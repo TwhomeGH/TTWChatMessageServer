@@ -39,11 +39,12 @@ const server = http.createServer((req, res) => {
         // ✅ 新增：解析 query
         const url = new URL(req.url, `http://${req.headers.host}`)
         const user = url.searchParams.get('user') ?? ''
-        const isTK = url.searchParams.get('isTK') === '1'
+
+        var isTK = url.searchParams.get('isTK') === '1'
+        var isTwitch = url.searchParams.get('isTwitch') === '1'
 
         const isBark = url.searchParams.get('isBark') === '1'
         const isSocket = url.searchParams.get('isSocket') === '1'
-        const isTwitch = url.searchParams.get('isTwitch') === '1'
         const isBoth = url.searchParams.get('isBoth') === '1'
 
         console.log('Starting TikTok.js with user=', user, 'isTK=', isTK);

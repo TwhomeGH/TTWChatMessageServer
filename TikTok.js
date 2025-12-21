@@ -136,6 +136,9 @@ function alreadySent(uniqueKey) {
 
 async function handleExit() {
     console.log("⏹️ 程式結束，儲存 sent_messages...");
+
+    sendBarkNotification("系統通知", "TTW Chat Message Server 已關閉", "");
+    sendSocketMessage("系統", "TTW Chat Message Server 已關閉", "", "", false);
     await saveSentMessages();
     if (client) {
         client.destroy();
@@ -203,7 +206,7 @@ function connectSocket() {
     });
 }
 
-function sendSocketMessage(user, message, img, giftImg) {
+function sendSocketMessage(user, message, img, giftImg,isMain=true) {
     if (!client || client.destroyed) return;
 
     const payload = {
@@ -211,7 +214,8 @@ function sendSocketMessage(user, message, img, giftImg) {
         user,
         message,
         img,
-        giftImg
+        giftImg,
+        isMain
     };
     
     try {
@@ -229,8 +233,14 @@ if (isTK) {
     // Connect to the chat (await can be used as well)
     connection.connect().then(state => {
         console.info(`Connected to roomId ${state.roomId}`);
+
+        sendBarkNotification("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間`, "");
+        sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間`, "", "", false);
+  
     }).catch(err => {
         console.error('Failed to connect', err);
+        sendBarkNotification("TikTok 直播間連線失敗", `無法連接到 ${tiktokName} 的直播間`, "");
+        sendSocketMessage("系統", `TikTok 直播間連線失敗，無法連接到 ${tiktokName} 的直播間`, "", "", false);
     });
 }
 
@@ -245,16 +255,17 @@ connection.on(WebcastEvent.MEMBER,data => {
     console.log(data.user.nickname,"加入了")  
 
     sendBarkNotification(data.user.nickname, "來了",iconn);
-    sendSocketMessage(data.user.nickname, "來了",iconn);
+    sendSocketMessage(data.user.nickname, "來了",iconn,"",false);
 
 
 })
 
 connection.on(WebcastEvent.FOLLOW,data =>{
      let iconn = data.user.profilePicture.url[1]
+    console.log(data.user.nickname,"關注了主播")
 
         sendBarkNotification(data.user.nickname, "關注了主播",iconn);
-        sendSocketMessage(data.user.nickname, "關注了主播",iconn);
+        sendSocketMessage(data.user.nickname, "關注了主播",iconn,"",false);
 
 })
 
@@ -268,7 +279,7 @@ connection.on(WebcastEvent.CHAT, data => {
 
     console.log(`${data.user.nickname} : ${data.comment}`)
     sendBarkNotification(data.user.nickname, data.comment,iconn);
-    sendSocketMessage(data.user.nickname, data.comment,iconn);
+    sendSocketMessage(data.user.nickname, data.comment,iconn,"");
 
 });
 
@@ -282,15 +293,14 @@ connection.on(WebcastEvent.LIKE, data => {
     
 
     sendBarkNotification(data.user.nickname, mess,iconn);
-
-    sendSocketMessage(data.user.nickname, mess,iconn);
+    sendSocketMessage(data.user.nickname, mess,iconn,"",false);
 
 })
 
 // And here we receive gifts sent to the streamer
 connection.on(WebcastEvent.GIFT, data => {
         
-    console.log(JSON.stringify(data,"",4))
+    //console.log(JSON.stringify(data,"",4))
     if (data.giftType === 1 && !data.repeatEnd ){
        
         console.log(`送出了 ${data.user.nickname} : ${ data.giftDetails.giftName} x${data.repeatCount}`)
@@ -332,7 +342,7 @@ connection.on(WebcastEvent.SHARE, data =>{
     console.log(`${data.user.nickname} ${mess}`)
     
     sendBarkNotification(data.user.nickname, mess,iconn);
-    sendSocketMessage(data.user.nickname, mess,iconn);
+    sendSocketMessage(data.user.nickname, mess,iconn,"",false);
 
 })
 
@@ -343,7 +353,7 @@ connection.on(WebcastEvent.ENVELOPE ,data => {
     console.log(`${data.nickname} ${mess}`)
     
     sendBarkNotification(data.nickname, mess,iconn);
-    sendSocketMessage(data.nickname, mess,iconn);
+    sendSocketMessage(data.nickname, mess,iconn,"",false);
 
 })
 connection.on(WebcastEvent.SUPER_FAN, (data) => {
@@ -366,13 +376,13 @@ let mess = "直播結束啦"
     if (action === ControlAction.CONTROL_ACTION_STREAM_ENDED) {
         console.log('Stream ended by user');
         sendBarkNotification(data.user.nickname, mess,IMG);
-        sendSocketMessage(data.user.nickname, mess,IMG);
+        sendSocketMessage(data.user.nickname, mess,IMG,"",false);
 
     }
     if (action === ControlAction.CONTROL_ACTION_STREAM_SUSPENDED) {
         console.log('Stream ended by platform moderator (ban)');
         sendBarkNotification(data.user.nickname, mess,IMG);
-        sendSocketMessage(data.user.nickname, mess,IMG);
+        sendSocketMessage(data.user.nickname, mess,IMG,"",false);
 
     }
 });
