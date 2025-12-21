@@ -33,11 +33,12 @@ const args = process.argv.slice(2)
 const keyword = args[0] || ''
 
 
-const isTK = args.includes('--tiktok')
+let isTK = args.includes('--tiktok')
+let isTwitch = args.includes('--twitch')
+
 
 let isBark = args.includes('--bark')
 let isSocket = args.includes('--socket')
-let isTwitch = args.includes('--twitch')
 
 let isBoth = args.includes('--both')
 
