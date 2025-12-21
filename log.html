@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Console</title>
+</head>
+
+<style>
+  body {
+    font-family: monospace;
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    margin: 0;
+    padding: 10px;
+  }
+  pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+</style>
+
+
+<body>
+    
+    
+    <pre id="log"></pre>
+
+<script>
+  const logEl = document.getElementById('log');
+  const es = new EventSource('/status/stream');
+
+  es.onmessage = (e) => {
+    logEl.textContent += e.data + '\n';
+  };
+</script>
+
+</body>
+</html>
