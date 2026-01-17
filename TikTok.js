@@ -245,6 +245,14 @@ if (isTK) {
     });
 }
 
+
+connection.on(ControlEvent.DISCONNECTED, () => {
+    console.log('Disconnected :(')
+    
+    sendBarkNotification("TikTok 直播間已斷線", `已從 ${tiktokName} 的直播間斷線`, "");
+    sendSocketMessage("系統", `TikTok 直播間已斷線，已從 ${tiktokName} 的直播間斷線`, "", "", false);
+});
+
 // Define the events that you want to handle
 // In this case we listen to chat messages (comments)
 
@@ -283,6 +291,23 @@ connection.on(WebcastEvent.CHAT, data => {
     sendSocketMessage(data.user.nickname, data.comment,iconn,"");
 
 });
+
+
+connection.on(WebcastEvent.ROOM_MESSAGE, data => {
+
+    printf("ROOM_MESSAGE", JSON.stringify(data, "", 4));
+
+    const uniqueKey = `chat_${data.user.nickname}_${data.comment}`;
+    if (alreadySent(uniqueKey)) return;
+
+    let iconn = data.user.profilePicture.url[1]
+
+    console.log(`${data.user.nickname} : ${data.comment}`)
+    sendBarkNotification(data.user.nickname, data.comment,iconn);
+    sendSocketMessage(data.user.nickname, data.comment,iconn,"");
+
+});
+
 
 connection.on(WebcastEvent.LIKE, data => {
 
@@ -373,6 +398,8 @@ connection.on(ControlEvent.STREAM_END, ({ action }) => {
 let IMG = "https://img.icons8.com/?size=100&id=xruQNezCArqC&format=png&color=000000"
     
 let mess = "直播結束啦"
+
+console.log(JSON.stringify({ action },"",4))
 
     if (action === ControlAction.CONTROL_ACTION_STREAM_ENDED) {
         console.log('Stream ended by user');
