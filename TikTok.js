@@ -159,7 +159,7 @@ async function handleExit() {
 
                     clearTimeout(heartbeatTimer);
                     heartbeatTimer = null;
-                    
+
                     resolve();
                 });
             });
@@ -256,7 +256,7 @@ function connectSocket() {
             if (client && !client.destroyed) {
                 client.write(JSON.stringify({ type: 'heartbeat' }) + '\n');
             }
-        }, 30000); // 每 30 秒送一次心跳
+        }, 50000); // 每 50 秒送一次心跳
 
     });
 
