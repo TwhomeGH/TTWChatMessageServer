@@ -156,6 +156,10 @@ async function handleExit() {
             }) + '\n', () => {
                 // 等到 write callback 確認送出後再關閉
                 client.end(() => {
+
+                    clearTimeout(heartbeatTimer);
+                    heartbeatTimer = null;
+                    
                     resolve();
                 });
             });
@@ -253,7 +257,7 @@ function connectSocket() {
                 client.write(JSON.stringify({ type: 'heartbeat' }) + '\n');
             }
         }, 30000); // 每 30 秒送一次心跳
-            
+
     });
 
 
@@ -264,11 +268,17 @@ function connectSocket() {
     client.on('close', () => {
         console.log('⚠️ TCP Socket closed, reconnecting in 3s...');
         reconnectTimer = setTimeout(connectSocket, 3000);
+        clearTimeout(heartbeatTimer);
+        heartbeatTimer = null;
+
     });
 
     client.on('error', (err) => {
         console.error('⚠️ TCP Socket error:', err.message);
         client?.destroy();
+
+        clearTimeout(heartbeatTimer);
+        heartbeatTimer = null;
     });
 }
 
