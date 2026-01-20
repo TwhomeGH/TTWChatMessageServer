@@ -1,0 +1,15 @@
+# .env File參數參考以下
+
+CLIENT_ID=Twitch ClientID 你的AppID
+CLIENT_SECRET=Twitch ClientID 你的AppSecrt
+
+SIGN_API=EulerStream API 簽名API
+
+TIKTOK_NAME=你的TikTok 用戶名
+SESSION_ID=你的TikTok SessionID
+TT_TARGET_IDC=你的TikTok Target IDC
+
+
+
+BARK_API=你的Bark API
+SOCKET_API=你的Socket API

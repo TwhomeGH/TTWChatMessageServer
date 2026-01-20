@@ -14,7 +14,7 @@ import path from 'path';
 
 
 import { TikTokLiveConnection, WebcastEvent,ControlEvent,ControlAction } from 'tiktok-live-connector';
-import { json } from 'stream/consumers';
+
 
 config(); // 讀取 .env
 
@@ -61,6 +61,9 @@ const tiktokName = keyword || process.env.TIKTOK_NAME || "coffeelatte0709";
 
 let client = null;
 let reconnectTimer = null;
+
+let heartbeatTimer = null;
+
 
 const PORT = process.env.SOCKET_API?.split(':')[2] || 9322; // 你的 socket server 端口
 const HOST = process.env.SOCKET_API?.split(':')[1]?.replace('//', '') || 'localhost'; // 你的 socket server 地址
@@ -139,17 +142,49 @@ async function handleExit() {
     console.log("⏹️ 程式結束，儲存 sent_messages...");
 
     sendBarkNotification("系統通知", "TTW Chat Message Server 已關閉", "");
-    sendSocketMessage("系統", "TTW Chat Message Server 已關閉", "", "", false);
-    await saveSentMessages();
-    if (client) {
-        client.destroy();
+    
+    if (client && !client.destroyed) {
+        // 先嘗試送最後一條訊息
+        await new Promise((resolve) => {
+            client.write(JSON.stringify({
+                type: 'StreamMessage',
+                user: "系統",
+                message: "TTW Chat Message Server 已關閉",
+                img: "",
+                giftImg: "",
+                isMain: false
+            }) + '\n', () => {
+                // 等到 write callback 確認送出後再關閉
+                client.end(() => {
+                    resolve();
+                });
+            });
+        });
     }
+
+    await saveSentMessages();
+   
+    console.log("✅ 優雅退出完成");
+
     process.exit(0);
 }
 
-process.on("SIGINT", handleExit);
-process.on("SIGTERM", handleExit);
+process.stdin.on('data', async (data) => {
+    const msg = data.toString().trim();
+    if (msg === 'EXIT') {
+        console.log('[SYSTEM] Received EXIT command via stdin');
+        await handleExit(); // 可以完整 await
+    }
+});
 
+process.on("SIGINT", async () => {
+    await handleExit();
+});
+
+process.on("SIGTERM", async () => {
+    console.log("Received SIGTERM, exiting gracefully...");
+    await handleExit();
+});
 
 loadSentMessages()
 
@@ -177,36 +212,6 @@ async function sendBarkNotification(title = "Twitch", comment, icon) {
     }
 }
 
-
-function connectSocket() {
-    if (!isSocket) { return }
-    if (client && !client.destroyed) return; // 已經連線中
-
-    client = new net.Socket();
-
-    client.connect(PORT, HOST, () => {
-        console.log('✅ TCP Socket connected');
-        if (reconnectTimer) {
-            clearTimeout(reconnectTimer);
-            reconnectTimer = null;
-        }
-    });
-
-    client.on('data', (data) => {
-        console.log('收到服務器訊息:', data.toString());
-    });
-
-    client.on('close', () => {
-        console.log('⚠️ TCP Socket closed, reconnecting in 3s...');
-        reconnectTimer = setTimeout(connectSocket, 3000);
-    });
-
-    client.on('error', (err) => {
-        console.error('⚠️ TCP Socket error:', err.message);
-        client?.destroy();
-    });
-}
-
 function sendSocketMessage(user, message, img, giftImg,isMain=true) {
     if (!client || client.destroyed) return;
 
@@ -227,6 +232,47 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true) {
         console.error('⚠️ 發送 Socket 訊息失敗:', err.message);
     }
 }
+
+function connectSocket() {
+    if (!isSocket) { return }
+    if (client && !client.destroyed) return; // 已經連線中
+
+    client = new net.Socket();
+  
+    client.connect(PORT, HOST, () => {
+        console.log('✅ TCP Socket connected');
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+        sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false);
+    
+        // 啟動心跳
+        heartbeatTimer = setInterval(() => {
+            if (client && !client.destroyed) {
+                client.write(JSON.stringify({ type: 'heartbeat' }) + '\n');
+            }
+        }, 30000); // 每 30 秒送一次心跳
+            
+    });
+
+
+    client.on('data', (data) => {
+        console.log('收到服務器訊息:', data.toString());
+    });
+
+    client.on('close', () => {
+        console.log('⚠️ TCP Socket closed, reconnecting in 3s...');
+        reconnectTimer = setTimeout(connectSocket, 3000);
+    });
+
+    client.on('error', (err) => {
+        console.error('⚠️ TCP Socket error:', err.message);
+        client?.destroy();
+    });
+}
+
+
 
 
 if (isTK) {
@@ -486,12 +532,13 @@ const tuser = user.id;
 
 console.log("[Twitch] UserID", tuser);
 
+
 // --- 2. EventSub WebSocket ---
 const listener = new EventSubWsListener({ apiClient, port: 0 });
 
 if (isTwitch) {
     console.log("啟用 Twitch 事件監聽");
-    await listener.start();
+    listener.start();
 }
 
 
@@ -508,6 +555,34 @@ async function getUserIcon(id) {
 
 
 connectSocket();
+
+
+
+// 錯誤處理
+listener.on("error", (err) => {
+    console.error('⚠️ Twitch EventSub Listener error:', err);
+});
+
+
+
+// --- 3. Twitch EventSub 直播開始/結束 ---
+listener.onStreamOnline(tuser, async (event) => {
+    const message = `直播開始啦！標題：${event.title}`; 
+
+    console.log(message);
+    sendBarkNotification("直播開始啦！", event.title, "");
+    sendSocketMessage("系統", message, "", "", false);
+
+   
+});
+
+listener.onStreamOffline(tuser, async (event) => {
+    const message = `直播結束啦！`;    
+    console.log(message);
+    sendBarkNotification("直播結束啦！", "", "");
+    sendSocketMessage("系統", message, "", "", false);
+});
+
 
 // --- 5. Twitch EventSub ---
 listener.onChannelFollow(tuser, tuser, async (event) => {

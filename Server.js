@@ -5,6 +5,9 @@ const { URL } = require('url')
 const fs = require('fs');
 const path = require('path');
 
+const { config } = require('dotenv');
+
+config(); // 讀取 .env
 
 let tiktokProcess = null;
 let logs = [];
@@ -96,6 +99,7 @@ const server = http.createServer((req, res) => {
         // 5s jump to / webpage
         // 假設你在 Node.js/Express 裡
         res.setHeader('Content-Type', 'text/html');
+
         res.end(`
   <html>
     <head>
@@ -159,28 +163,66 @@ const server = http.createServer((req, res) => {
             return;
         }
 
-        pushLog('[SYSTEM] Stopping TikTok.js');
+        // 透過 stdin 發送退出命令
+        tiktokProcess.stdin.write('EXIT\n');
 
-        const proc = tiktokProcess;   // ✅ 保留引用
-        tiktokProcess = null;         // ✅ 先標記為「不再接受新請求」
 
-        // 1️⃣ 嘗試優雅關閉
-        proc.kill('SIGTERM');
+        let consoleLog = `TikTok.js stopping...`;
+        console.log(consoleLog);
+        pushLog(`[SYSTEM] ${consoleLog}`);
 
-        // 2️⃣ 等真正退出
-        proc.once('exit', (code, signal) => {
-            pushLog(`[SYSTEM] TikTok.js exited code=${code} signal=${signal}`);
-        });
-
-        // 3️⃣ 保險：超時還不死就強制
-        setTimeout(() => {
-            if (!proc.killed) {
-                pushLog('[SYSTEM] Force killing TikTok.js');
-                proc.kill('SIGKILL');
-            }
-        }, 5000);
-
-        res.end('TikTok.js stopping...\n');
+        res.setHeader('Content-Type', 'text/html');
+        res.end(`
+  <html>
+    <head>
+     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ 
+      <title>Redirecting...</title>
+    </head>
+    <style>
+        body {  
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #25211eff;
+            color: #e4d4d4ff;
+        }
+        pre {   
+            background-color: #333;
+            color: #eee;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        #countdown {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #edd4d4ff;
+            background-color: #444;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+    
+    <body>
+      <pre>${consoleLog}</pre>
+      <div id="countdown">5</div>
+      <script>
+        let seconds = 5;
+        const countdownEl = document.getElementById('countdown');
+        const interval = setInterval(() => {
+          seconds--;
+          countdownEl.textContent = "即將跳轉到日志頁面 " + seconds;
+          if (seconds <= 0) {
+            clearInterval(interval);
+            window.location.href = '/';
+          }
+        }, 1000);
+      </script>
+    </body>
+  </html>
+`);
+        
     }
 
     // =======================
@@ -218,6 +260,85 @@ const server = http.createServer((req, res) => {
         });
     }
 
+    // GET /config → 顯示表單
+else if (req.url === '/config' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(`
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Config Editor</title>
+<style>
+body { font-family: Arial; margin: 20px; }
+label { display: block; margin: 8px 0 4px; }
+input { width: 400px; padding: 4px; }
+button { margin-top: 10px; padding: 6px 12px; }
+</style>
+</head>
+<body>
+<h2>修改環境變數</h2>
+<form method="POST" action="/config">
+<label for="BARK_API">BARK_API:</label>
+<input type="text" name="BARK_API" id="BARK_API" value="${process.env.BARK_API || ''}" />
+
+<label for="SOCKET_API">SOCKET_API:</label>
+<input type="text" name="SOCKET_API" id="SOCKET_API" value="${process.env.SOCKET_API || ''}" />
+
+<button type="submit">儲存</button>
+</form>
+</body>
+</html>
+`);
+}
+
+// POST /config → 接收表單
+else if (req.url === '/config' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+        const params = new URLSearchParams(body);
+        const newBark = params.get('BARK_API') || '';
+        const newSocket = params.get('SOCKET_API') || '';
+
+        // 更新 process.env
+        process.env.BARK_API = newBark;
+        process.env.SOCKET_API = newSocket;
+
+        // 更新 .env 檔案
+        const envPath = path.resolve('.env');
+        let envContent = '';
+        try {
+            if (fs.existsSync(envPath)) {
+                envContent = fs.readFileSync(envPath, 'utf-8');
+            }
+        } catch (err) { console.error(err); }
+
+        const updateEnv = (key, value) => {
+            const regex = new RegExp(`^${key}=.*$`, 'm');
+            if (regex.test(envContent)) {
+                envContent = envContent.replace(regex, `${key}=${value}`);
+            } else {
+                envContent += `\n${key}=${value}`;
+            }
+        }
+
+        updateEnv('BARK_API', newBark);
+        updateEnv('SOCKET_API', newSocket);
+
+        fs.writeFileSync(envPath, envContent, 'utf-8');
+
+        pushLog(`[SYSTEM] Updated .env: BARK_API=${newBark}, SOCKET_API=${newSocket}`);
+
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`
+<html><body>
+<p>更新完成！</p>
+<p><a href="/config">回到設定頁面</a></p>
+</body></html>
+`);
+    });
+}
+
     else if (req.url === '/help') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end(`Available endpoints:
@@ -233,6 +354,9 @@ isBoth=1 : 同時啟用 TikTok 和 Twitch
 
 /close
 stops TikTok.js
+
+/config
+view and edit configuration (.env variables) via HTML form
 
 /status
 once-off status and logs
@@ -276,15 +400,41 @@ server.listen(3332, '0.0.0.0', () => {
     console.log('HTTP control server listening on port 3332');
 });
 
-process.on("SIGINT", handleExit);
-process.on("SIGTERM", handleExit);
+process.on("SIGINT", async () => {
+    await handleExit()
+});
 
-function handleExit() {
+process.on("SIGTERM", async () => {
+    await handleExit()
+});
+
+
+
+
+async function handleExit() {
     console.log("Exiting...");
 
     if (tiktokProcess) {
-        tiktokProcess.kill('SIGTERM');
+        const proc = tiktokProcess;
+        tiktokProcess = null;
+
+           // 透過 stdin 發送退出命令
+        proc.stdin.write('EXIT\n');
+
+        await new Promise(resolve => {
+            proc.once('exit', () => resolve());
+            // 超時保險
+            setTimeout(() => {
+                if (!proc.killed) proc.kill('SIGKILL');
+                resolve();
+            }, 5000);
+        });
+        console.log("✅ TikTok.js process exited");
+
     }
+
+    console.log("TikTok.js exited, exiting main process");
+
     process.exit(0);
 
 
