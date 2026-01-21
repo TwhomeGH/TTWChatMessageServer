@@ -137,9 +137,13 @@ function alreadySent(uniqueKey) {
     return false;
 }
 
+var isEnd=false
 
 async function handleExit() {
     console.log("⏹️ 程式結束，儲存 sent_messages...");
+    
+
+    isEnd=true
 
     sendBarkNotification("系統通知", "TTW Chat Message Server 已關閉", "");
     
@@ -267,10 +271,18 @@ function connectSocket() {
 
     client.on('close', () => {
         console.log('⚠️ TCP Socket closed, reconnecting in 3s...');
-        reconnectTimer = setTimeout(connectSocket, 3000);
+
         clearTimeout(heartbeatTimer);
         heartbeatTimer = null;
 
+        if (isEnd){
+           console.log("程式已結束，停止重連");
+           return; 
+        }// 如果是程式結束就不重連
+
+        reconnectTimer = setTimeout(connectSocket, 3000);
+
+       
     });
 
     client.on('error', (err) => {
