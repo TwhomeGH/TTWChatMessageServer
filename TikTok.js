@@ -609,7 +609,7 @@ listener.onStreamOffline(tuser, async (event) => {
 // --- 5. Twitch EventSub ---
 listener.onChannelFollow(tuser, tuser, async (event) => {
     const icon = await getUserIcon(event.userId);
-    const message = `${event.userDisplayName} 關注了主播`;
+    const message = `關注了主播`;
 
     console.log(message);
 

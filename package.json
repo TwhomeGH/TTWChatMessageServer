@@ -2,5 +2,15 @@
   "name": "ttw-chat-message-server",
   "version": "1.0.0",
   "main": "index.js",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": "https://github.com/TwhomeGH/TTWChatMessageServer.git",
+  "author": "Nuclear0709 <agp05432@gmail.com>",
+  "dependencies": {
+    "@twurple/api": "^8.0.3",
+    "@twurple/auth": "^8.0.3",
+    "@twurple/eventsub-ws": "^8.0.3",
+    "axios": "^1.13.2",
+    "dotenv": "^17.2.3",
+    "tiktok-live-connector": "^2.1.1-beta1"
+  }
 }
