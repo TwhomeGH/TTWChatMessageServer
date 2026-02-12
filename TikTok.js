@@ -3,6 +3,7 @@ import { RefreshingAuthProvider } from '@twurple/auth';
 import { EventSubWsListener } from '@twurple/eventsub-ws';
 import { promises as fs } from 'fs';
 import axios from 'axios';
+
 import { config } from 'dotenv';
 
 import net from 'net';
@@ -23,7 +24,7 @@ SignConfig.apiKey = sign_api
 
 
 // node 內建：process.argv
-// argv[0] = node 路徑
+// argv[0] = node 路徑 / user?
 // argv[1] = TikTok.js 路徑
 // argv[2] 開始才是你傳的參數
 
@@ -38,6 +39,9 @@ let isTwitch = args.includes('--twitch')
 
 
 let isBark = args.includes('--bark')
+let isWeb = args.includes('--web')
+
+
 let isSocket = args.includes('--socket')
 
 let isBoth = args.includes('--both')
@@ -54,7 +58,7 @@ console.log('isBoth=', isBoth);
 
 // TikTok 用戶名稱
 
-const tiktokName = keyword || process.env.TIKTOK_NAME || "coffeelatte0709";
+const tiktokName = keyword.length > 0 ? keyword : process.env.TIKTOK_NAME || "coffeelatte0709";
 
 
 // --- 4. Socket 客戶端 ---
@@ -69,9 +73,10 @@ const PORT = process.env.SOCKET_API?.split(':')[2] || 9322; // 你的 socket ser
 const HOST = process.env.SOCKET_API?.split(':')[1]?.replace('//', '') || 'localhost'; // 你的 socket server 地址
 
 const Bark = process.env.BARK_API;
+const WebServer = process.env.WEB_API || "http://localhost:3001/sendSync";
 
 
-const CACHE_FILE = path.resolve("./sent_messages.json");
+const CACHE_FILE = path.resolve("./send_messages.json");
 let sentMessages = {}; // { uniqueKey: timestamp }
 let newSentMessages = {};    // 只保存這次新產生的訊息
 
@@ -88,10 +93,10 @@ async function loadSentMessages() {
         console.log(`✅ 載入 ${Object.keys(sentMessages).length} 筆歷史訊息`);
     } catch (err) {
         if (err.code === 'ENOENT') {
-            console.log("⚠️ sent_messages.json 不存在，初始化空物件");
+            console.log("⚠️ send_messages.json 不存在，初始化空物件");
             sentMessages = {};
         } else {
-            console.error("❌ 載入 sent_messages 失敗:", err);
+            console.error("❌ 載入 send_messages 失敗:", err);
         }
     }
 }
@@ -102,9 +107,9 @@ async function saveSentMessages() {
             Object.entries(newSentMessages).map(([k, v]) => [k, new Date(v).toISOString()])
         );
         await fs.writeFile(CACHE_FILE, JSON.stringify(data, null, 2), "utf-8");
-        console.log(`✅ 已儲存 ${Object.keys(sentMessages).length} 筆 sent_messages`);
+        console.log(`✅ 已儲存 ${Object.keys(sentMessages).length} 筆 send_messages`);
     } catch (err) {
-        console.error("❌ 儲存 sent_messages 失敗:", err);
+        console.error("❌ 儲存 send_messages 失敗:", err);
     }
 }
 
@@ -140,7 +145,7 @@ function alreadySent(uniqueKey) {
 var isEnd=false
 
 async function handleExit() {
-    console.log("⏹️ 程式結束，儲存 sent_messages...");
+    console.log("⏹️ 程式結束，儲存 send_messages...");
     
 
     isEnd=true
@@ -220,8 +225,28 @@ async function sendBarkNotification(title = "Twitch", comment, icon) {
     }
 }
 
-function sendSocketMessage(user, message, img, giftImg,isMain=true) {
+
+async function sendWebSocketNotification(username = "Test", comment = "這是一條測試訊息") {
+
+    if (!isWeb) { return }
+    if (!WebServer || WebServer.toLowerCase() === "none") return;
+
+    try {
+        await axios.post(WebServer,
+             { username, message: comment }, { headers: { "Content-Type": "application/json" } });
+
+        console.log("✅ WebSocket 推送成功");
+    } catch (err) {
+        console.error("❌ WebSocket 推送錯誤:", err.message);
+    }
+}
+
+function sendSocketMessage(user, message, img, giftImg,isMain=true,webType="default") {
     if (!client || client.destroyed) return;
+
+    if (isWeb && webType === "Chat") {
+        sendWebSocketNotification(user, message);
+    }
 
     const payload = {
         type: 'StreamMessage',
@@ -314,11 +339,19 @@ if (isTK) {
 }
 
 
-connection.on(ControlEvent.DISCONNECTED, () => {
-    console.log('Disconnected :(')
+connection.on(ControlEvent.DISCONNECTED, (e) => {
+    console.log('Disconnected :( \(error code: ' + e.errorCode + ', reason: ' + e.reason + ')');
     
     sendBarkNotification("TikTok 直播間已斷線", `已從 ${tiktokName} 的直播間斷線`, "");
     sendSocketMessage("系統", `TikTok 直播間已斷線，已從 ${tiktokName} 的直播間斷線`, "", "", false);
+
+
+    setTimeout(() => {
+        console.log("嘗試重新連線 TikTok 直播間...");
+        connection.connect();
+    }, 15000);
+
+
 });
 
 // Define the events that you want to handle
@@ -356,7 +389,7 @@ connection.on(WebcastEvent.CHAT, data => {
 
     console.log(`${data.user.nickname} : ${data.comment}`)
     sendBarkNotification(data.user.nickname, data.comment,iconn);
-    sendSocketMessage(data.user.nickname, data.comment,iconn,"");
+    sendSocketMessage(data.user.nickname, data.comment,iconn,"",true,"Chat");
 
 });
 

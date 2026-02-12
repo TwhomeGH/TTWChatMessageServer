@@ -13,3 +13,6 @@ TT_TARGET_IDC=你的TikTok Target IDC
 
 BARK_API=你的Bark API
 SOCKET_API=你的Socket API
+WEB_API=http://localhost:3001/sendSync
+
+# WebAPI是用於WebSocket.js的API地址，默認為http://localhost:3001/sendSync，如果你有修改WebSocket.js中的API地址，請相應修改此處。

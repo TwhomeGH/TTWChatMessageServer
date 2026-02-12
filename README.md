@@ -101,6 +101,9 @@ http://localhost:3332/open?isSocket=1&isTwitch=1&isTK=1&isBark=1
 | isBoth=1 | 同時啟用 TikTok + Twitch |
 | isBark=1 | 啟用 Bark 推送通知 |
 | isSocket=1 | 啟用 Socket 訊息推送 |
+| isRepeat=1 | 啟用WebServer重複訊息檢查 |
+| isDelay=1 | 啟用等待2秒再檢查後發出 |
+| isWeb=1 | 啟用補釘服務器 給UserScript轉接用 |
 
 範例：
 
@@ -161,3 +164,105 @@ http://localhost:3332/config
 2.	本服務適合內網或私人環境使用，未加密認證
 
 3.	TikTok session 過期需重新抓取
+
+
+
+## 補釘服務器 WebSocket.js
+
+**補釘服務器** 是專門用來接收 **UserScript** 所轉發的直播頁面訊息。
+
+當你透過 **Restream / Streamlabs** 等工具推流到 TikTok 時
+
+在對應的管理後台中會出現一個 **TikTok Live Monitor** 入口 之類的。
+
+點擊後會開啟官方的直播監聽頁面，
+最終頁面實際運行於：
+
+> https://livecenter.tiktok.com/
+
+在這個頁面中，你可以查看：
+
+- 觀眾數
+-	直播時長
+-	禮物資訊
+-	聊天室訊息（最重要）
+
+
+## 運作原理
+
+
+### UserScript 腳本運行於 livecenter.tiktok.com 頁面中：
+
+1.	直接監聽 DOM 內聊天室訊息的新增
+
+2.	即時抓取頁面上實際渲染出的聊天內容
+
+3.	將訊息轉送至補釘服務器（WebSocket.js）
+
+4.	再由補釘服務器分發給你的本地應用或推流系統
+
+### 為什麼這樣做？
+
+  這種方式從根本上解決了：
+
+  第三方 TikTok Live API / Library 可能漏訊息的問題
+
+#### 因為：
+
+  -	你抓的是「官方頁面實際顯示的內容」
+  -	只要頁面能看到，腳本就一定能抓到
+  -	不依賴非官方 WebSocket 協議
+  -	不會因為封包解析錯誤而漏訊
+
+#### 簡單說：
+
+  這是「基於官方直播頁面實際渲染結果」的資料來源
+  準確度最高，幾乎不會遺漏。
+
+## 架構流程圖（邏輯層）
+
+```txt
+TikTok Live 推流
+        ↓
+livecenter.tiktok.com（官方頁面）
+        ↓
+UserScript 監聽 DOM 變化
+        ↓
+WebSocket.js 補釘服務器
+        ↓
+你的本地應用 / PiP 聊天室 / 直播系統
+```
+
+## 延伸說明
+
+  目前 **UserScript** 僅處理聊天室訊息（**Chat Messages**）
+
+  以下事件尚未納入處理範圍：
+
+  -	送禮事件（Gift）
+  -	使用者加入直播間（Join）
+  -	其他系統事件
+
+
+### 目前架構定位
+
+  現階段，UserScript 的角色是：
+
+  作為輔助訊息來源（Fallback / Patch Layer）
+
+  主要用來彌補第三方 TikTok Live API
+  在實際使用中 偶爾出現聊天室訊息遺漏 的問題。
+
+  運作方式為：
+  
+  -	第三方 TikTok Live API → 作為主要資料來源
+  -	UserScript（監聽官方頁面 DOM） → 作為補強與校正來源
+
+
+### 未來規劃
+
+  後續可考慮：
+
+  -	將送禮、加入等事件一併納入監聽
+  -	逐步完整遷移至「頁面監聽方案」
+  -	最終降低甚至完全移除對第三方 TikTok Live API 的依賴
