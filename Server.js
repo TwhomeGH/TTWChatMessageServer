@@ -10,7 +10,7 @@ const { config } = require('dotenv');
 config(); // 讀取 .env
 
 let tiktokProcess = null;
-let webServer = null;
+
 
 let logs = [];
 const MAX_LOG_LINES = 200; // 最多保留 200 行
@@ -27,6 +27,11 @@ function pushLog(line) {
         client.write(`data: ${line}\n\n`);
     }
 
+}
+
+
+function sendToTikTok(obj) {
+    tiktokProcess && tiktokProcess.stdin.write(JSON.stringify(obj) + '\n');
 }
 
 const server = http.createServer((req, res) => {
@@ -54,15 +59,10 @@ const server = http.createServer((req, res) => {
         const isBoth = url.searchParams.get('isBoth') === '1'
 
 
-        const isWeb = url.searchParams.get('isWeb') === '1'
-        const isRepeat = url.searchParams.get('isRepeat') === '1'
-        const isDelay = url.searchParams.get('isDelay') === '1'
-
 
         console.log('Starting TikTok.js with user=', user, 'isTK=', isTK);
         console.log('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch);
-        console.log('isRepeat=', isRepeat, 'isDelay=', isDelay, 'isBoth=', isBoth, 'isWeb=', isWeb);
-
+        console.log('isBoth=', isBoth);
 
         logs = [];
         pushLog('[SYSTEM] Starting TikTok.js');
@@ -77,9 +77,7 @@ const server = http.createServer((req, res) => {
         if (isSocket) args.push('--socket')
         if (isTwitch) args.push('--twitch')
         if (isBoth) args.push('--both')
-        if (isWeb) args.push('--web')
-
-
+        
         tiktokProcess = spawn('node', args);
 
         tiktokProcess.stdout.on('data', (data) => {
@@ -102,38 +100,8 @@ const server = http.createServer((req, res) => {
         });
 
 
-        // ✅ 關鍵：把參數傳給 node WebSocket.js
-        const WebArgs = ['WebSocket.js']
-
-        if (isRepeat) WebArgs.push('--repeat')
-        if (isDelay) WebArgs.push('--delay')
-
-        if (isWeb)  {
-        webServer = spawn('node', WebArgs);
-        
-
-        webServer.stdout.on('data', (data) => {
-            data
-                .toString()
-                .split('\n')
-                .forEach(line => line && pushLog(`[WEB] ${line}`));
-        });
-
-        webServer.stderr.on('data', (data) => {
-            data
-                .toString()
-                .split('\n')
-                .forEach(line => line && pushLog(`[WEB ERR] ${line}`));
-        });
-
-        webServer.on('exit', (code, signal) => {
-            pushLog(`[SYSTEM] WebSocket.js Exit code=${code} signal=${signal}`);
-            webServer = null;
-        });
-
-        } else {
-            pushLog(`[SYSTEM] WebServer not started, skipping WebSocket.js`);
-        }
+       
+      
 
 
 
@@ -198,26 +166,54 @@ const server = http.createServer((req, res) => {
 
 
     }
+     // ===============================
+    // /chat 主入口
+    // ===============================
 
+    else if (req.method === 'POST' && req.url === '/chat') {
+        let body = '';
+
+        req.on('data', chunk => {
+            body += chunk.toString();
+        });
+
+        req.on('end', () => {
+
+             try {
+                       
+                console.log('📩 收到訊息:', body);
+
+                const data = JSON.parse(body);
+
+                sendToTikTok({
+                    type: 'StreamMessage',
+                    ...data
+                });
+
+
+                const { user, message } = data;
+                  
+                console.log('📩 發送訊息:', user, message);
+
+                res.writeHead(200);
+                res.end("OK");
+
+            } catch (err) {
+                console.error("❌ 處理 /chat 訊息失敗:", err.message);
+                res.writeHead(400);
+                res.end("Invalid JSON");
+            }
+
+        });
+
+    } 
     // =======================
     // /close
     // =======================
     else if (req.url === '/close') {
 
-        endString = ""
-
-         if (webServer) {
-            endString += 'WebSocket.js is running, sending exit command...\n';
-        
-            // 透過 stdin 發送退出命令
-            webServer.stdin.write('EXIT\n');
-           
-        } else {
-            endString += 'WebSocket.js not running\n';
-        }
-
         if (!tiktokProcess) {
-            res.end(endString + 'TikTok.js not running\n');
+            res.end('TikTok.js not running\n');
             return;
         }
 
@@ -472,26 +468,6 @@ process.on("SIGTERM", async () => {
 
 async function handleExit() {
     console.log("Exiting...");
-
-    
-    if (webServer) {
-        const proc = webServer;
-        webServer = null;
-
-           // 透過 stdin 發送退出命令
-        proc.stdin.write('EXIT\n');
-
-        await new Promise(resolve => {
-            proc.once('exit', () => resolve());
-            // 超時保險
-            setTimeout(() => {
-                if (!proc.killed) proc.kill('SIGKILL');
-                resolve();
-            }, 5000);
-        });
-        console.log("✅ WebSocket.js process exited");
-
-    }
 
     if (tiktokProcess) {
         const proc = tiktokProcess;

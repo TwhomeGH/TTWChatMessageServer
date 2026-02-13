@@ -39,7 +39,6 @@ let isTwitch = args.includes('--twitch')
 
 
 let isBark = args.includes('--bark')
-let isWeb = args.includes('--web')
 
 
 let isSocket = args.includes('--socket')
@@ -182,11 +181,37 @@ async function handleExit() {
     process.exit(0);
 }
 
-process.stdin.on('data', async (data) => {
-    const msg = data.toString().trim();
-    if (msg === 'EXIT') {
-        console.log('[SYSTEM] Received EXIT command via stdin');
-        await handleExit(); // 可以完整 await
+
+let stdinBuffer = '';
+
+process.stdin.on('data', async (chunk) => {
+    stdinBuffer += chunk.toString();
+
+    let lines = stdinBuffer.split('\n');
+    stdinBuffer = lines.pop(); // 留下未完成的半行
+
+    for (const line of lines) {
+        const msg = line.trim();
+        if (!msg) continue;
+
+        // 🔴 純文字指令
+        if (msg === 'EXIT') {
+            await handleExit();
+            
+            return;
+        }
+
+        // 🟢 JSON 訊息
+        try {
+            const json = JSON.parse(msg);
+
+            if (json.type === 'StreamMessage') {
+                sendToTCP(json);
+            }
+
+        } catch (e) {
+            console.error('stdin JSON 解析失敗:', msg);
+        }
     }
 });
 
@@ -226,26 +251,55 @@ async function sendBarkNotification(title = "Twitch", comment, icon) {
 }
 
 
-async function sendWebSocketNotification(username = "Test", comment = "這是一條測試訊息") {
 
-    if (!isWeb) { return }
-    if (!WebServer || WebServer.toLowerCase() === "none") return;
+
+function sendToTCP(payload) {
+    if (!client || client.destroyed) return;
+    
+    if (isDuplicate(payload.user, payload.message)) {
+        console.log('🚫 重複訊息跳過:', payload.user, payload.message);
+        return;
+    }
 
     try {
-        await axios.post(WebServer,
-             { username, message: comment }, { headers: { "Content-Type": "application/json" } });
 
-        console.log("✅ WebSocket 推送成功");
+        client.write(JSON.stringify(payload) + '\n');
     } catch (err) {
-        console.error("❌ WebSocket 推送錯誤:", err.message);
+        console.error('⚠️ 發送 TCP 訊息失敗:', err.message);
     }
+
+}
+
+
+
+// ===== 暫存最多 10 筆 =====
+let syncBuffer = []; // [{ username, message, timestamp }]
+
+function addToSyncBuffer(username, message) {
+    syncBuffer.push({
+        username,
+        message,
+        timestamp: Date.now()
+    });
+
+    // 超過 10 筆就移除最舊的
+    if (syncBuffer.length > 10) {
+        syncBuffer.shift();
+    }
+}
+
+function isDuplicate(username, message) {
+    return syncBuffer.some(item =>
+        item.username === username &&
+        item.message === message
+    );
 }
 
 function sendSocketMessage(user, message, img, giftImg,isMain=true,webType="default") {
     if (!client || client.destroyed) return;
 
-    if (isWeb && webType === "Chat") {
-        sendWebSocketNotification(user, message);
+    if (webType === "Chat") {
+        addToSyncBuffer(user, message);
     }
 
     const payload = {

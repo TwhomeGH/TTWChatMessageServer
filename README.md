@@ -101,9 +101,16 @@ http://localhost:3332/open?isSocket=1&isTwitch=1&isTK=1&isBark=1
 | isBoth=1 | 同時啟用 TikTok + Twitch |
 | isBark=1 | 啟用 Bark 推送通知 |
 | isSocket=1 | 啟用 Socket 訊息推送 |
-| isRepeat=1 | 啟用WebServer重複訊息檢查 |
-| isDelay=1 | 啟用等待2秒再檢查後發出 |
-| isWeb=1 | 啟用補釘服務器 給UserScript轉接用 |
+
+> [!WARNING]
+> 補丁服務器 重複訊息檢查功能
+>
+> 已經直接合併到TikTok.js/Server.js裡
+
+以下參數不再使用
+- isWeb 啟用備用UserScript監聽服務器
+- isDelay 啟用延遲2秒後檢查重複訊息
+- isRepeat 啟用重複訊息檢查
 
 範例：
 
