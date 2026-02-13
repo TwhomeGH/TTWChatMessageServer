@@ -192,23 +192,23 @@ const server = createServer((req, res) => {
                 console.log('📩 收到訊息:', body);
 
                 const data = JSON.parse(body);
-                const { username, message } = data;
+                const { user, message } = data;
 
                const processSend = () => {
 
-                    if (enableDuplicateCheck && isDuplicate(username, message)) {
-                        console.log('🚫 重複訊息跳過:', username, message);
+                    if (enableDuplicateCheck && isDuplicate(user, message)) {
+                        console.log('🚫 重複訊息跳過:', user, message);
                         return;
                     }
 
-                    console.log('📩 發送訊息:', username, message);
+                    console.log('📩 發送訊息:', user, message);
 
                     if (tcpClient && !tcpClient.destroyed) {
                         tcpClient.write(JSON.stringify(data) + '\n');
                     }
 
                     // 加入 buffer 避免短時間內重複
-                    addToSyncBuffer(username, message);
+                    addToSyncBuffer(user, message);
                 };
 
                 if (enableDuplicateCheck && enableDelayCheck) {
