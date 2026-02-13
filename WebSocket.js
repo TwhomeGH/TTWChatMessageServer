@@ -14,6 +14,7 @@ let tcpClient = null;
 let heartbeatTimer = null;
 
 
+var isEnd=false
 
 
 // node 內建：process.argv
