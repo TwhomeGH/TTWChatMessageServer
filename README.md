@@ -273,3 +273,18 @@ WebSocket.js 補釘服務器
   -	將送禮、加入等事件一併納入監聽
   -	逐步完整遷移至「頁面監聽方案」
   -	最終降低甚至完全移除對第三方 TikTok Live API 的依賴
+
+
+## 其他指引
+
+### 提交修改忽略
+
+```shell
+git update-index --assume-unchanged <file>
+```
+
+### 提交修改忽略回復
+
+```shell
+git update-index --no-assume-unchanged <file>
+```
