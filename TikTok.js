@@ -258,7 +258,7 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,webType="defa
     };
     
     try {
-        
+        console.log('📤 發送 Socket 訊息:', payload);
         client.write(JSON.stringify(payload) + '\n'); // '\n' 可以讓 server 分行處理
     } catch (err) {
 
@@ -387,7 +387,7 @@ connection.on(WebcastEvent.CHAT, data => {
 
     let iconn = data.user.profilePicture.url[1]
 
-    console.log(`${data.user.nickname} : ${data.comment}`)
+    console.log(`Chat:${data.user.nickname} : ${data.comment}`)
     sendBarkNotification(data.user.nickname, data.comment,iconn);
     sendSocketMessage(data.user.nickname, data.comment,iconn,"",true,"Chat");
 

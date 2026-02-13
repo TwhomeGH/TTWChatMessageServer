@@ -71,7 +71,7 @@ function startHeartbeat() {
         if (!tcpClient || tcpClient.destroyed) return;
 
         const heartbeat = JSON.stringify({
-            type: "Heartbeat"
+            type: "heartbeat"
         });
 
         try {
@@ -194,6 +194,10 @@ const server = createServer((req, res) => {
                 const data = JSON.parse(body);
                 const { user, message } = data;
 
+                console.log('enableDuplicateCheck:', enableDuplicateCheck, 'enableDelayCheck:', enableDelayCheck);
+
+                console.log('syncBuffer:', syncBuffer);
+
                const processSend = () => {
 
                     if (enableDuplicateCheck && isDuplicate(user, message)) {
@@ -206,14 +210,17 @@ const server = createServer((req, res) => {
                     if (tcpClient && !tcpClient.destroyed) {
                         tcpClient.write(JSON.stringify(data) + '\n');
                     }
-
-                    // 加入 buffer 避免短時間內重複
-                    addToSyncBuffer(user, message);
+                   
                 };
 
                 if (enableDuplicateCheck && enableDelayCheck) {
                     // 延遲 2 秒
+                    console.log('⏳ 啟用重複檢查，2秒後發送訊息:', user, message);
                     setTimeout(processSend, 2000);
+                    setTimeout(() => {
+                        syncBuffer.shift(); // 4秒後移除最舊的訊息，讓重複檢查不會永遠阻擋
+                    }, 4000);
+
                 } else {
                     processSend();
                 }
