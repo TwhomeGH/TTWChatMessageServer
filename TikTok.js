@@ -409,7 +409,21 @@ connection.on(ControlEvent.DISCONNECTED, (e) => {
 
     setTimeout(() => {
         console.log("嘗試重新連線 TikTok 直播間...");
+
+        try {
         connection.connect();
+        } catch (err) {
+        
+            if (err instanceof errors_1.UserOfflineError) {
+                console.log('[INFO] 使用者不在線上');
+                return;
+            }
+
+            console.error('重新連線失敗:', err);
+            
+        }
+
+
     }, 15000);
 
 
