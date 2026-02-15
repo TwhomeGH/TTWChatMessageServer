@@ -72,7 +72,6 @@ const PORT = process.env.SOCKET_API?.split(':')[2] || 9322; // 你的 socket ser
 const HOST = process.env.SOCKET_API?.split(':')[1]?.replace('//', '') || 'localhost'; // 你的 socket server 地址
 
 const Bark = process.env.BARK_API;
-const WebServer = process.env.WEB_API || "http://localhost:3001/sendSync";
 
 
 const CACHE_FILE = path.resolve("./send_messages.json");
@@ -261,8 +260,10 @@ function sendToTCP(payload) {
         return;
     }
 
-    try {
+    addToSyncBuffer(payload.user, payload.message);
 
+    try {
+        console.log('📤 發送 TCP 訊息Sync:', payload);
         client.write(JSON.stringify(payload) + '\n');
     } catch (err) {
         console.error('⚠️ 發送 TCP 訊息失敗:', err.message);
@@ -302,6 +303,12 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,webType="defa
         addToSyncBuffer(user, message);
     }
 
+
+    if (isDuplicate(user, message)) {
+        console.log('🚫內部 重複訊息跳過:', user, message);
+        return;
+    }
+
     const payload = {
         type: 'StreamMessage',
         user,
@@ -312,7 +319,7 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,webType="defa
     };
     
     try {
-        console.log('📤 發送 Socket 訊息:', payload);
+        console.log('📤[TK] 發送 Socket 訊息:', payload);
         client.write(JSON.stringify(payload) + '\n'); // '\n' 可以讓 server 分行處理
     } catch (err) {
 
