@@ -116,7 +116,7 @@ async function saveStatsToFile(filePath = './message_stats.json') {
     });
 
     console.log(`📊 訊息統計:\n`, data.slice(0, 20)); // 顯示前 20 條統計
-    
+
     } catch (err) {
         console.error('❌ 儲存訊息統計失敗:', err);
     }
@@ -248,6 +248,9 @@ process.stdin.on('data', async (chunk) => {
             const json = JSON.parse(msg);
 
             if (json.type === 'StreamMessage') {
+                // 同時記錄訊息統計
+                recordMessageStat(json.message);
+
                 sendToTCP(json);
             }
 
@@ -285,9 +288,6 @@ async function sendBarkNotification(title = "Twitch", comment, icon) {
     if (!isBark) { return }
     if (!Bark || Bark.toLowerCase() === "none") return;
     try {
-
-        //統計訊息用
-        recordMessageStat(comment);
 
         await axios.post(Bark, { title, body: comment, icon }, { headers: { "Content-Type": "application/json" } });
         console.log("✅ Bark 推送成功");
@@ -362,9 +362,7 @@ function addToSyncBuffer(username, message) {
         timestamp: Date.now()
     });
 
-    // 同時記錄訊息統計
-    recordMessageStat(message);
-
+    
     // 超過 10 筆就移除最舊的
     if (syncBuffer.length > 10) {
         syncBuffer.shift();
@@ -545,6 +543,10 @@ connection.on(WebcastEvent.CHAT, data => {
     let iconn = data.user.profilePicture.url[1]
 
     console.log(`Chat:${data.user.nickname} : ${data.comment}`)
+    
+    // 同時記錄訊息統計
+    recordMessageStat(data.comment);
+
     sendBarkNotification(data.user.nickname, data.comment,iconn);
     sendSocketMessage(data.user.nickname, data.comment,iconn,"",true,"Chat");
 
@@ -561,6 +563,10 @@ connection.on(WebcastEvent.ROOM_MESSAGE, data => {
     let iconn = data.user.profilePicture.url[1]
 
     console.log(`${data.user.nickname} : ${data.comment}`)
+
+    // 同時記錄訊息統計
+    recordMessageStat(data.comment);
+
     sendBarkNotification(data.user.nickname, data.comment,iconn);
     sendSocketMessage(data.user.nickname, data.comment,iconn,"");
 
@@ -828,8 +834,9 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
     
     console.log(`${event.chatterDisplayName} : ${event.messageText}`);
 
+    recordMessageStat(event.messageText);
+
     sendBarkNotification(event.chatterDisplayName, event.messageText, icon);
-    
     sendSocketMessage(event.chatterDisplayName, event.messageText, icon,"Chat");
 
    
