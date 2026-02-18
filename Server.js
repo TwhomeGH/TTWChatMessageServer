@@ -326,16 +326,65 @@ else if (req.url === '/status/keyword') {
         'Access-Control-Allow-Origin': '*'
     });
 
+   
+          
+        // 透過 stdin 發送退出命令
+        if (tiktokProcess) {
+            tiktokProcess.stdin.write('GETTOP\n');
+            
+
+        tiktokProcess.stdout.once('data', (data) => {
+            const line = data.toString().trim();
+            
+                
+            console.log('📈 TikTok.js 回傳:', line);
+
+            if (line.startsWith('{') && line.endsWith('}')) {
+                // 可能是 JSON
+                line = line.replace(/^[^\{]*/, '').replace(/[^\}]*$/, ''); // 嘗試提取 JSON 部分
+
+                const json = JSON.parse(line);
+
+                console.log('📈 TikTok.js 回傳解析後:', json)
+                
+                
+                res.write(`data: ${JSON.stringify({
+                    type: 'top10',
+                    message: json.data
+                })}\n\n`);
+
+                return;
+            }
+            
+        })
+
+        return;
+
+    } else {
+
+          res.write(`data: ${JSON.stringify({
+                type: 'error',
+                message: 'TikTok.js 未啟動，沒有實時關鍵字資料'
+            })}\n\n`);
+
+    }
+
     function sendKeywordData() {
         try {
             const raw = fs.readFileSync('./message_stats.json', 'utf-8');
             const json = JSON.parse(raw);
 
-            const stats = json.stats || [];
+            console.log('📈 讀取 message_stats.json:', json);
+
+            const stats = json || [];
 
             const top10 = stats
                 .slice(0, 10); // 你存檔時已排序就直接 slice
 
+
+            console.log('📈 傳送 top10:', top10);
+            console.log('📈 傳送 all stats:', stats)
+            ;
             res.write(`data: ${JSON.stringify({
                 type: 'top10',
                 data: top10
@@ -357,11 +406,12 @@ else if (req.url === '/status/keyword') {
     // 進來先送一次
     sendKeywordData();
 
+   
     // 如果你未來會更新檔案，可以定時推
-    const interval = setInterval(sendKeywordData, 5000);
-
+    // const interval = setInterval(sendKeywordData, 5000);
+    
     req.on('close', () => {
-        clearInterval(interval);
+        //clearInterval(interval);
     });
 }
 

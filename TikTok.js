@@ -105,15 +105,22 @@ async function loadSentMessages() {
 async function saveStatsToFile(filePath = './message_stats.json') {
     const data = getAllMessageStatsSorted();
 
-    fs.writeFileSync(
-        filePath,
-        JSON.stringify({
-            generatedAt: new Date().toISOString(),
-            totalUniqueMessages: data.length,
-            stats: data
-        }, null, 2),
-        'utf-8'
-    );
+    try {
+
+    await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8', (err) => {
+        if (err) {
+            console.error('❌ 儲存訊息統計失敗:', err);
+        } else {
+            console.log(`✅ 已儲存訊息統計到 ${filePath}`);
+        }
+    });
+
+    console.log(`📊 訊息統計:\n`, data.slice(0, 20)); // 顯示前 20 條統計
+    
+    } catch (err) {
+        console.error('❌ 儲存訊息統計失敗:', err);
+    }
+    
 }
 
 async function saveSentMessages() {
@@ -219,6 +226,22 @@ process.stdin.on('data', async (chunk) => {
             
             return;
         }
+
+         // 🔴 純文字指令
+        if (msg === 'GETTOP') {
+            const topMessages = getTopMessages(10);
+           
+            console.log("📈 最高出現次數訊息:\n", topMessages);
+            
+            // 回傳給 Server.js
+            process.stdout.write(JSON.stringify({
+                type: "TopMessages",
+                data: topMessages
+            }) + '\n');
+
+            return;
+        }
+
 
         // 🟢 JSON 訊息
         try {

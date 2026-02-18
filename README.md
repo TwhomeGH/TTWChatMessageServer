@@ -161,6 +161,12 @@ http://localhost:3332/keyword
 > 指向EventSource源到 內網使用記得修
 > [http://你自己的本地內網IP:3332/status/keyword](http://你自己的本地內網IP:3332/status/keyword)
 
+![關鍵字統計畫面](Docs/Keyword.png)
+
+可以用此來判斷那些**廣告帳號**老是刷的**關鍵字**
+
+以便後續加入封鎖關鍵字 或**自動禁言規則**裡
+
 ### 2. 修改環境變數
 
 可快速修改 .env 的 BARK_API 與 SOCKET_API：
