@@ -15,6 +15,7 @@ import path from 'path';
 
 
 import { TikTokLiveConnection, WebcastEvent,ControlEvent,ControlAction } from 'tiktok-live-connector';
+import { type } from 'os';
 
 
 config(); // 讀取 .env
@@ -99,6 +100,22 @@ async function loadSentMessages() {
     }
 }
 
+
+
+async function saveStatsToFile(filePath = './message_stats.json') {
+    const data = getAllMessageStatsSorted();
+
+    fs.writeFileSync(
+        filePath,
+        JSON.stringify({
+            generatedAt: new Date().toISOString(),
+            totalUniqueMessages: data.length,
+            stats: data
+        }, null, 2),
+        'utf-8'
+    );
+}
+
 async function saveSentMessages() {
     try {
         const data = Object.fromEntries(
@@ -106,6 +123,7 @@ async function saveSentMessages() {
         );
         await fs.writeFile(CACHE_FILE, JSON.stringify(data, null, 2), "utf-8");
         console.log(`✅ 已儲存 ${Object.keys(sentMessages).length} 筆 send_messages`);
+   
     } catch (err) {
         console.error("❌ 儲存 send_messages 失敗:", err);
     }
@@ -174,6 +192,8 @@ async function handleExit() {
     }
 
     await saveSentMessages();
+
+    await saveStatsToFile();
    
     console.log("✅ 優雅退出完成");
 
@@ -242,6 +262,10 @@ async function sendBarkNotification(title = "Twitch", comment, icon) {
     if (!isBark) { return }
     if (!Bark || Bark.toLowerCase() === "none") return;
     try {
+
+        //統計訊息用
+        recordMessageStat(comment);
+
         await axios.post(Bark, { title, body: comment, icon }, { headers: { "Content-Type": "application/json" } });
         console.log("✅ Bark 推送成功");
     } catch (err) {
@@ -272,6 +296,38 @@ function sendToTCP(payload) {
 }
 
 
+const messageStats = new Map();
+// key: message 內容
+// value: 出現次數
+
+function recordMessageStat(message) {
+    if (!message) return;
+
+    const count = messageStats.get(message) || 0;
+    messageStats.set(message, count + 1);
+}
+
+// 取得出現次數最高的 N 條訊息
+function getTopMessages(limit = 10) {
+    return [...messageStats.entries()]
+        .sort((a, b) => b[1] - a[1]) // 依次數由大到小
+        .slice(0, limit)            // 取前 N 名
+        .map(([message, count]) => ({
+            message,
+            count
+        }));
+}
+
+// 取得所有訊息統計，依次數排序
+function getAllMessageStatsSorted() {
+    return [...messageStats.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([message, count]) => ({
+            message,
+            count
+        }));
+}
+
 
 // ===== 暫存最多 10 筆 =====
 let syncBuffer = []; // [{ username, message, timestamp }]
@@ -282,6 +338,9 @@ function addToSyncBuffer(username, message) {
         message,
         timestamp: Date.now()
     });
+
+    // 同時記錄訊息統計
+    recordMessageStat(message);
 
     // 超過 10 筆就移除最舊的
     if (syncBuffer.length > 10) {
@@ -747,7 +806,8 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
     console.log(`${event.chatterDisplayName} : ${event.messageText}`);
 
     sendBarkNotification(event.chatterDisplayName, event.messageText, icon);
-    sendSocketMessage(event.chatterDisplayName, event.messageText, icon);
+    
+    sendSocketMessage(event.chatterDisplayName, event.messageText, icon,"Chat");
 
    
 });

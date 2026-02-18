@@ -315,6 +315,69 @@ const server = http.createServer((req, res) => {
         });
     }
 
+
+// 補丁前端頁面 status/keyword
+
+else if (req.url === '/status/keyword') {
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*'
+    });
+
+    function sendKeywordData() {
+        try {
+            const raw = fs.readFileSync('./message_stats.json', 'utf-8');
+            const json = JSON.parse(raw);
+
+            const stats = json.stats || [];
+
+            const top10 = stats
+                .slice(0, 10); // 你存檔時已排序就直接 slice
+
+            res.write(`data: ${JSON.stringify({
+                type: 'top10',
+                data: top10
+            })}\n\n`);
+
+            res.write(`data: ${JSON.stringify({
+                type: 'all',
+                data: stats
+            })}\n\n`);
+
+        } catch (err) {
+            res.write(`data: ${JSON.stringify({
+                type: 'error',
+                message: '無法讀取關鍵字檔案'
+            })}\n\n`);
+        }
+    }
+
+    // 進來先送一次
+    sendKeywordData();
+
+    // 如果你未來會更新檔案，可以定時推
+    const interval = setInterval(sendKeywordData, 5000);
+
+    req.on('close', () => {
+        clearInterval(interval);
+    });
+}
+
+else if (req.url === '/keyword') {
+    fs.readFile('./keyword.html', (err, data) => {
+        if (err) {
+            res.writeHead(500);
+            res.end('Error loading keyword.html');
+            return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(data);
+    });
+}
+
     // GET /config → 顯示表單
 else if (req.url === '/config' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });

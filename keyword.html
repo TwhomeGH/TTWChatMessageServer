@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Keyword Stats</title>
+    <style>
+        body { font-family: sans-serif; }
+        .top { color: red; font-weight: bold; }
+        .list { margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+<h2>🔥 Top 10 關鍵字</h2>
+<ul id="top10"></ul>
+
+<h2>📊 全部關鍵字</h2>
+<ul id="all"></ul>
+
+<script>
+const top10El = document.getElementById('top10');
+const allEl = document.getElementById('all');
+
+const evt = new EventSource('http://192.168.0.102:3332/status/keyword');
+
+evt.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+
+    if (msg.type === 'top10') {
+        top10El.innerHTML = '';
+        msg.data.forEach(item => {
+            const li = document.createElement('li');
+            li.textContent = `${item.message} (${item.count})`;
+            li.classList.add('top');
+            top10El.appendChild(li);
+        });
+    }
+
+    if (msg.type === 'all') {
+        allEl.innerHTML = '';
+        msg.data.forEach(item => {
+            const li = document.createElement('li');
+            li.textContent = `${item.message} (${item.count})`;
+            allEl.appendChild(li);
+        });
+    }
+};
+</script>
+
+</body>
+</html>
