@@ -17,6 +17,39 @@ const MAX_LOG_LINES = 200; // 最多保留 200 行
 
 const sseClients = new Set();
 
+
+const messageStats = new Map();
+// key: message 內容
+// value: 出現次數
+
+function recordMessageStat(message) {
+    if (!message) return;
+
+    const count = messageStats.get(message) || 0;
+    messageStats.set(message, count + 1);
+}
+
+// 取得出現次數最高的 N 條訊息
+function getTopMessages(limit = 10) {
+    return [...messageStats.entries()]
+        .sort((a, b) => b[1] - a[1]) // 依次數由大到小
+        .slice(0, limit)            // 取前 N 名
+        .map(([message, count]) => ({
+            message,
+            count
+        }));
+}
+
+// 取得所有訊息統計，依次數排序
+function getAllMessageStatsSorted() {
+    return [...messageStats.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([message, count]) => ({
+            message,
+            count
+        }));
+}
+
 function pushLog(line) {
     logs.push(line);
     if (logs.length > MAX_LOG_LINES) {
@@ -193,6 +226,8 @@ const server = http.createServer((req, res) => {
 
                 const { user, message } = data;
                   
+                recordMessageStat(message);
+
                 console.log('📩 發送訊息:', user, message);
 
                 res.writeHead(200);
@@ -331,7 +366,7 @@ else if (req.url === '/status/keyword') {
         // 透過 stdin 發送退出命令
         if (tiktokProcess) {
             tiktokProcess.stdin.write('GETTOP\n');
-            
+           
 
         tiktokProcess.stdout.once('data', (data) => {
             const line = data.toString().trim();
@@ -345,6 +380,7 @@ else if (req.url === '/status/keyword') {
 
                 const json = JSON.parse(line);
 
+                cacheKeywordDataTop = json.data || [];
                 console.log('📈 TikTok.js 回傳解析後:', json)
                 
                 
@@ -353,12 +389,11 @@ else if (req.url === '/status/keyword') {
                     message: json.data
                 })}\n\n`);
 
-                return;
             }
             
         })
 
-        return;
+        
 
     } else {
 
@@ -367,6 +402,54 @@ else if (req.url === '/status/keyword') {
                 message: 'TikTok.js 未啟動，沒有實時關鍵字資料'
             })}\n\n`);
 
+    }
+
+    function sendKeywordDataCacheTop() {
+
+        let cache = getAllMessageStatsSorted();
+        if (cache.length > 0) {
+            const top10 = cache.slice(0, 10);
+            res.write(`data: ${JSON.stringify({
+                type: 'top10',
+                data: top10
+            })}\n\n`);
+        }
+
+    }
+
+    function sendKeywordDataCacheAll() {
+
+        if (!tiktokProcess) {
+            console.log('TikTok.js not running, cannot get ALL keyword data');
+            
+            let cache = getAllMessageStatsSorted();
+            if (cache.length > 0) {
+                res.write(`data: ${JSON.stringify({
+                    type: 'all',
+                    data: cache
+                })}\n\n`);
+            }
+
+           
+        } else {
+
+        console.log('Requesting ALL keyword data from TikTok.js');
+       
+        tiktokProcess.stdin.write('GETALL\n');
+        
+        tiktokProcess.stdout.once('data', (data) => {
+            const line = data.toString().trim();
+            console.log('📈 TikTok.js 回傳 (ALL):', line)
+            if (line.startsWith('{') && line.endsWith('}')) {
+                line = line.replace(/^[^\{]*/, '').replace(/[^\}]*$/, ''); // 嘗試提取 JSON 部分
+                const json = JSON.parse(line);
+             
+                console.log('📈 TikTok.js 回傳解析後 (ALL):', json)
+            }
+        });
+            
+    }
+       
     }
 
     function sendKeywordData() {
@@ -407,12 +490,18 @@ else if (req.url === '/status/keyword') {
     sendKeywordData();
 
    
+    if (!tiktokProcess) {
+        console.log('TikTok.js not running, using cache data for streaming');
     // 如果你未來會更新檔案，可以定時推
-    // const interval = setInterval(sendKeywordData, 5000);
+     const interval = setInterval(sendKeywordDataCacheTop, 1000);
+     const intervalAll = setInterval(sendKeywordDataCacheAll, 5000);
     
     req.on('close', () => {
-        //clearInterval(interval);
+        clearInterval(interval);
+        clearInterval(intervalAll);
     });
+
+    }
 }
 
 else if (req.url === '/keyword') {

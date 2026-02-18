@@ -227,7 +227,7 @@ process.stdin.on('data', async (chunk) => {
             return;
         }
 
-         // 🔴 純文字指令
+        // 🔴 純文字指令
         if (msg === 'GETTOP') {
             const topMessages = getTopMessages(10);
            
@@ -241,6 +241,21 @@ process.stdin.on('data', async (chunk) => {
 
             return;
         }
+         // 🔴 純文字指令
+        if (msg === 'GETALL') {
+            const allMessages = getAllMessageStatsSorted();
+           
+            console.log("📈 所有訊息統計:\n", allMessages);
+            
+            // 回傳給 Server.js
+            process.stdout.write(JSON.stringify({
+                type: "AllMessages",
+                data: allMessages
+            }) + '\n');
+
+            return;
+        }
+
 
 
         // 🟢 JSON 訊息
