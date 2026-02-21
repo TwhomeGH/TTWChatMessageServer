@@ -154,6 +154,7 @@ http://localhost:3332/keyword
 
 > [!TIP]
 > 用於統計重複訊息 以便屏蔽煩人廣告關鍵字用
+>
 > 或者做熱門關鍵字統計用
 >
 
@@ -161,8 +162,11 @@ http://localhost:3332/keyword
 
 > [!WARNING]
 > 記得修正目錄下 `keyword.html`
-> 指向EventSource源到 內網使用記得修
+>
+> 指向EventSource源到內網使用記得修
+>
 > [http://你自己的本地內網IP:3332/status/keyword](http://你自己的本地內網IP:3332/status/keyword)
+>
 
 ![關鍵字統計畫面](Docs/Keyword2.png)
 
