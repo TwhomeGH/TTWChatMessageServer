@@ -506,7 +506,18 @@ connection.on(ControlEvent.DISCONNECTED, (e) => {
         console.log("嘗試重新連線 TikTok 直播間...");
 
         try {
-        connection.connect();
+        
+        connection.fetchIsLive().then(isLive => {
+            if (isLive) {
+                console.log("直播間仍在線上，嘗試重新連線...");
+                connection.connect();
+            } else {
+                console.log("直播間已下線，暫不重新連線");
+            }
+        }).catch(err => {
+            console.error("檢查直播狀態失敗:", err);
+            });
+            
         } catch (err) {
         
             if (err instanceof errors_1.UserOfflineError) {
