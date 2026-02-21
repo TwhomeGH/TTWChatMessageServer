@@ -152,16 +152,21 @@ http://localhost:3332/
 http://localhost:3332/keyword
 ```
 
-> [!TIP]
-> 用於統計重複訊息 以便屏蔽煩人廣告關鍵字用
-> 或者做熱門關鍵字統計用
->
-> [!WARNING]
-> 記得修正目錄下keyword.html
-> 指向EventSource源到 內網使用記得修
-> [http://你自己的本地內網IP:3332/status/keyword](http://你自己的本地內網IP:3332/status/keyword)
+::: tip
+用於統計重複訊息 以便屏蔽煩人廣告關鍵字用
 
-![關鍵字統計畫面](Docs/Keyword.png)
+或者做熱門關鍵字統計用
+:::
+
+::: warning
+記得修正目錄下 `keyword.html`
+指向EventSource源到 內網使用記得修
+[http://你自己的本地內網IP:3332/status/keyword](http://你自己的本地內網IP:3332/status/keyword)
+:::
+
+![關鍵字統計畫面](Docs/Keyword2.png)
+
+目前也加了 **複製按鈕** 方便快速複製添加
 
 可以用此來判斷那些**廣告帳號**老是刷的**關鍵字**
 

@@ -50,7 +50,15 @@ evt.onmessage = (event) => {
 
             li.innerHTML = `
                 <span class="truncate">${index + 1}. ${item.message}</span>
-                <span class="ml-4 text-red-400">${item.count}</span>
+                <div class="flex items-center gap-2 ml-4">
+                    <span class="text-red-400">${item.count}</span>
+                    <button
+                        class="copy-btn px-2 py-1 text-xs bg-red-500/80 hover:bg-red-500 text-white rounded"
+                        data-text="${item.message}"
+                    >
+                        複製
+                    </button>
+                </div>
             `;
 
             top10El.appendChild(li);
@@ -64,15 +72,68 @@ evt.onmessage = (event) => {
             li.className =
                 "flex justify-between items-center bg-gray-700/40 rounded-md px-3 py-1 text-sm";
 
-            li.innerHTML = `
+           li.innerHTML = `
                 <span class="truncate">${item.message}</span>
-                <span class="ml-4 text-gray-300">${item.count}</span>
+                <div class="flex items-center gap-2 ml-4">
+                    <span class="text-gray-300">${item.count}</span>
+                    <button
+                        class="copy-btn px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 text-white rounded"
+                        data-text="${item.message}"
+                    >
+                        複製
+                    </button>
+                </div>
             `;
 
             allEl.appendChild(li);
         });
     }
 };
+
+
+function copyText(text) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+  } else {
+    fallbackCopy(text);
+  }
+}
+
+function fallbackCopy(text) {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    document.body.appendChild(textarea);
+    textarea.select();
+   
+    try {
+        document.execCommand("copy");
+        console.log("已複製 (fallback)");
+    } catch (err) {
+        console.error("複製失敗:", err);
+    }
+    document.body.removeChild(textarea);
+
+}
+document.addEventListener("click", async (e) => {
+    if (e.target.classList.contains("copy-btn")) {
+        const text = e.target.dataset.text;
+
+        try {
+            await navigator.clipboard.writeText(text);
+            e.target.textContent = "已複製";
+            setTimeout(() => (e.target.textContent = "複製"), 1000);
+        } catch (err) {
+            e.target.textContent = "失敗 Fallback";
+            console.warn("Clipboard API failed, using fallback:", err);
+            
+            setTimeout(() => (e.target.textContent = "複製"), 1000);
+            fallbackCopy(text); 
+
+        }
+    }
+});
+
+
 </script>
 
 </body>

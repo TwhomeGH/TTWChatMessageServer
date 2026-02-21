@@ -11,7 +11,6 @@ config(); // 讀取 .env
 
 let tiktokProcess = null;
 
-
 let logs = [];
 const MAX_LOG_LINES = 200; // 最多保留 200 行
 
@@ -50,14 +49,39 @@ function getAllMessageStatsSorted() {
         }));
 }
 
-function pushLog(line) {
-    logs.push(line);
+ function SaveCacheKeywordDataAll() {
+
+        let cacheKeywordDataAll = getAllMessageStatsSorted();
+        fs.writeFileSync('./message_stats.json', JSON.stringify(cacheKeywordDataAll, null, 2));
+        pushLog('💾 已將所有關鍵字統計寫入 message_stats.json');
+    }
+
+/**
+ * 日誌推送函數，會同時推送給所有 SSE client
+ * @param  {...any} line 
+ */
+function pushLog(...line) {
+
+
+    console.log(...line);
+
+    logs.push(...line);
+
     if (logs.length > MAX_LOG_LINES) {
         logs.shift();
     }
+    const text = line.map(item => 
+        typeof item === 'object' ? JSON.stringify(item) : item
+    ).join('\n');
+
+
     // 推送給所有 SSE client
     for (const client of sseClients) {
-        client.write(`data: ${line}\n\n`);
+        text.split('\n').forEach(ln => {
+            client.write(`data: ${ln}\n`);
+        });
+
+        client.write(`data: \n\n`);
     }
 
 }
@@ -93,9 +117,9 @@ const server = http.createServer((req, res) => {
 
 
 
-        console.log('Starting TikTok.js with user=', user, 'isTK=', isTK);
-        console.log('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch);
-        console.log('isBoth=', isBoth);
+        pushLog('Starting TikTok.js with user=', user, 'isTK=', isTK);
+        pushLog('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch);
+        pushLog('isBoth=', isBoth);
 
         logs = [];
         pushLog('[SYSTEM] Starting TikTok.js');
@@ -139,7 +163,7 @@ const server = http.createServer((req, res) => {
 
 
         let consoleLog = `TikTok.js started (TikTokUserName=${user}) isTK=${isTK} isBark=${isBark} isSocket=${isSocket} isTwitch=${isTwitch} isBoth=${isBoth}`;
-        console.log(consoleLog);
+
         pushLog(`[SYSTEM] ${consoleLog}`);
 
         // 5s jump to / webpage
@@ -214,7 +238,7 @@ const server = http.createServer((req, res) => {
 
              try {
                        
-                console.log('📩 收到訊息:', body);
+                pushLog('📩 收到訊息:', body);
 
                 const data = JSON.parse(body);
 
@@ -228,7 +252,7 @@ const server = http.createServer((req, res) => {
                   
                 recordMessageStat(message);
 
-                console.log('📩 發送訊息:', user, message);
+                pushLog('📩 發送訊息:', user, message);
 
                 res.writeHead(200);
                 res.end("OK");
@@ -258,7 +282,7 @@ const server = http.createServer((req, res) => {
 
         let consoleLog = `TikTok.js stopping...`;
 
-        console.log(consoleLog);
+     
         pushLog(`[SYSTEM] ${consoleLog}`);
 
         res.setHeader('Content-Type', 'text/html');
@@ -336,6 +360,7 @@ const server = http.createServer((req, res) => {
         // 立刻送一次目前狀態
         res.write(`data: Running: ${tiktokProcess ? 'YES' : 'NO'}\n\n`);
         res.write(`data: -------------------------\n\n`);
+        
         logs.forEach(line => {
             res.write(`data: ${line}\n\n`);
         });
@@ -372,7 +397,7 @@ else if (req.url === '/status/keyword') {
             const line = data.toString().trim();
             
                 
-            console.log('📈 TikTok.js 回傳:', line);
+            pushLog('📈 TikTok.js 回傳:', line);
 
             if (line.startsWith('{') && line.endsWith('}')) {
                 // 可能是 JSON
@@ -381,7 +406,7 @@ else if (req.url === '/status/keyword') {
                 const json = JSON.parse(line);
 
                 cacheKeywordDataTop = json.data || [];
-                console.log('📈 TikTok.js 回傳解析後:', json)
+                pushLog('📈 TikTok.js 回傳解析後:', json)
                 
                 
                 res.write(`data: ${JSON.stringify({
@@ -406,21 +431,22 @@ else if (req.url === '/status/keyword') {
 
     function sendKeywordDataCacheTop() {
 
-        let cache = getAllMessageStatsSorted();
-        if (cache.length > 0) {
-            const top10 = cache.slice(0, 10);
+        let cacheKeywordDataTop = getTopMessages(10);
+        if (cacheKeywordDataTop.length > 0) {
             res.write(`data: ${JSON.stringify({
                 type: 'top10',
-                data: top10
+                data: cacheKeywordDataTop
             })}\n\n`);
         }
 
+
     }
 
+   
     function sendKeywordDataCacheAll() {
 
         if (!tiktokProcess) {
-            console.log('TikTok.js not running, cannot get ALL keyword data');
+            pushLog('TikTok.js not running, cannot get ALL keyword data');
             
             let cache = getAllMessageStatsSorted();
             if (cache.length > 0) {
@@ -433,18 +459,19 @@ else if (req.url === '/status/keyword') {
            
         } else {
 
-        console.log('Requesting ALL keyword data from TikTok.js');
+        pushLog('Requesting ALL keyword data from TikTok.js');
        
         tiktokProcess.stdin.write('GETALL\n');
         
         tiktokProcess.stdout.once('data', (data) => {
             const line = data.toString().trim();
-            console.log('📈 TikTok.js 回傳 (ALL):', line)
+            pushLog('📈 TikTok.js 回傳 (ALL):', line)
+
             if (line.startsWith('{') && line.endsWith('}')) {
                 line = line.replace(/^[^\{]*/, '').replace(/[^\}]*$/, ''); // 嘗試提取 JSON 部分
                 const json = JSON.parse(line);
              
-                console.log('📈 TikTok.js 回傳解析後 (ALL):', json)
+                pushLog('📈 TikTok.js 回傳解析後 (ALL):', json)
             }
         });
             
@@ -457,7 +484,7 @@ else if (req.url === '/status/keyword') {
             const raw = fs.readFileSync('./message_stats.json', 'utf-8');
             const json = JSON.parse(raw);
 
-            console.log('📈 讀取 message_stats.json:', json);
+            pushLog('📈 讀取 message_stats.json:', json);
 
             const stats = json || [];
 
@@ -465,9 +492,9 @@ else if (req.url === '/status/keyword') {
                 .slice(0, 10); // 你存檔時已排序就直接 slice
 
 
-            console.log('📈 傳送 top10:', top10);
-            console.log('📈 傳送 all stats:', stats)
-            ;
+            pushLog('📈 傳送 top10:', top10);
+            pushLog('📈 傳送 all stats:', stats);
+
             res.write(`data: ${JSON.stringify({
                 type: 'top10',
                 data: top10
@@ -491,14 +518,25 @@ else if (req.url === '/status/keyword') {
 
    
     if (!tiktokProcess) {
-        console.log('TikTok.js not running, using cache data for streaming');
-    // 如果你未來會更新檔案，可以定時推
-     const interval = setInterval(sendKeywordDataCacheTop, 1000);
-     const intervalAll = setInterval(sendKeywordDataCacheAll, 5000);
+        pushLog('TikTok.js not running, using cache data for streaming');
     
+    // 如果你未來會更新檔案，可以定時推
+    const interval = setInterval(sendKeywordDataCacheTop, 1000);
+    const intervalAll = setInterval(sendKeywordDataCacheAll, 5000);
+    
+
     req.on('close', () => {
         clearInterval(interval);
         clearInterval(intervalAll);
+
+        pushLog('Client disconnected, stopped sending keyword data');
+    
+        if (!tiktokProcess) {
+            SaveCacheKeywordDataAll();
+            pushLog('TikTok.js not running, saved cache keyword data to file on client disconnect');
+            pushLog('Saved cache keyword data to file on client disconnect');
+        }
+
     });
 
     }
@@ -654,7 +692,7 @@ Process view logs in real-time.
 });
 
 server.listen(3332, '0.0.0.0', () => {
-    console.log('HTTP control server listening on port 3332');
+    pushLog('HTTP control server listening on port 3332');
 });
 
 process.on("SIGINT", async () => {
@@ -669,8 +707,13 @@ process.on("SIGTERM", async () => {
 
 
 async function handleExit() {
-    console.log("Exiting...");
+    
+    pushLog("Exiting...");
 
+    if (!tiktokProcess) {
+        SaveCacheKeywordDataAll();
+        pushLog('TikTok.js not running, saved cache keyword data to file on exit');
+    }
     if (tiktokProcess) {
         const proc = tiktokProcess;
         tiktokProcess = null;
@@ -686,11 +729,11 @@ async function handleExit() {
                 resolve();
             }, 5000);
         });
-        console.log("✅ TikTok.js process exited");
+        pushLog("✅ TikTok.js process exited");
 
     }
 
-    console.log("TikTok.js exited, exiting main process");
+    pushLog("TikTok.js exited, exiting main process");
 
     process.exit(0);
 
