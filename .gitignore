@@ -1,5 +1,6 @@
 .env
 tokens.json
 node_modules/
+message_stats.json
 send_messages.json
-send_messages.json
+
