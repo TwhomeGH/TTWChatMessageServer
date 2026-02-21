@@ -157,8 +157,8 @@ const server = http.createServer((req, res) => {
         });
 
 
-       
-      
+        
+        
 
 
 
@@ -236,8 +236,8 @@ const server = http.createServer((req, res) => {
 
         req.on('end', () => {
 
-             try {
-                       
+            try {
+                
                 pushLog('📩 收到訊息:', body);
 
                 const data = JSON.parse(body);
@@ -249,7 +249,7 @@ const server = http.createServer((req, res) => {
 
 
                 const { user, message } = data;
-                  
+                
                 recordMessageStat(message);
 
                 pushLog('📩 發送訊息:', user, message);

@@ -265,8 +265,8 @@ process.stdin.on('data', async (chunk) => {
             if (json.type === 'StreamMessage') {
                 // 同時記錄訊息統計
                 recordMessageStat(json.message);
-
                 sendToTCP(json);
+                console.log('📥 收到 JSON 訊息:', json);
             }
 
         } catch (e) {
@@ -316,11 +316,6 @@ async function sendBarkNotification(title = "Twitch", comment, icon) {
 
 function sendToTCP(payload) {
     if (!client || client.destroyed) return;
-    
-    if (isDuplicate(payload.user, payload.message)) {
-        console.log('🚫 重複訊息跳過:', payload.user, payload.message);
-        return;
-    }
 
     addToSyncBuffer(payload.user, payload.message);
 
