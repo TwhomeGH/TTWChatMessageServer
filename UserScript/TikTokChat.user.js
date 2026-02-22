@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
 // @grant        GM_xmlhttpRequest
+// @run-at       document-end
 
 // @updateURL    https://raw.githubusercontent.com/TwhomeGH/TTWChatMessageServer/main/UserScript/TikTokChat.user.js
 // @downloadURL  https://raw.githubusercontent.com/TwhomeGH/TTWChatMessageServer/main/UserScript/TikTokChat.user.js
@@ -98,13 +99,16 @@
         }
     }
 
-    // 初次抓取觀眾列表
-    console.log("Current viewers:", getViewers());
 
+    setTimeout(() => {
+        // 初次抓取觀眾列表
+        console.log("Current viewers after 5s:", getViewers());
+    
     // 監控聊天室新訊息
     onElementAdded('div[data-e2e="chat-message"]', getNewChatMessages);
 
     // 監控觀眾進入訊息
     onElementAdded('div[data-e2e="enter-message"]', getNewEnterMessages);
+    }, 5000);
 
 })();
