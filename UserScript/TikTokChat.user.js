@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
@@ -38,6 +38,7 @@
         });
     }
 
+    // 監控 DOM 新增元素的工具函式
     function onElementAdded(selector, callback) {
         const observer = new MutationObserver(mutations => {
             for (const mutation of mutations) {
@@ -50,6 +51,48 @@
         observer.observe(document.body, { childList: true, subtree: true });
         return observer;
     }
+
+    // 監控 DOM 變化的工具函式（包含屬性、文字等變化）
+    function onElementChanged(selector, callback, options = {}) {
+    const {
+        attributes = true,
+        characterData = true,
+        childList = true,
+        subtree = true,
+        attributeFilter = null
+    } = options;
+
+    const observer = new MutationObserver(mutations => {
+        const triggered = new Set();
+
+        for (const mutation of mutations) {
+            let target = mutation.target;
+
+            // 找到符合 selector 的最近祖先（包含自己）
+            if (target.nodeType === 3) target = target.parentElement; // text node
+            if (!target) continue;
+
+            const el = target.matches?.(selector)
+                ? target
+                : target.closest?.(selector);
+
+            if (el && !triggered.has(el)) {
+                triggered.add(el);
+                callback(el, mutation);
+            }
+        }
+    });
+
+    observer.observe(document.body, {
+        attributes,
+        characterData,
+        childList,
+        subtree,
+        attributeFilter
+    });
+
+    return observer;
+}
 
     function getViewers() {
         const viewers = [];
@@ -99,6 +142,10 @@
         }
     }
 
+    setInterval(() => {
+        const currentViewers = getViewers();
+        console.log("Current viewers:", currentViewers);
+    }, 5000); // 每 5 秒更新一次觀眾列表
 
     setTimeout(() => {
         // 初次抓取觀眾列表
@@ -108,7 +155,7 @@
     onElementAdded('div[data-e2e="chat-message"]', getNewChatMessages);
 
     // 監控觀眾進入訊息
-    onElementAdded('div[data-e2e="enter-message"]', getNewEnterMessages);
+    onElementChanged('div[data-e2e="enter-message"]', getNewEnterMessages);
     }, 5000);
 
 })();
