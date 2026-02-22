@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
@@ -80,10 +80,31 @@
         }
     }
 
+    function getNewEnterMessages(node) {
+        // node 為新增的 chat message
+        if (sentMessages.has(node)) return;
+
+        const userName = node.querySelector('[data-e2e="message-owner-name"]')?.innerText?.trim();
+    
+        // 精準抓訊息本身
+        const text = node.querySelector('div.w-full.break-words.align-middle.cursor-pointer')?.innerText?.trim();
+
+        const avatar = 'https://img.icons8.com/?size=100&id=60989&format=png&color=000000'
+
+        if (userName && text) {
+            sendSocketMessage(userName, text, avatar, null, true);
+            sentMessages.add(node);
+            console.log("New Enter message sent:", { userName, text, avatar });
+        }
+    }
+
     // 初次抓取觀眾列表
     console.log("Current viewers:", getViewers());
 
     // 監控聊天室新訊息
     onElementAdded('div[data-e2e="chat-message"]', getNewChatMessages);
+
+    // 監控觀眾進入訊息
+    onElementAdded('div[data-e2e="enter-message"]', getNewEnterMessages);
 
 })();
