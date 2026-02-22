@@ -373,8 +373,8 @@ function addToSyncBuffer(username, message) {
     });
 
     
-    // 超過 10 筆就移除最舊的
-    if (syncBuffer.length > 10) {
+    // 超過 100 筆就移除最舊的
+    if (syncBuffer.length > 100) {
         syncBuffer.shift();
     }
 }
@@ -389,11 +389,7 @@ function isDuplicate(username, message) {
 function sendSocketMessage(user, message, img, giftImg,isMain=true,webType="default") {
     if (!client || client.destroyed) return;
 
-    if (webType === "Chat") {
-        addToSyncBuffer(user, message);
-    }
-
-
+    
     if (isDuplicate(user, message)) {
         console.log('🚫內部 重複訊息跳過:', user, message);
         return;
@@ -540,18 +536,21 @@ connection.on(WebcastEvent.MEMBER,data => {
     
     console.log(data.user.nickname,"加入了")  
 
+ 
     sendBarkNotification(data.user.nickname, "來了",iconn);
     sendSocketMessage(data.user.nickname, "來了",iconn,"",false);
 
+   // 同時記錄訊息統計 加入訊息存儲用與TikTok的結果一致 以便去重
+    addToSyncBuffer(data.user.nickname, "加入了");
 
 })
 
 connection.on(WebcastEvent.FOLLOW,data =>{
-     let iconn = data.user.profilePicture.url[1]
+    let iconn = data.user.profilePicture.url[1]
     console.log(data.user.nickname,"關注了主播")
 
-        sendBarkNotification(data.user.nickname, "關注了主播",iconn);
-        sendSocketMessage(data.user.nickname, "關注了主播",iconn,"",false);
+    sendBarkNotification(data.user.nickname, "關注了主播",iconn);
+    sendSocketMessage(data.user.nickname, "關注了主播",iconn,"",false);
 
 })
 
@@ -570,6 +569,9 @@ connection.on(WebcastEvent.CHAT, data => {
 
     sendBarkNotification(data.user.nickname, data.comment,iconn);
     sendSocketMessage(data.user.nickname, data.comment,iconn,"",true,"Chat");
+
+    // 同時記錄訊息統計
+    addToSyncBuffer(data.user.nickname, data.comment);
 
 });
 

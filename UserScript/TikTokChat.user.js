@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
@@ -53,45 +53,75 @@
     }
 
     // 監控 DOM 變化的工具函式（包含屬性、文字等變化）
-    function onElementChanged(selector, callback, options = {}) {
-    const {
-        attributes = true,
-        characterData = true,
-        childList = true,
-        subtree = true,
-        attributeFilter = null
-    } = options;
-
+function watchEnterMessages(callback) {
     const observer = new MutationObserver(mutations => {
-        const triggered = new Set();
-
         for (const mutation of mutations) {
-            let target = mutation.target;
+            mutation.addedNodes.forEach(node => {
+                if (node.nodeType !== 1) return;
 
-            // 找到符合 selector 的最近祖先（包含自己）
-            if (target.nodeType === 3) target = target.parentElement; // text node
-            if (!target) continue;
+                const enterEls = [];
 
-            const el = target.matches?.(selector)
-                ? target
-                : target.closest?.(selector);
+                if (node.matches?.('div[data-e2e="enter-message"]')) {
+                    enterEls.push(node);
+                }
 
-            if (el && !triggered.has(el)) {
-                triggered.add(el);
-                callback(el, mutation);
-            }
+                node.querySelectorAll?.('div[data-e2e="enter-message"]')
+                    .forEach(el => enterEls.push(el));
+
+                enterEls.forEach(el => {
+                    const container = el.parentElement?.parentElement || el;
+
+                    // 👉 等文字出現
+                    waitForContent(el, text => {
+                        callback(container, el, text);
+                    });
+                });
+            });
         }
     });
 
     observer.observe(document.body, {
-        attributes,
-        characterData,
-        childList,
-        subtree,
-        attributeFilter
+        childList: true,
+        subtree: true
     });
 
     return observer;
+}
+
+function waitForContent(el, callback) {
+    // 先快檢
+    if (hasContent(el)) {
+        callback(el.textContent.trim());
+        return;
+    }
+
+    const observer = new MutationObserver(() => {
+        if (hasContent(el)) {
+            observer.disconnect();
+            callback(el.textContent.trim());
+        }
+    });
+
+    observer.observe(el, {
+        childList: true,
+        characterData: true,
+        subtree: true
+    });
+
+    // 安全釋放
+    setTimeout(() => observer.disconnect(), 1500);
+}
+
+function hasContent(el) {
+    if (!el) return false;
+
+    // 有可見文字
+    if (el.textContent.trim().length > 0) return true;
+
+    // 或者已經有子元素
+    if (el.children.length > 0) return true;
+
+    return false;
 }
 
     function getViewers() {
@@ -105,6 +135,32 @@
         return viewers;
     }
 
+    // 觀眾人數通常在一個包含 "觀眾人數" 字樣的元素中，裡面有多個 span 組成的數字
+    function getViewerCount() {
+        const container = Array.from(document.querySelectorAll('[data-e2e="live-chat-container"]'))
+            .find(el => el.textContent.includes('觀眾人數'));
+
+
+        if (!container) return null;
+
+        const digits = container.querySelectorAll('.inline-flex.justify-center.w-9');
+
+        console.log('找到觀眾人數容器:', container,digits);
+
+        const number = Array.from(digits)
+            .map(el => {
+                //console.log('處理數字元素:', el, el.textContent);
+
+                return el.textContent.trim();
+    })
+            .join('');
+
+        if (number == null || number === '') return 0;
+
+        return Number(number);
+    }
+
+    // 監控聊天室新訊息
     function getNewChatMessages(node) {
         // node 為新增的 chat message
         if (sentMessages.has(node)) return;
@@ -124,28 +180,32 @@
         }
     }
 
+    // 監控觀眾進入訊息
     function getNewEnterMessages(node) {
         // node 為新增的 chat message
-        if (sentMessages.has(node)) return;
+        //console.log("Processing enter message node:", node);
+    
+        var nodeKey=node.querySelector('[data-e2e="enter-message"]')
 
-        const userName = node.querySelector('[data-e2e="message-owner-name"]')?.innerText?.trim();
+        console.log("Checking enter message key element:", nodeKey);
+
+        const userName = nodeKey.querySelector('[data-e2e="message-owner-name"]')?.innerText?.trim();
     
         // 精準抓訊息本身
-        const text = node.querySelector('div.w-full.break-words.align-middle.cursor-pointer')?.innerText?.trim();
-
-        const avatar = 'https://img.icons8.com/?size=100&id=60989&format=png&color=000000'
+        const text = nodeKey.querySelector('div.inline-flex.items-center.break-words.ltr\\:ml-4.rtl\\:mr-4')?.innerText?.trim();
+        const avatar = 'https://img.icons8.com/?size=100&id=1090&format=png&color=355FFF'
 
         if (userName && text) {
-            sendSocketMessage(userName, text, avatar, null, true);
-            sentMessages.add(node);
-            console.log("New Enter message sent:", { userName, text, avatar });
+            sendSocketMessage(userName, text, avatar, null, false);
+            console.log("加入訊息送出:", { userName, text, avatar });
         }
     }
 
+
     setInterval(() => {
-        const currentViewers = getViewers();
-        console.log("Current viewers:", currentViewers);
-    }, 5000); // 每 5 秒更新一次觀眾列表
+        const viewers = getViewerCount();
+        console.log('觀眾人數:', viewers);
+    }, 60000); // 每 60 秒更新一次觀眾列表
 
     setTimeout(() => {
         // 初次抓取觀眾列表
@@ -154,8 +214,11 @@
     // 監控聊天室新訊息
     onElementAdded('div[data-e2e="chat-message"]', getNewChatMessages);
 
-    // 監控觀眾進入訊息
-    onElementChanged('div[data-e2e="enter-message"]', getNewEnterMessages);
     }, 5000);
+
+    setTimeout(() => {
+        // 監控觀眾進入訊息
+        watchEnterMessages(getNewEnterMessages);
+    }, 15000);
 
 })();

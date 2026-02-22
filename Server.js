@@ -65,14 +65,15 @@ function pushLog(...line) {
 
     console.log(...line);
 
-    logs.push(...line);
-
+ 
     if (logs.length > MAX_LOG_LINES) {
         logs.shift();
     }
     const text = line.map(item => 
         typeof item === 'object' ? JSON.stringify(item) : item
     ).join('\n');
+
+    logs.push(text);
 
 
     // 推送給所有 SSE client
