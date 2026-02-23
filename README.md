@@ -199,7 +199,7 @@ http://localhost:3332/config?key=你設置的密碼
 ## 注意事項
 
 1. 修改 .env 後，需要重新 /open 才能讓新設定生效
-2. 本服務適合內網或私人環境使用，未加密認證
+2. 本服務建議保持內網或私人環境使用
 3. TikTok session 過期需重新抓取
 
 ## 補釘服務器 WebSocket.js
