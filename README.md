@@ -186,6 +186,12 @@ http://localhost:3332/config
 
 表單提交後會立即更新 process.env，下一次 /open 將生效
 
+現在已添加配置頁存取密碼 對應env的`CONFIG_KEY`進行密碼設置
+
+```bash
+http://localhost:3332/config?key=你設置的密碼
+```
+
 ## 日誌與錯誤
 
 所有運行日誌會在瀏覽器根目錄 SSE 頁面即時顯示，也會輸出到控制台

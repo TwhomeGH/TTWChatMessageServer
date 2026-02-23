@@ -557,7 +557,22 @@ else if (req.url === '/keyword') {
 }
 
     // GET /config → 顯示表單
-else if (req.url === '/config' && req.method === 'GET') {
+else if (req.url.startsWith('/config') && req.method === 'GET') {
+
+        // ✅ 新增：解析 query
+    const url = new URL(req.url, `http://${req.headers.host}`)
+
+    const password = url.searchParams.get('key') ?? ''
+
+    if (password !== process.env.CONFIG_KEY) {
+        res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`<html><body>
+<h2>403 Forbidden</h2>
+<p>Invalid or key error.</p>
+</body></html>`);
+        return;
+    }
+
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(`
 <html>
