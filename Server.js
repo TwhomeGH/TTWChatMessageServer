@@ -70,19 +70,17 @@ function pushLog(...line) {
         logs.shift();
     }
     const text = line.map(item => 
-        typeof item === 'object' ? JSON.stringify(item) : item
-    ).join('\n');
+        typeof item === 'object' ? JSON.stringify(item) : String(item)
+    ).join(' ');
 
     logs.push(text);
+    if (logs.length > MAX_LOG_LINES) logs.shift();
+
 
 
     // 推送給所有 SSE client
     for (const client of sseClients) {
-        text.split('\n').forEach(ln => {
-            client.write(`data: ${ln}\n`);
-        });
-
-        client.write(`data: \n\n`);
+        client.write(`data: ${text}\n\n`);
     }
 
 }
