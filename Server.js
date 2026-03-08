@@ -16,6 +16,8 @@ const MAX_LOG_LINES = 200; // 最多保留 200 行
 
 const sseClients = new Set();
 
+var cacheKeywordDataTop = []
+var cacheKeywordDataAll = []
 
 const messageStats = new Map();
 // key: message 內容
@@ -49,11 +51,12 @@ function getAllMessageStatsSorted() {
         }));
 }
 
- function SaveCacheKeywordDataAll() {
+function SaveCacheKeywordDataAll() {
 
-        let cacheKeywordDataAll = getAllMessageStatsSorted();
+        cacheKeywordDataAll = getAllMessageStatsSorted();
         fs.writeFileSync('./message_stats.json', JSON.stringify(cacheKeywordDataAll, null, 2));
         pushLog('💾 已將所有關鍵字統計寫入 message_stats.json');
+        
     }
 
 /**
@@ -141,6 +144,28 @@ const server = http.createServer((req, res) => {
                 .toString()
                 .split('\n')
                 .forEach(line => line && pushLog(`[OUT] ${line}`));
+
+            
+            var line = data.toString().trim();
+
+            if (line.startsWith('{') && line.endsWith('}')) {
+                // 可能是 JSON
+                line = line.replace(/^[^\{]*/, '').replace(/[^\}]*$/, ''); // 嘗試提取 JSON 部分
+
+                const json = JSON.parse(line);
+                
+                var PType = json.type;
+
+                if ( PType == "top10"){
+                    cacheKeywordDataTop = json.data
+                } else if ( PType == "all") {
+                    cacheKeywordDataAll = json.data
+                }
+
+                pushLog('📈 TikTok.js 回傳解析後:', json)
+
+            }
+
         });
 
         tiktokProcess.stderr.on('data', (data) => {
@@ -387,56 +412,9 @@ else if (req.url === '/status/keyword') {
 
         
         // 透過 stdin 發送退出命令
-        if (tiktokProcess) {
+        if (!tiktokProcess) {
 
-        function processTikTokTop10() {
-            tiktokProcess.stdin.write('GETTOP\n');
-        }
-
-        function processTikTokAll() {
-                tiktokProcess.stdin.write('GETALL\n');
-        }
-    
-        intervalTop10 = setInterval(processTikTokTop10, 1000);
-        intervalAll = setInterval(processTikTokAll, 5000);
-
-        tiktokProcess.stdout.once('data', (data) => {
-            const line = data.toString().trim();
-            
-                
-            pushLog('📈 TikTok.js 回傳:', line);
-
-            if (line.startsWith('{') && line.endsWith('}')) {
-                // 可能是 JSON
-                line = line.replace(/^[^\{]*/, '').replace(/[^\}]*$/, ''); // 嘗試提取 JSON 部分
-
-                const json = JSON.parse(line);
-                
-                var PType = json.type;
-
-                cacheKeywordDataTop = json.data || [];
-                pushLog('📈 TikTok.js 回傳解析後:', json)
-                
-                
-                res.write(`data: ${JSON.stringify({
-                    type: PType,
-                    message: json.data
-                })}\n\n`);
-
-            }
-            
-        })
-
-        
-        req.on('close', () => {
-            clearInterval(intervalTop10);
-            clearInterval(intervalAll);
-            pushLog('Client中斷 停止請求 TikTok.js 關鍵字資料[TikTokJS 仍在運行]');
-        });
-
-    } else {
-
-          res.write(`data: ${JSON.stringify({
+        res.write(`data: ${JSON.stringify({
                 type: 'error',
                 message: 'TikTok.js 未啟動，沒有實時關鍵字資料'
             })}\n\n`);
@@ -445,12 +423,28 @@ else if (req.url === '/status/keyword') {
 
     function sendKeywordDataCacheTop() {
 
-        let cacheKeywordDataTop = getTopMessages(10);
+        if (!tiktokProcess) {  
+        
+        pushLog('未運行使用快取資料推送 top10 關鍵字統計');
+        cacheKeywordDataTop = getTopMessages(10);
         if (cacheKeywordDataTop.length > 0) {
             res.write(`data: ${JSON.stringify({
                 type: 'top10',
                 data: cacheKeywordDataTop
             })}\n\n`);
+        }
+
+        } else {
+        pushLog('請求 TikTok.js 推送 top10 關鍵字統計');
+        tiktokProcess.stdin.write('GETTOP\n');
+
+        if (cacheKeywordDataTop.length > 0) {
+            res.write(`data: ${JSON.stringify({
+                type: 'top10',
+                data: cacheKeywordDataTop
+            })}\n\n`);
+        }
+
         }
 
 
@@ -462,35 +456,28 @@ else if (req.url === '/status/keyword') {
         if (!tiktokProcess) {
             pushLog('TikTok.js not running, cannot get ALL keyword data');
             
-            let cache = getAllMessageStatsSorted();
-            if (cache.length > 0) {
+            cacheKeywordDataAll = getAllMessageStatsSorted();
+            if (cacheKeywordDataAll.length > 0) {
                 res.write(`data: ${JSON.stringify({
                     type: 'all',
-                    data: cache
+                    data: cacheKeywordDataAll
                 })}\n\n`);
             }
 
-           
+        
         } else {
 
-        pushLog('Requesting ALL keyword data from TikTok.js');
-       
+        pushLog('請求 All Keyword TikTok.js');
         tiktokProcess.stdin.write('GETALL\n');
         
-        tiktokProcess.stdout.once('data', (data) => {
-            const line = data.toString().trim();
-            pushLog('📈 TikTok.js 回傳 (ALL):', line)
-
-            if (line.startsWith('{') && line.endsWith('}')) {
-                line = line.replace(/^[^\{]*/, '').replace(/[^\}]*$/, ''); // 嘗試提取 JSON 部分
-                const json = JSON.parse(line);
-             
-                pushLog('📈 TikTok.js 回傳解析後 (ALL):', json)
-            }
-        });
-            
+        if (cacheKeywordDataAll.length > 0) {
+                res.write(`data: ${JSON.stringify({
+                    type: 'all',
+                    data: cacheKeywordDataAll
+                })}\n\n`);
+        }
+    
     }
-       
     }
 
     function sendKeywordData() {
@@ -530,10 +517,7 @@ else if (req.url === '/status/keyword') {
     // 進來先送一次
     sendKeywordData();
 
-   
-    if (!tiktokProcess) {
-        pushLog('TikTok.js not running, using cache data for streaming');
-    
+
     // 如果你未來會更新檔案，可以定時推
     const interval = setInterval(sendKeywordDataCacheTop, 1000);
     const intervalAll = setInterval(sendKeywordDataCacheAll, 5000);
@@ -553,7 +537,7 @@ else if (req.url === '/status/keyword') {
 
     });
 
-    }
+    
 }
 
 else if (req.url === '/keyword') {
