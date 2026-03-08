@@ -385,12 +385,20 @@ else if (req.url === '/status/keyword') {
         'Access-Control-Allow-Origin': '*'
     });
 
-   
-          
+        
         // 透過 stdin 發送退出命令
         if (tiktokProcess) {
+
+        function processTikTokTop10() {
             tiktokProcess.stdin.write('GETTOP\n');
-           
+        }
+
+        function processTikTokAll() {
+                tiktokProcess.stdin.write('GETALL\n');
+        }
+    
+        intervalTop10 = setInterval(processTikTokTop10, 1000);
+        intervalAll = setInterval(processTikTokAll, 5000);
 
         tiktokProcess.stdout.once('data', (data) => {
             const line = data.toString().trim();
@@ -403,13 +411,15 @@ else if (req.url === '/status/keyword') {
                 line = line.replace(/^[^\{]*/, '').replace(/[^\}]*$/, ''); // 嘗試提取 JSON 部分
 
                 const json = JSON.parse(line);
+                
+                var PType = json.type;
 
                 cacheKeywordDataTop = json.data || [];
                 pushLog('📈 TikTok.js 回傳解析後:', json)
                 
                 
                 res.write(`data: ${JSON.stringify({
-                    type: 'top10',
+                    type: PType,
                     message: json.data
                 })}\n\n`);
 
@@ -418,6 +428,11 @@ else if (req.url === '/status/keyword') {
         })
 
         
+        req.on('close', () => {
+            clearInterval(intervalTop10);
+            clearInterval(intervalAll);
+            pushLog('Client中斷 停止請求 TikTok.js 關鍵字資料[TikTokJS 仍在運行]');
+        });
 
     } else {
 
@@ -528,7 +543,7 @@ else if (req.url === '/status/keyword') {
         clearInterval(interval);
         clearInterval(intervalAll);
 
-        pushLog('Client disconnected, stopped sending keyword data');
+        pushLog('Client 中斷，停止推送關鍵字資料[TikTokJS 未運行，使用快取資料]');
     
         if (!tiktokProcess) {
             SaveCacheKeywordDataAll();

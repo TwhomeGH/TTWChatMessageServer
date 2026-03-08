@@ -29,7 +29,7 @@
 // let enableDelayCheck = isDelay;       // 是否延遲 2 秒檢查
 
 // async function handleExit() {
-  
+
 //     isEnd=true
 
 //     server.close((e) =>{

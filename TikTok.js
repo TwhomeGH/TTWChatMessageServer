@@ -107,13 +107,8 @@ async function saveStatsToFile(filePath = './message_stats.json') {
 
     try {
 
-    await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8', (err) => {
-        if (err) {
-            console.error('❌ 儲存訊息統計失敗:', err);
-        } else {
-            console.log(`✅ 已儲存訊息統計到 ${filePath}`);
-        }
-    });
+    await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+    console.log(`✅ 已進行儲存訊息統計到 ${filePath}`);
 
     console.log(`📊 訊息統計:\n`, data.slice(0, 20)); // 顯示前 20 條統計
 
@@ -201,7 +196,7 @@ async function handleExit() {
     await saveSentMessages();
 
     await saveStatsToFile();
-   
+    
     console.log("✅ 優雅退出完成");
 
     process.exit(0);
@@ -230,12 +225,12 @@ process.stdin.on('data', async (chunk) => {
         // 🔴 純文字指令
         if (msg === 'GETTOP') {
             const topMessages = getTopMessages(10);
-           
+            
             console.log("📈 最高出現次數訊息:\n", topMessages);
             
             // 回傳給 Server.js
             process.stdout.write(JSON.stringify({
-                type: "TopMessages",
+                type: "top10",
                 data: topMessages
             }) + '\n');
 
@@ -244,12 +239,12 @@ process.stdin.on('data', async (chunk) => {
          // 🔴 純文字指令
         if (msg === 'GETALL') {
             const allMessages = getAllMessageStatsSorted();
-           
+            
             console.log("📈 所有訊息統計:\n", allMessages);
             
             // 回傳給 Server.js
             process.stdout.write(JSON.stringify({
-                type: "AllMessages",
+                type: "all",
                 data: allMessages
             }) + '\n');
 
@@ -395,10 +390,12 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,webType="defa
         return;
     }
 
+    
+
     const payload = {
         type: 'StreamMessage',
         user,
-        message,
+        message:String(message),
         img,
         giftImg,
         isMain
@@ -494,31 +491,32 @@ connection.on(ControlEvent.DISCONNECTED, (e) => {
 
 
     setTimeout(() => {
-        console.log("嘗試重新連線 TikTok 直播間...");
+        console.log("需要重新連線 TikTok 直播間...");
+        sendSocketMessage("系統", "需要重新連線 TikTok 直播間...", "", "", false);
 
-        try {
+        //try {
         
-        connection.fetchIsLive().then(isLive => {
-            if (isLive) {
-                console.log("直播間仍在線上，嘗試重新連線...");
-                connection.connect();
-            } else {
-                console.log("直播間已下線，暫不重新連線");
-            }
-        }).catch(err => {
-            console.error("檢查直播狀態失敗:", err);
-            });
+        // connection.fetchIsLive().then(isLive => {
+        //     if (isLive) {
+        //         console.log("直播間仍在線上，嘗試重新連線...");
+        //         connection.connect();
+        //     } else {
+        //         console.log("直播間已下線，暫不重新連線");
+        //     }
+        // }).catch(err => {
+        //     console.error("檢查直播狀態失敗:", err);
+        //     });
             
-        } catch (err) {
+        // } catch (err) {
         
-            if (err instanceof errors_1.UserOfflineError) {
-                console.log('[INFO] 使用者不在線上');
-                return;
-            }
+        //     if (err instanceof errors_1.UserOfflineError) {
+        //         console.log('[INFO] 使用者不在線上');
+        //         return;
+        //     }
 
-            console.error('重新連線失敗:', err);
+        //     console.error('重新連線失敗:', err);
             
-        }
+        // }
 
 
     }, 15000);
