@@ -312,11 +312,20 @@ async function sendBarkNotification(title = "Twitch", comment, icon) {
 function sendToTCP(payload) {
     if (!client || client.destroyed) return;
 
-    addToSyncBuffer(payload.user, payload.message);
-
+    console.log('📤 發送 TCP 訊息:紀錄',payload.user,payload.message);
+  
     try {
         console.log('📤 發送 TCP 訊息Sync:', payload);
+
+        if (isDuplicate(payload.user, payload.message)) {
+            console.log('🚫 重複訊息跳過:', payload.user, payload.message);
+            return;
+        }
+
         client.write(JSON.stringify(payload) + '\n');
+
+        addToSyncBuffer(payload.user, payload.message);
+
     } catch (err) {
         console.error('⚠️ 發送 TCP 訊息失敗:', err.message);
     }
@@ -561,7 +570,7 @@ connection.on(WebcastEvent.CHAT, data => {
     let iconn = data.user.profilePicture.url[1]
 
     console.log(`Chat:${data.user.nickname} : ${data.comment}`)
-    
+    console.log("訊息已記錄到統計中:", data.comment)
     // 同時記錄訊息統計
     recordMessageStat(data.comment);
 

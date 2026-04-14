@@ -265,7 +265,8 @@ const server = http.createServer((req, res) => {
 
             try {
                 
-                pushLog('📩 收到訊息:', body);
+
+                pushLog('Chat入口📩 收到訊息:', body);
 
                 const data = JSON.parse(body);
 
