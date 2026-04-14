@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const { config } = require('dotenv');
+const { time } = require('console');
 
 config(); // 讀取 .env
 
@@ -104,6 +105,8 @@ const server = http.createServer((req, res) => {
             res.end('TikTok.js already running\n');
             return;
         }
+
+        console.log("開啟通知!!");
 
         // ✅ 新增：解析 query
         const url = new URL(req.url, `http://${req.headers.host}`)
@@ -266,10 +269,15 @@ const server = http.createServer((req, res) => {
 
                 const data = JSON.parse(body);
 
-                sendToTikTok({
-                    type: 'StreamMessage',
-                    ...data
-                });
+                setTimeout(() => {
+                    pushLog('📩 0.7秒後處理訊息:', data);
+                    sendToTikTok({
+                        type: 'StreamMessage',
+                        ...data
+                    });
+                
+                }, 700);
+                
 
 
                 const { user, message } = data;

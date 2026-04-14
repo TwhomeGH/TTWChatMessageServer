@@ -22,6 +22,10 @@
     const HTTP_HOST = "127.0.0.1";
     const HTTP_PORT = 3332;
 
+        // 已處理過的訊息集合
+    const processedMessages = new Set();
+
+
 
 
 
@@ -59,24 +63,27 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true) {
     function handleChatMessage(element) {
         if (!element.matches('[data-e2e="chat-message"]')) return;
 
-        // 頭像
+        // 用唯一 key 判斷是否已處理過
+        const uniqueKey = element.innerText.trim();
+        if (processedMessages.has(uniqueKey)) return;
+        processedMessages.add(uniqueKey);
+
         const avatar = element.querySelector('img');
         const avatarUrl = avatar?.src || "";
 
-        // 使用者名稱
         const nameElement = element.querySelector('[data-e2e="message-owner-name"]');
         const username = nameElement?.textContent?.trim() || "";
 
-        // 訊息內容
         const messageElement = element.querySelector('.css-wz5k0l');
         const message = messageElement?.textContent?.trim() || "";
 
         if (!username || !message) return;
 
         console.log("📩 新訊息:", username, message);
-
         sendSocketMessage(username, message, avatarUrl, null, true);
     }
+
+
 
     /**********************
      * 👀 MutationObserver
@@ -87,12 +94,13 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true) {
                 for (const node of mutation.addedNodes) {
                     if (!(node instanceof HTMLElement)) continue;
 
-                    // 如果新增的是 chat-message
-                    handleChatMessage(node);
-
-                    // 或裡面包含 chat-message
-                    node.querySelectorAll?.('[data-e2e="chat-message"]')
-                        .forEach(handleChatMessage);
+                    // 只處理一次
+                    if (node.matches('[data-e2e="chat-message"]')) {
+                        handleChatMessage(node);
+                    } else {
+                        node.querySelectorAll?.('[data-e2e="chat-message"]')
+                            .forEach(handleChatMessage);
+                    }
                 }
             }
         });
@@ -104,6 +112,8 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true) {
 
         console.log("👀 已開始監聽聊天室");
     }
+
+
 
     /**********************
      * 🚀 啟動
