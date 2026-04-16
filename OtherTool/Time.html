@@ -1,38 +1,48 @@
 <style>
     body {
-        
-        background-color:  rgba(0, 0, 0, 0.8);
+        background-color: rgba(0, 0, 0, 0.8);
         font-family: Arial, Helvetica, sans-serif;
         color: white;
-        /* #text-align: center; */
-        margin:5px;
-        padding: 5px;
+        display: flex;
+        flex-direction: column;
+        /* 改成垂直排列，避免橫向撐開 */
+        justify-content: center;
+        /* 垂直置中 */
+        align-items: center;
+        /* 水平置中 */
+        height: 100vh;
+        /* 讓容器填滿視窗高度 */
+        margin: 0;
     }
-    #Time{
-        font-size: 21vh;
+
+    #Time {
+        font-size: 5vw;
+        /* 根據寬高自適應，取較小值避免溢出 */
+        line-height: 1.2em;
+        text-align: left;
     }
 </style>
 
 <script language="JavaScript" type="text/javascript">
 
-    
-    function TimeCount(NTime){
+
+    function TimeCount(NTime) {
         /**
          * NTime 結束時間 格式->2023/2/10
          * 
          * @return Array 返回天/時/分/秒
          * */
-        NowTime=new Date().getTime()
-        NextTime=new Date(NTime).getTime()
-        Result=Math.floor((NextTime-NowTime)/1000)
+        NowTime = new Date().getTime()
+        NextTime = new Date(NTime).getTime()
+        Result = Math.floor((NextTime - NowTime) / 1000)
 
-        ResultT=[
-            `${Math.floor(Result/60/60/24)}天`, //天數
-            `${Math.floor(Result/60/60%24)}時`,//小時
-            `${Math.floor(Result/60%60)}分`,//分鐘
-            `${Math.floor(Result%60)}秒`//秒數
+        ResultT = [
+            `${Math.floor(Result / 60 / 60 / 24)}天`, //天數
+            `${Math.floor(Result / 60 / 60 % 24)}時`,//小時
+            `${Math.floor(Result / 60 % 60)}分`,//分鐘
+            `${Math.floor(Result % 60)}秒`//秒數
         ]
-        return ResultT 
+        return ResultT
     }
     function ShowTime() {
         var NowDate = new Date();
@@ -43,15 +53,17 @@
         ];
         let Time = document.getElementById('Time');
 
-        let TimeSet=new Date('2024/7/9')
-        let CountDown_Time=TimeCount(TimeSet)
+        let TimeSet = new Date('2024/7/9')
+        let CountDown_Time = TimeCount(TimeSet)
 
         Display = [
-            `目前時間：`,`${NowDate.toLocaleString()}📦${DayNames[D]}`,
-            `到${TimeSet.getMonth()+1}/${TimeSet.getDate()} 倒數${CountDown_Time[0]} ${CountDown_Time[1]}${CountDown_Time[2]}${CountDown_Time[3]}`
+            `目前時間：${NowDate.toLocaleString()}🍫${DayNames[D]}`
         ]
+        // 倒數用
+        //`到${TimeSet.getMonth()+1}/${TimeSet.getDate()} 倒數${CountDown_Time[0]} ${CountDown_Time[1]}${CountDown_Time[2]}${CountDown_Time[3]}`
 
-        Time.innerHTML = Display.join("<br>");
+
+        Time.innerHTML = Display.join("");
 
         setTimeout('ShowTime()', 10);
     }
