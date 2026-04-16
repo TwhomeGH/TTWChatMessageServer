@@ -4,3 +4,4 @@ node_modules/
 message_stats.json
 send_messages.json
 
+./OtherTool/*.env
