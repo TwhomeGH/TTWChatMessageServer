@@ -1,0 +1,64 @@
+<style>
+    body {
+        
+        background-color:  rgba(0, 0, 0, 0.8);
+        font-family: Arial, Helvetica, sans-serif;
+        color: white;
+        /* #text-align: center; */
+        margin:5px;
+        padding: 5px;
+    }
+    #Time{
+        font-size: 21vh;
+    }
+</style>
+
+<script language="JavaScript" type="text/javascript">
+
+    
+    function TimeCount(NTime){
+        /**
+         * NTime 結束時間 格式->2023/2/10
+         * 
+         * @return Array 返回天/時/分/秒
+         * */
+        NowTime=new Date().getTime()
+        NextTime=new Date(NTime).getTime()
+        Result=Math.floor((NextTime-NowTime)/1000)
+
+        ResultT=[
+            `${Math.floor(Result/60/60/24)}天`, //天數
+            `${Math.floor(Result/60/60%24)}時`,//小時
+            `${Math.floor(Result/60%60)}分`,//分鐘
+            `${Math.floor(Result%60)}秒`//秒數
+        ]
+        return ResultT 
+    }
+    function ShowTime() {
+        var NowDate = new Date();
+        var D = NowDate.getDay();
+        var DayNames = [
+            "週日", "週一", "週二",
+            "週三", "週四", "週五", "週六"
+        ];
+        let Time = document.getElementById('Time');
+
+        let TimeSet=new Date('2024/7/9')
+        let CountDown_Time=TimeCount(TimeSet)
+
+        Display = [
+            `目前時間：`,`${NowDate.toLocaleString()}📦${DayNames[D]}`,
+            `到${TimeSet.getMonth()+1}/${TimeSet.getDate()} 倒數${CountDown_Time[0]} ${CountDown_Time[1]}${CountDown_Time[2]}${CountDown_Time[3]}`
+        ]
+
+        Time.innerHTML = Display.join("<br>");
+
+        setTimeout('ShowTime()', 10);
+    }
+</script>
+
+<body onload="ShowTime()">
+
+    <div id="Time"></div>
+
+</body>

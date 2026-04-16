@@ -308,3 +308,12 @@ git update-index --assume-unchanged <file>
 ```shell
 git update-index --no-assume-unchanged <file>
 ```
+
+
+### 其他工具 **OtherTool**
+
+這個資料夾是之前做的一些小工具
+
+`Time.html` 是很早以前我用在OBS瀏覽器來源 用來顯示當前時間的附加件
+
+`NetFix.py` 則是平時用來FFMPEG重新編碼壓縮用 的小工具
