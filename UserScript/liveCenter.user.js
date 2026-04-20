@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat → Socket Bridge
 // @namespace    pip-chat-bridge
-// @version      1.3
+// @version      1.4
 // @description  Listen TikTok live chat and forward to socket server
 // @author       Nuclear0709
 // @match        https://livecenter.tiktok.com/*
@@ -156,7 +156,7 @@ function getTopFanUsers() {
                 console.log("頭號觀眾人數:", users.length);
                 console.log("名字清單:", users);
             }, 5000); // 每5秒更新一次頭號觀眾列表
-            
+
         }, 3000); // 等頁面穩定
     });
 
