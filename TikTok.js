@@ -448,7 +448,7 @@ function connectSocket() {
     });
 
     client.on('close', () => {
-        console.log('⚠️ TCP Socket closed, reconnecting in 3s...');
+        console.log('⚠️ TCP Socket closed, reconnecting in 15s...');
 
         clearTimeout(heartbeatTimer);
         heartbeatTimer = null;
@@ -458,7 +458,7 @@ function connectSocket() {
            return; 
         }// 如果是程式結束就不重連
 
-        reconnectTimer = setTimeout(connectSocket, 3000);
+        reconnectTimer = setTimeout(connectSocket, 15000);
 
        
     });
@@ -815,19 +815,21 @@ listener.on("error", (err) => {
 
 // --- 3. Twitch EventSub 直播開始/結束 ---
 listener.onStreamOnline(tuser, async (event) => {
-    const message = `直播開始啦！標題：${event.title}`; 
+    const message = `直播開始啦！標題：${event.broadcasterName} ${event.type}`; 
 
     console.log(message);
-    sendBarkNotification("直播開始啦！", event.title, "");
+    sendBarkNotification("直播開始啦！", `${event.broadcasterName} ${event.type}`, "");
     sendSocketMessage("系統", message, "", "", false);
 
-   
+    
 });
 
 listener.onStreamOffline(tuser, async (event) => {
-    const message = `直播結束啦！`;    
+    const message = `直播結束啦！標題：${event.broadcasterName} ${event.type}`;  
+
     console.log(message);
-    sendBarkNotification("直播結束啦！", "", "");
+
+    sendBarkNotification("直播結束啦！", `${event.broadcasterName} ${event.type}`, "");
     sendSocketMessage("系統", message, "", "", false);
 });
 
