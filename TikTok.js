@@ -681,13 +681,13 @@ function connectSocket() {
 function viewCache() {
     console.log("📊 CacheUserNum:", CacheUserNum)
     console.log("📋 CacheUserList:", CacheUserList);
+    
 
     if (connection.state.isConnected) {
-        CacheUserNum = connection.state.user_count
+        console.log("STATE",connection.state.roomInfo.data.user_count)
+        CacheUserNum = connection.state.roomInfo.data.user_count
 
-        if (connection.state.ranks_list) {
-            CacheUserList = connection.state.ranks_list.map(item => item.user.nickname);
-        }
+
     }
 }
 
@@ -696,8 +696,8 @@ if (isTK) {
     // Connect to the chat (await can be used as well)
     connection.connect().then(state => {
         console.info(`Connected to roomId ${state.roomId}`);
-        let DisplayTitle = connection.state.title || "未知直播間";
-        CacheUserNum = connection.state.user_count || 0;
+        let DisplayTitle = connection.state.roomInfo.data.title || "未知直播間";
+        CacheUserNum = connection.state.roomInfo.data.user_count || 0;
         
         sendBarkNotification("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "");
         sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
@@ -708,7 +708,7 @@ if (isTK) {
         sendSocketMessage("系統", `TikTok 直播間連線失敗，無法連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
     });
 
-    setInterval(viewCache, 1000); // 每秒更新一次用戶數量   
+    setInterval(viewCache, 5000); // 每5秒更新一次用戶數量   
 
 
 }
