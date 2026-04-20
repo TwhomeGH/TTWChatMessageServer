@@ -76,8 +76,12 @@ const Bark = process.env.BARK_API;
 
 
 const CACHE_FILE = path.resolve("./send_messages.json");
+const GIFT_MAP_FILE = path.resolve("./gift_map.json");
+const GIFT_LIST_FILE = path.resolve("./gift_list.json");
 let sentMessages = {}; // { uniqueKey: timestamp }
 let newSentMessages = {};    // 只保存這次新產生的訊息
+let giftNameMap = {};
+const missingGiftNames = new Set();
 
 
 const MESSAGE_TTL = 5 * 60 * 1000; // 5 分鐘
@@ -97,6 +101,92 @@ async function loadSentMessages() {
         } else {
             console.error("❌ 載入 send_messages 失敗:", err);
         }
+    }
+}
+
+async function loadGiftNameMap() {
+    try {
+        const raw = await fs.readFile(GIFT_MAP_FILE, "utf-8");
+        giftNameMap = JSON.parse(raw);
+        console.log(`✅ 載入 ${Object.keys(giftNameMap).length} 筆 gift_map 對應`);
+    } catch (err) {
+        if (err.code === 'ENOENT') {
+            giftNameMap = {};
+            await saveGiftNameMap();
+            console.log("⚠️ gift_map.json 不存在，已初始化空對照表");
+        } else {
+            console.error("❌ 載入 gift_map.json 失敗:", err);
+            giftNameMap = {};
+        }
+    }
+}
+
+async function saveGiftNameMap() {
+    try {
+        const sortedMap = Object.fromEntries(
+            Object.entries(giftNameMap).sort(([a], [b]) => a.localeCompare(b))
+        );
+        await fs.writeFile(GIFT_MAP_FILE, JSON.stringify(sortedMap, null, 4), "utf-8");
+    } catch (err) {
+        console.error("❌ 儲存 gift_map.json 失敗:", err);
+    }
+}
+
+function getTranslatedGiftName(giftName) {
+    if (!giftName || typeof giftName !== 'string') {
+        return giftName;
+    }
+
+    const translatedName = giftNameMap[giftName];
+    if (typeof translatedName === 'string' && translatedName.trim().length > 0) {
+        return translatedName;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(giftNameMap, giftName)) {
+        giftNameMap[giftName] = "";
+        if (!missingGiftNames.has(giftName)) {
+            missingGiftNames.add(giftName);
+            saveGiftNameMap();
+            console.log(`📝 發現未翻譯禮物: ${giftName}，已加入 gift_map.json`);
+        }
+    }
+
+    return giftName;
+}
+
+async function saveGiftCatalog(giftList) {
+    try {
+        const normalizedGiftList = giftList.map(gift => ({
+            id: gift.id,
+            name: gift.name,
+            diamond_count: gift.diamond_count,
+            translatedName: giftNameMap[gift.name] || ""
+        }));
+
+        await fs.writeFile(GIFT_LIST_FILE, JSON.stringify(normalizedGiftList, null, 4), "utf-8");
+        console.log(`✅ 已儲存 gift_list.json，共 ${normalizedGiftList.length} 筆禮物資料`);
+    } catch (err) {
+        console.error("❌ 儲存 gift_list.json 失敗:", err);
+    }
+}
+
+async function syncGiftMapFromGiftList(giftList) {
+    let hasNewGift = false;
+
+    for (const gift of giftList) {
+        if (!gift?.name) {
+            continue;
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(giftNameMap, gift.name)) {
+            giftNameMap[gift.name] = "";
+            hasNewGift = true;
+        }
+    }
+
+    if (hasNewGift) {
+        await saveGiftNameMap();
+        console.log("📝 已將 giftList 中尚未翻譯的禮物加入 gift_map.json");
     }
 }
 
@@ -288,6 +378,7 @@ process.on("SIGTERM", async () => {
 });
 
 loadSentMessages()
+const giftMapReady = loadGiftNameMap();
 
 
 
@@ -665,14 +756,18 @@ connection.on(WebcastEvent.LIKE, data => {
 })
 
 // And here we receive gifts sent to the streamer
-connection.on(WebcastEvent.GIFT, data => {
+connection.on(WebcastEvent.GIFT, async data => {
+    await giftMapReady;
+    const originalGiftName = data.giftDetails?.giftName || "";
+    const translatedGiftName = getTranslatedGiftName(originalGiftName);
+    const giftNameForDisplay = translatedGiftName || originalGiftName;
         
     //console.log(JSON.stringify(data,"",4))
     if (data.giftType === 1 && !data.repeatEnd ){
        
-        console.log(`送出了 ${data.user.nickname} : ${ data.giftDetails.giftName} x${data.repeatCount}`)
+        console.log(`送出了 ${data.user.nickname} : ${giftNameForDisplay} x${data.repeatCount}`)
         
-        let mess = `送出了 ${data.giftDetails.giftName} x${data.repeatCount}`
+        let mess = `送出了 ${giftNameForDisplay} x${data.repeatCount}`
         let iconn = data.user.profilePicture.url[1]
         let giftImg = data.giftDetails.icon.url[1]
 
@@ -685,8 +780,8 @@ connection.on(WebcastEvent.GIFT, data => {
 
         
     } else {
-        console.log(`送出了 ${data.user.nickname} : ${data.giftDetails.giftName} x${data.repeatCount}`)
-        let mess = `送出了 ${data.giftDetails.giftName} x${data.repeatCount}`
+        console.log(`送出了 ${data.user.nickname} : ${giftNameForDisplay} x${data.repeatCount}`)
+        let mess = `送出了 ${giftNameForDisplay} x${data.repeatCount}`
         let iconn = data.user.profilePicture.url[1]
         let giftImg = data.giftDetails.icon.url[1]
 
@@ -765,8 +860,11 @@ console.log(JSON.stringify({ action },"",4))
 
 
 // Gift
-connection.fetchAvailableGifts().then((giftList) => {
+connection.fetchAvailableGifts().then(async (giftList) => {
+    await giftMapReady;
     console.log(tiktokName,"Tiktok giftList.length:", giftList.length);
+    await syncGiftMapFromGiftList(giftList);
+    await saveGiftCatalog(giftList);
     // giftList.forEach(gift => {
     //     console.log(`id: ${gift.id}, name: ${gift.name}, cost: ${gift.diamond_count}`)
     // });
