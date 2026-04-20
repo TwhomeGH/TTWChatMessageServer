@@ -73,6 +73,10 @@ const PORT = process.env.SOCKET_API?.split(':')[2] || 9322; // 你的 socket ser
 const HOST = process.env.SOCKET_API?.split(':')[1]?.replace('//', '') || 'localhost'; // 你的 socket server 地址
 
 const Bark = process.env.BARK_API;
+const TRANSLATE_API_URL = process.env.TRANSLATE_API_URL || "https://api.mymemory.translated.net/get";
+const TRANSLATE_SOURCE_LANG = process.env.TRANSLATE_SOURCE_LANG || "en";
+const TRANSLATE_TARGET_LANG = process.env.TRANSLATE_TARGET_LANG || "zh-TW";
+const GIFT_TRANSLATE_PREFILL_LIMIT = Number(process.env.GIFT_TRANSLATE_PREFILL_LIMIT || 10);
 
 
 const CACHE_FILE = path.resolve("./send_messages.json");
@@ -82,6 +86,7 @@ let sentMessages = {}; // { uniqueKey: timestamp }
 let newSentMessages = {};    // 只保存這次新產生的訊息
 let giftNameMap = {};
 const missingGiftNames = new Set();
+const pendingGiftTranslations = new Map();
 
 
 const MESSAGE_TTL = 5 * 60 * 1000; // 5 分鐘
@@ -132,7 +137,7 @@ async function saveGiftNameMap() {
     }
 }
 
-function getTranslatedGiftName(giftName) {
+function getTranslatedGiftNameFromMap(giftName) {
     if (!giftName || typeof giftName !== 'string') {
         return giftName;
     }
@@ -151,7 +156,73 @@ function getTranslatedGiftName(giftName) {
         }
     }
 
-    return giftName;
+    return "";
+}
+
+async function translateGiftNameByApi(giftName) {
+    try {
+        const response = await axios.get(TRANSLATE_API_URL, {
+            params: {
+                q: giftName,
+                langpair: `${TRANSLATE_SOURCE_LANG}|${TRANSLATE_TARGET_LANG}`
+            },
+            timeout: 10000
+        });
+
+        const translatedText = response?.data?.responseData?.translatedText?.trim();
+        if (!translatedText || translatedText.toLowerCase() === giftName.toLowerCase()) {
+            return "";
+        }
+
+        console.log(`🌐 禮物翻譯成功: ${giftName} -> ${translatedText}`);
+        return translatedText;
+    } catch (err) {
+        console.error(`❌ 禮物翻譯失敗 (${giftName}):`, err.message);
+        return "";
+    }
+}
+
+async function ensureGiftNameTranslation(giftName) {
+    if (!giftName || typeof giftName !== 'string') {
+        return giftName;
+    }
+
+    const translatedName = getTranslatedGiftNameFromMap(giftName);
+    if (translatedName) {
+        return translatedName;
+    }
+
+    if (pendingGiftTranslations.has(giftName)) {
+        return pendingGiftTranslations.get(giftName);
+    }
+
+    const translationPromise = (async () => {
+        if (!Object.prototype.hasOwnProperty.call(giftNameMap, giftName)) {
+            giftNameMap[giftName] = "";
+            if (!missingGiftNames.has(giftName)) {
+                missingGiftNames.add(giftName);
+                await saveGiftNameMap();
+                console.log(`📝 發現未翻譯禮物: ${giftName}，已加入 gift_map.json`);
+            }
+        }
+
+        const translatedByApi = await translateGiftNameByApi(giftName);
+        if (translatedByApi) {
+            giftNameMap[giftName] = translatedByApi;
+            await saveGiftNameMap();
+            return translatedByApi;
+        }
+
+        return giftName;
+    })();
+
+    pendingGiftTranslations.set(giftName, translationPromise);
+
+    try {
+        return await translationPromise;
+    } finally {
+        pendingGiftTranslations.delete(giftName);
+    }
 }
 
 async function saveGiftCatalog(giftList) {
@@ -187,6 +258,23 @@ async function syncGiftMapFromGiftList(giftList) {
     if (hasNewGift) {
         await saveGiftNameMap();
         console.log("📝 已將 giftList 中尚未翻譯的禮物加入 gift_map.json");
+    }
+}
+
+async function backfillGiftTranslationsFromGiftList(giftList) {
+    const unresolvedGiftNames = giftList
+        .map(gift => gift?.name)
+        .filter(name => name && !getTranslatedGiftNameFromMap(name));
+
+    const namesToTranslate = unresolvedGiftNames.slice(0, Math.max(0, GIFT_TRANSLATE_PREFILL_LIMIT));
+    if (namesToTranslate.length === 0) {
+        return;
+    }
+
+    console.log(`🌐 準備自動翻譯 ${namesToTranslate.length} 個禮物名稱`);
+
+    for (const giftName of namesToTranslate) {
+        await ensureGiftNameTranslation(giftName);
     }
 }
 
@@ -759,7 +847,7 @@ connection.on(WebcastEvent.LIKE, data => {
 connection.on(WebcastEvent.GIFT, async data => {
     await giftMapReady;
     const originalGiftName = data.giftDetails?.giftName || "";
-    const translatedGiftName = getTranslatedGiftName(originalGiftName);
+    const translatedGiftName = await ensureGiftNameTranslation(originalGiftName);
     const giftNameForDisplay = translatedGiftName || originalGiftName;
         
     //console.log(JSON.stringify(data,"",4))
@@ -864,6 +952,7 @@ connection.fetchAvailableGifts().then(async (giftList) => {
     await giftMapReady;
     console.log(tiktokName,"Tiktok giftList.length:", giftList.length);
     await syncGiftMapFromGiftList(giftList);
+    await backfillGiftTranslationsFromGiftList(giftList);
     await saveGiftCatalog(giftList);
     // giftList.forEach(gift => {
     //     console.log(`id: ${gift.id}, name: ${gift.name}, cost: ${gift.diamond_count}`)

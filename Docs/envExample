@@ -14,6 +14,13 @@ TT_TARGET_IDC=你的TikTok Target IDC
 BARK_API=你的Bark API
 SOCKET_API=你的Socket API
 WEB_API=http://localhost:3001/sendSync
+TRANSLATE_API_URL=https://api.mymemory.translated.net/get
+TRANSLATE_SOURCE_LANG=en
+TRANSLATE_TARGET_LANG=zh-TW
+GIFT_TRANSLATE_PREFILL_LIMIT=10
 
 # WebAPI是用於WebSocket.js的API地址，默認為http://localhost:3001/sendSync，如果你有修改WebSocket.js中的API地址，請相應修改此處。
+# TRANSLATE_API_URL 是禮物名稱翻譯 API，預設使用免費的 MyMemory 介面。
+# TRANSLATE_SOURCE_LANG / TRANSLATE_TARGET_LANG 是禮物名稱翻譯的來源與目標語言。
+# GIFT_TRANSLATE_PREFILL_LIMIT 是啟動時用 giftList 預先補翻譯的最大數量，避免一次打太多免費 API。
 CONFIG_KEY=你的配置頁面存取密碼設置

@@ -42,11 +42,24 @@ TT_TARGET_IDC=你的TikTok Target IDC
 # 推送設定
 BARK_API=https://api.day.app/你的BarkKey
 SOCKET_API=http://192.168.0.195:9322
+
+# 禮物翻譯設定（可選）
+TRANSLATE_API_URL=https://api.mymemory.translated.net/get
+TRANSLATE_SOURCE_LANG=en
+TRANSLATE_TARGET_LANG=zh-TW
+GIFT_TRANSLATE_PREFILL_LIMIT=10
 ```
 
 ⚠️SESSION_ID / TT_TARGET_IDC 需要從已登入TikTok網頁Cookie裡取得
 
 ⚠️CLIENT_ID / CLIENT_SECRET 需從 Twitch 開發者平台取得
+
+禮物翻譯補充：
+
+- 收到禮物時，系統會優先讀取 `gift_map.json` 的對應翻譯。
+- 如果禮物名稱尚未建立對應，會先加入 `gift_map.json`，再嘗試呼叫免費翻譯 API 補上翻譯。
+- 啟動時 `fetchAvailableGifts()` 也會同步輸出 `gift_list.json`，並依照 `GIFT_TRANSLATE_PREFILL_LIMIT` 預先補一部分未翻譯的禮物名稱。
+- 若你想手動修正翻譯結果，直接編輯 `gift_map.json` 即可，之後事件會優先使用你手動設定的內容。
 
 ### 3. 建立 tokens.json 範例
 
