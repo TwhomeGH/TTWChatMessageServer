@@ -333,13 +333,13 @@
         "id": 15063,
         "name": "Journey Pass",
         "diamond_count": 10,
-        "translatedName": ""
+        "translatedName": "旅程通行證"
     },
     {
         "id": 13300,
         "name": "Heart Gaze",
         "diamond_count": 10,
-        "translatedName": ""
+        "translatedName": "注視心臟"
     },
     {
         "id": 11919,
@@ -351,7 +351,7 @@
         "id": 10576,
         "name": "Fried Chicken",
         "diamond_count": 10,
-        "translatedName": ""
+        "translatedName": "炸雞"
     },
     {
         "id": 9947,
@@ -369,13 +369,13 @@
         "id": 19443,
         "name": "Bravo!",
         "diamond_count": 15,
-        "translatedName": ""
+        "translatedName": "太棒了！"
     },
     {
         "id": 17456,
         "name": "Bouquet",
         "diamond_count": 20,
-        "translatedName": ""
+        "translatedName": "花束"
     },
     {
         "id": 5658,
@@ -393,7 +393,7 @@
         "id": 16807,
         "name": "Takoyaki",
         "diamond_count": 88,
-        "translatedName": ""
+        "translatedName": "章魚燒"
     },
     {
         "id": 13682,
@@ -453,7 +453,7 @@
         "id": 12296,
         "name": "Bouquet",
         "diamond_count": 100,
-        "translatedName": ""
+        "translatedName": "花束"
     },
     {
         "id": 5660,
@@ -870,6 +870,114 @@
         "translatedName": "愛我"
     },
     {
+        "id": 14562,
+        "name": "Battle Champion",
+        "diamond_count": 15000,
+        "translatedName": ""
+    },
+    {
+        "id": 19067,
+        "name": "League Countdown",
+        "diamond_count": 199,
+        "translatedName": ""
+    },
+    {
+        "id": 16527,
+        "name": "LIVE Ranking Crown",
+        "diamond_count": 299,
+        "translatedName": ""
+    },
+    {
+        "id": 54541,
+        "name": "Legend Marcellus ",
+        "diamond_count": 42999,
+        "translatedName": ""
+    },
+    {
+        "id": 56080,
+        "name": "Surprise Baby Mob",
+        "diamond_count": 2999,
+        "translatedName": ""
+    },
+    {
+        "id": 18339,
+        "name": "Julius the Champion",
+        "diamond_count": 43999,
+        "translatedName": ""
+    },
+    {
+        "id": 19131,
+        "name": "Chocolate",
+        "diamond_count": 10,
+        "translatedName": ""
+    },
+    {
+        "id": 19068,
+        "name": "League Trophy",
+        "diamond_count": 599,
+        "translatedName": ""
+    },
+    {
+        "id": 19071,
+        "name": "League Fandom",
+        "diamond_count": 5000,
+        "translatedName": ""
+    },
+    {
+        "id": 18790,
+        "name": "Doll New Year Greeting",
+        "diamond_count": 1999,
+        "translatedName": ""
+    },
+    {
+        "id": 8624,
+        "name": "Zeus",
+        "diamond_count": 34000,
+        "translatedName": ""
+    },
+    {
+        "id": 54539,
+        "name": "Tidecaller Trident",
+        "diamond_count": 14999,
+        "translatedName": ""
+    },
+    {
+        "id": 14544,
+        "name": "Go Home",
+        "diamond_count": 3999,
+        "translatedName": ""
+    },
+    {
+        "id": 18791,
+        "name": "Ring Of Honor-Cube",
+        "diamond_count": 2999,
+        "translatedName": ""
+    },
+    {
+        "id": 54728,
+        "name": "Sneaky Jockey",
+        "diamond_count": 15000,
+        "translatedName": ""
+    },
+    {
+        "id": 14534,
+        "name": "Raya Gift Card",
+        "diamond_count": 1500,
+        "translatedName": ""
+    },
+    {
+        "id": 18338,
+        "name": "Cyber Roar",
+        "diamond_count": 25999,
+        "translatedName": ""
+    },
+    {
+        "id": 12892,
+        "name": "Crocodile",
+        "diamond_count": 15000,
+        "translatedName": ""
+    },
+    {
         "id": 19133,
         "name": "Love Flight",
         "diamond_count": 800,
@@ -882,63 +990,15 @@
         "translatedName": ""
     },
     {
-        "id": 19071,
-        "name": "League Fandom",
-        "diamond_count": 5000,
-        "translatedName": ""
-    },
-    {
-        "id": 11838,
-        "name": "Diamond Gun",
-        "diamond_count": 5000,
-        "translatedName": ""
-    },
-    {
-        "id": 18338,
-        "name": "Cyber Roar",
-        "diamond_count": 25999,
-        "translatedName": ""
-    },
-    {
-        "id": 9532,
-        "name": "Shine Bright",
-        "diamond_count": 4088,
-        "translatedName": ""
-    },
-    {
-        "id": 19065,
-        "name": "League Ball",
-        "diamond_count": 10,
-        "translatedName": ""
-    },
-    {
-        "id": 19134,
-        "name": "Paris",
+        "id": 8603,
+        "name": "Leopard",
         "diamond_count": 15000,
         "translatedName": ""
     },
     {
-        "id": 54724,
-        "name": "Creeper",
-        "diamond_count": 1,
-        "translatedName": ""
-    },
-    {
-        "id": 19067,
-        "name": "League Countdown",
-        "diamond_count": 199,
-        "translatedName": ""
-    },
-    {
-        "id": 18299,
-        "name": "Viking Hammer",
-        "diamond_count": 1500,
-        "translatedName": ""
-    },
-    {
-        "id": 12944,
-        "name": "Dynamic Music",
-        "diamond_count": 4888,
+        "id": 5648,
+        "name": "Duit Raya",
+        "diamond_count": 5,
         "translatedName": ""
     },
     {
@@ -948,14 +1008,20 @@
         "translatedName": ""
     },
     {
-        "id": 18789,
-        "name": "Lucky Pony",
-        "diamond_count": 10,
+        "id": 12944,
+        "name": "Dynamic Music",
+        "diamond_count": 4888,
         "translatedName": ""
     },
     {
         "id": 18792,
         "name": "Golden Gallop",
+        "diamond_count": 15000,
+        "translatedName": ""
+    },
+    {
+        "id": 19134,
+        "name": "Paris",
         "diamond_count": 15000,
         "translatedName": ""
     },
@@ -966,165 +1032,27 @@
         "translatedName": ""
     },
     {
-        "id": 54541,
-        "name": "Legend Marcellus ",
-        "diamond_count": 42999,
-        "translatedName": ""
-    },
-    {
-        "id": 8469,
-        "name": "Wolf",
-        "diamond_count": 5500,
-        "translatedName": ""
-    },
-    {
-        "id": 56855,
-        "name": "Festival Bracelet",
-        "diamond_count": 349,
-        "translatedName": ""
-    },
-    {
-        "id": 14543,
-        "name": "Congratulations",
+        "id": 9355,
+        "name": "So Cute",
         "diamond_count": 1,
         "translatedName": ""
     },
     {
-        "id": 56080,
-        "name": "Surprise Baby Mob",
-        "diamond_count": 2999,
-        "translatedName": ""
-    },
-    {
-        "id": 14562,
-        "name": "Battle Champion",
-        "diamond_count": 15000,
-        "translatedName": ""
-    },
-    {
-        "id": 18339,
-        "name": "Julius the Champion",
-        "diamond_count": 43999,
-        "translatedName": ""
-    },
-    {
-        "id": 12110,
-        "name": "Manifesting",
-        "diamond_count": 500,
-        "translatedName": ""
-    },
-    {
-        "id": 8603,
-        "name": "Leopard",
-        "diamond_count": 15000,
-        "translatedName": ""
-    },
-    {
-        "id": 18790,
-        "name": "Doll New Year Greeting",
-        "diamond_count": 1999,
-        "translatedName": ""
-    },
-    {
-        "id": 14544,
-        "name": "Go Home",
-        "diamond_count": 3999,
-        "translatedName": ""
-    },
-    {
-        "id": 54728,
-        "name": "Sneaky Jockey",
-        "diamond_count": 15000,
-        "translatedName": ""
-    },
-    {
-        "id": 8624,
-        "name": "Zeus",
-        "diamond_count": 34000,
-        "translatedName": ""
-    },
-    {
-        "id": 5648,
-        "name": "Duit Raya",
-        "diamond_count": 5,
-        "translatedName": ""
-    },
-    {
-        "id": 18791,
-        "name": "Ring Of Honor-Cube",
-        "diamond_count": 2999,
-        "translatedName": ""
-    },
-    {
-        "id": 19131,
-        "name": "Chocolate",
-        "diamond_count": 10,
-        "translatedName": ""
-    },
-    {
-        "id": 14534,
-        "name": "Raya Gift Card",
+        "id": 18299,
+        "name": "Viking Hammer",
         "diamond_count": 1500,
         "translatedName": ""
     },
     {
-        "id": 9101,
-        "name": "TikTok Universe",
-        "diamond_count": 44999,
-        "translatedName": "TikTok 宇宙"
-    },
-    {
-        "id": 12892,
-        "name": "Crocodile",
-        "diamond_count": 15000,
+        "id": 18789,
+        "name": "Lucky Pony",
+        "diamond_count": 10,
         "translatedName": ""
     },
     {
-        "id": 14532,
-        "name": "Fully Bloomed Sakura",
-        "diamond_count": 599,
-        "translatedName": "盛開的櫻花"
-    },
-    {
-        "id": 19132,
-        "name": "Rose Bear",
-        "diamond_count": 214,
-        "translatedName": ""
-    },
-    {
-        "id": 6833,
-        "name": "Castle Fantasy",
-        "diamond_count": 20000,
-        "translatedName": ""
-    },
-    {
-        "id": 54726,
-        "name": "Surprise Baby Mob",
-        "diamond_count": 2999,
-        "translatedName": ""
-    },
-    {
-        "id": 16527,
-        "name": "LIVE Ranking Crown",
-        "diamond_count": 299,
-        "translatedName": ""
-    },
-    {
-        "id": 19068,
-        "name": "League Trophy",
-        "diamond_count": 599,
-        "translatedName": ""
-    },
-    {
-        "id": 10423,
-        "name": "Club Music",
-        "diamond_count": 2000,
-        "translatedName": ""
-    },
-    {
-        "id": 10065,
-        "name": "Gorilla",
-        "diamond_count": 30000,
+        "id": 54724,
+        "name": "Creeper",
+        "diamond_count": 1,
         "translatedName": ""
     },
     {
@@ -1134,9 +1062,75 @@
         "translatedName": ""
     },
     {
-        "id": 9355,
-        "name": "So Cute",
+        "id": 10423,
+        "name": "Club Music",
+        "diamond_count": 2000,
+        "translatedName": ""
+    },
+    {
+        "id": 56855,
+        "name": "Festival Bracelet",
+        "diamond_count": 349,
+        "translatedName": ""
+    },
+    {
+        "id": 19065,
+        "name": "League Ball",
+        "diamond_count": 10,
+        "translatedName": ""
+    },
+    {
+        "id": 14543,
+        "name": "Congratulations",
         "diamond_count": 1,
+        "translatedName": ""
+    },
+    {
+        "id": 10065,
+        "name": "Gorilla",
+        "diamond_count": 30000,
+        "translatedName": ""
+    },
+    {
+        "id": 8469,
+        "name": "Wolf",
+        "diamond_count": 5500,
+        "translatedName": ""
+    },
+    {
+        "id": 19132,
+        "name": "Rose Bear",
+        "diamond_count": 214,
+        "translatedName": ""
+    },
+    {
+        "id": 9532,
+        "name": "Shine Bright",
+        "diamond_count": 4088,
+        "translatedName": ""
+    },
+    {
+        "id": 11838,
+        "name": "Diamond Gun",
+        "diamond_count": 5000,
+        "translatedName": ""
+    },
+    {
+        "id": 6833,
+        "name": "Castle Fantasy",
+        "diamond_count": 20000,
+        "translatedName": ""
+    },
+    {
+        "id": 12110,
+        "name": "Manifesting",
+        "diamond_count": 500,
+        "translatedName": ""
+    },
+    {
+        "id": 54726,
+        "name": "Surprise Baby Mob",
+        "diamond_count": 2999,
         "translatedName": ""
     },
     {
@@ -1146,10 +1140,16 @@
         "translatedName": ""
     },
     {
-        "id": 54539,
-        "name": "Tidecaller Trident",
-        "diamond_count": 14999,
-        "translatedName": ""
+        "id": 9101,
+        "name": "TikTok Universe",
+        "diamond_count": 44999,
+        "translatedName": "TikTok 宇宙"
+    },
+    {
+        "id": 14532,
+        "name": "Fully Bloomed Sakura",
+        "diamond_count": 599,
+        "translatedName": "盛開的櫻花"
     },
     {
         "id": 9072,

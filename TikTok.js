@@ -696,7 +696,8 @@ if (isTK) {
     // Connect to the chat (await can be used as well)
     connection.connect().then(state => {
         console.info(`Connected to roomId ${state.roomId}`);
-        let DisplayTitle = state.roomInfo?.title || "未知直播間";
+        let DisplayTitle = connection.state.title || "未知直播間";
+        CacheUserNum = connection.state.user_count || 0;
         
         sendBarkNotification("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "");
         sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
