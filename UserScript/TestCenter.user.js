@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Socket Test Button
 // @namespace    pip-chat-test
-// @version      1.2
+// @version      1.3
 // @description  Manual test button for local socket bridge (SPA safe)
 // @match        https://livecenter.tiktok.com/*
 // @match        https://*.bing.com/*
@@ -60,7 +60,7 @@
         btn.id = BUTTON_ID;
         btn.innerText = "🧪 測試 Socket";
         btn.style.position = "fixed";
-        btn.style.bottom = "20px";
+        btn.style.bottom = "40px";
         btn.style.right = "20px";
         btn.style.zIndex = "999999";
         btn.style.padding = "10px 16px";
