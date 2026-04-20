@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Socket Test Button
 // @namespace    pip-chat-test
-// @version      1.1
+// @version      1.2
 // @description  Manual test button for local socket bridge (SPA safe)
 // @match        https://livecenter.tiktok.com/*
 // @match        https://*.bing.com/*
@@ -27,7 +27,9 @@
             message: '這是一條測試訊息 ' + new Date().toLocaleTimeString(),
             img: 'https://img.icons8.com/?size=100&id=124062&format=png&color=000000',
             giftImg: null,
-            isMain: true
+            isMain: true,
+            userNum: 300, // 模擬頭號觀眾人數
+            userList: ['肉鬆', '松鼠', '瓜瓜'] // 模擬頭號觀眾名字列表
         };
 
         const sendURL = `http://${HTTP_HOST}:${HTTP_PORT}/chat`;
