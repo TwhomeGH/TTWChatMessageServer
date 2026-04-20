@@ -678,21 +678,38 @@ function connectSocket() {
 
 
 
+function viewCache() {
+    console.log("📊 CacheUserNum:", CacheUserNum)
+    console.log("📋 CacheUserList:", CacheUserList);
+
+    if (connection.state.isConnected) {
+        CacheUserNum = connection.state.user_count
+
+        if (connection.state.ranks_list) {
+            CacheUserList = connection.state.ranks_list.map(item => item.user.nickname);
+        }
+    }
+}
 
 if (isTK) {
     console.log("連接 TikTok 直播間:", tiktokName)
     // Connect to the chat (await can be used as well)
     connection.connect().then(state => {
         console.info(`Connected to roomId ${state.roomId}`);
-
-        sendBarkNotification("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間`, "");
-        sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間`, "", "", false,CacheUserNum,CacheUserList);
-  
+        let DisplayTitle = state.roomInfo?.title || "未知直播間";
+        
+        sendBarkNotification("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "");
+        sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
+        
     }).catch(err => {
         console.error('Failed to connect', err);
-        sendBarkNotification("TikTok 直播間連線失敗", `無法連接到 ${tiktokName} 的直播間`, "");
-        sendSocketMessage("系統", `TikTok 直播間連線失敗，無法連接到 ${tiktokName} 的直播間`, "", "", false,CacheUserNum,CacheUserList);
+        sendBarkNotification("TikTok 直播間連線失敗", `無法連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "");
+        sendSocketMessage("系統", `TikTok 直播間連線失敗，無法連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
     });
+
+    setInterval(viewCache, 1000); // 每秒更新一次用戶數量   
+
+
 }
 
 
@@ -707,6 +724,7 @@ connection.on(ControlEvent.DISCONNECTED, (e) => {
         console.log("需要重新連線 TikTok 直播間...");
         sendSocketMessage("系統", "需要重新連線 TikTok 直播間...", "", "", false,CacheUserNum,CacheUserList);
 
+        clearInterval(viewCache);
         //try {
         
         // connection.fetchIsLive().then(isLive => {
@@ -762,12 +780,15 @@ connection.on(WebcastEvent.ROOM_USER, data => {
 // Define the events that you want to handle
 // In this case we listen to chat messages (comments)
 
+
 connection.on(WebcastEvent.MEMBER,data => {
 
     let iconn = data.user.profilePicture.url[1]
     //console.log(JSON.stringify(data,"",4))
     
-    console.log(data.user.nickname,"加入了")  
+    console.log("STATE",connection.state)
+    console.log(data.user.nickname,"加入了") 
+    console.log("STATE",connection.state.user_count) 
 
     
     sendBarkNotification(data.user.nickname, "來了",iconn);
