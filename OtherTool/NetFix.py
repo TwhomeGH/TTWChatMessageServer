@@ -76,7 +76,7 @@ def process_video(input_path, output_dir="output"):
         "-c:v", "h264_nvenc",
         "-preset", "p7",
         "-rc", "vbr",
-        "-cq", "34",
+        "-cq", "35",
         "-c:a", "copy",
         "-movflags", "+faststart",
         final_file
