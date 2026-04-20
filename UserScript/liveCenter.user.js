@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat → Socket Bridge
 // @namespace    pip-chat-bridge
-// @version      1.4
+// @version      1.5
 // @description  Listen TikTok live chat and forward to socket server
 // @author       Nuclear0709
 // @match        https://livecenter.tiktok.com/*
@@ -30,7 +30,7 @@
 
 
 
-function sendSocketMessage(user, message, img, giftImg, isMain = true) {
+function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 0, userList = []) {
 
     const payload = {
         type: 'StreamMessage',
@@ -38,7 +38,9 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true) {
         message,
         img,
         giftImg,
-        isMain
+        isMain,
+        userNum,
+        userList
     };
 
 
@@ -78,10 +80,15 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true) {
         const messageElement = element.querySelector('.css-wz5k0l');
         const message = messageElement?.textContent?.trim() || "";
 
+        const users = getTopFanUsers();
+
+        console.log("頭號觀眾人數:", users.length);
+        console.log("名字清單:", users);
+
         if (!username || !message) return;
 
         console.log("📩 新訊息:", username, message);
-        sendSocketMessage(username, message, avatarUrl, null, true);
+        sendSocketMessage(username, message, avatarUrl, null, true, users.length, users);
     }
 
 
