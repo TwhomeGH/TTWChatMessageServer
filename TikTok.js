@@ -839,7 +839,7 @@ connection.on(WebcastEvent.LIKE, data => {
     
 
     sendBarkNotification(data.user.nickname, mess,iconn);
-    sendSocketMessage(data.user.nickname, mess,iconn,"",false);
+    sendSocketMessage(data.user.nickname, mess,iconn,"",false,CacheUserNum,CacheUserList);
 
 })
 
