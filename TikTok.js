@@ -260,6 +260,14 @@ process.stdin.on('data', async (chunk) => {
             if (json.type === 'StreamMessage') {
                 // 同時記錄訊息統計
                 recordMessageStat(json.message);
+
+                if (json.userNum !== CacheUserNum) {
+                    CacheUserNum = json.userNum;
+                }
+                if (json.userList) {
+                    CacheUserList = json.userList;
+                }
+
                 sendToTCP(json);
                 console.log('📥 收到 JSON 訊息:', json);
             }
@@ -313,7 +321,7 @@ function sendToTCP(payload) {
     if (!client || client.destroyed) return;
 
     console.log('📤 發送 TCP 訊息:紀錄',payload.user,payload.message);
-  
+    
     try {
         console.log('📤 發送 TCP 訊息Sync:', payload);
 
@@ -390,7 +398,22 @@ function isDuplicate(username, message) {
     );
 }
 
-function sendSocketMessage(user, message, img, giftImg,isMain=true,webType="default") {
+var CacheUserList = [] // 用於去重的用戶列表
+var CacheUserNum = 0 // 用於去重的用戶數量
+
+/**
+ * 用於發送 Socket 訊息的統一函數，會先檢查是否重複，再格式化後發送
+ * 
+ * @param {*} user 
+ * @param {*} message 
+ * @param {*} img 
+ * @param {*} giftImg 
+ * @param {*} isMain 
+ * @param {*} userNum 
+ * @param {*} userList 
+ * @returns 
+ */
+function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,userList=[]) {
     if (!client || client.destroyed) return;
 
     
@@ -407,7 +430,9 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,webType="defa
         message:String(message),
         img,
         giftImg,
-        isMain
+        isMain,
+        userNum,
+        userList
     };
     
     try {
@@ -431,7 +456,7 @@ function connectSocket() {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
         }
-        sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false);
+        sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false,CacheUserNum,CacheUserList);
     
         // 啟動心跳
         heartbeatTimer = setInterval(() => {
@@ -482,12 +507,12 @@ if (isTK) {
         console.info(`Connected to roomId ${state.roomId}`);
 
         sendBarkNotification("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間`, "");
-        sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間`, "", "", false);
+        sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間`, "", "", false,CacheUserNum,CacheUserList);
   
     }).catch(err => {
         console.error('Failed to connect', err);
         sendBarkNotification("TikTok 直播間連線失敗", `無法連接到 ${tiktokName} 的直播間`, "");
-        sendSocketMessage("系統", `TikTok 直播間連線失敗，無法連接到 ${tiktokName} 的直播間`, "", "", false);
+        sendSocketMessage("系統", `TikTok 直播間連線失敗，無法連接到 ${tiktokName} 的直播間`, "", "", false,CacheUserNum,CacheUserList);
     });
 }
 
@@ -496,12 +521,12 @@ connection.on(ControlEvent.DISCONNECTED, (e) => {
     console.log('Disconnected :( \(error code: ' + e.errorCode + ', reason: ' + e.reason + ')');
     
     sendBarkNotification("TikTok 直播間已斷線", `已從 ${tiktokName} 的直播間斷線`, "");
-    sendSocketMessage("系統", `TikTok 直播間已斷線，已從 ${tiktokName} 的直播間斷線`, "", "", false);
+    sendSocketMessage("系統", `TikTok 直播間已斷線，已從 ${tiktokName} 的直播間斷線`, "", "", false,CacheUserNum,CacheUserList);
 
 
     setTimeout(() => {
         console.log("需要重新連線 TikTok 直播間...");
-        sendSocketMessage("系統", "需要重新連線 TikTok 直播間...", "", "", false);
+        sendSocketMessage("系統", "需要重新連線 TikTok 直播間...", "", "", false,CacheUserNum,CacheUserList);
 
         //try {
         
@@ -533,6 +558,28 @@ connection.on(ControlEvent.DISCONNECTED, (e) => {
 
 });
 
+
+// 取得人數和頭號觀眾列表的事件
+
+connection.on(WebcastEvent.ROOM_USER, data => {
+    console.log(`Viewer Count: ${data.viewerCount}`);
+    const topGifter = data.ranksList[0];
+    if (topGifter?.user) {
+        const uniqueId = topGifter.user.uniqueId;
+        const nickname = topGifter.user.nickname;
+        if (uniqueId) {
+            console.log(`Top gifter uniqueId: ${uniqueId} (${topGifter.coinCount})`);
+        }
+        if (nickname) {
+            console.log(`Top gifter nickname: ${nickname} (${topGifter.coinCount})`);
+        }
+    }
+
+    CacheUserList = data.ranksList.map(item => item.user.nickname);
+    CacheUserNum = data.viewerCount;
+
+});
+
 // Define the events that you want to handle
 // In this case we listen to chat messages (comments)
 
@@ -545,7 +592,7 @@ connection.on(WebcastEvent.MEMBER,data => {
 
     
     sendBarkNotification(data.user.nickname, "來了",iconn);
-    sendSocketMessage(data.user.nickname, "來了",iconn,"",false);
+    sendSocketMessage(data.user.nickname, "來了",iconn,"",false,CacheUserNum,CacheUserList);
 
    // 同時記錄訊息統計 加入訊息存儲用與TikTok的結果一致 以便去重
     addToSyncBuffer(data.user.nickname, "加入了");
@@ -557,7 +604,7 @@ connection.on(WebcastEvent.FOLLOW,data =>{
     console.log(data.user.nickname,"關注了主播")
 
     sendBarkNotification(data.user.nickname, "關注了主播",iconn);
-    sendSocketMessage(data.user.nickname, "關注了主播",iconn,"",false);
+    sendSocketMessage(data.user.nickname, "關注了主播",iconn,"",false,CacheUserNum,CacheUserList);
 
 })
 
@@ -575,7 +622,7 @@ connection.on(WebcastEvent.CHAT, data => {
     recordMessageStat(data.comment);
 
     sendBarkNotification(data.user.nickname, data.comment,iconn);
-    sendSocketMessage(data.user.nickname, data.comment,iconn,"",true,"Chat");
+    sendSocketMessage(data.user.nickname, data.comment,iconn,"",true,CacheUserNum,CacheUserList);
 
     // 同時記錄訊息統計
     addToSyncBuffer(data.user.nickname, data.comment);
@@ -646,7 +693,7 @@ connection.on(WebcastEvent.GIFT, data => {
         console.log("giftimg",giftImg)
         sendBarkNotification(data.user.nickname, mess,giftImg);
 
-        sendSocketMessage(data.user.nickname, mess,iconn,giftImg);
+        sendSocketMessage(data.user.nickname, mess,iconn,giftImg,CacheUserNum,CacheUserList);
 
     }
      
@@ -662,20 +709,27 @@ connection.on(WebcastEvent.SHARE, data =>{
     console.log(`${data.user.nickname} ${mess}`)
     
     sendBarkNotification(data.user.nickname, mess,iconn);
-    sendSocketMessage(data.user.nickname, mess,iconn,"",false);
+    sendSocketMessage(data.user.nickname, mess,iconn,"",false,CacheUserNum,CacheUserList);
 
 })
 
-connection.on(WebcastEvent.ENVELOPE ,data => {
-    
-    let mess = "送出了寶箱"
-    let iconn = data.user.profilePicture.url[1]
-    console.log(`${data.nickname} ${mess}`)
-    
-    sendBarkNotification(data.nickname, mess,iconn);
-    sendSocketMessage(data.nickname, mess,iconn,"",false);
 
-})
+connection.on(WebcastEvent.ENVELOPE, data => {
+    const envelope = data.envelopeInfo;
+    if (envelope) {
+        if (envelope.envelopeId) {
+            console.log(`Envelope ${envelope.envelopeId}`);
+        }
+        if (envelope.sendUserName) {
+            console.log(`From: ${envelope.sendUserName}`);
+        }
+        console.log(`Diamonds: ${envelope.diamondCount}, People: ${envelope.peopleCount}`);
+
+        sendBarkNotification(data.nickname, `送出了寶箱，包含 ${envelope.diamondCount} 鑽石`, data.user.profilePicture.url[1]);
+        sendSocketMessage(data.nickname, `送出了寶箱，包含 ${envelope.diamondCount} 鑽石`, data.user.profilePicture.url[1], "", true, CacheUserNum, CacheUserList);
+    }
+});
+
 connection.on(WebcastEvent.SUPER_FAN, (data) => {
     console.log('A user became a superfan!');
     let mess = "鐵粉出現啦！"
@@ -683,7 +737,7 @@ connection.on(WebcastEvent.SUPER_FAN, (data) => {
     console.log(`${data.user.nickname} ${mess}`)
     
     sendBarkNotification(data.user.nickname, mess,iconn);
-    sendSocketMessage(data.user.nickname, mess,iconn);
+    sendSocketMessage(data.user.nickname, mess,iconn,"",true,CacheUserNum,CacheUserList);
 
 });
 
@@ -819,18 +873,18 @@ listener.onStreamOnline(tuser, async (event) => {
 
     console.log(message);
     sendBarkNotification("直播開始啦！", `${event.broadcasterName} ${event.type}`, "");
-    sendSocketMessage("系統", message, "", "", false);
+    sendSocketMessage("系統", message, "", "", false,CacheUserNum,CacheUserList);
 
     
 });
 
 listener.onStreamOffline(tuser, async (event) => {
-    const message = `直播結束啦！標題：${event.broadcasterName} ${event.type}`;  
+    const message = `直播結束啦！標題：${event.broadcasterName}`;  
 
     console.log(message);
 
-    sendBarkNotification("直播結束啦！", `${event.broadcasterName} ${event.type}`, "");
-    sendSocketMessage("系統", message, "", "", false);
+    sendBarkNotification("直播結束啦！", `${event.broadcasterName}`, "");
+    sendSocketMessage("系統", message, "", "", false,CacheUserNum,CacheUserList);
 });
 
 
@@ -843,7 +897,7 @@ listener.onChannelFollow(tuser, tuser, async (event) => {
 
     sendBarkNotification(event.userDisplayName, "關注了主播", icon);
 
-    sendSocketMessage(event.userDisplayName, message, icon);
+    sendSocketMessage(event.userDisplayName, message, icon,"", false,CacheUserNum,CacheUserList);
 
    
 });
@@ -855,7 +909,7 @@ listener.onChannelCheer(tuser, tuser, async (event) => {
     console.log(`${event.userDisplayName} ${message}`);
 
     sendBarkNotification(event.userDisplayName, message, icon);
-    sendSocketMessage(event.userDisplayName, message, icon);
+    sendSocketMessage(event.userDisplayName, message, icon,"", false,CacheUserNum,CacheUserList);
 
    
 });
@@ -869,9 +923,9 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
     recordMessageStat(event.messageText);
 
     sendBarkNotification(event.chatterDisplayName, event.messageText, icon);
-    sendSocketMessage(event.chatterDisplayName, event.messageText, icon,"Chat");
+    sendSocketMessage(event.chatterDisplayName, event.messageText, icon,"Chat", false,CacheUserNum,CacheUserList);
 
-   
+    
 });
 
 // 其他事件同理可加 sendSocketMessage
