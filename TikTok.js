@@ -543,7 +543,7 @@ connection.on(WebcastEvent.MEMBER,data => {
     
     console.log(data.user.nickname,"加入了")  
 
- 
+    
     sendBarkNotification(data.user.nickname, "來了",iconn);
     sendSocketMessage(data.user.nickname, "來了",iconn,"",false);
 

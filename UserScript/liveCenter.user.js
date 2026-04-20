@@ -85,6 +85,35 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true) {
     }
 
 
+    function findTopLabel() {
+    const xpath = "//div[contains(text(),'頭號觀眾')]";
+    const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+    return result.singleNodeValue;
+}
+
+function getTopFanUsers() {
+    const topLabel = findTopLabel();
+    if (!topLabel) return [];
+
+    // 往外找到父容器
+    const container = topLabel.parentElement.parentElement;
+    if (!container) return [];
+
+    // 精準抓「名字區塊」：只找有文字的 div，不要抓全部
+    const nameDivs = container.querySelectorAll('div.css-192a2f3');
+    const names = Array.from(nameDivs).map(div => div.textContent.trim());
+
+    // 去重複
+    const uniqueNames = [...new Set(names)];
+
+    return uniqueNames;
+}
+
+    const users = getTopFanUsers();
+    console.log("頭號觀眾人數:", users.length);
+    console.log("名字清單:", users);
+
+
 
     /**********************
      * 👀 MutationObserver
@@ -120,7 +149,15 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true) {
      * 🚀 啟動
      **********************/
     window.addEventListener("load", () => {
-        setTimeout(startObserver, 3000); // 等頁面穩定
+        setTimeout(() => {
+            startObserver();
+            setInterval(() => {
+                const users = getTopFanUsers();
+                console.log("頭號觀眾人數:", users.length);
+                console.log("名字清單:", users);
+            }, 5000); // 每5秒更新一次頭號觀眾列表
+            
+        }, 3000); // 等頁面穩定
     });
 
 })();
