@@ -685,7 +685,12 @@ function viewCache() {
 
     if (connection.state.isConnected) {
         console.log("STATE",connection.state.roomInfo.data.user_count)
-        CacheUserNum = connection.state.roomInfo.data.user_count
+        
+        if (CacheUserList.length > 0) {
+            CacheUserNum = CacheUserList.length // 以用戶列表長度為準，因為有時候 user_count 可能不準確;
+        } else {
+            CacheUserNum = connection.state.roomInfo.data.user_count
+        }
 
 
     }
@@ -708,7 +713,7 @@ if (isTK) {
         sendSocketMessage("系統", `TikTok 直播間連線失敗，無法連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
     });
 
-    setInterval(viewCache, 5000); // 每5秒更新一次用戶數量   
+    setInterval(viewCache, 10000); // 每10秒更新一次用戶數量   
 
 
 }
