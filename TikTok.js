@@ -609,7 +609,7 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,use
         message:String(message),
         img,
         giftImg,
-        isMain,
+        isMain:Boolean(isMain),
         userNum,
         userList
     };
@@ -891,7 +891,7 @@ connection.on(WebcastEvent.GIFT, async data => {
         console.log("giftimg",giftImg)
 
         sendBarkNotification(data.user.nickname, mess,giftImg);
-        sendSocketMessage(data.user.nickname, mess,iconn,giftImg);
+        sendSocketMessage(data.user.nickname, mess,iconn,giftImg,true,CacheUserNum,CacheUserList);
 
         
     } else {
@@ -903,7 +903,7 @@ connection.on(WebcastEvent.GIFT, async data => {
         console.log("giftimg",giftImg)
         sendBarkNotification(data.user.nickname, mess,giftImg);
 
-        sendSocketMessage(data.user.nickname, mess,iconn,giftImg,CacheUserNum,CacheUserList);
+        sendSocketMessage(data.user.nickname, mess,iconn,giftImg,true,CacheUserNum,CacheUserList);
 
     }
      
