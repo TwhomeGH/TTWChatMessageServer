@@ -91,7 +91,14 @@ function pushLog(...line) {
 
 
 function sendToTikTok(obj) {
-    tiktokProcess && tiktokProcess.stdin.write(JSON.stringify(obj) + '\n');
+
+    if (tiktokProcess) {
+        pushLog("正在運行主TikTok,js 傳遞Socket與訊息紀錄")
+        tiktokProcess.stdin.write(JSON.stringify(obj) + '\n');
+    } else {
+        pushLog("未運行TikTok.js")
+    }
+
 }
 
 const server = http.createServer((req, res) => {

@@ -628,7 +628,7 @@ function connectSocket() {
     if (client && !client.destroyed) return; // 已經連線中
 
     client = new net.Socket();
-  
+    
     client.connect(PORT, HOST, () => {
         console.log('✅ TCP Socket connected');
         if (reconnectTimer) {
@@ -686,7 +686,7 @@ function viewCache() {
     if (connection.state.isConnected) {
         console.log("STATE",connection.state.roomInfo.data.user_count)
         
-        if (CacheUserList.length > 0) {
+        if (CacheUserList.length > CacheUserNum) {
             CacheUserNum = CacheUserList.length // 以用戶列表長度為準，因為有時候 user_count 可能不準確;
         } else {
             CacheUserNum = connection.state.roomInfo.data.user_count
@@ -800,7 +800,7 @@ connection.on(WebcastEvent.MEMBER,data => {
     sendBarkNotification(data.user.nickname, "來了",iconn);
     sendSocketMessage(data.user.nickname, "來了",iconn,"",false,CacheUserNum,CacheUserList);
 
-   // 同時記錄訊息統計 加入訊息存儲用與TikTok的結果一致 以便去重
+    // 同時記錄訊息統計 加入訊息存儲用與TikTok的結果一致 以便去重
     addToSyncBuffer(data.user.nickname, "加入了");
 
 })
@@ -879,10 +879,10 @@ connection.on(WebcastEvent.GIFT, async data => {
         
     //console.log(JSON.stringify(data,"",4))
     if (data.giftType === 1 && !data.repeatEnd ){
-       
-        console.log(`送出了 ${data.user.nickname} : ${giftNameForDisplay} x${data.repeatCount}`)
         
-        let mess = `送出了 ${giftNameForDisplay} x${data.repeatCount}`
+        console.log(`連擊結束 送出了 ${data.user.nickname} : ${giftNameForDisplay} x${data.repeatCount}`)
+        
+        let mess = `連擊結束 送出了 ${giftNameForDisplay} x${data.repeatCount}`
         let iconn = data.user.profilePicture.url[1]
         let giftImg = data.giftDetails.icon.url[1]
 
@@ -935,8 +935,10 @@ connection.on(WebcastEvent.ENVELOPE, data => {
         }
         console.log(`Diamonds: ${envelope.diamondCount}, People: ${envelope.peopleCount}`);
 
-        sendBarkNotification(data.nickname, `送出了寶箱，包含 ${envelope.diamondCount} 鑽石`, data.user.profilePicture.url[1]);
-        sendSocketMessage(data.nickname, `送出了寶箱，包含 ${envelope.diamondCount} 鑽石`, data.user.profilePicture.url[1], "", true, CacheUserNum, CacheUserList);
+
+        let mess = `送出了寶箱，包含 ${envelope.diamondCount} 鑽石`
+        sendBarkNotification(data.nickname, mess , data.user.profilePicture.url[1]);
+        sendSocketMessage(data.nickname, mess, data.user.profilePicture.url[1], "", true, CacheUserNum, CacheUserList);
     }
 });
 
@@ -980,6 +982,7 @@ connection.fetchAvailableGifts().then(async (giftList) => {
     console.log(tiktokName,"Tiktok giftList.length:", giftList.length);
     await syncGiftMapFromGiftList(giftList);
     await backfillGiftTranslationsFromGiftList(giftList);
+    
     await saveGiftCatalog(giftList);
     // giftList.forEach(gift => {
     //     console.log(`id: ${gift.id}, name: ${gift.name}, cost: ${gift.diamond_count}`)
