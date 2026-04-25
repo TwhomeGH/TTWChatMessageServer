@@ -1166,8 +1166,8 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
             let RESCHAT=`${event.messageText}\n${event.messageText == RES ? "" : RES}`
             
-            sendBarkNotification(event.chatterDisplayName, RESCHAT,iconn);
-            sendSocketMessage(event.chatterDisplayName, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList);
+            sendBarkNotification(event.chatterDisplayName, RESCHAT,icon);
+            sendSocketMessage(event.chatterDisplayName, RESCHAT,icon,"",true,CacheUserNum,CacheUserList);
 
             
     })
