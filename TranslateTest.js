@@ -60,7 +60,12 @@ function detectLanguage(text)  {
         return "en";
     }
 
-    // 檢查是否包含中文 (Unicode 範圍)
+    // 檢查是否包含日文假名 (平假名 + 片假名)
+    if (/[\u3040-\u30FF\uFF66-\uFF9F]/.test(text)) {
+        return "ja";
+    }
+
+    // 檢查是否包含中文 (漢字範圍)
     if (/[\u4e00-\u9fff]/.test(text)) {
         return "zh-CN";
     }
