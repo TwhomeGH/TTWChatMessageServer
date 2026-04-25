@@ -4,6 +4,7 @@ import { EventSubWsListener } from '@twurple/eventsub-ws';
 import { promises as fs } from 'fs';
 import axios from 'axios';
 
+
 import { config } from 'dotenv';
 
 import net from 'net';
@@ -16,7 +17,13 @@ import path from 'path';
 
 import { TikTokLiveConnection, WebcastEvent,ControlEvent,ControlAction } from 'tiktok-live-connector';
 import { type } from 'os';
+import Translate from "./TranslateTest.js"
 
+
+
+// Translate.TranslateText("Hello User").then(RES=>{
+//     console.log("測試翻譯",RES)
+// })
 
 config(); // 讀取 .env
 
@@ -73,9 +80,12 @@ const PORT = process.env.SOCKET_API?.split(':')[2] || 9322; // 你的 socket ser
 const HOST = process.env.SOCKET_API?.split(':')[1]?.replace('//', '') || 'localhost'; // 你的 socket server 地址
 
 const Bark = process.env.BARK_API;
+
 const TRANSLATE_API_URL = process.env.TRANSLATE_API_URL || "https://api.mymemory.translated.net/get";
 const TRANSLATE_SOURCE_LANG = process.env.TRANSLATE_SOURCE_LANG || "en";
 const TRANSLATE_TARGET_LANG = process.env.TRANSLATE_TARGET_LANG || "zh-TW";
+
+
 const GIFT_TRANSLATE_PREFILL_LIMIT = Number(process.env.GIFT_TRANSLATE_PREFILL_LIMIT || 10);
 
 
@@ -158,6 +168,8 @@ function getTranslatedGiftNameFromMap(giftName) {
 
     return "";
 }
+
+
 
 async function translateGiftNameByApi(giftName) {
     try {
@@ -827,8 +839,19 @@ connection.on(WebcastEvent.CHAT, data => {
     // 同時記錄訊息統計
     recordMessageStat(data.comment);
 
-    sendBarkNotification(data.user.nickname, data.comment,iconn);
-    sendSocketMessage(data.user.nickname, data.comment,iconn,"",true,CacheUserNum,CacheUserList);
+    
+
+    Translate.TranslateText(data.comment).then(RES=>{
+
+            let RESCHAT=`${data.comment}\n${data.comment == RES ? "" : RES}`
+            
+            sendBarkNotification(data.user.nickname, RESCHAT,iconn);
+            sendSocketMessage(data.user.nickname, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList);
+
+            
+    })
+
+    
 
     // 同時記錄訊息統計
     addToSyncBuffer(data.user.nickname, data.comment);
@@ -982,7 +1005,7 @@ connection.fetchAvailableGifts().then(async (giftList) => {
     console.log(tiktokName,"Tiktok giftList.length:", giftList.length);
     await syncGiftMapFromGiftList(giftList);
     await backfillGiftTranslationsFromGiftList(giftList);
-    
+
     await saveGiftCatalog(giftList);
     // giftList.forEach(gift => {
     //     console.log(`id: ${gift.id}, name: ${gift.name}, cost: ${gift.diamond_count}`)
@@ -1139,8 +1162,15 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
     recordMessageStat(event.messageText);
 
-    sendBarkNotification(event.chatterDisplayName, event.messageText, icon);
-    sendSocketMessage(event.chatterDisplayName, event.messageText, icon,"Chat", false,CacheUserNum,CacheUserList);
+    Translate.TranslateText(event.messageText).then(RES=>{
+
+            let RESCHAT=`${event.messageText}\n${event.messageText == RES ? "" : RES}`
+            
+            sendBarkNotification(event.chatterDisplayName, RESCHAT,iconn);
+            sendSocketMessage(event.chatterDisplayName, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList);
+
+            
+    })
 
     
 });
