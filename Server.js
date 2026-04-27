@@ -106,8 +106,24 @@ function sendToTikTok(obj) {
 // server.js
 const crypto = require('crypto');
 
+
+const server_tokenFile = path.join(__dirname, 'server_tokens.json');
+
 // 用 Map 儲存 token -> expiry
-const validTokens = new Map();
+var validTokens = new Map();
+
+
+// 啟動時載入
+if (fs.existsSync(server_tokenFile)) {
+    const data = JSON.parse(fs.readFileSync(server_tokenFile, 'utf8'));
+    validTokens = new Map(Object.entries(data));
+}
+
+    // 儲存到檔案
+    function saveTokens() {
+    const obj = Object.fromEntries(validTokens);
+    fs.writeFileSync(server_tokenFile, JSON.stringify(obj, null, 2));
+}
 
 // 建立 token，設定有效期 (例如 30 分鐘)
 function createToken() {
@@ -122,8 +138,12 @@ function isValidToken(token) {
     if (!token) return false;
     const expiry = validTokens.get(token);
     if (!expiry) return false;
+    
+    saveTokens();
+    
     if (Date.now() > expiry) {
         validTokens.delete(token); // 過期就刪掉
+        
         return false;
     }
     return true;
