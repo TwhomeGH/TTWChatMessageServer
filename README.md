@@ -330,3 +330,23 @@ git update-index --no-assume-unchanged <file>
 `Time.html` 是很早以前我用在OBS瀏覽器來源 用來顯示當前時間的附加件
 
 `NetFix.py` 則是平時用來FFMPEG重新編碼壓縮用 的小工具
+
+`live_engine` 用於給Window的聊天疊加層
+
+
+### live_engine 使用方式
+
+依賴安裝
+
+```shell
+pip install PyQt6 PyOpenGL numpy pillow requests
+```
+
+疊加層配置 請從`live_engine/config.py` 處理
+
+寬高配置在這裡設置
+
+運行請先進入 live_engine目錄下 在運行 `main.py`
+
+運行會在本地部署一個Socket Server PORT跟ReplyKIT項目是一樣的 在PORT `9322`
+
