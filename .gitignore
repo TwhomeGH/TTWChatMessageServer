@@ -8,3 +8,5 @@ send_messages.json
 gift_list.json
 gift_map.json
 
+*__pycache__
+
