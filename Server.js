@@ -54,11 +54,11 @@ function getAllMessageStatsSorted() {
 
 function SaveCacheKeywordDataAll() {
 
-        cacheKeywordDataAll = getAllMessageStatsSorted();
-        fs.writeFileSync('./message_stats.json', JSON.stringify(cacheKeywordDataAll, null, 2));
-        pushLog('💾 已將所有關鍵字統計寫入 message_stats.json');
-        
-    }
+    cacheKeywordDataAll = getAllMessageStatsSorted();
+    fs.writeFileSync('./message_stats.json', JSON.stringify(cacheKeywordDataAll, null, 2));
+    pushLog('💾 已將所有關鍵字統計寫入 message_stats.json');
+
+}
 
 /**
  * 日誌推送函數，會同時推送給所有 SSE client
@@ -69,11 +69,11 @@ function pushLog(...line) {
 
     console.log(...line);
 
- 
+
     if (logs.length > MAX_LOG_LINES) {
         logs.shift();
     }
-    const text = line.map(item => 
+    const text = line.map(item =>
         typeof item === 'object' ? JSON.stringify(item) : String(item)
     ).join(' ');
 
@@ -99,6 +99,34 @@ function sendToTikTok(obj) {
         pushLog("未運行TikTok.js")
     }
 
+}
+
+
+
+// server.js
+const crypto = require('crypto');
+
+// 用 Map 儲存 token -> expiry
+const validTokens = new Map();
+
+// 建立 token，設定有效期 (例如 30 分鐘)
+function createToken() {
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiry = Date.now() + 14 * 24 * 60 * 60 * 1000; // 14天  24小時 60 分鐘
+    validTokens.set(token, expiry);
+    return token;
+}
+
+// 驗證 token
+function isValidToken(token) {
+    if (!token) return false;
+    const expiry = validTokens.get(token);
+    if (!expiry) return false;
+    if (Date.now() > expiry) {
+        validTokens.delete(token); // 過期就刪掉
+        return false;
+    }
+    return true;
 }
 
 const server = http.createServer((req, res) => {
@@ -146,7 +174,7 @@ const server = http.createServer((req, res) => {
         if (isSocket) args.push('--socket')
         if (isTwitch) args.push('--twitch')
         if (isBoth) args.push('--both')
-        
+
         tiktokProcess = spawn('node', args);
 
         tiktokProcess.stdout.on('data', (data) => {
@@ -155,7 +183,7 @@ const server = http.createServer((req, res) => {
                 .split('\n')
                 .forEach(line => line && pushLog(`[OUT] ${line}`));
 
-            
+
             var line = data.toString().trim();
 
             if (line.startsWith('{') && line.endsWith('}')) {
@@ -163,12 +191,12 @@ const server = http.createServer((req, res) => {
                 line = line.replace(/^[^\{]*/, '').replace(/[^\}]*$/, ''); // 嘗試提取 JSON 部分
 
                 const json = JSON.parse(line);
-                
+
                 var PType = json.type;
 
-                if ( PType == "top10"){
+                if (PType == "top10") {
                     cacheKeywordDataTop = json.data
-                } else if ( PType == "all") {
+                } else if (PType == "all") {
                     cacheKeywordDataAll = json.data
                 }
 
@@ -191,8 +219,8 @@ const server = http.createServer((req, res) => {
         });
 
 
-        
-        
+
+
 
 
 
@@ -257,7 +285,7 @@ const server = http.createServer((req, res) => {
 
 
     }
-     // ===============================
+    // ===============================
     // /chat 主入口
     // ===============================
 
@@ -271,7 +299,7 @@ const server = http.createServer((req, res) => {
         req.on('end', () => {
 
             try {
-                
+
 
                 pushLog('Chat入口📩 收到訊息:', body);
 
@@ -283,13 +311,13 @@ const server = http.createServer((req, res) => {
                         type: 'StreamMessage',
                         ...data
                     });
-                
+
                 }, 700);
-                
+
 
 
                 const { user, message } = data;
-                
+
                 recordMessageStat(message);
 
                 pushLog('📩 發送訊息:', user, message);
@@ -305,7 +333,7 @@ const server = http.createServer((req, res) => {
 
         });
 
-    } 
+    }
     // =======================
     // /close
     // =======================
@@ -322,7 +350,7 @@ const server = http.createServer((req, res) => {
 
         let consoleLog = `TikTok.js stopping...`;
 
-     
+
         pushLog(`[SYSTEM] ${consoleLog}`);
 
         res.setHeader('Content-Type', 'text/html');
@@ -376,7 +404,7 @@ const server = http.createServer((req, res) => {
     </body>
   </html>
 `);
-        
+
     }
 
     // =======================
@@ -400,7 +428,7 @@ const server = http.createServer((req, res) => {
         // 立刻送一次目前狀態
         res.write(`data: Running: ${tiktokProcess ? 'YES' : 'NO'}\n\n`);
         res.write(`data: -------------------------\n\n`);
-        
+
         logs.forEach(line => {
             res.write(`data: ${line}\n\n`);
         });
@@ -416,252 +444,286 @@ const server = http.createServer((req, res) => {
     }
 
 
-// 補丁前端頁面 status/keyword
+    // 補丁前端頁面 status/keyword
 
-else if (req.url === '/status/keyword') {
-    res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-        'Access-Control-Allow-Origin': '*'
-    });
+    else if (req.url === '/status/keyword') {
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*'
+        });
 
-        
+
         // 透過 stdin 發送退出命令
         if (!tiktokProcess) {
 
-        res.write(`data: ${JSON.stringify({
+            res.write(`data: ${JSON.stringify({
                 type: 'error',
                 message: 'TikTok.js 未啟動，沒有實時關鍵字資料'
             })}\n\n`);
 
-    }
-
-    function sendKeywordDataCacheTop() {
-
-        if (!tiktokProcess) {  
-        
-        pushLog('未運行使用快取資料推送 top10 關鍵字統計');
-        cacheKeywordDataTop = getTopMessages(10);
-        if (cacheKeywordDataTop.length > 0) {
-            res.write(`data: ${JSON.stringify({
-                type: 'top10',
-                data: cacheKeywordDataTop
-            })}\n\n`);
         }
 
-        } else {
-        pushLog('請求 TikTok.js 推送 top10 關鍵字統計');
-        tiktokProcess.stdin.write('GETTOP\n');
+        function sendKeywordDataCacheTop() {
 
-        if (cacheKeywordDataTop.length > 0) {
-            res.write(`data: ${JSON.stringify({
-                type: 'top10',
-                data: cacheKeywordDataTop
-            })}\n\n`);
-        }
+            if (!tiktokProcess) {
 
-        }
+                pushLog('未運行使用快取資料推送 top10 關鍵字統計');
+                cacheKeywordDataTop = getTopMessages(10);
+                if (cacheKeywordDataTop.length > 0) {
+                    res.write(`data: ${JSON.stringify({
+                        type: 'top10',
+                        data: cacheKeywordDataTop
+                    })}\n\n`);
+                }
 
+            } else {
+                pushLog('請求 TikTok.js 推送 top10 關鍵字統計');
+                tiktokProcess.stdin.write('GETTOP\n');
 
-    }
+                if (cacheKeywordDataTop.length > 0) {
+                    res.write(`data: ${JSON.stringify({
+                        type: 'top10',
+                        data: cacheKeywordDataTop
+                    })}\n\n`);
+                }
 
-   
-    function sendKeywordDataCacheAll() {
-
-        if (!tiktokProcess) {
-            pushLog('TikTok.js not running, cannot get ALL keyword data');
-            
-            cacheKeywordDataAll = getAllMessageStatsSorted();
-            if (cacheKeywordDataAll.length > 0) {
-                res.write(`data: ${JSON.stringify({
-                    type: 'all',
-                    data: cacheKeywordDataAll
-                })}\n\n`);
             }
 
-        
-        } else {
 
-        pushLog('請求 All Keyword TikTok.js');
-        tiktokProcess.stdin.write('GETALL\n');
-        
-        if (cacheKeywordDataAll.length > 0) {
+        }
+
+
+        function sendKeywordDataCacheAll() {
+
+            if (!tiktokProcess) {
+                pushLog('TikTok.js not running, cannot get ALL keyword data');
+
+                cacheKeywordDataAll = getAllMessageStatsSorted();
+                if (cacheKeywordDataAll.length > 0) {
+                    res.write(`data: ${JSON.stringify({
+                        type: 'all',
+                        data: cacheKeywordDataAll
+                    })}\n\n`);
+                }
+
+
+            } else {
+
+                pushLog('請求 All Keyword TikTok.js');
+                tiktokProcess.stdin.write('GETALL\n');
+
+                if (cacheKeywordDataAll.length > 0) {
+                    res.write(`data: ${JSON.stringify({
+                        type: 'all',
+                        data: cacheKeywordDataAll
+                    })}\n\n`);
+                }
+
+            }
+        }
+
+        function sendKeywordData() {
+            try {
+                const raw = fs.readFileSync('./message_stats.json', 'utf-8');
+                const json = JSON.parse(raw);
+
+                pushLog('📈 讀取 message_stats.json:', json);
+
+                const stats = json || [];
+
+                const top10 = stats
+                    .slice(0, 10); // 你存檔時已排序就直接 slice
+
+
+                pushLog('📈 傳送 top10:', top10);
+                pushLog('📈 傳送 all stats:', stats);
+
+                res.write(`data: ${JSON.stringify({
+                    type: 'top10',
+                    data: top10
+                })}\n\n`);
+
                 res.write(`data: ${JSON.stringify({
                     type: 'all',
-                    data: cacheKeywordDataAll
+                    data: stats
                 })}\n\n`);
-        }
-    
-    }
-    }
 
-    function sendKeywordData() {
-        try {
-            const raw = fs.readFileSync('./message_stats.json', 'utf-8');
-            const json = JSON.parse(raw);
-
-            pushLog('📈 讀取 message_stats.json:', json);
-
-            const stats = json || [];
-
-            const top10 = stats
-                .slice(0, 10); // 你存檔時已排序就直接 slice
-
-
-            pushLog('📈 傳送 top10:', top10);
-            pushLog('📈 傳送 all stats:', stats);
-
-            res.write(`data: ${JSON.stringify({
-                type: 'top10',
-                data: top10
-            })}\n\n`);
-
-            res.write(`data: ${JSON.stringify({
-                type: 'all',
-                data: stats
-            })}\n\n`);
-
-        } catch (err) {
-            res.write(`data: ${JSON.stringify({
-                type: 'error',
-                message: '無法讀取關鍵字檔案'
-            })}\n\n`);
-        }
-    }
-
-    // 進來先送一次
-    sendKeywordData();
-
-
-    // 如果你未來會更新檔案，可以定時推
-    const interval = setInterval(sendKeywordDataCacheTop, 1000);
-    const intervalAll = setInterval(sendKeywordDataCacheAll, 5000);
-    
-
-    req.on('close', () => {
-        clearInterval(interval);
-        clearInterval(intervalAll);
-
-        pushLog('Client 中斷，停止推送關鍵字資料[TikTokJS 未運行，使用快取資料]');
-    
-        if (!tiktokProcess) {
-            SaveCacheKeywordDataAll();
-            pushLog('TikTok.js not running, saved cache keyword data to file on client disconnect');
-            pushLog('Saved cache keyword data to file on client disconnect');
+            } catch (err) {
+                res.write(`data: ${JSON.stringify({
+                    type: 'error',
+                    message: '無法讀取關鍵字檔案'
+                })}\n\n`);
+            }
         }
 
-    });
+        // 進來先送一次
+        sendKeywordData();
 
+
+        // 如果你未來會更新檔案，可以定時推
+        const interval = setInterval(sendKeywordDataCacheTop, 1000);
+        const intervalAll = setInterval(sendKeywordDataCacheAll, 5000);
+
+
+        req.on('close', () => {
+            clearInterval(interval);
+            clearInterval(intervalAll);
+
+            pushLog('Client 中斷，停止推送關鍵字資料[TikTokJS 未運行，使用快取資料]');
+
+            if (!tiktokProcess) {
+                SaveCacheKeywordDataAll();
+                pushLog('TikTok.js not running, saved cache keyword data to file on client disconnect');
+                pushLog('Saved cache keyword data to file on client disconnect');
+            }
+
+        });
+
+
+    }
+
+    else if (req.url === '/keyword') {
+        fs.readFile('./keyword.html', (err, data) => {
+            if (err) {
+                res.writeHead(500);
+                res.end('Error loading keyword.html');
+                return;
+            }
+
+            res.writeHead(200, { 'Content-Type': 'text/html' });
+            res.end(data);
+        });
+    }
+
+    // 登入 API
+    else if (req.url === '/login' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            const { password } = JSON.parse(body);
+
+            if (password === process.env.CONFIG_KEY) {
+            const token = createToken(); // 你自己的 token 生成邏輯
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Set-Cookie': `authToken=${token}; SameSite=Strict`
+            });
+            res.end(JSON.stringify({ success: true }));
+            } else {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Invalid password' }));
+            }
+        });
+        }
+
+
+    // 保護的 config API
     
-}
+    // GET /config → 顯示表單
+    else if (req.url.startsWith('/config') && req.method === 'GET') {
 
-else if (req.url === '/keyword') {
-    fs.readFile('./keyword.html', (err, data) => {
-        if (err) {
-            res.writeHead(500);
-            res.end('Error loading keyword.html');
+        const cookies = req.headers.cookie || '';
+        const token = cookies.split(';')
+            .map(c => c.trim())
+            .find(c => c.startsWith('authToken='))
+            ?.split('=')[1];
+        
+        console.log("Cookie",token)
+
+        if (!isValidToken(token)) {
+            // 直接回傳 login.html，而不是 302
+            const loginPath = path.join(__dirname, 'login.html');
+            fs.readFile(loginPath, 'utf8', (err, html) => {
+            if (err) {
+                res.writeHead(403, { 'Content-Type': 'text/plain' });
+                res.end('Passwd Error');
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(html);
+            });
             return;
         }
 
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(data);
-    });
-}
+        // 讀取分離好的 config.html
+        const filePath = path.join(__dirname, 'config.html');
+        fs.readFile(filePath, 'utf8', (err, html) => {
+            if (err) {
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Server Error');
+            return;
+            }
 
-    // GET /config → 顯示表單
-else if (req.url.startsWith('/config') && req.method === 'GET') {
+            // 在 HTML 裡替換佔位符
+            let filledHtml = html
+            .replace('${BARK_API}', process.env.BARK_API || '')
+            .replace('${SOCKET_API}', process.env.SOCKET_API || '');
 
-        // ✅ 新增：解析 query
-    const url = new URL(req.url, `http://${req.headers.host}`)
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(filledHtml);
+        });
 
-    const password = url.searchParams.get('key') ?? ''
-
-    if (password !== process.env.CONFIG_KEY) {
-        res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(`<html><body>
-<h2>403 Forbidden</h2>
-<p>Invalid or key error.</p>
-</body></html>`);
-        return;
+        
     }
 
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(`
-<html>
-<head>
-<meta charset="UTF-8">
-<title>Config Editor</title>
-<style>
-body { font-family: Arial; margin: 20px; }
-label { display: block; margin: 8px 0 4px; }
-input { width: 400px; padding: 4px; }
-button { margin-top: 10px; padding: 6px 12px; }
-</style>
-</head>
-<body>
-<h2>修改環境變數</h2>
-<form method="POST" action="/config">
-<label for="BARK_API">BARK_API:</label>
-<input type="text" name="BARK_API" id="BARK_API" value="${process.env.BARK_API || ''}" />
+    // POST /config → 接收表單
+    else if (req.url === '/config' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', async () => {
+            const params = new URLSearchParams(body);
+            const newBark = params.get('BARK_API') || '';
+            const newSocket = params.get('SOCKET_API') || '';
 
-<label for="SOCKET_API">SOCKET_API:</label>
-<input type="text" name="SOCKET_API" id="SOCKET_API" value="${process.env.SOCKET_API || ''}" />
+            // 更新 process.env
+            process.env.BARK_API = newBark;
+            process.env.SOCKET_API = newSocket;
 
-<button type="submit">儲存</button>
-</form>
-</body>
-</html>
-`);
-}
+            // 更新 .env 檔案
+            const envPath = path.resolve('.env');
+            let envContent = '';
+            try {
+                if (fs.existsSync(envPath)) {
+                    envContent = fs.readFileSync(envPath, 'utf-8');
+                }
+            } catch (err) { console.error(err); }
 
-// POST /config → 接收表單
-else if (req.url === '/config' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => { body += chunk.toString(); });
-    req.on('end', async () => {
-        const params = new URLSearchParams(body);
-        const newBark = params.get('BARK_API') || '';
-        const newSocket = params.get('SOCKET_API') || '';
-
-        // 更新 process.env
-        process.env.BARK_API = newBark;
-        process.env.SOCKET_API = newSocket;
-
-        // 更新 .env 檔案
-        const envPath = path.resolve('.env');
-        let envContent = '';
-        try {
-            if (fs.existsSync(envPath)) {
-                envContent = fs.readFileSync(envPath, 'utf-8');
+            const updateEnv = (key, value) => {
+                const regex = new RegExp(`^${key}=.*$`, 'm');
+                if (regex.test(envContent)) {
+                    envContent = envContent.replace(regex, `${key}=${value}`);
+                } else {
+                    envContent += `\n${key}=${value}`;
+                }
             }
-        } catch (err) { console.error(err); }
 
-        const updateEnv = (key, value) => {
-            const regex = new RegExp(`^${key}=.*$`, 'm');
-            if (regex.test(envContent)) {
-                envContent = envContent.replace(regex, `${key}=${value}`);
-            } else {
-                envContent += `\n${key}=${value}`;
-            }
-        }
+            updateEnv('BARK_API', newBark);
+            updateEnv('SOCKET_API', newSocket);
 
-        updateEnv('BARK_API', newBark);
-        updateEnv('SOCKET_API', newSocket);
+            fs.writeFileSync(envPath, envContent, 'utf-8');
 
-        fs.writeFileSync(envPath, envContent, 'utf-8');
+            pushLog(`[SYSTEM] Updated .env: BARK_API=${newBark}, SOCKET_API=${newSocket}`);
 
-        pushLog(`[SYSTEM] Updated .env: BARK_API=${newBark}, SOCKET_API=${newSocket}`);
-
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(`
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(`
 <html><body>
 <p>更新完成！</p>
 <p><a href="/config">回到設定頁面</a></p>
 </body></html>
 `);
+        });
+    }
+
+    else if (req.url === '/logout') {
+    res.writeHead(200, {
+        'Set-Cookie': 'authToken=; HttpOnly; SameSite=Strict; Max-Age=0'
+        // 本地測試時不要加 Secure，正式環境再加
     });
-}
+    res.end(JSON.stringify({ success: true }));
+    }
+
 
     else if (req.url === '/help') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -714,6 +776,7 @@ Process view logs in real-time.
         });
     }
 
+
     else {
         res.statusCode = 404;
         res.end('Not found\n');
@@ -736,7 +799,7 @@ process.on("SIGTERM", async () => {
 
 
 async function handleExit() {
-    
+
     pushLog("Exiting...");
 
     if (!tiktokProcess) {
@@ -747,7 +810,7 @@ async function handleExit() {
         const proc = tiktokProcess;
         tiktokProcess = null;
 
-           // 透過 stdin 發送退出命令
+        // 透過 stdin 發送退出命令
         proc.stdin.write('EXIT\n');
 
         await new Promise(resolve => {

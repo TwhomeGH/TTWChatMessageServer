@@ -211,9 +211,36 @@ http://localhost:3332/config
 
 現在已添加配置頁存取密碼 對應env的`CONFIG_KEY`進行密碼設置
 
-```bash
-http://localhost:3332/config?key=你設置的密碼
-```
+# Config Editor 認證流程
+
+## 入口
+- 使用者訪問 `http://localhost:3332/config`
+- 如果尚未登入，系統會自動導向至 `login.html`
+
+## 登入
+- 在 `login.html` 輸入密碼並送出
+- 後端驗證成功後，會產生一組隨機 **Token**
+- Token 透過 **Set-Cookie** 寫入瀏覽器 (`authToken`)
+- Token 有效期為 **14 天**
+
+## 使用
+- 之後訪問 `/config` 時，瀏覽器會自動帶上 Cookie
+- 後端檢查 Cookie 中的 Token 是否有效：
+  - **有效** → 顯示 `config.html` 並填入環境變數
+  - **無效或過期** → 導向回 `login.html`
+
+## 登出
+- 使用者在 `config.html` 點選「登出」按鈕
+- 前端呼叫 `/logout`
+- 後端回應 `Set-Cookie: authToken=; Max-Age=0`，清除 Cookie
+- 使用者被導回 `login.html`
+
+## Token 有效期
+- 每次登入會生成一組新的 Token
+- Token 有效期為 **14 天**
+- 過期後需要重新登入
+- 使用者也可以手動點選「登出」來清除 Cookie
+- 
 
 ## 日誌與錯誤
 

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>登入頁面</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+
+  <div class="bg-white shadow-lg rounded-lg p-8 w-full max-w-sm">
+    <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">系統登入</h2>
+
+    <div class="space-y-4">
+      <input 
+        type="password" 
+        id="password" 
+        placeholder="請輸入密碼" 
+        class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+      <button 
+        onclick="login()" 
+        class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">
+        登入
+      </button>
+    </div>
+
+    <p id="error" class="text-red-500 text-center mt-4"></p>
+  </div>
+
+  <script>
+    async function login() {
+      const password = document.getElementById('password').value.trim();
+      const errorBox = document.getElementById('error');
+      errorBox.textContent = '';
+
+      if (!password) {
+        errorBox.textContent = '請輸入密碼';
+        return;
+      }
+
+      try {
+        const res = await fetch('/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password }),
+          credentials: 'include'
+        });
+
+        if (!res.ok) {
+          errorBox.textContent = '登入失敗，密碼錯誤';
+          return;
+        }
+
+        const data = await res.json();
+        if (data.success) {
+          // 後端已經透過 Set-Cookie 寫入 authToken
+          // 前端只要跳轉到 /config，瀏覽器會自動帶上 Cookie
+          window.location.href = '/config';
+        } else {
+          errorBox.textContent = '登入失敗';
+        }
+      } catch (err) {
+        console.error(err);
+        errorBox.textContent = '登入過程發生錯誤';
+      }
+    }
+  </script>
+</body>
+</html>
