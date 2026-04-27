@@ -657,8 +657,8 @@ const server = http.createServer((req, res) => {
             const loginPath = path.join(__dirname, 'login.html');
             fs.readFile(loginPath, 'utf8', (err, html) => {
             if (err) {
-                res.writeHead(403, { 'Content-Type': 'text/plain' });
-                res.end('Passwd Error');
+                res.writeHead(500, { 'Content-Type': 'text/plain' });
+                res.end('Server Error');
                 return;
             }
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -724,15 +724,25 @@ const server = http.createServer((req, res) => {
 
             fs.writeFileSync(envPath, envContent, 'utf-8');
 
-            pushLog(`[SYSTEM] Updated .env: BARK_API=${newBark}, SOCKET_API=${newSocket}`);
+            let FixBARK = newBark.substring(0,newBark.length-5) + "00000"
+            
+            pushLog(`[SYSTEM] Updated .env: BARK_API=${FixBARK}, SOCKET_API=${newSocket}`);
 
+
+
+            // 直接回傳 login.html，而不是 302
+            const UpdatePath = path.join(__dirname, 'Update.html');
+            fs.readFile(UpdatePath, 'utf8', (err, html) => {
+            if (err) {
+                res.writeHead(500, { 'Content-Type': 'text/plain' });
+                res.end('Server Error');
+                return;
+            }
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(`
-<html><body>
-<p>更新完成！</p>
-<p><a href="/config">回到設定頁面</a></p>
-</body></html>
-`);
+            res.end(html);
+            });
+
+
         });
     }
 

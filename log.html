@@ -1,40 +1,29 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Console</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Console</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
+<body class="bg-gray-900 text-gray-200 font-mono min-h-screen p-4">
 
-<style>
-  body {
-    font-family: monospace;
-    background-color: #1e1e1e;
-    color: #d4d4d4;
-    margin: 0;
-    padding: 10px;
-  }
-  pre {
-    white-space: pre-wrap;
-    word-wrap: break-word;
-  }
-
-</style>
-
-
-<body>
+  <div class="bg-gray-800 rounded-lg shadow-lg p-6 w-full">
+    <h1 class="text-xl font-bold text-green-400 mb-4">系統日誌 Console</h1>
     
-    
-    <pre id="log"></pre>
+    <div class="bg-black rounded-lg p-4 overflow-y-auto h-[80vh] w-full">
+      <pre id="log" class="whitespace-pre-wrap break-words text-sm w-full"></pre>
+    </div>
+  </div>
 
-<script>
-  const logEl = document.getElementById('log');
-  const es = new EventSource('/status/stream');
+  <script>
+    const logEl = document.getElementById('log');
+    const es = new EventSource('/status/stream');
 
-  es.onmessage = (e) => {
-    logEl.textContent += e.data + '\n';
-  };
-</script>
-
+    es.onmessage = (e) => {
+      logEl.textContent += e.data + '\n';
+      logEl.scrollTop = logEl.scrollHeight; // 自動捲到底
+    };
+  </script>
 </body>
 </html>

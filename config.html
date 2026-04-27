@@ -38,6 +38,8 @@
           />
         </div>
 
+        
+
         <div class="flex space-x-4">
           <button
             type="submit"
@@ -52,21 +54,33 @@
           >
             登出
           </button>
+          <button
+            type="button"
+            onclick="back_home()"
+            class="flex-1 bg-gray-400 text-white py-2 rounded-lg hover:bg-gray-500 transition"
+          >
+            回主頁
+          </button>
         </div>
       </form>
     </div>
 
     <script>
-      async function logout() {
-        try {
-          await fetch("/logout", { method: "GET", credentials: "include" });
-          // 清除後端 Cookie 後，導回登入頁
-          window.location.href = "/config";
-        } catch (err) {
-          console.error(err);
-          alert("登出失敗");
+        async function logout() {
+            try {
+            await fetch("/logout", { method: "GET", credentials: "include" });
+            // 清除後端 Cookie 後，導回登入頁
+            window.location.href = "/config";
+            } catch (err) {
+            console.error(err);
+            alert("登出失敗");
+            }
         }
-      }
+
+        async function back_home() {
+            window.location.href = "/";
+        }
+
     </script>
   </body>
 </html>
