@@ -8,11 +8,13 @@
 </head>
 <body class="bg-gray-900 text-gray-200 font-mono min-h-screen p-4">
 
-  <div class="bg-gray-800 rounded-lg shadow-lg p-6 w-full">
+  <div class="bg-gray-800 rounded-lg shadow-lg p-6 w-full h-[90vh] flex flex-col">
     <h1 class="text-xl font-bold text-green-400 mb-4">系統日誌 Console</h1>
     
-    <div class="bg-black rounded-lg p-4 overflow-y-auto h-[80vh] w-full">
-      <pre id="log" class="whitespace-pre-wrap break-words text-sm w-full"></pre>
+    <!-- 日誌區塊 -->
+    <div class="bg-black rounded-lg p-4 flex-1 overflow-auto w-full">
+      <pre id="log" 
+           class="whitespace-pre-wrap break-words text-sm w-full overflow-x-auto"></pre>
     </div>
   </div>
 
@@ -22,7 +24,8 @@
 
     es.onmessage = (e) => {
       logEl.textContent += e.data + '\n';
-      logEl.scrollTop = logEl.scrollHeight; // 自動捲到底
+      // 自動滾到底
+      logEl.parentElement.scrollTop = logEl.parentElement.scrollHeight;
     };
   </script>
 </body>

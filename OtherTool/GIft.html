@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <title>禮品卡首頁</title>
+  </head>
+
+  <body class="bg-gray-50">
+    <!-- Hero Section -->
+    <section class="max-w-6xl mx-auto px-6 py-5">
+      <div class="flex flex-col md:flex-row items-center gap-10">
+        <!-- 左側圖片 -->
+        <div class="w-full md:w-1/2">
+          <div
+            class="aspect-[4/3] bg-gray-200 rounded-2xl overflow-hidden shadow-md"
+          >
+            <!-- 🔥 這裡換成你的圖片 -->
+            <img
+              src="./Gift.webp"
+              alt="禮品卡主視覺"
+              class="w-full h-full object-contain"
+            />
+          </div>
+        </div>
+
+        <!-- 右側文案 -->
+        <div class="w-full md:w-1/2">
+          <h1
+            class="text-3xl md:text-4xl font-bold text-gray-900 leading-tight"
+          >
+            想要送禮給親朋好友嗎？
+          </h1>
+
+          <p class="mt-4 text-gray-600 text-lg leading-relaxed">
+            精選超商與百貨禮品卡，快速購買、立即使用，送禮更簡單。
+          </p>
+
+          <!-- CTA -->
+          <div class="mt-8 flex flex-col sm:flex-row gap-4">
+            <a
+              href="#products"
+              class="px-6 py-3 bg-black text-white rounded-xl text-center hover:bg-gray-800 transition"
+            >
+              查看超商禮品卡
+            </a>
+
+            <a
+              href="#all"
+              class="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl text-center hover:bg-gray-100 transition"
+            >
+              瀏覽全部商品
+            </a>
+          </div>
+
+          <!-- 小補充 -->
+          <div class="mt-6 text-sm text-gray-500">
+            ✔ 即買即用 ｜ ✔ 多品牌可選 ｜ ✔ 安全交易
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 商品區示意 -->
+    <section id="products" class="max-w-6xl mx-auto px-6 py-10">
+      <h2 class="text-xl font-semibold text-gray-900 mb-6">超商禮品卡</h2>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <!-- 商品卡（示意） -->
+        <div class="bg-white rounded-xl shadow-sm p-4">
+          <div class="aspect-square bg-gray-100 rounded-lg">
+            <!-- 🔥 這裡換成你的圖片 -->
+            <img
+              src="./Gift.webp"
+              alt="禮品卡主視覺"
+              class="w-full h-full object-contain p-1"
+            />
+          </div>
+          <p class="mt-2 font-medium">7-11 商品卡 1000元</p>
+          <p class="text-sm text-gray-500">NT$1000</p>
+          <button
+            class="mt-3 w-full bg-black text-white text-sm py-2 rounded-lg hover:bg-gray-800 transition"
+          >
+            加入購物車
+          </button>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-4">
+          <div class="aspect-square bg-gray-100 rounded-lg">
+            <img
+              src="./Gift500.jpg"
+              alt="禮品卡主視覺"
+              class="w-full h-full object-contain p-1"
+            />
+          </div>
+          <p class="mt-2 font-medium">7-11 商品卡 500元</p>
+          <p class="text-sm text-gray-500">NT$500</p>
+
+          <button
+            class="mt-3 w-full bg-black text-white text-sm py-2 rounded-lg hover:bg-gray-800 transition"
+          >
+            加入購物車
+          </button>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-4">
+          <div class="aspect-square bg-gray-100 rounded-lg">
+            <img
+              src="./Gift200.webp"
+              alt="禮品卡主視覺"
+              class="w-full h-full object-contain p-1"
+            />
+          </div>
+          <p class="mt-2 font-medium">7-11商品卡 200元</p>
+          <p class="text-sm text-gray-500">NT$200</p>
+          <button
+            class="mt-3 w-full bg-black text-white text-sm py-2 rounded-lg hover:bg-gray-800 transition"
+          >
+            加入購物車
+          </button>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-4">
+          <div class="aspect-square bg-gray-100 rounded-lg">
+            <img
+              src="./Gift100.jpeg"
+              alt="禮品卡主視覺"
+              class="w-full h-full object-contain p-1"
+            />
+          </div>
+          <p class="mt-2 font-medium">7-11 商品卡 100元</p>
+          <p class="text-sm text-gray-500">$100</p>
+          <button
+            class="mt-3 w-full bg-black text-white text-sm py-2 rounded-lg hover:bg-gray-800 transition"
+          >
+            加入購物車
+          </button>
+        </div>
+      </div>
+    </section>
+  </body>
+</html>

@@ -1000,6 +1000,8 @@ console.log(JSON.stringify({ action },"",4))
 
 
 // Gift
+
+if (isTK) {
 connection.fetchAvailableGifts().then(async (giftList) => {
     await giftMapReady;
     console.log(tiktokName,"Tiktok giftList.length:", giftList.length);
@@ -1014,6 +1016,10 @@ connection.fetchAvailableGifts().then(async (giftList) => {
 }).catch(err => {
     console.error(err);
 })
+
+} else {
+    console.log("跳過 TikTok禮物列表取得")
+}
 
 
 
