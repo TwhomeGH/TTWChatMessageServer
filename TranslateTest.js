@@ -102,6 +102,10 @@ function isChinese(text) {
 async function translateByApi(Chat) {
     try {
 
+        if (Chat.length < 3) {
+            console.log("太短了取消翻譯")
+            return Chat
+        }
         let CheckLang = isChinese(Chat)
 
         

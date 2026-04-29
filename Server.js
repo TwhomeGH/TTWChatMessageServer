@@ -306,7 +306,7 @@ const server = http.createServer((req, res) => {
 
     }
     // ===============================
-    // /chat 主入口
+    // Chat 主入口
     // ===============================
 
     else if (req.method === 'POST' && req.url === '/chat') {
@@ -325,16 +325,14 @@ const server = http.createServer((req, res) => {
 
                 const data = JSON.parse(body);
 
-                setTimeout(() => {
-                    pushLog('📩 0.7秒後處理訊息:', data);
-                    sendToTikTok({
-                        type: 'StreamMessage',
-                        ...data
-                    });
+                
+                
+                sendToTikTok({
+                    type: 'StreamMessage',
+                    ...data
+                });
 
-                }, 700);
-
-
+    
 
                 const { user, message } = data;
 
