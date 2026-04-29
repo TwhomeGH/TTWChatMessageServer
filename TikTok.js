@@ -516,7 +516,7 @@ function sendToTCP(payload) {
     try {
         console.log('📤 發送 TCP 訊息Sync:', payload);
 
-        if (isDuplicate(payload.user, payload.message)) {
+        if (isDuplicate(payload.user.trim(), payload.message.trim())) {
             console.log('🚫 重複訊息跳過:', payload.user, payload.message);
             return;
         }
@@ -575,9 +575,13 @@ function addToSyncBuffer(username, message) {
         timestamp: Date.now()
     });
 
-    
-    // 超過 100 筆就移除最舊的
-    if (syncBuffer.length > 100) {
+
+    // 清理超過 60 秒的訊息
+    const now = Date.now();
+    syncBuffer = syncBuffer.filter(item => now - item.timestamp <= 60000);
+        
+    // 超過 500 筆就移除最舊的
+    if (syncBuffer.length > 500) {
         syncBuffer.shift();
     }
 }
@@ -608,13 +612,12 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,use
     if (!client || client.destroyed) return;
 
     
-    if (isDuplicate(user, message)) {
+    if (isDuplicate(user.trim(), message.trim())) {
         console.log('🚫內部 重複訊息跳過:', user, message);
         return;
     }
 
     
-
     const payload = {
         type: 'StreamMessage',
         user,
@@ -703,6 +706,8 @@ function viewCache() {
         } else {
             CacheUserNum = connection.state.roomInfo.data.user_count
         }
+
+        sendSocketMessage("", "", "", "", false,CacheUserNum,CacheUserList);
 
 
     }
@@ -804,16 +809,15 @@ connection.on(WebcastEvent.MEMBER,data => {
     let iconn = data.user.profilePicture.url[1]
     //console.log(JSON.stringify(data,"",4))
     
-    console.log("STATE",connection.state)
     console.log(data.user.nickname,"加入了") 
-    console.log("STATE",connection.state.user_count) 
+    console.log("STATE View",connection.state.roomInfo.data.user_count) 
 
     
     sendBarkNotification(data.user.nickname, "來了",iconn);
     sendSocketMessage(data.user.nickname, "來了",iconn,"",false,CacheUserNum,CacheUserList);
 
     // 同時記錄訊息統計 加入訊息存儲用與TikTok的結果一致 以便去重
-    addToSyncBuffer(data.user.nickname, "加入了");
+    addToSyncBuffer(data.user.nickname.trim(), "加入了");
 
 })
 
@@ -838,7 +842,6 @@ connection.on(WebcastEvent.CHAT, data => {
     console.log("訊息已記錄到統計中:", data.comment)
     // 同時記錄訊息統計
     recordMessageStat(data.comment);
-
     
 
     Translate.TranslateText(data.comment).then(RES=>{
@@ -848,13 +851,12 @@ connection.on(WebcastEvent.CHAT, data => {
             sendBarkNotification(data.user.nickname, RESCHAT,iconn);
             sendSocketMessage(data.user.nickname, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList);
 
-            
+            // 同時記錄訊息統計
+            addToSyncBuffer(data.user.nickname.trim(), data.comment.trim());
+        
     })
 
-    
 
-    // 同時記錄訊息統計
-    addToSyncBuffer(data.user.nickname, data.comment);
 
 });
 
