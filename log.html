@@ -23,6 +23,9 @@
     const logEl = document.getElementById('log');
     const es = new EventSource('/status/stream');
 
+    let DATE = new Date()
+
+    logEl.textContent = `${DATE.toLocaleString()} 初始化日誌\n`
     es.onmessage = (e) => {
       logEl.textContent += e.data + '\n';
       // 自動滾到底
