@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat → Socket Bridge
 // @namespace    pip-chat-bridge
-// @version      1.5
+// @version      1.6
 // @description  Listen TikTok live chat and forward to socket server
 // @author       Nuclear0709
 // @match        https://livecenter.tiktok.com/*
@@ -88,7 +88,12 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 
         if (!username || !message) return;
 
         console.log("📩 新訊息:", username, message);
-        sendSocketMessage(username, message, avatarUrl, null, true, users.length, users);
+
+        console.log("等待0.8秒後送出")
+        setTimeout( ()=>{
+            console.log(`已送出 ${username} ${message} ${avatarUrl} 人數:${users.length} ${users}`)
+            sendSocketMessage(username, message, avatarUrl, null, true, users.length, users);
+        },800)
     }
 
 

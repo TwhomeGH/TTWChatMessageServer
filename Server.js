@@ -8,6 +8,14 @@ const path = require('path');
 const { config } = require('dotenv');
 const { time } = require('console');
 
+
+var TEST_LOG = [
+    Date.now().toLocaleString(),
+    "測試主 LOG文件"
+]
+
+writeLog("Default",TEST_LOG.join("\n"))
+
 config(); // 讀取 .env
 
 let tiktokProcess = null;
@@ -60,6 +68,30 @@ function SaveCacheKeywordDataAll() {
 
 }
 
+
+/**
+ * 將日誌訊息追加到檔案尾端
+ * @param {string} filename - 日誌檔案名稱
+ * @param {string} message - 要寫入的訊息
+ */
+function writeLog(filename="Main_Log.log", message) {
+
+    var FileN = filename
+    if (filename.toLowerCase().startsWith("default")) {
+    console.log("使用預設",FileN)
+    FileN = "Main_Log.log"
+    }
+    const logPath = path.resolve(__dirname, FileN);
+    const logLine = `${new Date().toLocaleString()} - ${message}\n`;
+
+    fs.appendFile(logPath, logLine, (err) => {
+        if (err) {
+        console.error('寫入日誌失敗:', err);
+        }
+    });
+
+}
+
 /**
  * 日誌推送函數，會同時推送給所有 SSE client
  * @param  {...any} line 
@@ -105,6 +137,7 @@ function sendToTikTok(obj) {
 
 // server.js
 const crypto = require('crypto');
+const { text } = require('stream/consumers');
 
 
 const server_tokenFile = path.join(__dirname, 'server_tokens.json');
@@ -801,6 +834,81 @@ Process view logs in real-time.
 
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end(html);
+        });
+    }
+    else if (req.url === '/logViewer') {
+        const filePath = path.join(__dirname, 'logFile.html');
+
+        fs.readFile(filePath, 'utf8', (err, html) => {
+            if (err) {
+                res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Failed to load logFile.html');
+                return;
+            }
+
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(html);
+        });
+
+    }
+
+    else if (req.url.startsWith('/Clear_LOG') && req.method == "POST") {
+
+         let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+
+            const { file } = JSON.parse(body);
+            console.log("收到清理請求:", file);
+
+            try {
+            // 這裡執行清空檔案的邏輯
+            fs.writeFileSync(file, "");
+
+
+            res.writeHead(200, {
+                'Content-Type': 'application/json'
+            });
+            res.end(JSON.stringify({ status: "ok", cleared: file }));
+
+            } catch (err) {
+                console.log("清理錯誤",err)
+
+                res.writeHead(500, {
+                'Content-Type': 'application/json'
+                });
+                res.end(JSON.stringify({ status: "error", cleared: file }));
+
+
+            }
+
+        })
+
+
+            
+    }
+    else if (req.url.startsWith('/Get_LOG') && req.method == "GET") {
+
+
+            // ✅ 新增：解析 query
+        const url = new URL(req.url, `http://${req.headers.host}`)
+    
+        
+        const log_File = url.searchParams.get('file') ?? 'Main_Log.log'
+
+        pushLog("讀取文件",url,"File",log_File)
+
+        const filePath = path.join(__dirname, log_File);
+
+        fs.readFile(filePath, 'utf8', (err, html_text) => {
+            if (err) {
+                res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end(`加載失敗日誌文件 Load Error : ${log_File}`);
+                return;
+            }
+
+            res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end(html_text);
         });
     }
 

@@ -14,11 +14,48 @@ import { SignConfig } from "tiktok-live-connector";
 
 import path from 'path';
 
+import { fileURLToPath } from 'url';
+
+// 在 ESM 裡手動定義 __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 
 import { TikTokLiveConnection, WebcastEvent,ControlEvent,ControlAction } from 'tiktok-live-connector';
 import { type } from 'os';
 import Translate from "./TranslateTest.js"
+import console from 'console';
 
+import { fork } from 'child_process'
+
+const child = fork('TikTok.js', [], {
+  execArgv: ['--inspect=9230'] // 指定子程序的 debug port
+});
+
+
+
+/**
+ * 將日誌訊息追加到檔案尾端
+ * @param {string} filename - 日誌檔案名稱 Default使用預設
+ * @param {string} message - 要寫入的訊息
+ */
+function writeLog(filename="TikTokRun.log", message) {
+  
+  var FileN = filename
+  if (filename.toLowerCase().startsWith("default")) {
+    console.log("使用預設",FileN)
+    FileN = "TikTokRun.log"
+  }
+
+  const logPath = path.resolve(__dirname, FileN);
+  const logLine = `${new Date().toLocaleString()} - ${message}\n`;
+
+  fs.appendFile(logPath, logLine, (err) => {
+    if (err) {
+      console.error('寫入日誌失敗:', err);
+    }
+  });
+}
 
 
 // Translate.TranslateText("Hello User").then(RES=>{
@@ -511,19 +548,27 @@ async function sendBarkNotification(title = "Twitch", comment, icon) {
 function sendToTCP(payload) {
     if (!client || client.destroyed) return;
 
+    if (isDuplicate(payload.user.trim(), payload.message.trim())) {
+        console.log('🚫 重複訊息跳過:', payload.user, payload.message);
+        return;
+    }
+
     console.log('📤 發送 TCP 訊息:紀錄',payload.user,payload.message);
-    
+    console.log('📤 發送 TCP 訊息Sync:', payload);
+
     try {
-        console.log('📤 發送 TCP 訊息Sync:', payload);
+        var CHAT_RES = payload.message
 
-        if (isDuplicate(payload.user.trim(), payload.message.trim())) {
-            console.log('🚫 重複訊息跳過:', payload.user, payload.message);
-            return;
-        }
+        Translate.TranslateText(payload.message).then(RES=>{
+            
+            if (payload.message != RES) {
+                CHAT_RES += `\n${RES}`
+            }
+        })
 
-        client.write(JSON.stringify(payload) + '\n');
+        client.write(JSON.stringify(CHAT_RES) + '\n');
 
-        addToSyncBuffer(payload.user, payload.message);
+        addToSyncBuffer(payload.user.trim(), payload.message.trim());
 
     } catch (err) {
         console.error('⚠️ 發送 TCP 訊息失敗:', err.message);
@@ -566,7 +611,7 @@ function getAllMessageStatsSorted() {
 
 
 // ===== 暫存最多 10 筆 =====
-let syncBuffer = []; // [{ username, message, timestamp }]
+var syncBuffer = []; // [{ username, message, timestamp }]
 
 function addToSyncBuffer(username, message) {
     syncBuffer.push({
@@ -692,32 +737,44 @@ function connectSocket() {
 }
 
 
+var RoomID = ""
 
 function viewCache() {
     console.log("📊 CacheUserNum:", CacheUserNum)
     console.log("📋 CacheUserList:", CacheUserList);
     
+    try {
+        connection.fetchRoomInfo(RoomID).then(async (roomInfo) => {
 
-    if (connection.state.isConnected) {
-        console.log("STATE",connection.state.roomInfo.data.user_count)
-        
-        if (CacheUserList.length > CacheUserNum) {
-            CacheUserNum = CacheUserList.length // 以用戶列表長度為準，因為有時候 user_count 可能不準確;
-        } else {
-            CacheUserNum = connection.state.roomInfo.data.user_count
-        }
+            let Viewer = roomInfo.user_count
+            console.debug("DEBUG View",)
 
-        sendSocketMessage("", "", "", "", false,CacheUserNum,CacheUserList);
+            CacheUserNum = Viewer
+            console.log(`Stream started timestamp: ${roomInfo.create_time}`);
+            sendSocketMessage("", "", "", "", false,CacheUserNum,CacheUserList);
 
+        })
+
+
+    } catch (err) {
+        console.log("RoomError",err)
 
     }
+    
+    
 }
+
+
+
 
 if (isTK) {
     console.log("連接 TikTok 直播間:", tiktokName)
     // Connect to the chat (await can be used as well)
     connection.connect().then(state => {
         console.info(`Connected to roomId ${state.roomId}`);
+
+        RoomID = state.roomId
+
         let DisplayTitle = connection.state.roomInfo.data.title || "未知直播間";
         CacheUserNum = connection.state.roomInfo.data.user_count || 0;
         
@@ -779,6 +836,20 @@ connection.on(ControlEvent.DISCONNECTED, (e) => {
 });
 
 
+
+connection.on(WebcastEvent.CAPTION_MESSAGE, (data) => {
+    var MES_CAPTION = [""]
+
+    if (data.content.length) {
+        const lines = data.content.map(c => `[${c.lang}] ${c.content}`).join(' ');
+
+        MES_CAPTION.push`Caption (${data.timestampMs}): ${lines}`
+
+        writeLog("Default", MES_CAPTION.join("\n"))
+
+    }
+});
+
 // 取得人數和頭號觀眾列表的事件
 
 connection.on(WebcastEvent.ROOM_USER, data => {
@@ -810,7 +881,7 @@ connection.on(WebcastEvent.MEMBER,data => {
     //console.log(JSON.stringify(data,"",4))
     
     console.log(data.user.nickname,"加入了") 
-    console.log("STATE View",connection.state.roomInfo.data.user_count) 
+    console.log("STATE View",connection.state.roomInfo.data.user_count,CacheUserNum) 
 
     
     sendBarkNotification(data.user.nickname, "來了",iconn);
@@ -818,6 +889,9 @@ connection.on(WebcastEvent.MEMBER,data => {
 
     // 同時記錄訊息統計 加入訊息存儲用與TikTok的結果一致 以便去重
     addToSyncBuffer(data.user.nickname.trim(), "加入了");
+
+
+
 
 })
 
@@ -840,13 +914,22 @@ connection.on(WebcastEvent.CHAT, data => {
 
     console.log(`Chat:${data.user.nickname} : ${data.comment}`)
     console.log("訊息已記錄到統計中:", data.comment)
+
     // 同時記錄訊息統計
     recordMessageStat(data.comment);
-    
 
     Translate.TranslateText(data.comment).then(RES=>{
 
-            let RESCHAT=`${data.comment}\n${data.comment == RES ? "" : RES}`
+            
+            var RESCHAT=`${data.comment}`
+
+            if (data.comment != RES) {
+                RESCHAT += `\n${RES}`
+            }
+
+            
+            writeLog("Default", RESCHAT)
+    
             
             sendBarkNotification(data.user.nickname, RESCHAT,iconn);
             sendSocketMessage(data.user.nickname, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList);
@@ -856,35 +939,94 @@ connection.on(WebcastEvent.CHAT, data => {
         
     })
 
+    
+
+});
 
 
+// 分享類型
+
+connection.on(WebcastEvent.SOCIAL, data => {
+
+    var LOG_SOCIAL = []
+    
+    if (data.action) {
+        LOG_SOCIAL.push(`Social action: ${data.action}`);
+    }
+    const uniqueId = data.user?.uniqueId;
+    const nickname = data.user?.nickname;
+    if (uniqueId) {
+        LOG_SOCIAL.push(`User uniqueId: ${uniqueId}`);
+    }
+    if (nickname) {
+        LOG_SOCIAL.push(`User nickname: ${nickname}`);
+    }
+    if (data.shareType || data.shareTarget) {
+        LOG_SOCIAL.push(`Share type: ${data.shareType}, share target: ${data.shareTarget}`);
+    }
+
+
+    writeLog("Default",LOG_SOCIAL.join("\n"))
+
+});
+
+// EMOTE 表情
+
+connection.on(WebcastEvent.EMOTE, (data) => {
+    const uniqueId = data.user?.uniqueId;
+    const nickname = data.user?.nickname;
+
+    var LOG_R = [ ]
+
+    if (uniqueId) {
+        LOG_R.push(`User uniqueId: ${uniqueId}`);
+    }
+    if (nickname) {
+        LOG_R.push(`User nickname: ${nickname}`);
+    }
+
+    
+    const emoteId = data.emoteList[0]?.emoteId;
+    
+    if (emoteId) {
+        LOG_R.push(`Emote id: ${emoteId}`);
+        LOG_R.push(emoteList)
+        LOG_R.push("原始數據:")
+        LOG_R.push(data)
+
+        writeLog("Default",LOG_R.join("\n"))
+    }
+    
 });
 
 
 connection.on(WebcastEvent.ROOM_MESSAGE, data => {
 
-    printf("ROOM_MESSAGE", JSON.stringify(data, "", 4));
+    var LOG_ROOM = [
 
-    const uniqueKey = `chat_${data.user.nickname}_${data.comment}`;
-    if (alreadySent(uniqueKey)) return;
+    ]
 
-    let iconn = data.user.profilePicture.url[1]
+    if (data.content) {
+        LOG_ROOM.push(`Room message: ${data.content}`);
+    }
+    if (data.source) {
+        LOG_ROOM.push(`Source: ${data.source}`);
+    }
 
-    console.log(`${data.user.nickname} : ${data.comment}`)
+    LOG_ROOM.push(`Scene: ${data.scene}`);
 
-    // 同時記錄訊息統計
-    recordMessageStat(data.comment);
+    writeLog("Default",LOG_ROOM.join('\n'))
 
-    sendBarkNotification(data.user.nickname, data.comment,iconn);
-    sendSocketMessage(data.user.nickname, data.comment,iconn,"");
 
+    
 });
 
 
 connection.on(WebcastEvent.LIKE, data => {
 
     let iconn = data.user.profilePicture.url[1]
-    let mess = `喜歡你 ${data.likeCount} 次`
+    let mess = `喜歡你 ${data.totalLikeCount} 次`
+    // data.likeCount 單次點擊次數 聊天室訊息顯示 應用總點讚為準
 
     console.log(`${data.user.nickname} ${mess}`)
     //let giftImg =  "https://img.icons8.com/?size=100&id=xruQNezCArqC&format=png&color=000000"
@@ -904,37 +1046,48 @@ connection.on(WebcastEvent.GIFT, async data => {
         
     //console.log(JSON.stringify(data,"",4))
     if (data.giftType === 1 && !data.repeatEnd ){
-        
-        console.log(`連擊結束 送出了 ${data.user.nickname} : ${giftNameForDisplay} x${data.repeatCount}`)
-        
-        let mess = `連擊結束 送出了 ${giftNameForDisplay} x${data.repeatCount}`
+
+        // 連擊開始 => show only temporary
+        console.log('Gift 連擊開始 in progress');
+
+        console.log(`連擊了 ${data.user.nickname} : ${giftNameForDisplay} x${data.repeatCount}`)
+    
+        let mess = `連擊了 ${giftNameForDisplay} x${data.repeatCount}`
         let iconn = data.user.profilePicture.url[1]
         let giftImg = data.giftDetails.icon.url[1]
 
-        //giftPictureUrl
-
         console.log("giftimg",giftImg)
-
         sendBarkNotification(data.user.nickname, mess,giftImg);
+
         sendSocketMessage(data.user.nickname, mess,iconn,giftImg,true,CacheUserNum,CacheUserList);
 
-        
+    
     } else {
-        console.log(`送出了 ${data.user.nickname} : ${giftNameForDisplay} x${data.repeatCount}`)
-        let mess = `送出了 ${giftNameForDisplay} x${data.repeatCount}`
-        let iconn = data.user.profilePicture.url[1]
-        let giftImg = data.giftDetails.icon.url[1]
+        // 連續贈送活動結束或贈送活動無法連續贈送 => 使用最終的
+        console.log('Gift 連續贈送活動結束 or non-streakable gift');
 
-        console.log("giftimg",giftImg)
+        let MESS=`${data.user.nickname} 謝謝支持`
+        let MESS_MAIN="感謝大哥的餽贈"
+
         sendBarkNotification(data.user.nickname, mess,giftImg);
+        sendSocketMessage(MESS_MAIN,MESS,iconn,giftImg,true,CacheUserNum,CacheUserList);
 
-        sendSocketMessage(data.user.nickname, mess,iconn,giftImg,true,CacheUserNum,CacheUserList);
 
     }
-     
-   
+    
+    
+    console.log(`送出了 ${data.user.nickname} : ${giftNameForDisplay} x${data.repeatCount}`)
 
-     
+    let mess = `送出了 ${giftNameForDisplay} x${data.repeatCount}`
+    let iconn = data.user.profilePicture.url[1]
+    let giftImg = data.giftDetails.icon.url[1]
+
+    console.log("giftimg",giftImg)
+    sendBarkNotification(data.user.nickname, mess,giftImg);
+
+    sendSocketMessage(data.user.nickname, mess,iconn,giftImg,true,CacheUserNum,CacheUserList);
+
+    
 });
 
 

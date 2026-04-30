@@ -21,6 +21,8 @@ const TRANSLATE_API_URL = process.env.TRANSLATE_API_URL || "https://api.mymemory
 const TRANSLATE_SOURCE_LANG = process.env.TRANSLATE_SOURCE_LANG || "en";
 const TRANSLATE_TARGET_LANG = process.env.TRANSLATE_TARGET_LANG || "zh-TW";
 
+const TRANSLATE_MIN_LENGTH = process.env.TRANSLATE_MIN_LENGTH || 5;
+
 
 /**
  * @brief 判斷是否中文franc 回傳 cmn 表示中文普通話
@@ -102,8 +104,8 @@ function isChinese(text) {
 async function translateByApi(Chat) {
     try {
 
-        if (Chat.length < 3) {
-            console.log("太短了取消翻譯")
+        if (Chat.length < TRANSLATE_MIN_LENGTH) {
+            console.log(`太短了取消翻譯 < ${TRANSLATE_MIN_LENGTH}`)
             return Chat
         }
         let CheckLang = isChinese(Chat)

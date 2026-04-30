@@ -1,0 +1,163 @@
+<!doctype html>
+    <html lang="zh-TW">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>日誌文件查看器</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+
+    <script>
+
+        var NowFile = ""
+
+        async function ClearServerLog(file = "Main_Log.log") {
+            console.log("準備清理後端日誌文件", file);
+            // 顯示確認 UI
+
+            const logFile = document.getElementById("LogFileText");
+
+            logFile.innerText = file
+
+            document.getElementById("confirmModal").classList.remove("hidden");
+
+            // 暫存要清除的檔案名稱
+            window._pendingFile = file;
+            }
+
+            function closeModal() {
+            document.getElementById("confirmModal").classList.add("hidden");
+            }
+
+            async function confirmClear() {
+            const file = window._pendingFile || "Main_Log.log";
+            console.log("確定清除:", file);
+
+            // 這裡呼叫後端 API
+
+            const res = await fetch("/Clear_LOG", {
+                method: "POST",
+                headers: {
+                "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ file })
+            });
+
+            if (!res.ok) {
+                console.error("清理失敗:", file);
+                return;
+            }
+
+            const result = await res.json();
+            console.log("清理成功:", result);
+                    
+
+            closeModal();
+            }
+
+
+
+
+        async function Get_log(file = "Main_Log.log") {
+            const res = await fetch(`/Get_LOG?file=${file}`);
+
+            let GetClearBTN = document.getElementById("ClearLog");
+
+            console.log("CBTN",GetClearBTN);
+
+            NowFile = file
+            GetClearBTN.onclick =  () => {
+                console.log("已綁定使用:",NowFile)
+                ClearServerLog(file);
+            };
+
+            if (!res.ok) {
+                console.log("取得失敗 : ", file);
+                return;
+            }
+
+            
+
+            const logEl = document.getElementById("log");
+            const data = await res.text();
+            console.log("DEBUG數據", data,"更新當前全局標記文件",file);
+
+            logEl.textContent = data + "\n";
+            // 自動滾到底
+            logEl.parentElement.scrollTop = logEl.parentElement.scrollHeight;
+
+        }
+
+
+    </script>
+
+    <body class="bg-gray-900 text-red-400 font-mono min-h-screen p-6 flex flex-col space-y-6">
+
+
+
+    <!-- 確認 Modal -->
+    <div id="confirmModal" 
+        class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+    <div class="bg-gray-800 rounded-lg shadow-lg p-6 w-96">
+        <h2 class="text-lg font-bold text-gray-200 mb-4">確認操作</h2>
+        <p class="text-gray-300 mb-6">你確定要清除後端日誌文件嗎？</p>
+        <p id="LogFileText" class="text-red-400 mb-6"></p>
+        <div class="flex justify-end space-x-3">
+        <button onclick="closeModal()" 
+                class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition">
+            取消
+        </button>
+        <button onclick="confirmClear()" 
+                class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition">
+            確定清除
+        </button>
+        </div>
+    </div>
+    </div>
+
+
+    <!-- 按鈕區塊 -->
+    <div class="bg-black rounded-lg p-4 flex space-x-4 shadow-md">
+        <button 
+            onclick="Get_log('TikTokRun.log')" 
+            class="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">
+            取得 TikTok.js 存儲日誌
+        </button>
+        <button 
+            onclick="Get_log('Main_Log.log')" 
+            class="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">
+            取得 Server.js 存儲日誌
+        </button>
+    </div>
+
+    <!-- Console 區塊 -->
+    <div class="bg-gray-800 rounded-lg shadow-lg p-6 flex-1 flex flex-col max-h-[80vh]">
+        <div class="flex items-center justify-between mb-4 border-b border-gray-700 pb-2">
+        <h1 class="text-xl font-bold text-gray-300">日誌文件 Console</h1>
+
+        <div class="flex space-x-2">
+        <!-- 清除前端日誌 -->
+        <button 
+            onclick="document.getElementById('log').textContent='';" 
+            class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 transition">
+            清除日誌
+        </button>
+        <!-- 清空後端 log 文件 (預留 func) -->
+        <button id="ClearLog"
+            class="bg-yellow-600 text-white px-3 py-1 rounded hover:bg-yellow-700 transition">
+            清空後端文件
+        </button>
+
+    </div>
+
+        </div>
+        <div class="bg-black rounded-lg p-2 flex-1 overflow-auto">
+        <pre id="log" 
+            class="whitespace-pre-wrap break-words text-sm text-green-400 w-full overflow-x-auto">
+        </pre>
+        </div>
+    </div>
+
+    </body>
+
+</html>

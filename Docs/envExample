@@ -18,6 +18,8 @@ TRANSLATE_API_URL=https://api.mymemory.translated.net/get
 TRANSLATE_SOURCE_LANG=en
 TRANSLATE_TARGET_LANG=zh-TW
 TRANSLATE_DEBUG=false
+TRANSLATE_MIN_LENGTH=5
+
 GIFT_TRANSLATE_PREFILL_LIMIT=10
 
 # WebAPI是用於WebSocket.js的API地址，默認為http://localhost:3001/sendSync，如果你有修改WebSocket.js中的API地址，請相應修改此處。
@@ -25,4 +27,6 @@ GIFT_TRANSLATE_PREFILL_LIMIT=10
 # TRANSLATE_SOURCE_LANG / TRANSLATE_TARGET_LANG 是禮物名稱翻譯的來源與目標語言。
 # GIFT_TRANSLATE_PREFILL_LIMIT 是啟動時用 giftList 預先補翻譯的最大數量，避免一次打太多免費 API。
 # TRANSLATE_DEBUG 用來檢查翻譯訊息 運行情況用的日誌
+# TRANSLATE_MIN_LENGTH 最小翻譯字數要求 預設5個字
+
 CONFIG_KEY=你的配置頁面存取密碼設置

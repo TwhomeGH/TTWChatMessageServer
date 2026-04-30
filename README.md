@@ -12,7 +12,7 @@
 
 ---
 
-## 最新更新
+## 最近更新
 
 新增了聊天室訊息翻譯功能
 如果語言不是中文會自動使用`env`裡的配置的翻譯API 進行翻譯
@@ -34,7 +34,7 @@ npm install
 
 在 TikTok.js 目錄下建立 .env，可參考範例：
 
-或者參考Docs/envExample
+主要請以 `Docs/envExample` 裡的為準
 
 ```env
 # Twitch 設定
@@ -148,6 +148,10 @@ http://localhost:3332/close
 會嘗試優雅關閉子進程，並發送最後一條訊息。
 
 ## 其他功能
+
+### 分支文件功能說明 
+
+- [主服務器的其他功能說明 Service.md](./Service.md)
 
 ### 1. 查看服務狀態
 
@@ -388,4 +392,12 @@ pip install PyQt6 PyOpenGL numpy pillow requests
 運行請先進入 live_engine目錄下 在運行 `main.py`
 
 運行會在本地部署一個Socket Server PORT跟ReplyKIT項目是一樣的 在PORT `9322`
+
+
+
+## 新更新 部分日誌會採用 `writeLog` 進行本地日誌紀錄
+
+有一些訊息為了方便調試 確認參數 所以特別寫進 `Main_Log.log` `TikTokRun.log`
+
+
 
