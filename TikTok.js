@@ -28,9 +28,6 @@ import console from 'console';
 
 import { fork } from 'child_process'
 
-const child = fork('TikTok.js', [], {
-  execArgv: ['--inspect=9230'] // 指定子程序的 debug port
-});
 
 
 
@@ -63,6 +60,18 @@ function writeLog(filename="TikTokRun.log", message) {
 // })
 
 config(); // 讀取 .env
+
+
+const isDebugChild = process.env.DEBUG_CHILD === 'true';
+
+if (isDebugChild) {
+
+const child = fork('TikTok.js', [], {
+  execArgv: ['--inspect=9237'] // 指定子程序的 debug port
+});
+
+
+}
 
 let sign_api= process.env.SIGN_API
 SignConfig.apiKey = sign_api
