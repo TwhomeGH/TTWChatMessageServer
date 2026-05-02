@@ -4,6 +4,7 @@ from core.scene import ChatNode
 from PyQt6.QtGui import QColor
 from renderer.font_system import FontSystem
 import config
+import time
 
 class Engine:
     def __init__(self, widget=None):
@@ -25,6 +26,7 @@ class Engine:
         while not message_queue.empty():
             data = message_queue.get()
             new_node = ChatNode(data)
+
 
             if not self.nodes:
                 # 第一個訊息直接貼頂部

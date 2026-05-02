@@ -1,4 +1,5 @@
 from PyQt6.QtGui import QColor
+import time
 
 class ChatNode:
     def __init__(self, data):
@@ -14,6 +15,7 @@ class ChatNode:
 
         self.alpha = 1.0
         self.dead = False
+        self.timestamp = time.time()
 
         self.w = 360
         self.h = 50
@@ -34,6 +36,11 @@ class ChatNode:
     def update(self):
         # 平滑收斂到目標位置
         self.y += (self.target_y - self.y) * 0.25
+
+
+        # 檢查時間是否超過 5 秒
+        if time.time() - self.timestamp > 5:
+            self.dead = True
 
         if self.dead:
             self.alpha -= 0.02
