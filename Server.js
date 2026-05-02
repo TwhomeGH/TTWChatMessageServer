@@ -681,7 +681,7 @@ const server = http.createServer((req, res) => {
             .find(c => c.startsWith('authToken='))
             ?.split('=')[1];
         
-        console.log("Cookie",token.substring(0,token.length-5)+"00000")
+        console.log("Cookie",String(token).substring(0,String(token).length-5)+"00000")
 
         if (!isValidToken(token)) {
             // 直接回傳 login.html，而不是 302
