@@ -755,11 +755,11 @@ function viewCache() {
     try {
         connection.fetchRoomInfo(RoomID).then(async (roomInfo) => {
 
-            let Viewer = roomInfo.user_count
-            console.debug("DEBUG View",)
+            let Viewer = roomInfo.data.user_count
+            console.debug("DEBUG View",roomInfo)
 
             CacheUserNum = Viewer
-            console.log(`Stream started timestamp: ${roomInfo.create_time}`);
+            
             sendSocketMessage("", "", "", "", false,CacheUserNum,CacheUserList);
 
         })
