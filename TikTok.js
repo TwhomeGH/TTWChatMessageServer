@@ -802,6 +802,9 @@ if (isTK) {
         sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
         
     }).catch(err => {
+
+        let DisplayTitle = "None"
+
         console.error('Failed to connect', err);
         sendBarkNotification("TikTok 直播間連線失敗", `無法連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "");
         sendSocketMessage("系統", `TikTok 直播間連線失敗，無法連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
