@@ -566,6 +566,8 @@ function sendToTCP(payload) {
     console.log('📤 發送 TCP 訊息Sync:', payload);
 
     try {
+        var payload_bak = payload
+
         var CHAT_RES = payload.message
 
         Translate.TranslateText(payload.message).then(RES=>{
@@ -575,7 +577,11 @@ function sendToTCP(payload) {
             }
         })
 
-        client.write(JSON.stringify(CHAT_RES) + '\n');
+
+        payload_bak["message"] = CHAT_RES
+
+
+        client.write(JSON.stringify(payload_bak) + '\n');
 
         addToSyncBuffer(payload.user.trim(), payload.message.trim());
 
