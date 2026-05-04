@@ -1067,7 +1067,6 @@ connection.on(WebcastEvent.GIFT, async data => {
 
         console.log("giftimg",giftImg)
         sendBarkNotification(data.user.nickname, mess,giftImg);
-
         sendSocketMessage(data.user.nickname, mess,iconn,giftImg,true,CacheUserNum,CacheUserList);
 
     
@@ -1078,7 +1077,7 @@ connection.on(WebcastEvent.GIFT, async data => {
         let MESS=`${data.user.nickname} 謝謝支持`
         let MESS_MAIN="感謝大哥的餽贈"
 
-        sendBarkNotification(data.user.nickname, mess,giftImg);
+        sendBarkNotification(data.user.nickname, MESS,giftImg);
         sendSocketMessage(MESS_MAIN,MESS,iconn,giftImg,true,CacheUserNum,CacheUserList);
 
 
