@@ -674,7 +674,7 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,use
     
     const payload = {
         type: 'StreamMessage',
-        user,
+        user:String(user),
         message:String(message),
         img,
         giftImg,
@@ -937,7 +937,7 @@ connection.on(WebcastEvent.CHAT, data => {
             }
 
             
-            writeLog("Default", RESCHAT)
+            writeLog("Default", `${data.user.nickname} : ${RESCHAT}`)
     
             
             sendBarkNotification(data.user.nickname, RESCHAT,iconn);
