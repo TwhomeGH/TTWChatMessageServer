@@ -1046,6 +1046,8 @@ connection.on(WebcastEvent.LIKE, data => {
 
 })
 
+var giftCount = 0
+
 // And here we receive gifts sent to the streamer
 connection.on(WebcastEvent.GIFT, async data => {
     await giftMapReady;
@@ -1076,10 +1078,18 @@ connection.on(WebcastEvent.GIFT, async data => {
 
         let MESS=`${data.user.nickname} 謝謝支持`
         let MESS_MAIN="感謝大哥的餽贈"
+        let iconn = "https://img.icons8.com/fluency/48/gift-card.png"
+        let giftImg = data.giftDetails.icon.url[1]
 
-        sendBarkNotification(data.user.nickname, MESS,giftImg);
-        sendSocketMessage(MESS_MAIN,MESS,iconn,giftImg,true,CacheUserNum,CacheUserList);
+        giftCount += 1
 
+        if (giftCount >= 5) {
+            console.log("5次連擊感謝",data.user.nickname,MESS)
+            sendBarkNotification(data.user.nickname, MESS,giftImg);
+            sendSocketMessage(MESS_MAIN,MESS,iconn,giftImg,true,CacheUserNum,CacheUserList);
+
+            giftCount = 0
+        }
 
     }
     
