@@ -557,6 +557,7 @@ async function sendBarkNotification(title = "Twitch", comment, icon) {
 function sendToTCP(payload) {
     if (!client || client.destroyed) return;
 
+
     if (isDuplicate(payload.user.trim(), payload.message.trim())) {
         console.log('🚫 重複訊息跳過:', payload.user, payload.message);
         return;
@@ -575,13 +576,17 @@ function sendToTCP(payload) {
             if (payload.message != RES) {
                 CHAT_RES += `\n${RES}`
             }
+
+            payload_bak["message"] = CHAT_RES
+
+            client.write(JSON.stringify(payload_bak) + '\n');
         })
 
 
-        payload_bak["message"] = CHAT_RES
+        
 
 
-        client.write(JSON.stringify(payload_bak) + '\n');
+        
 
         addToSyncBuffer(payload.user.trim(), payload.message.trim());
 
@@ -762,7 +767,7 @@ function viewCache() {
         connection.fetchRoomInfo(RoomID).then(async (roomInfo) => {
 
             let Viewer = roomInfo.data.user_count
-            console.debug("DEBUG View",roomInfo)
+            writeLog("Default",`DEBUG View:\n${roomInfo}`)
 
             CacheUserNum = Viewer
             
