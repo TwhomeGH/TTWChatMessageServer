@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Video Info Overlay (Dual)
 // @namespace    pip-chat-test
-// @version      1.9
+// @version      2.0
 // @description  顯示 video 原始解析度和頁面顯示尺寸，既掛 body 也掛 live-room-content
 // @match        https://www.tiktok.com/*
 // @grant        none
@@ -64,12 +64,14 @@
             infoDiv = createInfoDiv();
             document.body.appendChild(infoDiv);
         }
-
+        
+        // 如果要跟著 video 位置才更新座標
         const rect = video.getBoundingClientRect();
         const renderedWidth = video.clientWidth;
         const renderedHeight = video.clientHeight;
         const originalWidth = video.videoWidth;
         const originalHeight = video.videoHeight;
+        const containerRect = container.getBoundingClientRect();
 
         const newText = `Render: ${renderedWidth}×${renderedHeight} | Original: ${originalWidth}×${originalHeight}`;
 
@@ -77,12 +79,12 @@
         if (LastText !== newText) {
             LastText = newText;
             infoDivLive.textContent = LastText;
+            console.log("Not same",LastText,newText)
         }
 
 
-          // 如果要跟著 video 位置才更新座標
-        const rect = video.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
+        
+  
 
         infoDiv.style.top = `${rect.top - containerRect.top + 42}px`;
         infoDiv.style.left = `${rect.right - containerRect.left - infoDivLive.offsetWidth - 8}px`;
@@ -113,21 +115,25 @@
             infoDivLive = createInfoDivLive(container);
         }
 
+
+        // 如果要跟著 video 位置才更新座標
+        const rect = video.getBoundingClientRect();
+
         const renderedWidth = video.clientWidth;
         const renderedHeight = video.clientHeight;
         const originalWidth = video.videoWidth;
         const originalHeight = video.videoHeight;
+        const containerRect = container.getBoundingClientRect();
+
 
         const newText = `Render: ${renderedWidth}×${renderedHeight} | Original: ${originalWidth}×${originalHeight}`;
 
         if (LastTextDiv !== newText) {
             LastTextDiv = newText;
             infoDivLive.textContent = LastTextDiv;
+            console.log("Not same",LastTextDiv,newText)
         }
 
-        // 如果要跟著 video 位置才更新座標
-        const rect = video.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
 
 
         infoDivLive.style.top = `${rect.top - containerRect.top + 42}px`;
