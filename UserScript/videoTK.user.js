@@ -128,6 +128,8 @@ function updateInfoLive(video, container) {
         return;
     }
 
+    
+
     infoDivLive.textContent = LastTextDiv
 
 
@@ -157,10 +159,7 @@ function updateInfoLive(video, container) {
 
             if (container) {
                 
-                                // 從 body 移除
-                if (document.body.contains(infoDiv)) {
-                    document.body.removeChild(infoDiv);
-                }
+                
                 updateInfoLive(video, container);
                 
             }
@@ -328,7 +327,7 @@ function removeOpenAppBanner() {
   
     removeOpenAppBanner()
     
-    setInterval(checkVideo, 200);
+    setInterval(checkVideo, 1000);
     setTimeout(()=>{
         createFloatingButton()
         hiddenGift()
