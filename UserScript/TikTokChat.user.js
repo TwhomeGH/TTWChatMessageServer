@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.8
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
@@ -21,9 +21,10 @@
 
     // 只發送一次的訊息 Set
     const sentMessages = new WeakSet();
+    var View = 0
 
-    function sendSocketMessage(user, message, img, giftImg, isMain = true) {
-        const payload = { type: 'StreamMessage', user, message, img, giftImg, isMain };
+    function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum,userList=null) {
+        const payload = { type: 'StreamMessage', user, message, img, giftImg, isMain ,userNum,userList};
         const sendURL = `http://${HTTP_HOST}:${HTTP_PORT}/chat`;
 
         console.log("sendTo", sendURL, payload);
@@ -33,7 +34,7 @@
             url: sendURL,
             data: JSON.stringify(payload),
             headers: { "Content-Type": "application/json" },
-            onerror: (err) => console.error("GM_xmlhttpRequest error:", err),
+            onerror: (err) => console.error("GM_xmlhttpRequest error:", err,"DATA",payload,"URL",sendURL),
             onload: (res) => console.log("GM_xmlhttpRequest success:", res.status)
         });
     }
@@ -174,7 +175,7 @@ function hasContent(el) {
             || node.querySelector('img')?.src;
 
         if (userName && text) {
-            sendSocketMessage(userName, text, avatar, null, true);
+            sendSocketMessage(userName, text, avatar, null, true,View);
             sentMessages.add(node);
             console.log("New message sent:", { userName, text, avatar });
         }
@@ -196,7 +197,7 @@ function hasContent(el) {
         const avatar = 'https://img.icons8.com/?size=100&id=1090&format=png&color=355FFF'
 
         if (userName && text) {
-            sendSocketMessage(userName, text, avatar, null, false);
+            sendSocketMessage(userName, text, avatar, null, false,View);
             console.log("加入訊息送出:", { userName, text, avatar });
         }
     }
@@ -205,7 +206,9 @@ function hasContent(el) {
     setInterval(() => {
         const viewers = getViewerCount();
         console.log('觀眾人數:', viewers);
-    }, 60000); // 每 60 秒更新一次觀眾列表
+        View = viewers
+
+    }, 15000); // 每 15 秒更新一次觀眾列表
 
     setTimeout(() => {
         // 初次抓取觀眾列表
