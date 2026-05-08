@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      2.0
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
@@ -35,7 +35,7 @@
 
         if (FailCount > MaxFail) {
             console.log("訊息服務器 未運作停止發送 刷新頁面重新激活")
-
+            return;
         }
 
             GM_xmlhttpRequest({
@@ -44,8 +44,9 @@
             data: JSON.stringify(payload),
             headers: { "Content-Type": "application/json" },
             onerror: (err) => {
-                console.error("GM_xmlhttpRequest error:", err,"DATA",payload,"URL",sendURL)
                 FailCount+=1
+                console.error("GM_xmlhttpRequest error:", err,"DATA",payload,"URL",sendURL)
+                
             },
             onload: (res) => console.log("GM_xmlhttpRequest success:", res.status)
         });
