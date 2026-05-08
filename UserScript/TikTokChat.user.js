@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
 // @grant        GM_xmlhttpRequest
 // @run-at       document-end
+
 
 // @updateURL    https://raw.githubusercontent.com/TwhomeGH/TTWChatMessageServer/main/UserScript/TikTokChat.user.js
 // @downloadURL  https://raw.githubusercontent.com/TwhomeGH/TTWChatMessageServer/main/UserScript/TikTokChat.user.js
@@ -22,21 +23,34 @@
     // 只發送一次的訊息 Set
     const sentMessages = new WeakSet();
     var View = 0
+    var FailCount = 0
+    let MaxFail = 5
 
     function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum,userList=null) {
         const payload = { type: 'StreamMessage', user, message, img, giftImg, isMain ,userNum,userList};
+
         const sendURL = `http://${HTTP_HOST}:${HTTP_PORT}/chat`;
 
         console.log("sendTo", sendURL, payload);
 
-        GM_xmlhttpRequest({
+        if (FailCount > MaxFail) {
+            console.log("訊息服務器 未運作停止發送 刷新頁面重新激活")
+
+        }
+
+            GM_xmlhttpRequest({
             method: "POST",
             url: sendURL,
             data: JSON.stringify(payload),
             headers: { "Content-Type": "application/json" },
-            onerror: (err) => console.error("GM_xmlhttpRequest error:", err,"DATA",payload,"URL",sendURL),
+            onerror: (err) => {
+                console.error("GM_xmlhttpRequest error:", err,"DATA",payload,"URL",sendURL)
+                FailCount+=1
+            },
             onload: (res) => console.log("GM_xmlhttpRequest success:", res.status)
         });
+
+        
     }
 
     // 監控 DOM 新增元素的工具函式
