@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Video Info Overlay (Dual)
 // @namespace    pip-chat-test
-// @version      1.8
+// @version      1.9
 // @description  顯示 video 原始解析度和頁面顯示尺寸，既掛 body 也掛 live-room-content
 // @match        https://www.tiktok.com/*
 // @grant        none
@@ -73,17 +73,19 @@
 
         const newText = `Render: ${renderedWidth}×${renderedHeight} | Original: ${originalWidth}×${originalHeight}`;
 
-        LastText = newText
 
-        // if (LastText === newText) {
-        //     return;
-        // }
-
-        infoDiv.textContent = LastText
+        if (LastText !== newText) {
+            LastText = newText;
+            infoDivLive.textContent = LastText;
+        }
 
 
-        infoDiv.style.top = `${rect.top + 2}px`;
-        infoDiv.style.left = `${rect.right - infoDiv.offsetWidth - 8}px`;
+          // 如果要跟著 video 位置才更新座標
+        const rect = video.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+
+        infoDiv.style.top = `${rect.top - containerRect.top + 42}px`;
+        infoDiv.style.left = `${rect.right - containerRect.left - infoDivLive.offsetWidth - 8}px`;
     }
 
     function createInfoDivLive(container) {
@@ -111,32 +113,29 @@
             infoDivLive = createInfoDivLive(container);
         }
 
-        const rect = video.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-
         const renderedWidth = video.clientWidth;
         const renderedHeight = video.clientHeight;
         const originalWidth = video.videoWidth;
         const originalHeight = video.videoHeight;
 
-
         const newText = `Render: ${renderedWidth}×${renderedHeight} | Original: ${originalWidth}×${originalHeight}`;
 
-        LastTextDiv = newText
+        if (LastTextDiv !== newText) {
+            LastTextDiv = newText;
+            infoDivLive.textContent = LastTextDiv;
+        }
 
-        // if (LastTextDiv === newText) {
-        //     return;
-        // }
+        // 如果要跟著 video 位置才更新座標
+        const rect = video.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
 
 
-
-        infoDivLive.textContent = LastTextDiv
-
-
-        // 絕對定位相對於 container
         infoDivLive.style.top = `${rect.top - containerRect.top + 42}px`;
         infoDivLive.style.left = `${rect.right - containerRect.left - infoDivLive.offsetWidth - 8}px`;
+
     }
+
+
     function checkVideo() {
         const container = document.querySelector('[data-e2e="live-room-content"]');
         const video = document.querySelector("video");
@@ -323,11 +322,17 @@
         }
     }
 
+        function loop() {
+        checkVideo();
+        requestAnimationFrame(loop);
+    }
 
 
     removeOpenAppBanner()
 
-    setInterval(checkVideo, 1000);
+    // 啟動
+    requestAnimationFrame(loop)
+
     setTimeout(() => {
         createFloatingButton()
         hiddenGift()
