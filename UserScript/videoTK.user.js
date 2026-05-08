@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Video Info Overlay (Dual)
 // @namespace    pip-chat-test
-// @version      1.5
+// @version      1.6
 // @description  顯示 video 原始解析度和頁面顯示尺寸，既掛 body 也掛 live-room-content
 // @match        https://www.tiktok.com/*
 // @grant        none
@@ -20,6 +20,10 @@
     'use strict';
     
     
+
+    var LastText = ""
+
+    var LastTextDiv = ""
     
     const removeMeta = () => {
     document
@@ -67,7 +71,17 @@
         const originalWidth = video.videoWidth;
         const originalHeight = video.videoHeight;
 
-        infoDiv.textContent = `Render: ${renderedWidth}×${renderedHeight} | Original: ${originalWidth}×${originalHeight}`;
+        const newText = `Render: ${renderedWidth}×${renderedHeight} | Original: ${originalWidth}×${originalHeight}`;
+        
+        LastText = newText 
+
+        if (LastText === newText) {
+            return;
+        }
+
+        infoDiv.textContent = LastText
+        
+
         infoDiv.style.top = `${rect.top + 2}px`;
         infoDiv.style.left = `${rect.right - infoDiv.offsetWidth - 8}px`;
     }
@@ -90,7 +104,7 @@
     return div;
 }
 
-var LastText = ""
+
 
 function updateInfoLive(video, container) {
     if (!infoDivLive) {
@@ -108,13 +122,13 @@ function updateInfoLive(video, container) {
 
     const newText = `Render: ${renderedWidth}×${renderedHeight} | Original: ${originalWidth}×${originalHeight}`;
     
-    LastText = newText 
+    LastTextDiv = newText 
 
-    if (LastText === newText) {
+    if (LastTextDiv === newText) {
         return;
     }
 
-    infoDivLive.textContent = LastText
+    infoDivLive.textContent = LastTextDiv
 
 
     // 絕對定位相對於 container
