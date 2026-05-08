@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Video Info Overlay (Dual)
 // @namespace    pip-chat-test
-// @version      1.4
+// @version      1.5
 // @description  顯示 video 原始解析度和頁面顯示尺寸，既掛 body 也掛 live-room-content
 // @match        https://www.tiktok.com/*
 // @grant        none
@@ -34,8 +34,10 @@
     subtree: true
   });
 
-    let infoDiv = null;       // 原本掛 body 的
-    let infoDivLive = null;   // 新增掛 live-room-content 的
+    let infoDiv = null;
+    // 原本掛 body 的
+    let infoDivLive = null;
+    // 新增掛 live-room-content 的
     let lastVideo = null;
 
     function createInfoDiv() {
