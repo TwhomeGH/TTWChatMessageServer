@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Video Info Overlay (Dual)
 // @namespace    pip-chat-test
-// @version      2.1
+// @version      2.2
 // @description  顯示 video 原始解析度和頁面顯示尺寸，既掛 body 也掛 live-room-content
 // @match        https://www.tiktok.com/*
 // @grant        none
@@ -78,7 +78,7 @@
 
         if (LastText !== newText) {
             LastText = newText;
-            infoDivLive.textContent = LastText;
+            infoDiv.textContent = LastText;
             console.log("Not same",LastText,newText)
         }
 
@@ -87,7 +87,7 @@
   
 
         infoDiv.style.top = `${rect.top - containerRect.top + 42}px`;
-        infoDiv.style.left = `${rect.right - containerRect.left - infoDivLive.offsetWidth - 8}px`;
+        infoDiv.style.left = `${rect.right - containerRect.left - infoDiv.offsetWidth - 8}px`;
     }
 
     function createInfoDivLive(container) {
