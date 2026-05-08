@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Video Info Overlay (Dual)
 // @namespace    pip-chat-test
-// @version      2.0
+// @version      2.1
 // @description  顯示 video 原始解析度和頁面顯示尺寸，既掛 body 也掛 live-room-content
 // @match        https://www.tiktok.com/*
 // @grant        none
@@ -59,7 +59,7 @@
 
 
 
-    function updateInfo(video) {
+    function updateInfo(video, container) {
         if (!infoDiv) {
             infoDiv = createInfoDiv();
             document.body.appendChild(infoDiv);
@@ -160,7 +160,7 @@
             video.muted = false;
             video.volume = 1;
 
-            updateInfo(video);
+            updateInfo(video, container);
 
             if (container) {
 
