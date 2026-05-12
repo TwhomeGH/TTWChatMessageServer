@@ -35,8 +35,9 @@ import { fork } from 'child_process'
  * 將日誌訊息追加到檔案尾端
  * @param {string} filename - 日誌檔案名稱 Default使用預設
  * @param {string} message - 要寫入的訊息
+ * @param {string} type - 訊息類型 (預設為 "Other"，可用於區分不同類型的訊息)
  */
-function writeLog(filename="TikTokRun.log", message) {
+function writeLog(filename="TikTokRun.log", message,type="Other") {
   
   var FileN = filename
   if (filename.toLowerCase().startsWith("default")) {
@@ -45,7 +46,8 @@ function writeLog(filename="TikTokRun.log", message) {
   }
 
   const logPath = path.resolve(__dirname, FileN);
-  const logLine = `${new Date().toLocaleString()} - ${message}\n`;
+
+  const logLine = `[${type}] ${new Date().toLocaleString()} - ${message}\n`;
 
   fs.appendFile(logPath, logLine, (err) => {
     if (err) {
@@ -758,6 +760,7 @@ function connectSocket() {
 
 
 var RoomID = ""
+var writeViewCount = 0
 
 function viewCache() {
     console.log("📊 CacheUserNum:", CacheUserNum)
@@ -767,7 +770,15 @@ function viewCache() {
         connection.fetchRoomInfo(RoomID).then(async (roomInfo) => {
 
             let Viewer = roomInfo.data.user_count
-            writeLog("Default",`DEBUG View:\n${roomInfo}`)
+            
+            if (writeViewCount > 20) {
+            writeLog("Default",`DEBUG View:\n${JSON.stringify(roomInfo)}`, "View統計")
+                console.log("🔄 更新觀眾數量 寫入Debug_RoomInfo數據:", Viewer)    
+                writeViewCount=0
+            
+            }
+
+            writeViewCount+=1
 
             CacheUserNum = Viewer
             
@@ -868,7 +879,7 @@ connection.on(WebcastEvent.CAPTION_MESSAGE, (data) => {
 
         MES_CAPTION.push`Caption (${data.timestampMs}): ${lines}`
 
-        writeLog("Default", MES_CAPTION.join("\n"))
+        writeLog("Default", MES_CAPTION.join("\n"), "Caption")
 
     }
 });
@@ -951,9 +962,8 @@ connection.on(WebcastEvent.CHAT, data => {
             }
 
             
-            writeLog("Default", `${data.user.nickname} : ${RESCHAT}`)
-    
-            
+            writeLog("Default", `${data.user.nickname} : ${RESCHAT}`, "Chat")
+
             sendBarkNotification(data.user.nickname, RESCHAT,iconn);
             sendSocketMessage(data.user.nickname, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList);
 
@@ -989,7 +999,7 @@ connection.on(WebcastEvent.SOCIAL, data => {
     }
 
 
-    writeLog("Default",LOG_SOCIAL.join("\n"))
+    writeLog("Default",LOG_SOCIAL.join("\n"), "Social分享")
 
 });
 
@@ -1017,7 +1027,7 @@ connection.on(WebcastEvent.EMOTE, (data) => {
         LOG_R.push("原始數據:")
         LOG_R.push(data)
 
-        writeLog("Default",LOG_R.join("\n"))
+        writeLog("Default",LOG_R.join("\n"), "Emote表情")
     }
     
 });
@@ -1025,9 +1035,7 @@ connection.on(WebcastEvent.EMOTE, (data) => {
 
 connection.on(WebcastEvent.ROOM_MESSAGE, data => {
 
-    var LOG_ROOM = [
-
-    ]
+    var LOG_ROOM = []
 
     if (data.content) {
         LOG_ROOM.push(`Room message: ${data.content}`);
@@ -1038,18 +1046,69 @@ connection.on(WebcastEvent.ROOM_MESSAGE, data => {
 
     LOG_ROOM.push(`Scene: ${data.scene}`);
 
-    writeLog("Default",LOG_ROOM.join('\n'))
+    writeLog("Default",LOG_ROOM.join('\n'), "Room message")
 
 
     
 });
 
 
+let UserLikeClearTimer = process.env.USER_LIKE_CLEAR_TIMER ? Number(process.env.USER_LIKE_CLEAR_TIMER) : 60 * 1000; // 默認 60 秒
+
+
+// 包含時間戳的點讚事件 用於計算一定時間內的累加點讚數量
+let UserLikeCount = new Map(); 
+// key: userId, value: { count: number, lastLikeTimestamp: number }
+
+/**
+ * 累加點讚數，並在超過 60 秒時自動清空
+ * @param {string} user - 用戶ID
+ * @param {number} likeCount - 點讚數
+ * @returns {number} - 該用戶最新的累計點讚數
+ */
+function likeUserCount(user, likeCount) {
+    const now = Date.now();
+    let userData = UserLikeCount.get(user);
+
+    if (!userData) {
+        // 沒有紀錄，初始化
+        userData = { count: 0, lastLikeTimestamp: now };
+    } else {
+        // 檢查是否超過 60 秒
+        if (now - userData.lastLikeTimestamp > UserLikeClearTimer * 1000) {
+            // 超過 60 秒，清空計數
+            writeLog("Default", `用戶 ${user} 的點讚數已超過 ${UserLikeClearTimer} 秒未更新，重置計數`, "Like清空")
+            userData.count = 0;
+        }
+    }
+
+    // 累加點讚數並更新時間
+    userData.count += likeCount;
+    userData.lastLikeTimestamp = now;
+
+    UserLikeCount.set(user, userData);
+
+    let secondsToClear = Math.ceil((UserLikeClearTimer * 1000 - (now - userData.lastLikeTimestamp)) / 1000);
+
+    writeLog("Default", `用戶 ${user} 的點讚數更新為 ${userData.count} 將於${secondsToClear}秒 後清空`, "Like累加")
+
+    return userData.count;
+}
+
+
+
+
 connection.on(WebcastEvent.LIKE, data => {
 
     let iconn = data.user.profilePicture.url[1]
-    let mess = `喜歡你 ${data.totalLikeCount} 次`
+
+    // 本場總累加點讚數 data.totalLikeCount 單次點擊次數 data.likeCount 聊天室訊息顯示 應用總點讚為準
+    let totalLikeCount = data.totalLikeCount || 0
+    let likeCount = data.likeCount || 0
+
+    let mess = `喜歡你 ${data.likeCount} 次`
     // data.likeCount 單次點擊次數 聊天室訊息顯示 應用總點讚為準
+
 
     console.log(`${data.user.nickname} ${mess}`)
     //let giftImg =  "https://img.icons8.com/?size=100&id=xruQNezCArqC&format=png&color=000000"
@@ -1057,6 +1116,8 @@ connection.on(WebcastEvent.LIKE, data => {
 
     sendBarkNotification(data.user.nickname, mess,iconn);
     sendSocketMessage(data.user.nickname, mess,iconn,"",false,CacheUserNum,CacheUserList);
+
+    writeLog("Default", `${data.user.nickname} ${mess}`, "Like")
 
 })
 
@@ -1121,6 +1182,8 @@ connection.on(WebcastEvent.GIFT, async data => {
 
     sendSocketMessage(data.user.nickname, mess,iconn,giftImg,true,CacheUserNum,CacheUserList);
 
+    writeLog("Default", `${data.user.nickname} 送出了 ${giftNameForDisplay} x${data.repeatCount}`, "Gift")
+
     
 });
 
@@ -1132,6 +1195,8 @@ connection.on(WebcastEvent.SHARE, data =>{
     
     sendBarkNotification(data.user.nickname, mess,iconn);
     sendSocketMessage(data.user.nickname, mess,iconn,"",false,CacheUserNum,CacheUserList);
+
+    writeLog("Default", `${data.user.nickname} 分享了直播間！`, "Share")
 
 })
 
@@ -1151,6 +1216,9 @@ connection.on(WebcastEvent.ENVELOPE, data => {
         let mess = `送出了寶箱，包含 ${envelope.diamondCount} 鑽石`
         sendBarkNotification(data.nickname, mess , data.user.profilePicture.url[1]);
         sendSocketMessage(data.nickname, mess, data.user.profilePicture.url[1], "", true, CacheUserNum, CacheUserList);
+
+        writeLog("Default", `${data.nickname} 送出了寶箱，包含 ${envelope.diamondCount} 鑽石`, "Envelope")
+
     }
 });
 
@@ -1163,6 +1231,8 @@ connection.on(WebcastEvent.SUPER_FAN, (data) => {
     sendBarkNotification(data.user.nickname, mess,iconn);
     sendSocketMessage(data.user.nickname, mess,iconn,"",true,CacheUserNum,CacheUserList);
 
+    writeLog("Default", `${data.user.nickname} 成為了鐵粉！`, "SuperFan")
+
 });
 
 connection.on(ControlEvent.STREAM_END, ({ action }) => {
@@ -1174,6 +1244,7 @@ let mess = "直播結束啦"
 console.log(JSON.stringify({ action },"",4))
 
     if (action === ControlAction.CONTROL_ACTION_STREAM_ENDED) {
+        writeLog("Default", "直播結束，用戶主動結束或推流斷線", "Stream Status")
         console.log('Stream ended by user');
         sendBarkNotification(data.user.nickname, mess,IMG);
         sendSocketMessage(data.user.nickname, mess,IMG,"",false);
@@ -1183,6 +1254,8 @@ console.log(JSON.stringify({ action },"",4))
         console.log('Stream ended by platform moderator (ban)');
         sendBarkNotification(data.user.nickname, mess,IMG);
         sendSocketMessage(data.user.nickname, mess,IMG,"",false);
+
+        writeLog("Default", "直播被強行終止了 :(", "Stream Status")
 
     }
 });
@@ -1206,8 +1279,13 @@ connection.fetchAvailableGifts().then(async (giftList) => {
     console.error(err);
 })
 
+
+writeLog("Default", "開始取得 TikTok禮物列表", "System")
+
 } else {
     console.log("跳過 TikTok禮物列表取得")
+
+    writeLog("Default", "跳過 TikTok禮物列表取得", "System")
 }
 
 
@@ -1268,6 +1346,7 @@ const user = await apiClient.users.getUserByName("coffeelatte0709");
 const tuser = user.id;
 
 console.log("[Twitch] UserID", tuser);
+writeLog("Default", `取得 Twitch UserID: ${tuser}`, "System")
 
 
 // --- 2. EventSub WebSocket ---
@@ -1275,6 +1354,9 @@ const listener = new EventSubWsListener({ apiClient, port: 0 });
 
 if (isTwitch) {
     console.log("啟用 Twitch 事件監聽");
+
+    writeLog("Default", "啟用 Twitch 事件監聽", "System")
+
     listener.start();
 }
 
@@ -1298,6 +1380,12 @@ connectSocket();
 // 錯誤處理
 listener.on("error", (err) => {
     console.error('⚠️ Twitch EventSub Listener error:', err);
+
+    writeLog("Default", `Twitch EventSub Listener error: ${err.message || err}`, "Error")
+
+    sendBarkNotification("Twitch 事件監聽錯誤", `Twitch EventSub Listener error: ${err.message || err}`, "");
+    sendSocketMessage("系統", `Twitch 事件監聽錯誤: ${err.message || err}`, "", "", false,CacheUserNum,CacheUserList);
+    
 });
 
 
@@ -1310,6 +1398,8 @@ listener.onStreamOnline(tuser, async (event) => {
     sendBarkNotification("直播開始啦！", `${event.broadcasterName} ${event.type}`, "");
     sendSocketMessage("系統", message, "", "", false,CacheUserNum,CacheUserList);
 
+    writeLog("Default", message, "Twitch Stream Status")
+
     
 });
 
@@ -1320,7 +1410,10 @@ listener.onStreamOffline(tuser, async (event) => {
 
     sendBarkNotification("直播結束啦！", `${event.broadcasterName}`, "");
     sendSocketMessage("系統", message, "", "", false,CacheUserNum,CacheUserList);
-});
+
+    writeLog("Default", message, "Twitch Stream Status")
+
+}); 
 
 
 // --- 5. Twitch EventSub ---
@@ -1334,7 +1427,8 @@ listener.onChannelFollow(tuser, tuser, async (event) => {
 
     sendSocketMessage(event.userDisplayName, message, icon,"", false,CacheUserNum,CacheUserList);
 
-   
+    writeLog("Default", `${event.userDisplayName} ${message}`, "Twitch Follow")
+
 });
 
 listener.onChannelCheer(tuser, tuser, async (event) => {
@@ -1346,7 +1440,9 @@ listener.onChannelCheer(tuser, tuser, async (event) => {
     sendBarkNotification(event.userDisplayName, message, icon);
     sendSocketMessage(event.userDisplayName, message, icon,"", false,CacheUserNum,CacheUserList);
 
-   
+    writeLog("Default", `${event.userDisplayName} ${message}`, "Twitch Cheer")
+
+    
 });
 
 listener.onChannelChatMessage(tuser, tuser, async (event) => {
@@ -1364,7 +1460,7 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
             sendBarkNotification(event.chatterDisplayName, RESCHAT,icon);
             sendSocketMessage(event.chatterDisplayName, RESCHAT,icon,"",true,CacheUserNum,CacheUserList);
 
-            
+            writeLog("Default", `${event.chatterDisplayName} : ${RESCHAT}`, "Twitch Chat")
     })
 
     

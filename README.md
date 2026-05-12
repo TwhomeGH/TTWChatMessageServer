@@ -179,6 +179,12 @@ http://localhost:3332/
 http://localhost:3332/keyword
 ```
 
+- 本地日誌查看
+
+```url
+http://localhost:3332/logViewer
+```
+
 > [!TIP]
 > 用於統計重複訊息 以便屏蔽煩人廣告關鍵字用
 >
