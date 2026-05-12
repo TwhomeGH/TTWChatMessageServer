@@ -10,7 +10,7 @@
     "@twurple/auth": "^8.0.3",
     "@twurple/eventsub-ws": "^8.0.3",
     "axios": "^1.15.2",
-    "dotenv": "^17.2.3",
+    "dotenv": "^17.4.2",
     "franc": "^6.2.0",
     "franc-all": "^7.2.0",
     "tiktok-live-connector": "^2.1.1-beta1"
