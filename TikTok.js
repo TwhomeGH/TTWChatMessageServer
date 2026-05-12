@@ -1081,9 +1081,10 @@ connection.on(WebcastEvent.GIFT, async data => {
         let iconn = data.user.profilePicture.url[1]
         let giftImg = data.giftDetails.icon.url[1]
 
-        console.log("giftimg",giftImg)
-        sendBarkNotification(data.user.nickname, mess,giftImg);
-        sendSocketMessage(data.user.nickname, mess,iconn,giftImg,true,CacheUserNum,CacheUserList);
+        console.log("giftimg",giftImg,"連擊訊息",mess)
+        // 連擊過程中只顯示連擊訊息 不顯示單次贈送訊息
+        // sendBarkNotification(data.user.nickname, mess,giftImg);
+        // sendSocketMessage(data.user.nickname, mess,iconn,giftImg,true,CacheUserNum,CacheUserList);
 
     
     } else {
@@ -1114,7 +1115,8 @@ connection.on(WebcastEvent.GIFT, async data => {
     let iconn = data.user.profilePicture.url[1]
     let giftImg = data.giftDetails.icon.url[1]
 
-    console.log("giftimg",giftImg)
+    console.log("giftimg",giftImg,"訊息",mess)
+
     sendBarkNotification(data.user.nickname, mess,giftImg);
 
     sendSocketMessage(data.user.nickname, mess,iconn,giftImg,true,CacheUserNum,CacheUserList);
