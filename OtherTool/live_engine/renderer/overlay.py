@@ -80,9 +80,12 @@ class Overlay(QOpenGLWidget):
         win_w = config.WIDTH
         win_h = config.HEIGHT
 
+        print("Screen:", screen_width, screen_height)
+        print("Window:", win_w, win_h)
+        
         # 計算靠右位置
-        x = screen_width - win_w - 20   # 右邊留 20px margin
-        y = 100                        # 距離上方 100px
+        x = screen_width - int(win_w*2 - 20)   # 右邊留 20px margin
+        y = 50                        # 距離上方 100px
 
         self.setGeometry(x, y, win_w, win_h)
 
