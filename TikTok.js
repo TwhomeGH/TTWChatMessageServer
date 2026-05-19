@@ -753,7 +753,7 @@ function connectSocket() {
 
         if (SocketRetryCount < SocketRetryMaxCount ) {
             
-            console.log(`當前 ${SocketRetryCount} 最多重試上限 -> ${SocketRetryCount}`)
+            console.log(`當前 ${SocketRetryCount} 最多重試上限 -> ${SocketRetryMaxCount}`)
             reconnectTimer = setTimeout(connectSocket, 15000);
 
         } else {
