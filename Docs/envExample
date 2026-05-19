@@ -26,6 +26,8 @@ DEBUG_CHILD=false
 
 USER_LIKE_CLEAR_TIMER=60000
 
+SOCKET_RETRY_MAX_COUNT=3 
+
 # WebAPI是用於WebSocket.js的API地址，默認為http://localhost:3001/sendSync，如果你有修改WebSocket.js中的API地址，請相應修改此處。
 # TRANSLATE_API_URL 是禮物名稱翻譯 API，預設使用免費的 MyMemory 介面。
 # TRANSLATE_SOURCE_LANG / TRANSLATE_TARGET_LANG 是禮物名稱翻譯的來源與目標語言。
@@ -37,4 +39,5 @@ USER_LIKE_CLEAR_TIMER=60000
 # DEBUG_CHILD=false 只有在VSCode偵錯 打斷點時使用 正常保持關閉
 # USER_LIKE_CLEAR_TIMER=用戶點讚數清除計時器，單位毫秒，預設60000（1分鐘）。當用戶點讚後，經過這段時間後會清除該用戶的點讚數，以便在聊天室中顯示最新的點讚數。
 
-CONFIG_KEY=你的配置頁面存取密碼設置
+# SOCKET_RETRY_MAX_COUNT=最大重試次數
+# CONFIG_KEY=你的配置頁面存取密碼設置

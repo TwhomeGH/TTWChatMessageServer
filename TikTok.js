@@ -705,6 +705,11 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,use
     }
 }
 
+var SocketRetryCount = 0
+let SocketRetryMaxCount = process.env.SOCKET_RETRY_MAX_COUNT || 3
+
+
+
 function connectSocket() {
     if (!isSocket) { return }
     if (client && !client.destroyed) return; // 已經連線中
@@ -740,13 +745,24 @@ function connectSocket() {
         heartbeatTimer = null;
 
         if (isEnd){
-           console.log("程式已結束，停止重連");
-           return; 
+            console.log("程式已結束，停止重連");
+            return; 
         }// 如果是程式結束就不重連
 
-        reconnectTimer = setTimeout(connectSocket, 15000);
+        SocketRetryCount += 1 
 
-       
+        if (SocketRetryCount < SocketRetryMaxCount ) {
+            
+            console.log(`當前 ${SocketRetryCount} 最多重試上限 -> ${SocketRetryCount}`)
+            reconnectTimer = setTimeout(connectSocket, 15000);
+
+        } else {
+
+            console.log("已達最大重試次數 取消重連")
+            sendBarkNotification("Socket重試已停止","請重新透過/open啟動")
+
+        }
+        
     });
 
     client.on('error', (err) => {
