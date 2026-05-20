@@ -9,7 +9,7 @@
     "@twurple/api": "^8.0.3",
     "@twurple/auth": "^8.0.3",
     "@twurple/eventsub-ws": "^8.0.3",
-    "axios": "^1.15.2",
+    "axios": "^1.16.1",
     "dotenv": "^17.2.3",
     "franc": "^6.2.0",
     "franc-all": "^7.2.0",
