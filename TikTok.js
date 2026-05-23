@@ -1137,7 +1137,64 @@ connection.on(WebcastEvent.LIKE, data => {
 
 })
 
-var giftCount = 0
+// Map: key = userId, value = { count: number, lastGiftTimestamp: number }
+let UserGiftCount = new Map();
+const MAX_CAPACITY = 1000; // 保留最多1000筆
+
+/**
+ * 累計用戶送禮次數，並在超過 60 秒時自動清空
+ * 同時維持最大容量限制，超過時刪掉最舊紀錄
+ * @param {string} userId - 用戶ID
+ * @param {number} increment - 本次送禮數量 (通常是1)
+ * @returns {number} - 該用戶最新的累計送禮次數
+ */
+function recordGift(userId, increment = 1) {
+    const now = Date.now();
+
+    // 先清理過期的用戶紀錄
+    for (const [id, data] of UserGiftCount.entries()) {
+        if (now - data.lastGiftTimestamp > 60 * 1000) {
+            UserGiftCount.delete(id);
+        }
+    }
+
+    // 如果超過最大容量，刪掉最舊的紀錄
+    if (UserGiftCount.size >= MAX_CAPACITY) {
+        let oldestId = null;
+        let oldestTime = Infinity;
+        for (const [id, data] of UserGiftCount.entries()) {
+            if (data.lastGiftTimestamp < oldestTime) {
+                oldestTime = data.lastGiftTimestamp;
+                oldestId = id;
+            }
+        }
+        if (oldestId !== null) {
+            UserGiftCount.delete(oldestId);
+        }
+    }
+
+    let userData = UserGiftCount.get(userId);
+
+    if (!userData) {
+        // 初始化
+        userData = { count: 0, lastGiftTimestamp: now };
+    } else {
+        // 檢查是否超過 60 秒
+        if (now - userData.lastGiftTimestamp > 60 * 1000) {
+            userData.count = 0; // 清空
+        }
+    }
+
+    // 累加送禮數並更新時間
+    userData.count += increment;
+    userData.lastGiftTimestamp = now;
+
+    UserGiftCount.set(userId, userData);
+
+    return userData.count;
+}
+
+
 
 // And here we receive gifts sent to the streamer
 connection.on(WebcastEvent.GIFT, async data => {
@@ -1173,14 +1230,16 @@ connection.on(WebcastEvent.GIFT, async data => {
         let iconn = "https://img.icons8.com/fluency/48/gift-card.png"
         let giftImg = data.giftDetails.icon.url[1]
 
-        giftCount += 1
+        let count = recordGift(data.user.uniqueId);
 
-        if (giftCount >= 5) {
+        if (count >= 5) {
             console.log("5次連擊感謝",data.user.nickname,MESS)
             sendBarkNotification(data.user.nickname, MESS,giftImg);
             sendSocketMessage(MESS_MAIN,MESS,iconn,giftImg,true,CacheUserNum,CacheUserList);
 
-            giftCount = 0
+            // 清空計數
+            UserGiftCount.set(data.user.id, { count: 0, lastGiftTimestamp: Date.now() });
+            
         }
 
     }
