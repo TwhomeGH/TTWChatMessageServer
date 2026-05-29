@@ -1211,7 +1211,7 @@ connection.on(WebcastEvent.GIFT, async data => {
 
         console.log(`連擊了 ${data.user.nickname} : ${giftNameForDisplay} x${data.repeatCount}`)
     
-        let mess = `連擊了 ${giftNameForDisplay} x${data.repeatCount}`
+        let mess = `連擊了 ${giftNameForDisplay} ${data.repeatCount} 個`
         let iconn = data.user.profilePicture.url[1]
         let giftImg = data.giftDetails.icon.url[1]
 
@@ -1245,9 +1245,9 @@ connection.on(WebcastEvent.GIFT, async data => {
     }
     
     
-    console.log(`送出了 ${data.user.nickname} : ${giftNameForDisplay} x${data.repeatCount}`)
+    console.log(`送出了 ${data.user.nickname} : ${giftNameForDisplay} ${data.repeatCount} 個`)
 
-    let mess = `送出了 ${giftNameForDisplay} x${data.repeatCount}`
+    let mess = `送出了 ${giftNameForDisplay} ${data.repeatCount} 個`
     let iconn = data.user.profilePicture.url[1]
     let giftImg = data.giftDetails.icon.url[1]
 
@@ -1257,7 +1257,7 @@ connection.on(WebcastEvent.GIFT, async data => {
 
     sendSocketMessage(data.user.nickname, mess,iconn,giftImg,true,CacheUserNum,CacheUserList);
 
-    writeLog("Default", `${data.user.nickname} 送出了 ${giftNameForDisplay} x${data.repeatCount}`, "Gift")
+    writeLog("Default", `${data.user.nickname} 送出了 ${giftNameForDisplay} ${data.repeatCount} 個`, "Gift")
 
     
 });
