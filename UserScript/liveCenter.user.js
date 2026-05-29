@@ -23,12 +23,19 @@
     const HTTP_HOST = "127.0.0.1";
     const HTTP_PORT = 3332;
 
-        // 已處理過的訊息集合
+    // 已處理過的訊息集合
     const processedMessages = new Set();
 
+    var FailCount = 0;
+    const MaxFail = 5;
 
-
-
+    // 定時重置 FailCount
+    setInterval(() => {
+        if (FailCount > 0) {
+            FailCount = 0;
+            console.log("liveCenter FailCount 已重置為 0");
+        }
+    }, 30000);
 
 function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 0, userList = []) {
 
@@ -43,6 +50,10 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 
         userList
     };
 
+    if (FailCount > MaxFail) {
+        console.log("liveCenter 訊息服務器未運作，等待30秒後自動恢復")
+        return;
+    }
 
     const sendURL = `http://${HTTP_HOST}:${HTTP_PORT}/chat`
 
@@ -54,6 +65,14 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 
     data: JSON.stringify(payload),
     headers: {
         "Content-Type": "application/json"
+    },
+    onerror: (err) => {
+        FailCount += 1;
+        console.error("liveCenter GM_xmlhttpRequest error:", err, "DATA", payload);
+    },
+    onload: (res) => {
+        console.log("liveCenter GM_xmlhttpRequest success:", res.status);
+        FailCount = 0;
     }
 });
 
@@ -65,11 +84,6 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 
      **********************/
     function handleChatMessage(element) {
         if (!element.matches('[data-e2e="chat-message"]')) return;
-
-        // 用唯一 key 判斷是否已處理過
-        const uniqueKey = element.innerText.trim();
-        if (processedMessages.has(uniqueKey)) return;
-        processedMessages.add(uniqueKey);
 
         const avatar = element.querySelector('img');
         const avatarUrl = avatar?.src || "";
@@ -86,6 +100,11 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 
         console.log("名字清單:", users);
 
         if (!username || !message) return;
+
+        // 使用 user+message 作為去重鍵值，避免不同使用者相同內容被誤殺
+        const uniqueKey = `${username}:${message}`;
+        if (processedMessages.has(uniqueKey)) return;
+        processedMessages.add(uniqueKey);
 
         console.log("📩 新訊息:", username, message);
 

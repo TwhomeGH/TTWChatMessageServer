@@ -654,9 +654,11 @@ function addToSyncBuffer(username, message) {
 }
 
 function isDuplicate(username, message) {
+    // 只比對第一行原始文字（翻譯會附加在 \n 之後）
+    const originalPart = message.split('\n')[0].trim();
     return syncBuffer.some(item =>
         item.username === username &&
-        item.message === message
+        item.message === originalPart
     );
 }
 
@@ -777,6 +779,7 @@ function connectSocket() {
 
 var RoomID = ""
 var writeViewCount = 0
+var writeDebugView = false
 
 function viewCache() {
     console.log("📊 CacheUserNum:", CacheUserNum)
@@ -787,7 +790,7 @@ function viewCache() {
 
             let Viewer = roomInfo.data.user_count
             
-            if (writeViewCount > 20) {
+            if (writeViewCount > 100 && writeDebugView) {
             writeLog("Default",`DEBUG View:\n${JSON.stringify(roomInfo)}`, "View統計")
                 console.log("🔄 更新觀眾數量 寫入Debug_RoomInfo數據:", Viewer)    
                 writeViewCount=0
@@ -959,6 +962,15 @@ connection.on(WebcastEvent.CHAT, data => {
 
     const uniqueKey = `chat_${data.user.nickname}_${data.comment}`;
     if (alreadySent(uniqueKey)) return;
+
+    // 跨路徑去重：檢查是否已被 userscript 路徑送出（檢查 syncBuffer）
+    const isCrossPathDuplicate = isDuplicate(data.user.nickname.trim(), data.comment.trim());
+
+    if (isCrossPathDuplicate) {
+        console.log('🚫 跨路徑重複(來自userscript):', data.user.nickname, data.comment);
+        // still set the alreadySent key (already done above)
+        return;
+    }
 
     let iconn = data.user.profilePicture.url[1]
 

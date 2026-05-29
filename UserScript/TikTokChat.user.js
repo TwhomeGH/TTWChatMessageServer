@@ -26,6 +26,14 @@
     var FailCount = 0
     let MaxFail = 5
 
+    // 定時重置 FailCount，避免伺服器短暫重啟後永久停發
+    setInterval(() => {
+        if (FailCount > 0) {
+            FailCount = 0;
+            console.log("FailCount 已重置為 0");
+        }
+    }, 30000);
+
     function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum,userList=null) {
         const payload = { type: 'StreamMessage', user, message, img, giftImg, isMain ,userNum,userList};
 
@@ -34,7 +42,7 @@
         console.log("sendTo", sendURL, payload);
 
         if (FailCount > MaxFail) {
-            console.log("訊息服務器 未運作停止發送 刷新頁面重新激活")
+            console.log("訊息服務器 未運作停止發送，等待 30 秒後自動恢復")
             return;
         }
 
@@ -48,7 +56,11 @@
                 console.error("GM_xmlhttpRequest error:", err,"DATA",payload,"URL",sendURL)
                 
             },
-            onload: (res) => console.log("GM_xmlhttpRequest success:", res.status)
+            onload: (res) => {
+                console.log("GM_xmlhttpRequest success:", res.status);
+                // 成功時重置計數器
+                FailCount = 0;
+            }
         });
 
         
