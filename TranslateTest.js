@@ -165,7 +165,7 @@ async function translateByApi(Chat) {
     for (const api of apis) {
         try {
             const result = await api.fn();
-            if (result && result !== Chat) {
+            if (result && result.toLowerCase() !== Chat.toLowerCase()) {
                 self_logTo(`🌐 ${api.name} 翻譯成功: ${Chat} -> ${result}`);
                 return result;
             }
