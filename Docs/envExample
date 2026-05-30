@@ -5,6 +5,7 @@ CLIENT_SECRET=Twitch ClientID 你的AppSecrt
 
 SIGN_API=EulerStream API 簽名API
 
+TWITCH_USER_NAME=你的Twitch頻道 用戶名
 TIKTOK_NAME=你的TikTok 用戶名
 SESSION_ID=你的TikTok SessionID
 TT_TARGET_IDC=你的TikTok Target IDC

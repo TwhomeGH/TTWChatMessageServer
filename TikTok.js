@@ -1440,7 +1440,9 @@ authProvider.onRefresh(async (userId, newTokenData) => {
 await authProvider.addUserForToken(tokenData);
 
 const apiClient = new ApiClient({ authProvider });
-const user = await apiClient.users.getUserByName("coffeelatte0709");
+
+let TwitchUserName = process.env.TWITCH_USER_NAME || "coffeelatte0709"
+const user = await apiClient.users.getUserByName(TwitchUserName);
 const tuser = user.id;
 
 console.log("[Twitch] UserID", tuser);
@@ -1549,7 +1551,39 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
     
     console.log(`${event.chatterDisplayName} : ${event.messageText}`);
 
+
+    if (event.messageText.startsWith("G#clip")) {
+
+        let res = event.messageText.split(" ")
+        res.shift() // 去掉 R#clip
+
+        const title = res.length > 0 ? res.join(" ") : null
+        
+        apiClient.clips.createClip({
+            channel:tuser,
+            duration:60,
+            createAfterDelay:true,
+            ...(title ? { title } : {})
+        }).then( (e)=>{
+            
+
+            console.log("剪輯資訊",e)
+            writeLog("Default",`[剪輯建立] ${title} ${e}`)
+            sendBarkNotification("剪輯建立",`${title} ${e}`,icon)
+            sendSocketMessage("剪輯建立",`${title} ${e}`,icon)
+            
+        
+            
+        }
+        )       
+
+        
+        
+    }
+
     recordMessageStat(event.messageText);
+
+
 
     sendBarkNotification(event.chatterDisplayName, event.messageText, icon);
 
