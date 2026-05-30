@@ -403,6 +403,7 @@ var isEnd=false
 async function handleExit() {
     console.log("⏹️ 程式結束，儲存 send_messages...");
     
+    clearInterval(twitchViewCache)
 
     isEnd=true
 
@@ -500,7 +501,10 @@ process.stdin.on('data', async (chunk) => {
                 recordMessageStat(json.message);
 
                 if (json.userNum !== CacheUserNum) {
-                    CacheUserNum = json.userNum;
+                    TikTokViewerCount = json.userNum
+
+                    updateCombinedViewerCount()
+
                 }
                 if (json.userList) {
                     CacheUserList = json.userList;
@@ -664,6 +668,23 @@ function isDuplicate(username, message) {
 
 var CacheUserList = [] // 用於去重的用戶列表
 var CacheUserNum = 0 // 用於去重的用戶數量
+var TikTokViewerCount = 0
+var TwitchViewerCount = 0
+
+function updateCombinedViewerCount() {
+    let combined
+    if (isTK && isTwitch) {
+        combined = (TikTokViewerCount || 0) + (TwitchViewerCount || 0)
+    } else if (isTK) {
+        combined = TikTokViewerCount || 0
+    } else if (isTwitch) {
+        combined = TwitchViewerCount || 0
+    } else {
+        combined = 0
+    }
+    CacheUserNum = combined
+    sendSocketMessage("", "", "", "", false, CacheUserNum, CacheUserList)
+}
 
 /**
  * 用於發送 Socket 訊息的統一函數，會先檢查是否重複，再格式化後發送
@@ -799,9 +820,8 @@ function viewCache() {
 
             writeViewCount+=1
 
-            CacheUserNum = Viewer
-            
-            sendSocketMessage("", "", "", "", false,CacheUserNum,CacheUserList);
+            TikTokViewerCount = Viewer
+            updateCombinedViewerCount();
 
         })
 
@@ -826,7 +846,8 @@ if (isTK) {
         RoomID = state.roomId
 
         let DisplayTitle = connection.state.roomInfo.data.title || "未知直播間";
-        CacheUserNum = connection.state.roomInfo.data.user_count || 0;
+        TikTokViewerCount = connection.state.roomInfo.data.user_count || 0;
+        CacheUserNum = (isTK && isTwitch) ? TikTokViewerCount + TwitchViewerCount : TikTokViewerCount;
         
         sendBarkNotification("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "");
         sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
@@ -1475,6 +1496,25 @@ async function getUserIcon(id) {
 
 connectSocket();
 
+// Twitch 觀眾數定時更新
+function twitchViewCache() {
+    apiClient.streams.getStreamByUserId(tuser).then(stream => {
+        if (stream) {
+            TwitchViewerCount = stream.viewers;
+            console.log(`📊 Twitch 觀眾數: ${TwitchViewerCount}`);
+            writeLog("Default", `Twitch 觀眾數: ${TwitchViewerCount}`, "Twitch View");
+            updateCombinedViewerCount();
+        }
+    }).catch(err => {
+        console.error("⚠️ Twitch 觀眾數取得失敗:", err.message);
+    });
+}
+
+if (isTwitch) {
+    console.log("啟用 Twitch 觀眾數定時更新 (30秒)");
+    twitchViewCache();
+    setInterval(twitchViewCache, 30000);
+}
 
 
 // 錯誤處理
