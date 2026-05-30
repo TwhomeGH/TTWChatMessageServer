@@ -710,7 +710,8 @@ const server = http.createServer((req, res) => {
             // 在 HTML 裡替換佔位符
             let filledHtml = html
             .replace('${BARK_API}', process.env.BARK_API || '')
-            .replace('${SOCKET_API}', process.env.SOCKET_API || '');
+            .replace('${SOCKET_API}', process.env.SOCKET_API || '')
+            .replace('${BING_TRANSLATE_API_KEY}', process.env.BING_TRANSLATE_API_KEY || '');
 
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end(filledHtml);
@@ -727,10 +728,12 @@ const server = http.createServer((req, res) => {
             const params = new URLSearchParams(body);
             const newBark = params.get('BARK_API') || '';
             const newSocket = params.get('SOCKET_API') || '';
+            const newBingKey = params.get('BING_TRANSLATE_API_KEY') || '';
 
             // 更新 process.env
             process.env.BARK_API = newBark;
             process.env.SOCKET_API = newSocket;
+            process.env.BING_TRANSLATE_API_KEY = newBingKey;
 
             // 更新 .env 檔案
             const envPath = path.resolve('.env');
@@ -752,12 +755,13 @@ const server = http.createServer((req, res) => {
 
             updateEnv('BARK_API', newBark);
             updateEnv('SOCKET_API', newSocket);
+            updateEnv('BING_TRANSLATE_API_KEY', newBingKey);
 
             fs.writeFileSync(envPath, envContent, 'utf-8');
 
             let FixBARK = newBark.substring(0,newBark.length-5) + "00000"
             
-            pushLog(`[SYSTEM] Updated .env: BARK_API=${FixBARK}, SOCKET_API=${newSocket}`);
+            pushLog(`[SYSTEM] Updated .env: BARK_API=${FixBARK}, SOCKET_API=${newSocket}, BING_TRANSLATE_API_KEY=${newBingKey ? '***' : ''}`);
 
 
 

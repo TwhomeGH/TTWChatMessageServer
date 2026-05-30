@@ -980,6 +980,9 @@ connection.on(WebcastEvent.CHAT, data => {
     // 同時記錄訊息統計
     recordMessageStat(data.comment);
 
+    // 先發Bark
+    sendBarkNotification(data.user.nickname, data.comment,iconn);
+
     Translate.TranslateText(data.comment).then(RES=>{
 
             
@@ -992,7 +995,9 @@ connection.on(WebcastEvent.CHAT, data => {
             
             writeLog("Default", `${data.user.nickname} : ${RESCHAT}`, "Chat")
 
-            sendBarkNotification(data.user.nickname, RESCHAT,iconn);
+            // 直接補發翻譯後的內容 給Bark
+            sendBarkNotification(data.user.nickname, RES,iconn);
+
             sendSocketMessage(data.user.nickname, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList);
 
             // 同時記錄訊息統計
@@ -1540,11 +1545,15 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
     recordMessageStat(event.messageText);
 
+    sendBarkNotification(event.chatterDisplayName, event.messageText, icon);
+
     Translate.TranslateText(event.messageText).then(RES=>{
 
             let RESCHAT=`${event.messageText}${event.messageText == RES ? "" :`\n${RES}`}`
+
+            // 補發Bark翻譯後的
+            sendBarkNotification(event.chatterDisplayName, RES, icon);
             
-            sendBarkNotification(event.chatterDisplayName, RESCHAT,icon);
             sendSocketMessage(event.chatterDisplayName, RESCHAT,icon,"",true,CacheUserNum,CacheUserList);
 
             writeLog("Default", `${event.chatterDisplayName} : ${RESCHAT}`, "Twitch Chat")

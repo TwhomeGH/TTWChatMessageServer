@@ -23,6 +23,9 @@ const TRANSLATE_TARGET_LANG = process.env.TRANSLATE_TARGET_LANG || "zh-TW";
 
 const TRANSLATE_MIN_LENGTH = process.env.TRANSLATE_MIN_LENGTH || 5;
 
+const BING_TRANSLATE_API_KEY = process.env.BING_TRANSLATE_API_KEY || '';
+const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY || '';
+
 
 /**
  * @brief 判斷是否中文franc 回傳 cmn 表示中文普通話
@@ -101,72 +104,87 @@ function isChinese(text) {
  * @param Chat 要翻譯的訊息
  * @returns 
  */
-async function translateByApi(Chat) {
-    try {
-
-        if (Chat.length < TRANSLATE_MIN_LENGTH) {
-            console.log(`太短了取消翻譯 < ${TRANSLATE_MIN_LENGTH}`)
-            return Chat
-        }
-        let CheckLang = isChinese(Chat)
-
-        
-        self_logTo("LangISO6393",CheckLang.langISO6393,"LangCode",CheckLang.lang)
-        
-
-         // 如果已經是中文，就直接回傳原字串
-        if (CheckLang.isChinese) {
-            self_logTo(`${Chat} -> 這已經是中文`)
-            return Chat;
-        }
-
-
-        const response = await axios.get(TRANSLATE_API_URL, {
-            params: {
-                q: Chat,
-                langpair: `${CheckLang.lang}|${TRANSLATE_TARGET_LANG}`
-            },
-            timeout: 10000
-        });
-
-        const translatedText = response?.data?.responseData?.translatedText?.trim();
-
-        self_logTo(`🌐 聊天翻譯成功: ${Chat} -> ${translatedText}`);
-
-        return translatedText
-
-
-        
-        return translatedText;
-    } catch (err) {
-        self_logTo(`❌ 聊天翻譯失敗 (${Chat}):`, err.message);
-        return "";
-    }
+async function translateByMyMemory(Chat, sourceLang) {
+    const resp = await axios.get(TRANSLATE_API_URL, {
+        params: { q: Chat, langpair: `${sourceLang}|${TRANSLATE_TARGET_LANG}` },
+        timeout: 10000
+    });
+    return resp?.data?.responseData?.translatedText?.trim() || null;
 }
 
+async function translateByGoogle(Chat) {
+    const resp = await axios.get("https://translate.googleapis.com/translate_a/single", {
+        params: { client: "gtx", sl: "auto", tl: TRANSLATE_TARGET_LANG, dt: "t", q: Chat },
+        timeout: 10000
+    });
+    if (resp?.data?.[0]?.[0]?.[0]) {
+        return resp.data[0][0][0].trim();
+    }
+    return null;
+}
 
+async function translateByBing(Chat, sourceLang) {
+    if (!BING_TRANSLATE_API_KEY) return null;
+    const resp = await axios.post(
+        `https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&from=${sourceLang}&to=${TRANSLATE_TARGET_LANG}`,
+        [{ Text: Chat }],
+        {
+            headers: {
+                'Ocp-Apim-Subscription-Key': BING_TRANSLATE_API_KEY,
+                'Content-Type': 'application/json'
+            },
+            timeout: 10000
+        }
+    );
+    return resp?.data?.[0]?.translations?.[0]?.text?.trim() || null;
+}
 
-/**
- *
- * @brief 回傳翻譯數據
- * 
- * @param {string} [params="TEST"]
- * @return {*} 
- */
+async function translateByApi(Chat) {
+    if (Chat.length < TRANSLATE_MIN_LENGTH) {
+        console.log(`太短了取消翻譯 < ${TRANSLATE_MIN_LENGTH}`)
+        return Chat
+    }
+    let CheckLang = isChinese(Chat)
+
+    self_logTo("LangISO6393",CheckLang.langISO6393,"LangCode",CheckLang.lang)
+
+    if (CheckLang.isChinese) {
+        self_logTo(`${Chat} -> 這已經是中文`)
+        return Chat;
+    }
+
+    const apis = [
+        { name: "MyMemory", fn: () => translateByMyMemory(Chat, CheckLang.lang) },
+        { name: "Google", fn: () => translateByGoogle(Chat) },
+    ];
+
+    if (BING_TRANSLATE_API_KEY) {
+        apis.push({ name: "Bing", fn: () => translateByBing(Chat, CheckLang.lang) });
+    }
+
+    for (const api of apis) {
+        try {
+            const result = await api.fn();
+            if (result && result !== Chat) {
+                self_logTo(`🌐 ${api.name} 翻譯成功: ${Chat} -> ${result}`);
+                return result;
+            }
+            if (result) {
+                self_logTo(`${api.name} 回傳相同內容，嘗試下一個`);
+            }
+        } catch (err) {
+            self_logTo(`${api.name} 翻譯失敗: ${err.message}`);
+        }
+    }
+
+    self_logTo(`❌ 所有翻譯API皆無法翻譯: ${Chat}`);
+    return Chat;
+}
+
 async function TranslateText(params="TEST") {
     let RES = await translateByApi(params)
     return RES
 }
-
-
-// TranslateText("Test User").then(res => {
-//         console.log("RES:",res)
-// })
-
-// TranslateText("你好啊今天做什麼").then(res => {
-//         console.log("RES:",res)
-// })
-
 
 
 export default {
