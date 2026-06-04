@@ -972,12 +972,14 @@ connection.on(WebcastEvent.CHAT, data => {
 
     if (isCrossPathDuplicate) {
         console.log('🚫 跨路徑重複(來自userscript):', data.user.nickname, data.comment);
+        writeLog("Default", `跨路徑重複訊息被過濾(來自userscript): ${data.user.nickname} : ${data.comment}`, "CrossPathDuplicate")
         return;
     }
 
     const fr = processFilter({ user: data.user.nickname, message: data.comment });
     if (fr.blocked) {
         console.log('🚫 過濾器阻擋:', data.user.nickname, data.comment);
+        writeLog("Default", `過濾器阻擋訊息: ${data.user.nickname} : ${data.comment}`, "FilterBlocked")
         return;
     }
 
@@ -986,10 +988,12 @@ connection.on(WebcastEvent.CHAT, data => {
     let iconn = data.user.profilePicture.url[1]
 
     console.log(`Chat:${nickname} : ${comment}`)
-    console.log("訊息已記錄到統計中:", comment)
+
+    writeLog("Default", `原始訊息: ${data.user.nickname} : ${data.comment}\n過濾後訊息: ${nickname} : ${comment}`, "Chat原過濾對比")
 
     if (!nickname || !comment) {
         console.log('⚠️ 過濾後 nick/comment 為空，跳過:', data.user.nickname, data.comment);
+        writeLog("Default", `過濾後 nick/comment 為空，跳過: ${data.user.nickname} : ${data.comment}`, "FilterEmpty")
         return;
     }
 
@@ -1607,11 +1611,18 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
     const fr = processFilter({ user: event.chatterDisplayName, message: event.messageText });
     if (fr.blocked) {
         console.log('🚫 過濾器阻擋(Twitch):', event.chatterDisplayName, event.messageText);
+        writeLog("Default", `過濾器阻擋(Twitch): ${event.chatterDisplayName} : ${event.messageText}`, "Filter")
+
         return;
     }
 
     console.log(fr.modified ? `過濾器修改後的訊息(Twitch): ${fr.user} : ${fr.message}` : "過濾器未修改訊息(Twitch)")
+
+    writeLog("Default", fr.modified ? `過濾器修改後的訊息(Twitch): ${fr.user} : ${fr.message}` : "過濾器未修改訊息(Twitch)", "Filter")
+
     console.log(event.chatterDisplayName, "說了:", event.messageText)
+
+    writeLog("Default", `${event.chatterDisplayName} 說了: ${event.messageText}`, "Twitch Chat Original")
 
     let tUser = fr.modified && fr.user ? fr.user : event.chatterDisplayName;
     let tMsg = fr.modified && fr.message ? fr.message : event.messageText;
