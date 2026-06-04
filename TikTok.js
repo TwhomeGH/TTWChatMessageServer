@@ -344,6 +344,9 @@ async function saveStatsToFile(filePath = './message_stats.json') {
     const data = getAllMessageStatsSorted();
 
     try {
+    console.log("訊息統計:", data);
+
+    console.log(`正在儲存訊息統計到 ${filePath}... 共 ${data.length} 條訊息統計`);
 
     await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
     console.log(`✅ 已進行儲存訊息統計到 ${filePath}`);
