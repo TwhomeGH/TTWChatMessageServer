@@ -265,6 +265,114 @@ http://localhost:3332/config
 2. 本服務建議保持內網或私人環境使用
 3. TikTok session 過期需重新抓取
 
+## 訊息過濾系統 (MessageFilter)
+
+`MessageFilter.js` 為統一的訊息過濾與統計模組，同時被 `TikTok.js` 與 `Server.js` 引用，提供三種過濾動作：
+
+### 規則結構
+
+```js
+{
+  name:   '規則說明',                    // 用於日誌辨識
+  field:  'user' | 'message' | 'any',    // 檢查對象
+  action: 'block' | 'replace' | 'delete', // 預設 'block'
+
+  // block 模式：回傳 true 表示阻擋
+  test: (value) => boolean,
+
+  // replace / delete 模式：
+  match:       /pattern/g,      // 要匹配的 pattern
+  replacement: '取代文字'        // replace 專用，delete 強制為 ''
+}
+```
+
+### 三種模式
+
+| 模式 | 說明 | 使用時機 |
+|------|------|----------|
+| `block` | 完全阻擋該筆訊息 | 廣告帳號、無意義內容 |
+| `replace` | 將匹配文字取代為指定內容 | 遮罩髒話、敏感詞 |
+| `delete` | 刪除匹配文字，其餘保留 | 移除網址、特定關鍵字 |
+
+### 匯出 API
+
+| 函數 | 說明 |
+|------|------|
+| `addFilterRule(rule)` | 新增一條規則 |
+| `addFilterRules(rules)` | 批量新增 |
+| `processFilter({ user, message })` | 完整處理，回傳 `{ user, message, blocked, reason, field, modified }` |
+| `checkFilter(input)` | 僅檢查是否阻擋（向後相容） |
+| `isFiltered(input)` | `checkFilter` 的布林捷徑 |
+| `getFilterRules()` | 取得當前所有規則 |
+| `clearFilterRules()` | 清除所有規則 |
+
+### 預設規則
+
+模組啟動即載入以下預設規則：
+
+**User block（廣告帳號）：**
+- `user:廣告帳號-加LINE/加瀨` — 比對 `加LINE` / `加瀨` / `加line` 等關鍵字
+- `user:廣告帳號-特殊組合字` — 含 LINE/瀨 + Unicode 組合裝飾字元
+- `user:廣告帳號-臺幣/蚪幣` — 比對 `臺⃛幣⃛` / `蚪⃑.幣⃑` 模式
+- `user:廣告帳號-過長中文比例異常` — 特殊字元數量 > 中文字數 2 倍
+
+**Message block（無意義訊息）：**
+- `msg:僅標點符號` — 純 `。，、．...` 等符號
+- `msg:僅單一字元` — 單一符號如 `。` `？` `！`
+
+### 自訂過濾規則範例
+
+可在任意檔案（或直接在 `MessageFilter.js` 底部）加入：
+
+```js
+// replace 範例：遮罩髒話
+addFilterRule({
+  name: 'msg:遮罩髒話',
+  field: 'message',
+  action: 'replace',
+  match: /他媽的|操你媽|幹你娘/g,
+  replacement: '***',
+});
+
+// delete 範例：移除網址
+addFilterRule({
+  name: 'msg:刪除網址',
+  field: 'message',
+  action: 'delete',
+  match: /https?:\/\/\S+/g,
+});
+
+// block 範例：阻擋全數字訊息
+addFilterRule({
+  name: 'msg:全數字',
+  field: 'message',
+  action: 'block',
+  test: (m) => /^\d{6,}$/.test(m),
+});
+```
+
+### 過濾流程
+
+```
+收到訊息(user, message)
+       ↓
+processFilter({ user, message })
+       ↓
+  ┌────┴────┐
+  │ blocked │ ← true → ❌ 阻擋，不發送
+  └────┬────┘
+       │ false
+       ↓
+  ┌─────┴─────┐
+  │ modified  │ ← true → 使用 fr.user / fr.message 取代原值
+  └─────┬─────┘
+       │ false → 保持原值
+       ↓
+    記錄統計 → 發送 Bark → 發送 Socket
+```
+
+---
+
 ## 補釘服務器 WebSocket.js
 
 **補釘服務器** 是專門用來接收 **UserScript** 所轉發的直播頁面訊息。

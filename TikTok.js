@@ -24,6 +24,7 @@ const __dirname = path.dirname(__filename);
 import { TikTokLiveConnection, WebcastEvent,ControlEvent,ControlAction } from 'tiktok-live-connector';
 import { type } from 'os';
 import Translate from "./TranslateTest.js"
+import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFilter } from "./MessageFilter.js"
 import console from 'console';
 
 import { fork } from 'child_process'
@@ -500,7 +501,16 @@ process.stdin.on('data', async (chunk) => {
             const json = JSON.parse(msg);
 
             if (json.type === 'StreamMessage') {
-                // 同時記錄訊息統計
+                const fr = processFilter({ user: json.user, message: json.message });
+                if (fr.blocked) {
+                    console.log('🚫 過濾器阻擋(來自Server):', json.user, json.message);
+                    return;
+                }
+                if (fr.modified) {
+                    json.user = fr.user;
+                    json.message = fr.message;
+                }
+
                 recordMessageStat(json.message);
 
                 if (json.userNum !== CacheUserNum) {
@@ -606,37 +616,7 @@ function sendToTCP(payload) {
 }
 
 
-const messageStats = new Map();
-// key: message 內容
-// value: 出現次數
 
-function recordMessageStat(message) {
-    if (!message) return;
-
-    const count = messageStats.get(message) || 0;
-    messageStats.set(message, count + 1);
-}
-
-// 取得出現次數最高的 N 條訊息
-function getTopMessages(limit = 10) {
-    return [...messageStats.entries()]
-        .sort((a, b) => b[1] - a[1]) // 依次數由大到小
-        .slice(0, limit)            // 取前 N 名
-        .map(([message, count]) => ({
-            message,
-            count
-        }));
-}
-
-// 取得所有訊息統計，依次數排序
-function getAllMessageStatsSorted() {
-    return [...messageStats.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([message, count]) => ({
-            message,
-            count
-        }));
-}
 
 
 // ===== 暫存最多 10 筆 =====
@@ -992,46 +972,43 @@ connection.on(WebcastEvent.CHAT, data => {
 
     if (isCrossPathDuplicate) {
         console.log('🚫 跨路徑重複(來自userscript):', data.user.nickname, data.comment);
-        // still set the alreadySent key (already done above)
         return;
     }
 
+    const fr = processFilter({ user: data.user.nickname, message: data.comment });
+    if (fr.blocked) {
+        console.log('🚫 過濾器阻擋:', data.user.nickname, data.comment);
+        return;
+    }
+
+    let nickname = fr.modified ? fr.user : data.user.nickname;
+    let comment = fr.modified ? fr.message : data.comment;
     let iconn = data.user.profilePicture.url[1]
 
-    console.log(`Chat:${data.user.nickname} : ${data.comment}`)
-    console.log("訊息已記錄到統計中:", data.comment)
+    console.log(`Chat:${nickname} : ${comment}`)
+    console.log("訊息已記錄到統計中:", comment)
 
-    // 同時記錄訊息統計
-    recordMessageStat(data.comment);
+    recordMessageStat(comment);
 
-    // 先發Bark
-    sendBarkNotification(data.user.nickname, data.comment,iconn);
+    sendBarkNotification(nickname, comment,iconn);
 
-    Translate.TranslateText(data.comment).then(RES=>{
+    Translate.TranslateText(comment).then(RES=>{
 
-            
-            var RESCHAT=`${data.comment}`
+            var RESCHAT=`${comment}`
 
-            if (data.comment != RES) {
+            if (comment != RES) {
                 RESCHAT += `\n${RES}`
             }
 
-            
-            writeLog("Default", `${data.user.nickname} : ${RESCHAT}`, "Chat")
+            writeLog("Default", `${nickname} : ${RESCHAT}`, "Chat")
 
-            // 直接補發翻譯後的內容 給Bark
-            
-            if (RES.toLowerCase() != data.comment.toLowerCase() ) {
-                sendBarkNotification(data.user.nickname, RES,iconn);
-
+            if (RES.toLowerCase() != comment.toLowerCase() ) {
+                sendBarkNotification(nickname, RES,iconn);
             }
 
+            sendSocketMessage(nickname, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList);
 
-
-            sendSocketMessage(data.user.nickname, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList);
-
-            // 同時記錄訊息統計
-            addToSyncBuffer(data.user.nickname.trim(), data.comment.trim());
+            addToSyncBuffer(nickname.trim(), comment.trim());
         
     })
 
@@ -1624,25 +1601,30 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
         
     }
 
-    recordMessageStat(event.messageText);
+    const fr = processFilter({ user: event.chatterDisplayName, message: event.messageText });
+    if (fr.blocked) {
+        console.log('🚫 過濾器阻擋(Twitch):', event.chatterDisplayName, event.messageText);
+        return;
+    }
 
+    let tUser = fr.modified ? fr.user : event.chatterDisplayName;
+    let tMsg = fr.modified ? fr.message : event.messageText;
 
+    recordMessageStat(tMsg);
 
-    sendBarkNotification(event.chatterDisplayName, event.messageText, icon);
+    sendBarkNotification(tUser, tMsg, icon);
 
-    Translate.TranslateText(event.messageText).then(RES=>{
+    Translate.TranslateText(tMsg).then(RES=>{
 
-            let RESCHAT=`${event.messageText}${event.messageText == RES ? "" :`\n${RES}`}`
+            let RESCHAT=`${tMsg}${tMsg == RES ? "" :`\n${RES}`}`
 
-            // 補發Bark翻譯後的
-
-            if (RES.toLowerCase() != event.messageText.toLowerCase() ) {
-                sendBarkNotification(event.chatterDisplayName, RES, icon);
+            if (RES.toLowerCase() != tMsg.toLowerCase() ) {
+                sendBarkNotification(tUser, RES, icon);
             }
 
-            sendSocketMessage(event.chatterDisplayName, RESCHAT,icon,"",true,CacheUserNum,CacheUserList);
+            sendSocketMessage(tUser, RESCHAT,icon,"",true,CacheUserNum,CacheUserList);
 
-            writeLog("Default", `${event.chatterDisplayName} : ${RESCHAT}`, "Twitch Chat")
+            writeLog("Default", `${tUser} : ${RESCHAT}`, "Twitch Chat")
     })
 
     

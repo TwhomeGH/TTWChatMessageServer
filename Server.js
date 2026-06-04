@@ -8,6 +8,13 @@ const path = require('path');
 const { config } = require('dotenv');
 const { time } = require('console');
 
+let messageFilter = null;
+import('./MessageFilter.js').then(mod => {
+    messageFilter = mod.default || mod;
+}).catch(err => {
+    console.error('❌ 無法載入 MessageFilter 模組:', err);
+});
+
 
 var TEST_LOG = [
     Date.now().toLocaleString(),
@@ -28,44 +35,31 @@ const sseClients = new Set();
 var cacheKeywordDataTop = []
 var cacheKeywordDataAll = []
 
-const messageStats = new Map();
-// key: message 內容
-// value: 出現次數
-
 function recordMessageStat(message) {
     if (!message) return;
-
-    const count = messageStats.get(message) || 0;
-    messageStats.set(message, count + 1);
+    if (messageFilter) messageFilter.recordMessageStat(message);
 }
 
-// 取得出現次數最高的 N 條訊息
 function getTopMessages(limit = 10) {
-    return [...messageStats.entries()]
-        .sort((a, b) => b[1] - a[1]) // 依次數由大到小
-        .slice(0, limit)            // 取前 N 名
-        .map(([message, count]) => ({
-            message,
-            count
-        }));
+    return messageFilter ? messageFilter.getTopMessages(limit) : [];
 }
 
-// 取得所有訊息統計，依次數排序
 function getAllMessageStatsSorted() {
-    return [...messageStats.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([message, count]) => ({
-            message,
-            count
-        }));
+    return messageFilter ? messageFilter.getAllMessageStatsSorted() : [];
+}
+
+function isFiltered({ user, message } = {}) {
+    return messageFilter ? messageFilter.isFiltered({ user, message }) : false;
+}
+
+function processFilter({ user, message } = {}) {
+    return messageFilter ? messageFilter.processFilter({ user, message }) : { user, message, blocked: false, modified: false };
 }
 
 function SaveCacheKeywordDataAll() {
-
     cacheKeywordDataAll = getAllMessageStatsSorted();
     fs.writeFileSync('./message_stats.json', JSON.stringify(cacheKeywordDataAll, null, 2));
     pushLog('💾 已將所有關鍵字統計寫入 message_stats.json');
-
 }
 
 
@@ -358,20 +352,27 @@ const server = http.createServer((req, res) => {
 
                 const data = JSON.parse(body);
 
-                
-                
-                sendToTikTok({
-                    type: 'StreamMessage',
-                    ...data
-                });
-
-    
-
                 const { user, message } = data;
 
-                recordMessageStat(message);
+                const fr = processFilter({ user, message });
+                if (fr.blocked) {
+                    pushLog('🚫 過濾器阻擋(/chat):', user, message);
+                    res.writeHead(200);
+                    res.end("Filtered");
+                    return;
+                }
 
-                pushLog('📩 發送訊息:', user, message);
+                const payload = {
+                    type: 'StreamMessage',
+                    ...data,
+                    ...(fr.modified ? { user: fr.user, message: fr.message } : {}),
+                };
+
+                sendToTikTok(payload);
+
+                recordMessageStat(fr.modified ? fr.message : message);
+
+                pushLog('📩 發送訊息:', fr.modified ? fr.user : user, fr.modified ? fr.message : message);
 
                 res.writeHead(200);
                 res.end("OK");
