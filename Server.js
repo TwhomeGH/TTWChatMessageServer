@@ -365,7 +365,8 @@ const server = http.createServer((req, res) => {
                 const payload = {
                     type: 'StreamMessage',
                     ...data,
-                    ...(fr.modified ? { user: fr.user, message: fr.message } : {}),
+                    ...(fr.modified && fr.user ? { user: fr.user } : {}),
+                    ...(fr.modified && fr.message ? { message: fr.message } : {}),
                 };
 
                 sendToTikTok(payload);

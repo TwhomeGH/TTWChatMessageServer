@@ -92,6 +92,8 @@ export function addFilterRules(rules) {
  * @returns {{ user?: string, message?: string, blocked: boolean, reason?: string, field?: string, modified: boolean }}
  */
 export function processFilter({ user, message } = {}) {
+    user = (typeof user === 'string') ? user : '';
+    message = (typeof message === 'string') ? message : '';
     let result = { user, message, blocked: false, reason: undefined, field: undefined, modified: false };
 
     for (const rule of filterRules) {

@@ -506,10 +506,8 @@ process.stdin.on('data', async (chunk) => {
                     console.log('🚫 過濾器阻擋(來自Server):', json.user, json.message);
                     return;
                 }
-                if (fr.modified) {
-                    json.user = fr.user;
-                    json.message = fr.message;
-                }
+                if (fr.modified && fr.user) json.user = fr.user;
+                if (fr.modified && fr.message) json.message = fr.message;
 
                 recordMessageStat(json.message);
 
@@ -563,7 +561,9 @@ async function sendBarkNotification(title = "Twitch", comment, icon) {
     if (!Bark || Bark.toLowerCase() === "none") return;
     try {
 
-        await axios.post(Bark, { title, body: comment, icon }, { headers: { "Content-Type": "application/json" } });
+        console.log(`📢 發送 Bark 通知: ${title} - ${comment}`);
+        await axios.post(Bark, { title, body: comment, icon }, { headers: { "Content-Type": "application/json; charset=utf-8" } });
+        
         console.log("✅ Bark 推送成功");
     } catch (err) {
         console.error("❌ Bark 推送錯誤:", err.message);
@@ -981,21 +981,24 @@ connection.on(WebcastEvent.CHAT, data => {
         return;
     }
 
-    let nickname = fr.modified ? fr.user : data.user.nickname;
-    let comment = fr.modified ? fr.message : data.comment;
+    let nickname = fr.modified && fr.user ? fr.user : data.user.nickname;
+    let comment = fr.modified && fr.message ? fr.message : data.comment;
     let iconn = data.user.profilePicture.url[1]
 
     console.log(`Chat:${nickname} : ${comment}`)
     console.log("訊息已記錄到統計中:", comment)
+
+    if (!nickname || !comment) {
+        console.log('⚠️ 過濾後 nick/comment 為空，跳過:', data.user.nickname, data.comment);
+        return;
+    }
 
     recordMessageStat(comment);
 
     sendBarkNotification(nickname, comment,iconn);
 
     Translate.TranslateText(comment).then(RES=>{
-
             var RESCHAT=`${comment}`
-
             if (comment != RES) {
                 RESCHAT += `\n${RES}`
             }
@@ -1607,8 +1610,16 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
         return;
     }
 
-    let tUser = fr.modified ? fr.user : event.chatterDisplayName;
-    let tMsg = fr.modified ? fr.message : event.messageText;
+    console.log(fr.modified ? `過濾器修改後的訊息(Twitch): ${fr.user} : ${fr.message}` : "過濾器未修改訊息(Twitch)")
+    console.log(event.chatterDisplayName, "說了:", event.messageText)
+
+    let tUser = fr.modified && fr.user ? fr.user : event.chatterDisplayName;
+    let tMsg = fr.modified && fr.message ? fr.message : event.messageText;
+
+    if (!tUser || !tMsg) {
+        console.log('⚠️ 過濾後(Twitch) nick/msg 為空，跳過:', event.chatterDisplayName, event.messageText);
+        return;
+    }
 
     recordMessageStat(tMsg);
 
