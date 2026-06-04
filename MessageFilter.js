@@ -200,7 +200,7 @@ addFilterRules([
         test: (u) => {
             if (u.length < 6) return false;
             const cjk = (u.match(/[\u4e00-\u9fff\u3000-\u303f]/g) || []).length;
-            const other = u.replace(/[\u4e00-\u9fff\u3000-\u303f\w\s]/g, '').length;
+            const other = [...u.replace(/[\u4e00-\u9fff\u3000-\u303f\w\s]/g, '')].length;
             return other > cjk * 2;
         },
     },
