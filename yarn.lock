@@ -390,6 +390,11 @@ hasown@^2.0.2:
   dependencies:
     function-bind "^1.1.2"
 
+kick-wss@^1.0.5:
+  version "1.0.5"
+  resolved "https://registry.npmjs.org/kick-wss/-/kick-wss-1.0.5.tgz"
+  integrity sha512-vr5yfYI24W1nqlQjxOtKxuQC0ITUFDlcrFOd3liz7EKSm1ZTCnwG5xWZQCr3V8iUemXKbPGz7/Nx9H4jUsB+eA==
+
 klona@^2.0.4:
   version "2.0.6"
   resolved "https://registry.npmjs.org/klona/-/klona-2.0.6.tgz"

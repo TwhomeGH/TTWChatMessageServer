@@ -8,6 +8,74 @@ const path = require('path');
 const { config } = require('dotenv');
 const { time } = require('console');
 
+// PKCE helpers for Kick OAuth
+function base64URLEncode(buffer) {
+    return buffer.toString('base64')
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+}
+
+let pkceVerifier = null;
+let pkceChallenge = null;
+
+async function exchangeKickCode(code, verifier) {
+    const params = new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: process.env.KICK_CLIENT_ID || '',
+        client_secret: process.env.KICK_CLIENT_SECRET || '',
+        code,
+        code_verifier: verifier,
+        redirect_uri: `http://localhost:3332/get-kick-token`,
+    });
+    const res = await fetch('https://id.kick.com/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params,
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Kick token exchange failed: ${res.status} ${errText}`);
+    }
+    return res.json();
+}
+
+async function refreshKickToken(refreshToken) {
+    const params = new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: process.env.KICK_CLIENT_ID || '',
+        client_secret: process.env.KICK_CLIENT_SECRET || '',
+        refresh_token: refreshToken,
+    });
+    const res = await fetch('https://id.kick.com/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params,
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Kick token refresh failed: ${res.status} ${errText}`);
+    }
+    return res.json();
+}
+
+const kickTokenFile = path.join(__dirname, 'kick_tokens.json');
+
+function loadKickTokens() {
+    try {
+        if (fs.existsSync(kickTokenFile)) {
+            return JSON.parse(fs.readFileSync(kickTokenFile, 'utf8'));
+        }
+    } catch (err) {
+        console.error('讀取 kick_tokens.json 失敗:', err);
+    }
+    return null;
+}
+
+function saveKickTokens(tokens) {
+    fs.writeFileSync(kickTokenFile, JSON.stringify(tokens, null, 2));
+}
+
 let messageFilter = null;
 import('./MessageFilter.js').then(mod => {
     messageFilter = mod.default || mod;
@@ -197,6 +265,7 @@ const server = http.createServer((req, res) => {
 
         var isTK = url.searchParams.get('isTK') === '1'
         var isTwitch = url.searchParams.get('isTwitch') === '1'
+        var isKick = url.searchParams.get('isKick') === '1'
 
         const isBark = url.searchParams.get('isBark') === '1'
         const isSocket = url.searchParams.get('isSocket') === '1'
@@ -205,12 +274,12 @@ const server = http.createServer((req, res) => {
 
 
         pushLog('Starting TikTok.js with user=', user, 'isTK=', isTK);
-        pushLog('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch);
+        pushLog('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick);
         pushLog('isBoth=', isBoth);
 
         logs = [];
         pushLog('[SYSTEM] Starting TikTok.js');
-        pushLog(`[SYSTEM] user=${user} ${isTK ? '(TikTok)' : '(Twitch)'}`);
+        pushLog(`[SYSTEM] user=${user} ${isTK ? '(TikTok)' : isTwitch ? '(Twitch)' : isKick ? '(Kick)' : ''}`);
 
         // ✅ 關鍵：把參數傳給 node
         const args = ['TikTok.js']
@@ -220,6 +289,7 @@ const server = http.createServer((req, res) => {
         if (isBark) args.push('--bark')
         if (isSocket) args.push('--socket')
         if (isTwitch) args.push('--twitch')
+        if (isKick) args.push('--kick')
         if (isBoth) args.push('--both')
 
         tiktokProcess = spawn('node', args);
@@ -271,7 +341,7 @@ const server = http.createServer((req, res) => {
 
 
 
-        let consoleLog = `TikTok.js started (TikTokUserName=${user}) isTK=${isTK} isBark=${isBark} isSocket=${isSocket} isTwitch=${isTwitch} isBoth=${isBoth}`;
+        let consoleLog = `TikTok.js started (user=${user}) isTK=${isTK} isBark=${isBark} isSocket=${isSocket} isTwitch=${isTwitch} isKick=${isKick} isBoth=${isBoth}`;
 
         pushLog(`[SYSTEM] ${consoleLog}`);
 
@@ -713,7 +783,10 @@ const server = http.createServer((req, res) => {
             let filledHtml = html
             .replace('${BARK_API}', process.env.BARK_API || '')
             .replace('${SOCKET_API}', process.env.SOCKET_API || '')
-            .replace('${BING_TRANSLATE_API_KEY}', process.env.BING_TRANSLATE_API_KEY || '');
+            .replace('${BING_TRANSLATE_API_KEY}', process.env.BING_TRANSLATE_API_KEY || '')
+            .replace('${KICK_CLIENT_ID}', process.env.KICK_CLIENT_ID || '')
+            .replace('${KICK_CLIENT_SECRET}', process.env.KICK_CLIENT_SECRET || '')
+            .replace('${KICK_USER_NAME}', process.env.KICK_USER_NAME || '');
 
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end(filledHtml);
@@ -731,11 +804,17 @@ const server = http.createServer((req, res) => {
             const newBark = params.get('BARK_API') || '';
             const newSocket = params.get('SOCKET_API') || '';
             const newBingKey = params.get('BING_TRANSLATE_API_KEY') || '';
+            const newKickClientId = params.get('KICK_CLIENT_ID') || '';
+            const newKickClientSecret = params.get('KICK_CLIENT_SECRET') || '';
+            const newKickUserName = params.get('KICK_USER_NAME') || '';
 
             // 更新 process.env
             process.env.BARK_API = newBark;
             process.env.SOCKET_API = newSocket;
             process.env.BING_TRANSLATE_API_KEY = newBingKey;
+            process.env.KICK_CLIENT_ID = newKickClientId;
+            process.env.KICK_CLIENT_SECRET = newKickClientSecret;
+            process.env.KICK_USER_NAME = newKickUserName;
 
             // 更新 .env 檔案
             const envPath = path.resolve('.env');
@@ -758,6 +837,9 @@ const server = http.createServer((req, res) => {
             updateEnv('BARK_API', newBark);
             updateEnv('SOCKET_API', newSocket);
             updateEnv('BING_TRANSLATE_API_KEY', newBingKey);
+            updateEnv('KICK_CLIENT_ID', newKickClientId);
+            updateEnv('KICK_CLIENT_SECRET', newKickClientSecret);
+            updateEnv('KICK_USER_NAME', newKickUserName);
 
             fs.writeFileSync(envPath, envContent, 'utf-8');
 
@@ -783,6 +865,48 @@ const server = http.createServer((req, res) => {
         });
     }
 
+    // =======================
+    // Kick OAuth callback
+    // =======================
+    else if (req.url.startsWith('/get-kick-token')) {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const code = url.searchParams.get('code');
+        const state = url.searchParams.get('state');
+
+        if (!code) {
+            res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end('<h2>缺少授權碼 (code)</h2>');
+            return;
+        }
+
+        (async () => {
+            try {
+                const tokens = await exchangeKickCode(code, pkceVerifier);
+                tokens.obtainmentTimestamp = Date.now();
+                saveKickTokens(tokens);
+                pushLog('✅ Kick OAuth 成功，已儲存 token');
+
+                if (tiktokProcess) {
+                    tiktokProcess.stdin.write('KICK_START\n');
+                } else {
+                    const args = ['TikTok.js', '--kick'];
+                    if (isBark) args.push('--bark');
+                    if (isSocket) args.push('--socket');
+                    tiktokProcess = spawn('node', args);
+                    pushLog('[SYSTEM] 自動啟動 TikTok.js (Kick 模式)');
+                }
+
+                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+                res.end(`<h2>✅ Kick 授權成功！</h2><p>Token 已儲存，聊天監聽已啟動。</p><a href="/">回到主頁</a>`);
+            } catch (err) {
+                console.error('❌ Kick token exchange 失敗:', err);
+                pushLog('❌ Kick token exchange 失敗:', err.message);
+                res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+                res.end(`<h2>❌ 授權失敗</h2><p>${err.message}</p>`);
+            }
+        })();
+    }
+
     else if (req.url === '/logout') {
     res.writeHead(200, {
         'Set-Cookie': 'authToken=; HttpOnly; SameSite=Strict; Max-Age=0'
@@ -795,15 +919,22 @@ const server = http.createServer((req, res) => {
     else if (req.url === '/help') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end(`Available endpoints:
-/open?user=xxx&isTK=1&isBark=1&isSocket=1&isTwitch=1&isBoth=1
+/open?user=xxx&isTK=1&isBark=1&isSocket=1&isTwitch=1&isKick=1&isBoth=1
 starts TikTok.js with parameters:
-user=xxx : 指定 TikTok 或 Twitch 用戶名稱
-isTK=1   : 使用 TikTok (不設或設為 0 則使用 Twitch)
+user=xxx : 指定 TikTok/Twitch/Kick 用戶名稱
+isTK=1   : 使用 TikTok
+isTwitch=1 : 啟用 Twitch 通知
+isKick=1 : 啟用 Kick 通知
 isBark=1 : 啟用 Bark 通知
 isSocket=1 : 啟用 Socket 通知
-isTwitch=1 : 啟用 Twitch 通知
-isBoth=1 : 同時啟用 TikTok 和 Twitch
+isBoth=1 : 同時啟用 TikTok + Twitch
 
+Kick OAuth:
+先至 https://id.kick.com/oauth/authorize 取得授權，
+或直接訪問 /get-kick-token?code=xxx 手動設定 token
+
+/get-kick-token
+Kick OAuth callback endpoint (redirect URI)
 
 /close
 stops TikTok.js

@@ -13,6 +13,7 @@
     "dotenv": "^17.2.3",
     "franc": "^6.2.0",
     "franc-all": "^7.2.0",
+    "kick-wss": "^1.0.5",
     "tiktok-live-connector": "^2.1.1-beta1"
   }
 }
