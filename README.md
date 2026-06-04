@@ -212,6 +212,21 @@ http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickU
 - OAuth 僅用於發送訊息等進階功能
 - `kick-wss` 套件負責底層 WebSocket 連接，自動重連
 
+### kick-wss 修正版
+
+原版 `kick-wss` 有兩個問題導致無法正常連接 Kick 聊天室：
+1. `getChannelInfo` 缺少必要 HTTP headers（User-Agent、Referer、Origin），被 Cloudflare 阻擋（403）
+2. `LEGACY_EVENT_MAPPING` 將 Pusher 事件名 `App\Events\ChatMessageEvent` 錯誤轉換為短名，導致 switch 比對失敗
+
+修正後的完整套件請參閱 `Docs/kick-wss.zip`，解壓後可取代 `node_modules/kick-wss/`。
+
+修改內容：
+| 檔案 | 修改 |
+|------|------|
+| `dist/WebSocketManager.js` | 支援 `channelId` 選項，省略 API 呼叫 |
+| `dist/WebSocketManager.js` | `_channelIdExplicit` 旗標正確判斷是否跳過 API |
+| `dist/MessageParser.js` | 移除 `LEGACY_EVENT_MAPPING` 錯誤的正規化 |
+
 ## 其他功能
 
 ### 分支文件功能說明 

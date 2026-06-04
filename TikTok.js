@@ -1667,14 +1667,28 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
 let kickWS = null;
 
+function guessKickChannelId(channelName) {
+    const knownChannels = {
+        'nuclear0709': 24640237,
+    };
+    return knownChannels[channelName.toLowerCase()] || 0;
+}
+
 async function resolveKickChannelId(channelName) {
+    const envId = parseInt(process.env.KICK_CHANNEL_ID, 10);
+    if (envId > 0) return envId;
+
+    const knownId = guessKickChannelId(channelName);
+    if (knownId > 0) return knownId;
+
     try {
         const res = await fetch(`https://kick.com/api/v2/channels/${channelName}`, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'application/json',
                 'Referer': 'https://kick.com/',
-                'Origin': 'https://kick.com'
+                'Origin': 'https://kick.com',
+                'Accept-Encoding': 'gzip'
             }
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1698,9 +1712,9 @@ async function startKickChat() {
     writeLog("Default", `正在連接 Kick 頻道: ${kickChannel}`, "Kick");
 
     const channelId = await resolveKickChannelId(kickChannel);
-    console.log(`🔍 Kick 頻道 chatroom ID: ${channelId}`);
+    console.log(`🔍 Kick 頻道 chatroom ID: ${channelId || '無法取得'}`);
 
-    kickWS = new KickWebSocket({ debug: false, autoReconnect: true, channelId });
+    kickWS = new KickWebSocket({ debug: false, autoReconnect: true, ...(channelId > 0 && { channelId }) });
 
     kickWS.on('ready', () => {
         console.log(`✅ Kick WebSocket 已連線: ${kickChannel}`);

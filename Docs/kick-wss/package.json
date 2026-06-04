@@ -1,0 +1,146 @@
+{
+  "name": "kick-wss",
+  "version": "1.0.5",
+  "description": "Lightweight dependency-free library for connecting to Kick.com WebSockets",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md",
+    "README.es.md",
+    "BROWSER.md",
+    "BROWSER.es.md",
+    "examples",
+    "LICENSE"
+  ],
+  "unpkg": "dist/kick-wss.min.js",
+  "jsdelivr": "dist/kick-wss.min.js",
+  "scripts": {
+    "build": "tsc && node scripts/bundle.cjs && bun run build:minified && bun run build:browser && bun run build:copy-files",
+    "build:minified": "bun x terser dist/kick-wss.js -c -m -o dist/kick-wss.min.js --source-map filename=kick-wss.min.js.map",
+    "build:browser": "node -e \"const fs = require('fs'); if (!fs.existsSync('dist/browser')) fs.mkdirSync('dist/browser', { recursive: true }); const copyFile = (src, dest) => { fs.copyFileSync(src, dest); }; copyFile('dist/kick-wss.min.js', 'dist/browser/kick-wss.min.js'); copyFile('dist/kick-wss.min.js.map', 'dist/browser/kick-wss.min.js.map'); copyFile('dist/kick-wss.js', 'dist/browser/kick-wss.js');\"",
+    "build:copy-files": "node -e \"const fs = require('fs'); const copyFile = (src, dest) => { fs.copyFileSync(src, dest); }; copyFile('README.md', 'dist/README.md'); copyFile('README.es.md', 'dist/README.es.md'); copyFile('LICENSE', 'dist/LICENSE');\"",
+    "build:node": "tsc",
+    "dev": "tsc --watch",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage --bail",
+    "test:watch": "bun test --watch",
+    "test:performance": "bun test tests/unit/performance.test.ts",
+    "test:unit": "bun test tests/unit/",
+    "test:integration": "bun test tests/integration/",
+    "test:all": "bun test tests/",
+    "format": "prettier --write src/**/*.ts",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm run test",
+    "clean": "if exist dist rmdir /s /q dist"
+  },
+  "keywords": [
+    "kick",
+    "kick.com",
+    "websocket",
+    "chat",
+    "streaming",
+    "bot",
+    "events",
+    "real-time",
+    "lightweight",
+    "no-dependencies",
+    "typescript",
+    "browser",
+    "client-side",
+    "frontend",
+    "cdn",
+    "minified"
+  ],
+  "author": {
+    "name": "Kick.js Team",
+    "email": "support@kick-wss.com",
+    "url": "https://github.com/nglmercer/kick-wss"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nglmercer/kick-wss.git",
+    "directory": "websocket-lib"
+  },
+  "bugs": {
+    "url": "https://github.com/nglmercer/kick-wss/issues"
+  },
+  "homepage": "https://github.com/nglmercer/kick-wss/tree/main/websocket-lib#readme",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead",
+    "not IE 11"
+  ],
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "@types/node": "^20.0.0",
+    "bun-types": "^1.3.0",
+    "prettier": "^3.0.0",
+    "terser": "^5.44.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "typescript": ">=4.5.0"
+  },
+  "bun": {
+    "test": {
+      "preload": [
+        "./bun.test.ts"
+      ],
+      "coverage": {
+        "threshold": {
+          "statements": 80,
+          "branches": 75,
+          "functions": 80,
+          "lines": 80
+        }
+      }
+    }
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    },
+    "./EventEmitter": {
+      "types": "./dist/EventEmitter.d.ts",
+      "import": "./dist/EventEmitter.js"
+    },
+    "./MessageParser": {
+      "types": "./dist/MessageParser.d.ts",
+      "import": "./dist/MessageParser.js"
+    },
+    "./WebSocketManager": {
+      "types": "./dist/WebSocketManager.d.ts",
+      "import": "./dist/WebSocketManager.js"
+    },
+    "./examples": {
+      "types": "./dist/examples.d.ts",
+      "import": "./dist/examples.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/nglmercer"
+  }
+}
