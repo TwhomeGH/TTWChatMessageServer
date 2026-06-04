@@ -7,6 +7,11 @@ SIGN_API=EulerStream API 簽名API
 
 TWITCH_USER_NAME=你的Twitch頻道 用戶名
 TIKTOK_NAME=你的TikTok 用戶名
+
+KICK_CLIENT_ID=Kick ClientID 你的AppID
+KICK_CLIENT_SECRET=Kick ClientID 你的AppSecrt
+KICK_USER_NAME=Kick 用戶名
+
 SESSION_ID=你的TikTok SessionID
 TT_TARGET_IDC=你的TikTok Target IDC
 

@@ -2,7 +2,7 @@
 
 ## 簡介
 
-`TTWChatMessageServer` 是一個聊天室訊息服務器，可對接 **TikTok** 與 **Twitch** 的直播聊天室訊息，支援以下功能：
+`TTWChatMessageServer` 是一個聊天室訊息服務器，可對接 **TikTok**、**Twitch** 與 **Kick** 的直播聊天室訊息，支援以下功能：
 
 - 即時接收聊天室訊息
 - 支援禮物、關注、加入、分享等事件
@@ -55,6 +55,11 @@ TT_TARGET_IDC=你的TikTok Target IDC
 # 推送設定
 BARK_API=https://api.day.app/你的BarkKey
 SOCKET_API=http://192.168.0.195:9322
+
+# Kick 設定（OAuth 選填，閱讀公開聊天不需設定）
+KICK_CLIENT_ID=你的Kick Client ID
+KICK_CLIENT_SECRET=你的Kick Client Secret
+KICK_USER_NAME=你的Kick頻道名稱
 
 # 禮物翻譯設定（可選）
 TRANSLATE_API_URL=https://api.mymemory.translated.net/get
@@ -112,16 +117,19 @@ http://localhost:3332/help
 ### 2. 啟動聊天室訊息服務
 
 ```bash
-http://localhost:3332/open?isSocket=1&isTwitch=1&isTK=1&isBark=1
+http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickUser=你的Kick名&isSocket=1&isTwitch=1&isTK=1&isKick=1&isBark=1
 ```
 
 參數說明：
 
 | 參數 | 說明 |
 | -- | -- |
-| user | TikTok 或 Twitch 用戶名稱，若不設預設使用 .env 的值 |
+| user | TikTok 用戶名稱（給 isTK 使用），若不設使用 .env 的值 |
+| twitchUser | Twitch 用戶名稱（給 isTwitch 使用），若不設使用 .env 的值 |
+| kickUser | Kick 頻道名稱（給 isKick 使用），若不設使用 .env 的值 |
 | isTK=1 | 啟用 TikTok 直播聊天室 |
 | isTwitch=1 | 啟用 Twitch 直播聊天室 |
+| isKick=1 | 啟用 Kick 直播聊天室 |
 | isBoth=1 | 同時啟用 TikTok + Twitch |
 | isBark=1 | 啟用 Bark 推送通知 |
 | isSocket=1 | 啟用 Socket 訊息推送 |
@@ -140,6 +148,10 @@ http://localhost:3332/open?isSocket=1&isTwitch=1&isTK=1&isBark=1
 
 ```bash
 http://localhost:3332/open?user=coffeelatte0709&isTK=1&isBark=1
+# 或指定 Twitch：
+http://localhost:3332/open?twitchUser=coffeelatte0709&isTwitch=1&isBark=1
+# 或指定 Kick：
+http://localhost:3332/open?kickUser=你的頻道名&isKick=1&isBark=1
 ```
 
 ### 3. 關閉聊天室訊息服務
@@ -149,6 +161,56 @@ http://localhost:3332/close
 ```
 
 會嘗試優雅關閉子進程，並發送最後一條訊息。
+
+## Kick 聊天室整合
+
+### 快速啟動（不需 OAuth）
+
+Kick 公開聊天室可直接透過 WebSocket 讀取，不需任何授權：
+
+```bash
+http://localhost:3332/open?kickUser=你的頻道名&isKick=1&isSocket=1&isBark=1
+```
+
+### 支援的事件
+
+| 事件 | 說明 |
+|------|------|
+| `ChatMessage` | 即時聊天訊息 |
+| `Subscription` | 新訂閱 |
+| `GiftedSubscriptions` | 贈送訂閱 |
+| `UserBanned` | 用戶被封禁 |
+| `UserUnbanned` | 用戶解封 |
+| `StreamHost` | 主機轉播 |
+
+### OAuth 設定（選填，發送訊息用）
+
+如需發送訊息或存取私有 API，可設定 Kick OAuth：
+
+1. 前往 [Kick Dev Portal](https://dev.kick.com/) 註冊應用程式
+2. 設定 Redirect URI 為 `http://localhost:3332/get-kick-token`
+3. 在 `.env` 填入 `KICK_CLIENT_ID` 與 `KICK_CLIENT_SECRET`
+4. 瀏覽器開啟 Kick 授權 URL（由系統產生），授權完成後自動啟動聊天監聽
+
+Token 會自動儲存至 `kick_tokens.json`，並在過期時自動刷新。
+
+### 從 Browser 啟動
+
+```bash
+http://localhost:3332/open?kickUser=你的頻道名&isKick=1&isBark=1&isSocket=1
+```
+
+### Kick + Twitch + TikTok 同時運行
+
+```bash
+http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickUser=你的Kick名&isTK=1&isTwitch=1&isKick=1
+```
+
+### 注意事項
+
+- Kick 公開聊天不需 OAuth，直接填入頻道名稱即可
+- OAuth 僅用於發送訊息等進階功能
+- `kick-wss` 套件負責底層 WebSocket 連接，自動重連
 
 ## 其他功能
 

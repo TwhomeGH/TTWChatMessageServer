@@ -1667,7 +1667,26 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
 let kickWS = null;
 
-function startKickChat() {
+async function resolveKickChannelId(channelName) {
+    try {
+        const res = await fetch(`https://kick.com/api/v2/channels/${channelName}`, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json',
+                'Referer': 'https://kick.com/',
+                'Origin': 'https://kick.com'
+            }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        return data?.chatroom?.id || 0;
+    } catch (e) {
+        console.error('⚠️ 無法取得 Kick 頻道資訊:', e.message);
+        return 0;
+    }
+}
+
+async function startKickChat() {
     const kickChannel = process.env.KICK_USER_NAME || keyword || '';
     if (!kickChannel) {
         console.log('⚠️ 未指定 Kick 頻道名稱，跳過');
@@ -1678,7 +1697,10 @@ function startKickChat() {
     console.log(`🎯 正在連接 Kick 頻道: ${kickChannel}`);
     writeLog("Default", `正在連接 Kick 頻道: ${kickChannel}`, "Kick");
 
-    kickWS = new KickWebSocket({ debug: false, autoReconnect: true });
+    const channelId = await resolveKickChannelId(kickChannel);
+    console.log(`🔍 Kick 頻道 chatroom ID: ${channelId}`);
+
+    kickWS = new KickWebSocket({ debug: false, autoReconnect: true, channelId });
 
     kickWS.on('ready', () => {
         console.log(`✅ Kick WebSocket 已連線: ${kickChannel}`);

@@ -262,6 +262,8 @@ const server = http.createServer((req, res) => {
         const url = new URL(req.url, `http://${req.headers.host}`)
 
         const user = url.searchParams.get('user') ?? ''
+        const twitchUser = url.searchParams.get('twitchUser') ?? ''
+        const kickUser = url.searchParams.get('kickUser') ?? ''
 
         var isTK = url.searchParams.get('isTK') === '1'
         var isTwitch = url.searchParams.get('isTwitch') === '1'
@@ -271,11 +273,14 @@ const server = http.createServer((req, res) => {
         const isSocket = url.searchParams.get('isSocket') === '1'
         const isBoth = url.searchParams.get('isBoth') === '1'
 
-
+        if (twitchUser) process.env.TWITCH_USER_NAME = twitchUser;
+        if (kickUser) process.env.KICK_USER_NAME = kickUser;
 
         pushLog('Starting TikTok.js with user=', user, 'isTK=', isTK);
         pushLog('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick);
         pushLog('isBoth=', isBoth);
+        if (twitchUser) pushLog('Twitch user=', twitchUser);
+        if (kickUser) pushLog('Kick user=', kickUser);
 
         logs = [];
         pushLog('[SYSTEM] Starting TikTok.js');
@@ -919,15 +924,17 @@ const server = http.createServer((req, res) => {
     else if (req.url === '/help') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end(`Available endpoints:
-/open?user=xxx&isTK=1&isBark=1&isSocket=1&isTwitch=1&isKick=1&isBoth=1
+/open?user=xxx&twitchUser=yyy&kickUser=zzz&isTK=1&isTwitch=1&isKick=1&isBark=1&isSocket=1&isBoth=1
 starts TikTok.js with parameters:
-user=xxx : 指定 TikTok/Twitch/Kick 用戶名稱
-isTK=1   : 使用 TikTok
-isTwitch=1 : 啟用 Twitch 通知
-isKick=1 : 啟用 Kick 通知
-isBark=1 : 啟用 Bark 通知
-isSocket=1 : 啟用 Socket 通知
-isBoth=1 : 同時啟用 TikTok + Twitch
+user=xxx     : 指定 TikTok 用戶名稱（給 isTK 使用）
+twitchUser=yyy : 指定 Twitch 用戶名稱（給 isTwitch 使用）
+kickUser=zzz  : 指定 Kick 頻道名稱（給 isKick 使用）
+isTK=1       : 使用 TikTok
+isTwitch=1   : 啟用 Twitch 通知
+isKick=1     : 啟用 Kick 通知
+isBark=1     : 啟用 Bark 通知
+isSocket=1   : 啟用 Socket 通知
+isBoth=1     : 同時啟用 TikTok + Twitch
 
 Kick OAuth:
 先至 https://id.kick.com/oauth/authorize 取得授權，
