@@ -130,7 +130,8 @@ http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickU
 | isTK=1 | 啟用 TikTok 直播聊天室 |
 | isTwitch=1 | 啟用 Twitch 直播聊天室 |
 | isKick=1 | 啟用 Kick 直播聊天室 |
-| isBoth=1 | 同時啟用 TikTok + Twitch |
+| platforms=tiktok,twitch,kick | 自由組合平台（逗號分隔），例如 `twitch,kick`、`tiktok,twitch`、`tiktok,kick` |
+| isBoth=1 | （已棄用，建議改用 `platforms=tiktok,twitch`） |
 | isBark=1 | 啟用 Bark 推送通知 |
 | isSocket=1 | 啟用 Socket 訊息推送 |
 

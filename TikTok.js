@@ -104,15 +104,23 @@ let isSocket = args.includes('--socket')
 
 let isBoth = args.includes('--both')
 
-if (isBoth) {
+// 解析 --platforms=tiktok,twitch,kick 組合參數
+const platformsArg = args.find(a => a.startsWith('--platforms='))
+if (platformsArg) {
+    const list = platformsArg.split('=')[1].split(',').map(p => p.trim().toLowerCase())
+    isTK = list.includes('tiktok')
+    isTwitch = list.includes('twitch')
+    isKick = list.includes('kick')
+} else if (isBoth) {
+    // 向後相容：--both → tiktok + twitch
     isTK = true
     isTwitch = true
 }
 
-console.log('收到參數:', keyword, isTK ? '(TikTok)' : isTwitch ? '(Twitch)' : isKick ? '(Kick)' : '');
+console.log('收到參數:', keyword, isTK ? '(TikTok)' : '', isTwitch ? '(Twitch)' : '', isKick ? '(Kick)' : '');
 
 console.log('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick);
-console.log('isBoth=', isBoth);
+console.log('isBoth=', isBoth, 'platforms=', platformsArg ? platformsArg.split('=')[1] : '');
 
 // TikTok 用戶名稱
 

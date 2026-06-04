@@ -272,27 +272,50 @@ const server = http.createServer((req, res) => {
         const isBark = url.searchParams.get('isBark') === '1'
         const isSocket = url.searchParams.get('isSocket') === '1'
         const isBoth = url.searchParams.get('isBoth') === '1'
+        const platforms = url.searchParams.get('platforms')  // e.g. "tiktok,twitch,kick"
+
+        // platforms 參數優先：可任意組合平台
+        if (platforms) {
+            const list = platforms.split(',').map(p => p.trim().toLowerCase())
+            isTK = list.includes('tiktok')
+            isTwitch = list.includes('twitch')
+            isKick = list.includes('kick')
+        } else if (isBoth) {
+            // 向後相容：isBoth=1 → tiktok + twitch
+            isTK = true
+            isTwitch = true
+        }
 
         if (twitchUser) process.env.TWITCH_USER_NAME = twitchUser;
         if (kickUser) process.env.KICK_USER_NAME = kickUser;
 
         pushLog('Starting TikTok.js with user=', user, 'isTK=', isTK);
         pushLog('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick);
-        pushLog('isBoth=', isBoth);
+        pushLog('isBoth=', isBoth, 'platforms=', platforms);
         if (twitchUser) pushLog('Twitch user=', twitchUser);
         if (kickUser) pushLog('Kick user=', kickUser);
 
         logs = [];
         pushLog('[SYSTEM] Starting TikTok.js');
-        pushLog(`[SYSTEM] user=${user} ${isTK ? '(TikTok)' : isTwitch ? '(Twitch)' : isKick ? '(Kick)' : ''}`);
+        pushLog(`[SYSTEM] user=${user} ${isTK ? '(TikTok)' : ''}${isTwitch ? '(Twitch)' : ''}${isKick ? '(Kick)' : ''}`);
 
         // ✅ 關鍵：把參數傳給 node
         const args = ['TikTok.js']
         if (user) args.push(user)
-        if (isTK) args.push('--tiktok')
+
+        // 若有 platforms 則傳遞組合字串，否則逐一傳遞個別旗標
+        const activePlatforms = []
+        if (isTK) activePlatforms.push('tiktok')
+        if (isTwitch) activePlatforms.push('twitch')
+        if (isKick) activePlatforms.push('kick')
+        if (activePlatforms.length > 0) {
+            args.push(`--platforms=${activePlatforms.join(',')}`)
+        }
 
         if (isBark) args.push('--bark')
         if (isSocket) args.push('--socket')
+        // 向後相容：仍保留個別旗標給舊版 TikTok.js
+        if (isTK) args.push('--tiktok')
         if (isTwitch) args.push('--twitch')
         if (isKick) args.push('--kick')
         if (isBoth) args.push('--both')
@@ -346,7 +369,7 @@ const server = http.createServer((req, res) => {
 
 
 
-        let consoleLog = `TikTok.js started (user=${user}) isTK=${isTK} isBark=${isBark} isSocket=${isSocket} isTwitch=${isTwitch} isKick=${isKick} isBoth=${isBoth}`;
+        let consoleLog = `TikTok.js started (user=${user}) isTK=${isTK} isBark=${isBark} isSocket=${isSocket} isTwitch=${isTwitch} isKick=${isKick} isBoth=${isBoth} platforms=${platforms}`;
 
         pushLog(`[SYSTEM] ${consoleLog}`);
 
@@ -924,17 +947,22 @@ const server = http.createServer((req, res) => {
     else if (req.url === '/help') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end(`Available endpoints:
-/open?user=xxx&twitchUser=yyy&kickUser=zzz&isTK=1&isTwitch=1&isKick=1&isBark=1&isSocket=1&isBoth=1
+/open?user=xxx&twitchUser=yyy&kickUser=zzz&platforms=tiktok,twitch,kick&isBark=1&isSocket=1
 starts TikTok.js with parameters:
-user=xxx     : 指定 TikTok 用戶名稱（給 isTK 使用）
-twitchUser=yyy : 指定 Twitch 用戶名稱（給 isTwitch 使用）
-kickUser=zzz  : 指定 Kick 頻道名稱（給 isKick 使用）
-isTK=1       : 使用 TikTok
-isTwitch=1   : 啟用 Twitch 通知
-isKick=1     : 啟用 Kick 通知
-isBark=1     : 啟用 Bark 通知
-isSocket=1   : 啟用 Socket 通知
-isBoth=1     : 同時啟用 TikTok + Twitch
+user=xxx       : 指定 TikTok 用戶名稱
+twitchUser=yyy : 指定 Twitch 用戶名稱
+kickUser=zzz   : 指定 Kick 頻道名稱
+platforms      : 自由組合平台（用逗號分隔），例如：
+                 platforms=tiktok,twitch,kick  (三平台全開)
+                 platforms=twitch,kick         (只開 Twitch+Kick)
+                 platforms=tiktok,twitch       (TikTok+Twitch，同 isBoth=1)
+                 platforms=tiktok              (只開 TikTok)
+isTK=1         : 使用 TikTok（個別旗標，與 platforms 擇一使用）
+isTwitch=1     : 啟用 Twitch 通知（同上）
+isKick=1       : 啟用 Kick 通知（同上）
+isBark=1       : 啟用 Bark 通知
+isSocket=1     : 啟用 Socket 通知
+isBoth=1       : （已棄用，建議改用 platforms=tiktok,twitch）
 
 Kick OAuth:
 先至 https://id.kick.com/oauth/authorize 取得授權，
