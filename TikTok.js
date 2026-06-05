@@ -1716,7 +1716,7 @@ async function startKickChat() {
         return;
     }
 
-    console.log(`🎯 正在連接 Kick 頻道: ${kickChannel}`);
+    console.info(`🎯 正在連接 Kick 頻道: ${kickChannel.substring(kickChannel.length-5) +"0".repeat(5)}`);
     writeLog("Default", `正在連接 Kick 頻道: ${kickChannel}`, "Kick");
 
     const channelId = await resolveKickChannelId(kickChannel);
@@ -1725,23 +1725,23 @@ async function startKickChat() {
     kickWS = new KickWebSocket({ debug: false, autoReconnect: true, ...(channelId > 0 && { channelId }) });
     
     kickWS.on('ready', () => {
-        console.info(`✅ Kick WebSocket 已連線: ${kickChannel}`);
-        writeLog("Default", `Kick WebSocket 已連線: ${kickChannel}`, "Kick");
+        console.info(`✅ Kick WebSocket 已連線: ${kickChannel.substring(kickChannel.length-5) +"0".repeat(5)}`);
+        writeLog("Default", `Kick WebSocket 已連線: ${kickChannel.substring(kickChannel.length-5) +"0".repeat(5)}`, "Kick");
 
-        sendBarkNotification("Kick 連線", `已連線 ${kickChannel}`, "");
-        sendSocketMessage("系統", `Kick 已連線 ${kickChannel}`, "", "", false, CacheUserNum, CacheUserList);
+        sendBarkNotification("Kick 連線", `已連線 ${kickChannel.substring(kickChannel.length-5) +"0".repeat(5)}`, "");
+        sendSocketMessage("系統", `Kick 已連線 ${kickChannel.substring(kickChannel.length-5) +"0".repeat(5)}`, "", "", false, CacheUserNum, CacheUserList);
     });
 
     kickWS.on('ChatMessage', async (data) => {
         const userName = data.sender?.username || '未知';
         const message = data.content || '';
 
-        console.log(`[Kick Chat] ${userName} : ${message}`);
+        console.info(`[Kick Chat] ${userName} : ${message}`);
         writeLog("Default", `${userName} : ${message}`, "Kick Chat Original");
 
         const fr = processFilter({ user: userName, message });
         if (fr.blocked) {
-            console.log('🚫 過濾器阻擋(Kick):', userName, message);
+            console.info('🚫 過濾器阻擋(Kick):', userName, message);
             writeLog("Default", `過濾器阻擋(Kick): ${userName} : ${message}`, "Filter");
             return;
         }
@@ -1750,17 +1750,19 @@ async function startKickChat() {
         let tMsg = fr.modified && fr.message ? fr.message : message;
 
         if (!tUser || !tMsg) {
-            console.log('⚠️ 過濾後(Kick) nick/msg 為空，跳過:', userName, message);
+            console.info('⚠️ 過濾後(Kick) nick/msg 為空，跳過:', userName, message);
             return;
         }
 
         recordMessageStat(tMsg);
 
+        console.info(`📢 發送 Bark 通知: ${tUser} - ${tMsg}`);
         sendBarkNotification(tUser, tMsg, "");
 
         Translate.TranslateText(tMsg).then(RES => {
             let RESCHAT = `${tMsg}${tMsg == RES ? "" : `\n${RES}`}`;
             if (RES.toLowerCase() != tMsg.toLowerCase()) {
+                console.info(`📢 發送 Bark 通知: ${tUser} - ${RES}`);
                 sendBarkNotification(tUser, RES, "");
             }
             sendSocketMessage(tUser, RESCHAT, "", "", true, CacheUserNum, CacheUserList);
@@ -1772,7 +1774,7 @@ async function startKickChat() {
         const username = data.username || '未知';
         const message = `订阅了频道`;
 
-        console.log(`[Kick Sub] ${username} ${message}`);
+        console.info(`[Kick Sub] ${username} ${message}`);
         writeLog("Default", `${username} ${message}`, "Kick Sub");
 
         sendBarkNotification(username, message, "");
@@ -1784,7 +1786,7 @@ async function startKickChat() {
         const recipients = Array.isArray(data.recipients) ? data.recipients.join(', ') : '';
         const message = `赠送了订阅给 ${recipients}`;
 
-        console.log(`[Kick GiftSub] ${gifter} ${message}`);
+        console.info(`[Kick GiftSub] ${gifter} ${message}`);
         writeLog("Default", `${gifter} ${message}`, "Kick GiftSub");
 
         sendBarkNotification(gifter, message, "");
