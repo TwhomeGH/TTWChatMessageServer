@@ -1716,7 +1716,7 @@ async function startKickChat() {
         return;
     }
 
-    console.info(`🎯 正在連接 Kick 頻道: ${kickChannel.substring(kickChannel.length-5) +"0".repeat(5)}`);
+    console.info(`🎯 正在連接 Kick 頻道: ${kickChannel.substring(0,kickChannel.length-5) +"0".repeat(5)}`);
     writeLog("Default", `正在連接 Kick 頻道: ${kickChannel}`, "Kick");
 
     const channelId = await resolveKickChannelId(kickChannel);
@@ -1725,11 +1725,12 @@ async function startKickChat() {
     kickWS = new KickWebSocket({ debug: false, autoReconnect: true, ...(channelId > 0 && { channelId }) });
     
     kickWS.on('ready', () => {
-        console.info(`✅ Kick WebSocket 已連線: ${kickChannel.substring(kickChannel.length-5) +"0".repeat(5)}`);
-        writeLog("Default", `Kick WebSocket 已連線: ${kickChannel.substring(kickChannel.length-5) +"0".repeat(5)}`, "Kick");
+        console.info(`✅ Kick WebSocket 已連線: ${kickChannel.substring(0,kickChannel.length-5) +"0".repeat(5)}`);
 
-        sendBarkNotification("Kick 連線", `已連線 ${kickChannel.substring(kickChannel.length-5) +"0".repeat(5)}`, "");
-        sendSocketMessage("系統", `Kick 已連線 ${kickChannel.substring(kickChannel.length-5) +"0".repeat(5)}`, "", "", false, CacheUserNum, CacheUserList);
+        writeLog("Default", `Kick WebSocket 已連線: ${kickChannel}`, "Kick");
+
+        sendBarkNotification("Kick 連線", `已連線 ${kickChannel.substring(0,kickChannel.length-5) +"0".repeat(5)}`, "");
+        sendSocketMessage("系統", `Kick 已連線 ${kickChannel.substring(0,kickChannel.length-5) +"0".repeat(5)}`, "", "", false, CacheUserNum, CacheUserList);
     });
 
     kickWS.on('ChatMessage', async (data) => {
