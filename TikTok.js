@@ -1720,7 +1720,7 @@ async function startKickChat() {
     writeLog("Default", `正在連接 Kick 頻道: ${kickChannel}`, "Kick");
 
     const channelId = await resolveKickChannelId(kickChannel);
-    console.info(`🔍 Kick 頻道 chatroom ID: ${channelId.toString().substring(0,5) + '0'.repeat(5 - channelId.toString().length) || '無法取得'}`);
+    console.info(`🔍 Kick 頻道 chatroom ID: ${channelId || '無法取得'}`);
     writeLog("Default", `Kick 頻道 chatroom ID: ${channelId || '無法取得'}`, "Kick");
 
     kickWS = new KickWebSocket({ debug: false, autoReconnect: true, ...(channelId > 0 && { channelId }) });
