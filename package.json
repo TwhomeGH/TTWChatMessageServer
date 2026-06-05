@@ -14,6 +14,7 @@
     "franc": "^6.2.0",
     "franc-all": "^7.2.0",
     "kick-wss": "^1.0.5",
-    "tiktok-live-connector": "^2.1.1-beta1"
+    "tiktok-live-connector": "^2.1.1-beta1",
+    "update": "^0.7.4"
   }
 }
