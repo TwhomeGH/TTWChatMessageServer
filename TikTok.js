@@ -578,10 +578,10 @@ async function sendBarkNotification(title = "Twitch", comment, icon) {
     if (!Bark || Bark.toLowerCase() === "none") return;
     try {
 
-        console.log(`📢 發送 Bark 通知: ${title} - ${comment}`);
+        console.info(`📢 發送 Bark 通知: ${title} - ${comment}`);
         await axios.post(Bark, { title, body: comment, icon }, { headers: { "Content-Type": "application/json; charset=utf-8" } });
         
-        console.log("✅ Bark 推送成功");
+        console.info("✅ Bark 推送成功");
     } catch (err) {
         console.error("❌ Bark 推送錯誤:", err.message);
     }
@@ -1720,12 +1720,12 @@ async function startKickChat() {
     writeLog("Default", `正在連接 Kick 頻道: ${kickChannel}`, "Kick");
 
     const channelId = await resolveKickChannelId(kickChannel);
-    console.log(`🔍 Kick 頻道 chatroom ID: ${channelId || '無法取得'}`);
+    console.info(`🔍 Kick 頻道 chatroom ID: ${channelId || '無法取得'}`);
 
     kickWS = new KickWebSocket({ debug: false, autoReconnect: true, ...(channelId > 0 && { channelId }) });
-
+    
     kickWS.on('ready', () => {
-        console.log(`✅ Kick WebSocket 已連線: ${kickChannel}`);
+        console.info(`✅ Kick WebSocket 已連線: ${kickChannel}`);
         writeLog("Default", `Kick WebSocket 已連線: ${kickChannel}`, "Kick");
 
         sendBarkNotification("Kick 連線", `已連線 ${kickChannel}`, "");
