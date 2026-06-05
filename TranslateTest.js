@@ -140,11 +140,13 @@ async function translateByBing(Chat, sourceLang) {
 }
 
 async function translateByApi(Chat) {
-    if (Chat.length < TRANSLATE_MIN_LENGTH) {
-        console.log(`太短了取消翻譯 < ${TRANSLATE_MIN_LENGTH}`)
+    let CheckLang = isChinese(Chat)
+
+    const langMinLength = CheckLang.lang === 'ja' ? 2 : TRANSLATE_MIN_LENGTH;
+    if (Chat.length < langMinLength) {
+        console.log(`太短了取消翻譯 < ${langMinLength}`)
         return Chat
     }
-    let CheckLang = isChinese(Chat)
 
     self_logTo("LangISO6393",CheckLang.langISO6393,"LangCode",CheckLang.lang)
 
