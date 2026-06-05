@@ -10,7 +10,7 @@
     "@twurple/auth": "^8.0.3",
     "@twurple/eventsub-ws": "^8.0.3",
     "axios": "^1.17.0",
-    "dotenv": "^17.2.3",
+    "dotenv": "^17.4.2",
     "franc": "^6.2.0",
     "franc-all": "^7.2.0",
     "kick-wss": "^1.0.5",
