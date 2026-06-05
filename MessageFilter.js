@@ -228,7 +228,7 @@ addFilterRules([
         name: 'user:刪除特殊符號',
         field: 'user',
         action: 'delete',
-        match: /[^\w\s]/g,
+        match: /[^\w\s\p{sc=Han}]/gu,
     },
     {
         name: 'any:刪除控制字元',
