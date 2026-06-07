@@ -948,24 +948,43 @@ connection.on(WebcastEvent.ROOM_USER, data => {
 // Define the events that you want to handle
 // In this case we listen to chat messages (comments)
 
-
 connection.on(WebcastEvent.MEMBER,data => {
 
     let iconn = data.user.profilePicture.url[1]
-    //console.log(JSON.stringify(data,"",4))
     
     console.log(data.user.nickname,"加入了") 
     console.log("STATE View",connection.state.roomInfo.data.user_count,CacheUserNum) 
 
-    
-    sendBarkNotification(data.user.nickname, "來了",iconn);
-    sendSocketMessage(data.user.nickname, "來了",iconn,"",false,CacheUserNum,CacheUserList);
+    // 跨路徑去重：檢查是否已被 userscript 路徑送出（檢查 syncBuffer）
+    const isCrossPathDuplicate = isDuplicate(data.user.nickname.trim(), "加入了");
+
+    if (isCrossPathDuplicate) {
+        console.log('🚫 跨路徑重複(來自userscript):', data.user.nickname, "加入了");
+        writeLog("Default", `跨路徑重複訊息被過濾(來自userscript): ${data.user.nickname} : 加入了`, "CrossPathDuplicate")
+        return;
+    }
+
+    const fr = processFilter({ user: data.user.nickname, message: "加入了" });
+    if (fr.blocked) {
+        console.log('🚫 過濾器阻擋:', data.user.nickname, "加入了");
+        writeLog("Default", `過濾器阻擋訊息: ${data.user.nickname} : 加入了`, "FilterBlocked")
+        return;
+    }
+
+    let nickname = fr.modified && fr.user ? fr.user : data.user.nickname;
+    let message = fr.modified && fr.message ? fr.message : "加入了";
+
+    if (!nickname || !message) {
+        console.log('⚠️ 過濾後 nick/message 為空，跳過:', data.user.nickname, "加入了");
+        writeLog("Default", `過濾後 nick/message 為空，跳過: ${data.user.nickname} : 加入了`, "FilterEmpty")
+        return;
+    }
+
+    sendBarkNotification(nickname, "來了",iconn);
+    sendSocketMessage(nickname, "來了",iconn,"",false,CacheUserNum,CacheUserList);
 
     // 同時記錄訊息統計 加入訊息存儲用與TikTok的結果一致 以便去重
-    addToSyncBuffer(data.user.nickname.trim(), "加入了");
-
-
-
+    addToSyncBuffer(nickname.trim(), "加入了");
 
 })
 
