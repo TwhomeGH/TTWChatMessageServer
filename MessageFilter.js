@@ -201,6 +201,7 @@ addFilterRules([
             const codePoints = [...u];
             if (codePoints.length < 6) return false;
             const cjk = (u.match(/[\u4e00-\u9fff\u3000-\u303f]/g) || []).length;
+            if (cjk === 0) return false;
             const other = codePoints.filter(c => !/[\u4e00-\u9fff\u3000-\u303f\w\s]/u.test(c)).length;
             return other > cjk * 2;
         },
