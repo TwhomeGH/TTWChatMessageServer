@@ -564,8 +564,8 @@ const giftMapReady = loadGiftNameMap();
 
 const connection = new TikTokLiveConnection(tiktokName,{
     sessionId: process.env.SESSION_ID,
-    ttTargetIdc: process.env.TT_TARGET_IDC || "alisg"
-
+    ttTargetIdc: process.env.TT_TARGET_IDC || "alisg",
+    authenticateWs: true
 })
 
 
