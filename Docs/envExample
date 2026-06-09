@@ -14,6 +14,7 @@ KICK_USER_NAME=Kick 用戶名
 
 SESSION_ID=你的TikTok SessionID
 TT_TARGET_IDC=你的TikTok Target IDC
+WHITELIST_AUTHENTICATED_SESSION_ID_HOST=tiktok.eulerstream.com
 
 
 
