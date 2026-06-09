@@ -1,7 +1,7 @@
 import { ApiClient } from '@twurple/api';
 import { RefreshingAuthProvider } from '@twurple/auth';
 import { EventSubWsListener } from '@twurple/eventsub-ws';
-import { promises as fs } from 'fs';
+import { promises as fs, readFileSync, existsSync, writeFileSync } from 'fs';
 import axios from 'axios';
 
 
@@ -1693,6 +1693,62 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 // ===== Kick WebSocket 整合 =====
 
 let kickWS = null;
+const kickAvatarCache = new Map();
+
+const kickTokenFile = path.join(__dirname, 'kick_tokens.json');
+
+let kickAccessToken = null;
+
+function loadKickTokens() {
+    try {
+        if (existsSync(kickTokenFile)) {
+            return JSON.parse(readFileSync(kickTokenFile, 'utf8'));
+        }
+    } catch (err) {
+        console.error('⚠️ 讀取 kick_tokens.json 失敗:', err.message);
+    }
+    return null;
+}
+
+async function refreshKickToken(refreshToken) {
+    const params = new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: process.env.KICK_CLIENT_ID || '',
+        client_secret: process.env.KICK_CLIENT_SECRET || '',
+        refresh_token: refreshToken,
+    });
+    const res = await fetch('https://id.kick.com/oauth/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params,
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Kick token refresh failed: ${res.status} ${errText}`);
+    }
+    return res.json();
+}
+
+async function getValidKickToken() {
+    if (kickAccessToken) return kickAccessToken;
+    const tokens = loadKickTokens();
+    if (!tokens?.access_token) return null;
+    const expiresAt = (tokens.obtainmentTimestamp || 0) + (tokens.expires_in || 3600) * 1000;
+    if (Date.now() >= expiresAt - 60000 && tokens.refresh_token) {
+        try {
+            const newTokens = await refreshKickToken(tokens.refresh_token);
+            newTokens.obtainmentTimestamp = Date.now();
+            writeFileSync(kickTokenFile, JSON.stringify(newTokens, null, 2));
+            kickAccessToken = newTokens.access_token;
+            return kickAccessToken;
+        } catch (e) {
+            console.error('⚠️ Kick token 刷新失敗:', e.message);
+            return null;
+        }
+    }
+    kickAccessToken = tokens.access_token;
+    return kickAccessToken;
+}
 
 function guessKickChannelId(channelName) {
     const knownChannels = {
@@ -1727,6 +1783,53 @@ async function resolveKickChannelId(channelName) {
     }
 }
 
+async function getKickUserAvatar(username, userId) {
+    if (username === '未知' || (!username && !userId)) return "";
+    const cacheKey = (username || userId || "").toString().toLowerCase();
+    const cached = kickAvatarCache.get(cacheKey);
+    if (cached) return cached;
+
+    const token = await getValidKickToken();
+    if (!token) {
+        console.info(`[Kick Avatar] ❌ 無 OAuth token，跳過: ${username}`);
+        return "";
+    }
+    const authHeaders = { 'Authorization': `Bearer ${token}` };
+
+    const baseUrl = 'https://api.kick.com/public/v1';
+
+    try {
+        const res = await axios.get(`${baseUrl}/users`, {
+            params: { slug: username },
+            headers: { ...authHeaders, 'Accept': 'application/json' }
+        });
+        const user = Array.isArray(res.data?.data) ? res.data.data[0] : null;
+        const avatar = user?.profile_picture || user?.profile_pic || null;
+        if (avatar) {
+            console.info(`[Kick Avatar] ✅ 取得頭像(user): ${username}`);
+            kickAvatarCache.set(cacheKey, avatar);
+            return avatar;
+        }
+    } catch (e) {}
+
+    try {
+        const res = await axios.get(`${baseUrl}/channels`, {
+            params: { slug: username },
+            headers: { ...authHeaders, 'Accept': 'application/json' }
+        });
+        const chan = Array.isArray(res.data?.data) ? res.data.data[0] : null;
+        const avatar = chan?.user?.profile_pic || null;
+        if (avatar) {
+            console.info(`[Kick Avatar] ✅ 取得頭像(channel): ${username}`);
+            kickAvatarCache.set(cacheKey, avatar);
+            return avatar;
+        }
+    } catch (e) {}
+
+    console.info(`[Kick Avatar] ❌ 無法取得頭像: ${username}`);
+    return "";
+}
+
 async function startKickChat() {
     const kickChannel = process.env.KICK_USER_NAME || keyword || '';
     if (!kickChannel) {
@@ -1753,9 +1856,15 @@ async function startKickChat() {
         sendSocketMessage("系統", `Kick 已連線 ${kickChannel}`, "", "", false, CacheUserNum, CacheUserList);
     });
 
+    function getSenderAvatar(sender) {
+        return sender?.profile_picture || sender?.profile_pic || sender?.picture || sender?.avatar || "";
+    }
+
     kickWS.on('ChatMessage', async (data) => {
         const userName = data.sender?.username || '未知';
         const message = data.content || '';
+        let avatar = getSenderAvatar(data.sender);
+        if (!avatar) avatar = await getKickUserAvatar(userName, data.sender?.id);
 
         console.info(`[Kick Chat] ${userName} : ${message}`);
         writeLog("Default", `${userName} : ${message}`, "Kick Chat Original");
@@ -1778,50 +1887,53 @@ async function startKickChat() {
         recordMessageStat(tMsg);
 
         console.info(`📢 發送 Bark 通知: ${tUser} - ${tMsg}`);
-        sendBarkNotification(tUser, tMsg, "");
+        sendBarkNotification(tUser, tMsg, avatar);
 
         Translate.TranslateText(tMsg).then(RES => {
             let RESCHAT = `${tMsg}${tMsg == RES ? "" : `\n${RES}`}`;
             if (RES.toLowerCase() != tMsg.toLowerCase()) {
                 console.info(`📢 發送 Bark 通知: ${tUser} - ${RES}`);
-                sendBarkNotification(tUser, RES, "");
+                sendBarkNotification(tUser, RES, avatar);
             }
-            sendSocketMessage(tUser, RESCHAT, "", "", true, CacheUserNum, CacheUserList);
+            sendSocketMessage(tUser, RESCHAT, avatar, "", true, CacheUserNum, CacheUserList);
             writeLog("Default", `${tUser} : ${RESCHAT}`, "Kick Chat");
         });
     });
 
-    kickWS.on('Subscription', (data) => {
+    kickWS.on('Subscription', async (data) => {
         const username = data.username || '未知';
         const message = `订阅了频道`;
+        const avatar = await getKickUserAvatar(username);
 
         console.info(`[Kick Sub] ${username} ${message}`);
         writeLog("Default", `${username} ${message}`, "Kick Sub");
 
-        sendBarkNotification(username, message, "");
-        sendSocketMessage(username, message, "", "", false, CacheUserNum, CacheUserList);
+        sendBarkNotification(username, message, avatar);
+        sendSocketMessage(username, message, avatar, "", false, CacheUserNum, CacheUserList);
     });
 
-    kickWS.on('GiftedSubscriptions', (data) => {
+    kickWS.on('GiftedSubscriptions', async (data) => {
         const gifter = data.gifted_by || '未知';
         const recipients = Array.isArray(data.recipients) ? data.recipients.join(', ') : '';
         const message = `赠送了订阅给 ${recipients}`;
+        const avatar = await getKickUserAvatar(gifter);
 
         console.info(`[Kick GiftSub] ${gifter} ${message}`);
         writeLog("Default", `${gifter} ${message}`, "Kick GiftSub");
 
-        sendBarkNotification(gifter, message, "");
-        sendSocketMessage(gifter, message, "", "", false, CacheUserNum, CacheUserList);
+        sendBarkNotification(gifter, message, avatar);
+        sendSocketMessage(gifter, message, avatar, "", false, CacheUserNum, CacheUserList);
     });
 
-    kickWS.on('UserBanned', (data) => {
+    kickWS.on('UserBanned', async (data) => {
         const username = data.username || '未知';
         const message = `已被封禁`;
+        const avatar = await getKickUserAvatar(username);
 
         console.log(`[Kick Ban] ${username} ${message}`);
         writeLog("Default", `${username} ${message}`, "Kick Ban");
 
-        sendSocketMessage(username, message, "", "", false, CacheUserNum, CacheUserList);
+        sendSocketMessage(username, message, avatar, "", false, CacheUserNum, CacheUserList);
     });
 
     kickWS.on('error', (err) => {

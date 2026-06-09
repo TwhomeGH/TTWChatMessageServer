@@ -140,6 +140,7 @@ export class MessageParser {
             type: "message",
             created_at: data.created_at,
             sender: {
+                ...data.sender,
                 id: data.sender.id,
                 username: data.sender.username,
                 slug: data.sender.slug,

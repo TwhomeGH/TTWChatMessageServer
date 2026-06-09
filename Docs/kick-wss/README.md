@@ -1,9 +1,4 @@
-# Kick WebSocket (TTWChatMessageServer 修正版)
-
-> ⚠️ 此版本已針對 TTWChatMessageServer 專案修正下列問題：
->
-> 1. **getChannelInfo 403** — 原版缺少 HTTP headers（User-Agent、Referer、Origin），被 Cloudflare 阻擋。改由外部解析 `channelId` 後直接傳入，省略 API 呼叫。
-> 2. **事件名稱比對失敗** — 原版 `LEGACY_EVENT_MAPPING` 將 Pusher 事件 `App\Events\ChatMessageEvent` 錯誤映射為短名 `ChatMessageEvent`，導致 switch 比對 `KickEvent.ChatMessage`（值為 `App\Events\ChatMessageEvent`）失敗。已移除該正規化步驟。
+# Kick WebSocket
 
 A lightweight and dependency-free library for connecting to Kick.com WebSockets.
 
@@ -446,6 +441,38 @@ MIT License - see LICENSE file for details.
 
 - 🐛 Issues: [GitHub Issues](https://github.com/nglmercer/kick-wss/issues)
 - 📖 Documentation: [Wiki](https://github.com/nglmercer/kick-wss/wiki)
+
+---
+
+## 🛠️ Patch Notes (TTWChatMessageServer)
+
+此版本為 `kick-wss` 的修改版，用於 [TTWChatMessageServer] 專案。
+
+### 修改內容
+
+1. **`dist/MessageParser.js` — `parseChatMessage`**
+   - `sender` 物件改為 `...data.sender` 展開，保留 Pusher 原始資料中的所有欄位
+   - 使 `profile_picture`、`profile_pic` 等非標準欄位不會被濾掉
+
+2. **`dist/types.d.ts` — `KickUser` 介面**
+   - 新增 `[key: string]: unknown` 索引簽章，允許未知的額外欄位
+
+### 安裝方式
+
+將 `Docs/kick-wss_patched.zip` 解壓後，取代 `node_modules/kick-wss/` 內容：
+
+```bash
+Copy-Item -Path "Docs/kick-wss/*" -Destination "node_modules/kick-wss/" -Recurse -Force
+```
+
+### 未來計劃：抽離為獨立套件
+
+預計在後續版本中將此 patch 抽離為獨立的 npm 套件（例如 `@ttw/kick-wss`），主要方向：
+
+- 將 Pusher 資料解析邏輯封裝為可擴充的 plugin 架構
+- 內建 Kick OAuth token 管理（自動 refresh）
+- 支援 `api.kick.com/public/v1` 的 REST API 呼叫（取得頭像等）
+- 可獨立於 `TTWChatMessageServer` 專案外使用
 
 ---
 

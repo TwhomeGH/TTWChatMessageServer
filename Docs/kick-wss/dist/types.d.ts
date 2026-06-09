@@ -60,6 +60,7 @@ export interface KickUser {
         color: string;
         badges: string[];
     };
+    [key: string]: unknown;
 }
 export interface KickChannel {
     id: number;
@@ -231,6 +232,7 @@ export interface RawChatMessageData {
             color?: string;
             badges?: string[];
         };
+        profile_picture?: string;
     };
     chatroom?: {
         id: number;

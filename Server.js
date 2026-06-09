@@ -18,6 +18,8 @@ function base64URLEncode(buffer) {
 
 let pkceVerifier = null;
 let pkceChallenge = null;
+let isBark = false;
+let isSocket = false;
 
 async function exchangeKickCode(code, verifier) {
     const params = new URLSearchParams({
@@ -269,8 +271,8 @@ const server = http.createServer((req, res) => {
         var isTwitch = url.searchParams.get('isTwitch') === '1'
         var isKick = url.searchParams.get('isKick') === '1'
 
-        const isBark = url.searchParams.get('isBark') === '1'
-        const isSocket = url.searchParams.get('isSocket') === '1'
+        isBark = url.searchParams.get('isBark') === '1'
+        isSocket = url.searchParams.get('isSocket') === '1'
         const isBoth = url.searchParams.get('isBoth') === '1'
         const platforms = url.searchParams.get('platforms')  // e.g. "tiktok,twitch,kick"
 
@@ -894,6 +896,28 @@ const server = http.createServer((req, res) => {
     }
 
     // =======================
+    // Kick OAuth login
+    // =======================
+    else if (req.url === '/kick-login') {
+        pkceVerifier = base64URLEncode(crypto.randomBytes(32));
+        pkceChallenge = base64URLEncode(crypto.createHash('sha256').update(pkceVerifier).digest());
+        const state = base64URLEncode(crypto.randomBytes(16));
+
+        const params = new URLSearchParams({
+            response_type: 'code',
+            client_id: process.env.KICK_CLIENT_ID || '',
+            redirect_uri: 'http://localhost:3332/get-kick-token',
+            scope: 'user:read channel:read',
+            state,
+            code_challenge: pkceChallenge,
+            code_challenge_method: 'S256',
+        });
+
+        res.writeHead(302, { 'Location': `https://id.kick.com/oauth/authorize?${params}` });
+        res.end();
+    }
+
+    // =======================
     // Kick OAuth callback
     // =======================
     else if (req.url.startsWith('/get-kick-token')) {
@@ -914,18 +938,8 @@ const server = http.createServer((req, res) => {
                 saveKickTokens(tokens);
                 pushLog('✅ Kick OAuth 成功，已儲存 token');
 
-                if (tiktokProcess) {
-                    tiktokProcess.stdin.write('KICK_START\n');
-                } else {
-                    const args = ['TikTok.js', '--kick'];
-                    if (isBark) args.push('--bark');
-                    if (isSocket) args.push('--socket');
-                    tiktokProcess = spawn('node', args);
-                    pushLog('[SYSTEM] 自動啟動 TikTok.js (Kick 模式)');
-                }
-
                 res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-                res.end(`<h2>✅ Kick 授權成功！</h2><p>Token 已儲存，聊天監聽已啟動。</p><a href="/">回到主頁</a>`);
+                res.end(`<h2>✅ Kick 授權成功！</h2><p>Token 已儲存。</p><a href="/config">回到設定頁</a>`);
             } catch (err) {
                 console.error('❌ Kick token exchange 失敗:', err);
                 pushLog('❌ Kick token exchange 失敗:', err.message);
