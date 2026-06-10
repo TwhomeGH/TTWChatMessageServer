@@ -518,6 +518,10 @@ process.stdin.on('data', async (chunk) => {
             const json = JSON.parse(msg);
 
             if (json.type === 'StreamMessage') {
+                // 先存原始值供去重比對
+                const origUser = json.user;
+                const origMsg = json.message;
+
                 const fr = processFilter({ user: json.user, message: json.message });
                 if (fr.blocked) {
                     console.log('🚫 過濾器阻擋(來自Server):', json.user, json.message, `(規則: ${fr.reason})`);
@@ -538,7 +542,7 @@ process.stdin.on('data', async (chunk) => {
                     CacheUserList = json.userList;
                 }
 
-                sendToTCP(json);
+                sendToTCP(json, origUser, origMsg);
                 console.log('📥 收到 JSON 訊息:', json);
             }
 
@@ -590,11 +594,12 @@ async function sendBarkNotification(title = "Twitch", comment, icon) {
 
 
 
-function sendToTCP(payload) {
+function sendToTCP(payload, dedupUser, dedupMessage) {
     if (!client || client.destroyed) return;
 
-
-    if (isDuplicate(payload.user.trim(), payload.message.trim())) {
+    const checkUser = dedupUser ?? payload.user;
+    const checkMsg = dedupMessage ?? payload.message;
+    if (isDuplicate(checkUser.trim(), checkMsg.trim())) {
         console.log('🚫 重複訊息跳過:', payload.user, payload.message);
         return;
     }
@@ -624,7 +629,7 @@ function sendToTCP(payload) {
 
         
 
-        addToSyncBuffer(payload.user.trim(), payload.message.trim());
+        addToSyncBuffer((dedupUser ?? payload.user).trim(), (dedupMessage ?? payload.message).trim());
 
     } catch (err) {
         console.error('⚠️ 發送 TCP 訊息失敗:', err.message);
