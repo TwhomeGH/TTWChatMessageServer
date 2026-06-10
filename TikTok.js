@@ -1265,70 +1265,45 @@ function recordGift(userId, increment = 1) {
 
 
 
-// And here we receive gifts sent to the streamer
 connection.on(WebcastEvent.GIFT, async data => {
     await giftMapReady;
     const originalGiftName = data.giftDetails?.giftName || "";
     const translatedGiftName = await ensureGiftNameTranslation(originalGiftName);
     const giftNameForDisplay = translatedGiftName || originalGiftName;
-        
-    //console.log(JSON.stringify(data,"",4))
-    if (data.giftType === 1 && !data.repeatEnd ){
-
-        // 連擊開始 => show only temporary
-        console.log('Gift 連擊開始 in progress');
-
-        console.log(`連擊了 ${data.user.nickname} : ${giftNameForDisplay} x${data.repeatCount}`)
-    
-        let mess = `連擊了 ${giftNameForDisplay} ${data.repeatCount} 個`
-        let iconn = data.user.profilePicture.url[1]
-        let giftImg = data.giftDetails.icon.url[1]
-
-        console.log("giftimg",giftImg,"連擊訊息",mess)
-        // 連擊過程中只顯示連擊訊息 不顯示單次贈送訊息
-        // sendBarkNotification(data.user.nickname, mess,giftImg);
-        // sendSocketMessage(data.user.nickname, mess,iconn,giftImg,true,CacheUserNum,CacheUserList);
-
-    
-    } else {
-        // 連續贈送活動結束或贈送活動無法連續贈送 => 使用最終的
-        console.log('Gift 連續贈送活動結束 or non-streakable gift');
-
-        let MESS=`${data.user.nickname} 謝謝支持`
-        let MESS_MAIN="感謝大哥的餽贈"
-        let iconn = "https://img.icons8.com/fluency/48/gift-card.png"
-        let giftImg = data.giftDetails.icon.url[1]
-
-        let count = recordGift(data.user.uniqueId);
-
-        if (count >= 5) {
-            console.log("5次連擊感謝",data.user.nickname,MESS)
-            sendBarkNotification(data.user.nickname, MESS,giftImg);
-            sendSocketMessage(MESS_MAIN,MESS,iconn,giftImg,true,CacheUserNum,CacheUserList);
-
-            // 清空計數
-            UserGiftCount.set(data.user.id, { count: 0, lastGiftTimestamp: Date.now() });
-            
-        }
-
-    }
-    
-    
-    console.log(`送出了 ${data.user.nickname} : ${giftNameForDisplay} ${data.repeatCount} 個`)
-
-    let mess = `送出了 ${giftNameForDisplay} ${data.repeatCount} 個`
     let iconn = data.user.profilePicture.url[1]
     let giftImg = data.giftDetails.icon.url[1]
 
-    console.log("giftimg",giftImg,"訊息",mess)
+    if (data.giftType === 1 && !data.repeatEnd) {
+        // 連擊進行中 → 只發連擊進度，不回到底部
+        let mess = `連擊了 ${giftNameForDisplay} ${data.repeatCount} 個`
+        console.log(`連擊了 ${data.user.nickname} : ${giftNameForDisplay} x${data.repeatCount}`)
+        sendBarkNotification(data.user.nickname, mess, giftImg);
+        sendSocketMessage(data.user.nickname, mess, iconn, giftImg, true, CacheUserNum, CacheUserList);
+        addToSyncBuffer(data.user.nickname.trim(), mess);
+        writeLog("Default", `${data.user.nickname} ${mess}`, "Gift連擊")
+        return;
+    }
 
-    sendBarkNotification(data.user.nickname, mess,giftImg);
+    // 連擊結束 / 非連擊禮物 → 送出最終通知
+    let mess = `送出了 ${giftNameForDisplay} ${data.repeatCount} 個`
+    console.log(`送出了 ${data.user.nickname} : ${giftNameForDisplay} ${data.repeatCount} 個`)
 
-    sendSocketMessage(data.user.nickname, mess,iconn,giftImg,true,CacheUserNum,CacheUserList);
+    sendBarkNotification(data.user.nickname, mess, giftImg);
+    sendSocketMessage(data.user.nickname, mess, iconn, giftImg, true, CacheUserNum, CacheUserList);
+    addToSyncBuffer(data.user.nickname.trim(), mess);
+    writeLog("Default", `${data.user.nickname} ${mess}`, "Gift")
 
-    writeLog("Default", `${data.user.nickname} 送出了 ${giftNameForDisplay} ${data.repeatCount} 個`, "Gift")
-
-    
+    // 累計送禮次數感謝（同一使用者 60 秒內送禮 >= 5 次）
+    let count = recordGift(data.user.uniqueId);
+    if (count >= 5) {
+        let thanks = `${data.user.nickname} 謝謝支持`
+        console.log("5次送禮感謝", data.user.nickname, thanks)
+        sendBarkNotification(data.user.nickname, thanks, giftImg);
+        sendSocketMessage("感謝大哥的餽贈", thanks, iconn, giftImg, true, CacheUserNum, CacheUserList);
+        addToSyncBuffer(data.user.nickname.trim(), thanks);
+        writeLog("Default", thanks, "Gift感謝")
+        UserGiftCount.set(data.user.uniqueId, { count: 0, lastGiftTimestamp: Date.now() });
+    }
 });
 
 
