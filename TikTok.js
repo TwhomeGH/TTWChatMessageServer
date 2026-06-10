@@ -698,12 +698,14 @@ function updateCombinedViewerCount() {
  * @param {*} userList 
  * @returns 
  */
-function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,userList=[]) {
+function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,userList=[], dedupUser, dedupMessage) {
     if (!client || client.destroyed) return;
 
     
-    if (isDuplicate(user.trim(), message.trim())) {
-        console.log('🚫內部 重複訊息跳過:', user, message);
+    const checkUser = dedupUser ?? user;
+    const checkMsg = dedupMessage ?? message;
+    if (isDuplicate(checkUser.trim(), checkMsg.trim())) {
+        console.log('🚫內部 重複訊息跳過:', user, message, `(原始: ${checkUser} : ${checkMsg})`);
         return;
     }
 
@@ -983,7 +985,7 @@ connection.on(WebcastEvent.MEMBER,data => {
     }
 
     sendBarkNotification(nickname, "來了",iconn);
-    sendSocketMessage(nickname, "來了",iconn,"",false,CacheUserNum,CacheUserList);
+    sendSocketMessage(nickname, "來了",iconn,"",false,CacheUserNum,CacheUserList, data.user.nickname, "加入了");
 
     addToSyncBuffer(data.user.nickname.trim(), "加入了");
 
@@ -1053,7 +1055,7 @@ connection.on(WebcastEvent.CHAT, data => {
                 sendBarkNotification(nickname, RES,iconn);
             }
 
-            sendSocketMessage(nickname, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList);
+            sendSocketMessage(nickname, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList, data.user.nickname, data.comment);
 
             recordMessageStat(RESCHAT);
 
