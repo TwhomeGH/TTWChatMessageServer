@@ -968,6 +968,7 @@ connection.on(WebcastEvent.MEMBER,data => {
     if (fr.blocked) {
         console.log('🚫 過濾器阻擋:', data.user.nickname, "加入了", `(規則: ${fr.reason})`);
         writeLog("Default", `過濾器阻擋訊息: ${data.user.nickname} : 加入了 (規則: ${fr.reason})`, "FilterBlocked")
+        addToSyncBuffer(data.user.nickname.trim(), "加入了");
         return;
     }
 
@@ -977,13 +978,13 @@ connection.on(WebcastEvent.MEMBER,data => {
     if (!nickname || !message) {
         console.log('⚠️ 過濾後 nick/message 為空，跳過:', data.user.nickname, "加入了");
         writeLog("Default", `過濾後 nick/message 為空，跳過: ${data.user.nickname} : 加入了`, "FilterEmpty")
+        addToSyncBuffer(data.user.nickname.trim(), "加入了");
         return;
     }
 
     sendBarkNotification(nickname, "來了",iconn);
     sendSocketMessage(nickname, "來了",iconn,"",false,CacheUserNum,CacheUserList);
 
-    // 同時記錄訊息統計 加入訊息存儲用與TikTok的結果一致 以便去重
     addToSyncBuffer(nickname.trim(), "加入了");
 
 })
@@ -994,6 +995,7 @@ connection.on(WebcastEvent.FOLLOW,data =>{
 
     sendBarkNotification(data.user.nickname, "關注了主播",iconn);
     sendSocketMessage(data.user.nickname, "關注了主播",iconn,"",false,CacheUserNum,CacheUserList);
+    addToSyncBuffer(data.user.nickname.trim(), "關注了主播");
 
 })
 
@@ -1016,6 +1018,7 @@ connection.on(WebcastEvent.CHAT, data => {
     if (fr.blocked) {
         console.log('🚫 過濾器阻擋:', data.user.nickname, data.comment, `(規則: ${fr.reason})`);
         writeLog("Default", `過濾器阻擋訊息: ${data.user.nickname} : ${data.comment} (規則: ${fr.reason})`, "FilterBlocked")
+        addToSyncBuffer(data.user.nickname.trim(), data.comment.trim());
         return;
     }
 
@@ -1030,6 +1033,7 @@ connection.on(WebcastEvent.CHAT, data => {
     if (!nickname || !comment) {
         console.log('⚠️ 過濾後 nick/comment 為空，跳過:', data.user.nickname, data.comment);
         writeLog("Default", `過濾後 nick/comment 為空，跳過: ${data.user.nickname} : ${data.comment}`, "FilterEmpty")
+        addToSyncBuffer(data.user.nickname.trim(), data.comment.trim());
         return;
     }
 
@@ -1050,6 +1054,8 @@ connection.on(WebcastEvent.CHAT, data => {
             }
 
             sendSocketMessage(nickname, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList);
+
+            recordMessageStat(RESCHAT);
 
             addToSyncBuffer(nickname.trim(), comment.trim());
         
@@ -1194,6 +1200,7 @@ connection.on(WebcastEvent.LIKE, data => {
 
     sendBarkNotification(data.user.nickname, mess,iconn);
     sendSocketMessage(data.user.nickname, mess,iconn,"",false,CacheUserNum,CacheUserList);
+    addToSyncBuffer(data.user.nickname.trim(), mess);
 
     writeLog("Default", `${data.user.nickname} ${mess}`, "Like")
 
@@ -1332,6 +1339,7 @@ connection.on(WebcastEvent.SHARE, data =>{
     
     sendBarkNotification(data.user.nickname, mess,iconn);
     sendSocketMessage(data.user.nickname, mess,iconn,"",false,CacheUserNum,CacheUserList);
+    addToSyncBuffer(data.user.nickname.trim(), mess);
 
     writeLog("Default", `${data.user.nickname} 分享了直播間！`, "Share")
 
