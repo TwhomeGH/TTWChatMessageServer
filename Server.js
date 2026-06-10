@@ -462,12 +462,8 @@ const server = http.createServer((req, res) => {
                     return;
                 }
 
-                const payload = {
-                    type: 'StreamMessage',
-                    ...data,
-                    ...(fr.modified && fr.user ? { user: fr.user } : {}),
-                    ...(fr.modified && fr.message ? { message: fr.message } : {}),
-                };
+                // 傳原始資料給 TikTok.js，讓它自己跑 filter + 去重
+                const payload = { type: 'StreamMessage', ...data };
 
                 sendToTikTok(payload);
 
