@@ -456,7 +456,7 @@ const server = http.createServer((req, res) => {
 
                 const fr = processFilter({ user, message });
                 if (fr.blocked) {
-                    pushLog('🚫 過濾器阻擋(/chat):', user, message);
+                    pushLog('🚫 過濾器阻擋(/chat):', user, message, `(規則: ${fr.reason})`);
                     res.writeHead(200);
                     res.end("Filtered");
                     return;

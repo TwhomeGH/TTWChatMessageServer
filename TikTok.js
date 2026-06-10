@@ -520,7 +520,7 @@ process.stdin.on('data', async (chunk) => {
             if (json.type === 'StreamMessage') {
                 const fr = processFilter({ user: json.user, message: json.message });
                 if (fr.blocked) {
-                    console.log('🚫 過濾器阻擋(來自Server):', json.user, json.message);
+                    console.log('🚫 過濾器阻擋(來自Server):', json.user, json.message, `(規則: ${fr.reason})`);
                     return;
                 }
                 if (fr.modified && fr.user) json.user = fr.user;
@@ -966,8 +966,8 @@ connection.on(WebcastEvent.MEMBER,data => {
 
     const fr = processFilter({ user: data.user.nickname, message: "加入了" });
     if (fr.blocked) {
-        console.log('🚫 過濾器阻擋:', data.user.nickname, "加入了");
-        writeLog("Default", `過濾器阻擋訊息: ${data.user.nickname} : 加入了`, "FilterBlocked")
+        console.log('🚫 過濾器阻擋:', data.user.nickname, "加入了", `(規則: ${fr.reason})`);
+        writeLog("Default", `過濾器阻擋訊息: ${data.user.nickname} : 加入了 (規則: ${fr.reason})`, "FilterBlocked")
         return;
     }
 
@@ -1014,8 +1014,8 @@ connection.on(WebcastEvent.CHAT, data => {
 
     const fr = processFilter({ user: data.user.nickname, message: data.comment });
     if (fr.blocked) {
-        console.log('🚫 過濾器阻擋:', data.user.nickname, data.comment);
-        writeLog("Default", `過濾器阻擋訊息: ${data.user.nickname} : ${data.comment}`, "FilterBlocked")
+        console.log('🚫 過濾器阻擋:', data.user.nickname, data.comment, `(規則: ${fr.reason})`);
+        writeLog("Default", `過濾器阻擋訊息: ${data.user.nickname} : ${data.comment} (規則: ${fr.reason})`, "FilterBlocked")
         return;
     }
 
@@ -1646,8 +1646,8 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
     const fr = processFilter({ user: event.chatterDisplayName, message: event.messageText });
     if (fr.blocked) {
-        console.log('🚫 過濾器阻擋(Twitch):', event.chatterDisplayName, event.messageText);
-        writeLog("Default", `過濾器阻擋(Twitch): ${event.chatterDisplayName} : ${event.messageText}`, "Filter")
+        console.log('🚫 過濾器阻擋(Twitch):', event.chatterDisplayName, event.messageText, `(規則: ${fr.reason})`);
+        writeLog("Default", `過濾器阻擋(Twitch): ${event.chatterDisplayName} : ${event.messageText} (規則: ${fr.reason})`, "Filter")
 
         return;
     }
@@ -1871,8 +1871,8 @@ async function startKickChat() {
 
         const fr = processFilter({ user: userName, message });
         if (fr.blocked) {
-            console.info('🚫 過濾器阻擋(Kick):', userName, message);
-            writeLog("Default", `過濾器阻擋(Kick): ${userName} : ${message}`, "Filter");
+            console.info('🚫 過濾器阻擋(Kick):', userName, message, `(規則: ${fr.reason})`);
+            writeLog("Default", `過濾器阻擋(Kick): ${userName} : ${message} (規則: ${fr.reason})`, "Filter");
             return;
         }
 
