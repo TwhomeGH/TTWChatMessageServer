@@ -985,7 +985,7 @@ connection.on(WebcastEvent.MEMBER,data => {
     sendBarkNotification(nickname, "來了",iconn);
     sendSocketMessage(nickname, "來了",iconn,"",false,CacheUserNum,CacheUserList);
 
-    addToSyncBuffer(nickname.trim(), "加入了");
+    addToSyncBuffer(data.user.nickname.trim(), "加入了");
 
 })
 
@@ -1057,7 +1057,7 @@ connection.on(WebcastEvent.CHAT, data => {
 
             recordMessageStat(RESCHAT);
 
-            addToSyncBuffer(nickname.trim(), comment.trim());
+            addToSyncBuffer(data.user.nickname.trim(), data.comment.trim());
         
     })
 
