@@ -1158,7 +1158,7 @@ function likeUserCount(user, likeCount) {
         userData = { count: 0, lastLikeTimestamp: now };
     } else {
         // 檢查是否超過 60 秒
-        if (now - userData.lastLikeTimestamp > UserLikeClearTimer * 1000) {
+        if (now - userData.lastLikeTimestamp > UserLikeClearTimer) {
             // 超過 60 秒，清空計數
             writeLog("Default", `用戶 ${user} 的點讚數已超過 ${UserLikeClearTimer} 秒未更新，重置計數`, "Like清空")
             userData.count = 0;
@@ -1171,7 +1171,7 @@ function likeUserCount(user, likeCount) {
 
     UserLikeCount.set(user, userData);
 
-    let secondsToClear = Math.ceil((UserLikeClearTimer * 1000 - (now - userData.lastLikeTimestamp)) / 1000);
+    let secondsToClear = Math.ceil((UserLikeClearTimer - (now - userData.lastLikeTimestamp)) / 1000);
 
     writeLog("Default", `用戶 ${user} 的點讚數更新為 ${userData.count} 將於${secondsToClear}秒 後清空`, "Like累加")
 
@@ -1185,17 +1185,12 @@ connection.on(WebcastEvent.LIKE, data => {
 
     let iconn = data.user.profilePicture.url[1]
 
-    // 本場總累加點讚數 data.totalLikeCount 單次點擊次數 data.likeCount 聊天室訊息顯示 應用總點讚為準
     let totalLikeCount = data.totalLikeCount || 0
-    let likeCount = data.likeCount || 0
+    let likeCount = likeUserCount(data.user.nickname, data.likeCount || 0)
 
-    let mess = `喜歡你 ${data.likeCount} 次`
-    // data.likeCount 單次點擊次數 聊天室訊息顯示 應用總點讚為準
-
+    let mess = `喜歡你 ${likeCount} 次`
 
     console.log(`${data.user.nickname} ${mess}`)
-    //let giftImg =  "https://img.icons8.com/?size=100&id=xruQNezCArqC&format=png&color=000000"
-    
 
     sendBarkNotification(data.user.nickname, mess,iconn);
     sendSocketMessage(data.user.nickname, mess,iconn,"",false,CacheUserNum,CacheUserList);
