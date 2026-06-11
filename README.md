@@ -2,7 +2,7 @@
 
 ## 簡介
 
-`TTWChatMessageServer` 是一個聊天室訊息服務器，可對接 **TikTok**、**Twitch** 與 **Kick** 的直播聊天室訊息，支援以下功能：
+`TTWChatMessageServer` 是一個聊天室訊息服務器，可對接 **TikTok**、**Twitch**、**Kick** 與 **Odysee** 的直播聊天室訊息，支援以下功能：
 
 - 即時接收聊天室訊息
 - 支援禮物、關注、加入、分享等事件
@@ -13,6 +13,15 @@
 ---
 
 ## 最近更新
+
+### 新增 Odysee 直播聊天室支援
+
+- 支援 Odysee 頻道直播聊天室訊息接收
+- 透過 WebSocket 連接 sockety.odysee.tv 取得即時訊息
+- 頻道名稱自動解析，不需手動輸入 claim ID
+- 目前 Odysee 聊天訊息**不支援頭像顯示**（因 Odysee 的 WebSocket 資料未提供頭像網址）
+
+### 其他更新
 
 新增 Socket 最多重試上限
 在`env`文件裡設置 最大重試次數 `SOCKET_RETRY_MAX_COUNT` 預設 最多3次
@@ -60,6 +69,9 @@ SOCKET_API=http://192.168.0.195:9322
 KICK_CLIENT_ID=你的Kick Client ID
 KICK_CLIENT_SECRET=你的Kick Client Secret
 KICK_USER_NAME=你的Kick頻道名稱
+
+# Odysee 設定
+ODYSEE_CHANNEL_NAME=你的Odysee頻道名稱
 
 # 禮物翻譯設定（可選）
 TRANSLATE_API_URL=https://api.mymemory.translated.net/get
@@ -127,10 +139,12 @@ http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickU
 | user | TikTok 用戶名稱（給 isTK 使用），若不設使用 .env 的值 |
 | twitchUser | Twitch 用戶名稱（給 isTwitch 使用），若不設使用 .env 的值 |
 | kickUser | Kick 頻道名稱（給 isKick 使用），若不設使用 .env 的值 |
+| odyseeUser | Odysee 頻道名稱（給 isOdysee 使用），若不設使用 .env 的值 |
 | isTK=1 | 啟用 TikTok 直播聊天室 |
 | isTwitch=1 | 啟用 Twitch 直播聊天室 |
 | isKick=1 | 啟用 Kick 直播聊天室 |
-| platforms=tiktok,twitch,kick | 自由組合平台（逗號分隔），例如 `twitch,kick`、`tiktok,twitch`、`tiktok,kick` |
+| isOdysee=1 | 啟用 Odysee 直播聊天室 |
+| platforms=tiktok,twitch,kick,odysee | 自由組合平台（逗號分隔），例如 `twitch,kick`、`tiktok,odysee` |
 | isBoth=1 | （已棄用，建議改用 `platforms=tiktok,twitch`） |
 | isBark=1 | 啟用 Bark 推送通知 |
 | isSocket=1 | 啟用 Socket 訊息推送 |
@@ -162,6 +176,40 @@ http://localhost:3332/close
 ```
 
 會嘗試優雅關閉子進程，並發送最後一條訊息。
+
+## Odysee 聊天室整合
+
+### 快速啟動
+
+Odysee 聊天室透過 WebSocket 連接 `sockety.odysee.tv`，不需任何授權即可讀取：
+
+```bash
+http://localhost:3332/open?odyseeUser=你的頻道名&isOdysee=1&isSocket=1&isBark=1
+```
+
+或透過 `.env` 設定 `ODYSEE_CHANNEL_NAME`：
+
+```bash
+http://localhost:3332/open?isOdysee=1&isSocket=1
+```
+
+### 注意事項
+
+- Odysee 聊天訊息**沒有頭像**，`img` 欄位會是空字串
+- 頻道名稱會自動解析，不需要手動輸入 claim ID
+- 如果頻道未開播，程式會自動退出，不會持續輪詢
+
+### Odysee + 其他平台同時運行
+
+```bash
+http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickUser=你的Kick名&odyseeUser=你的Odysee名&isTK=1&isTwitch=1&isKick=1&isOdysee=1
+```
+
+或使用 `platforms`：
+
+```bash
+http://localhost:3332/open?odyseeUser=你的Odysee名&platforms=tiktok,twitch,kick,odysee
+```
 
 ## Kick 聊天室整合
 

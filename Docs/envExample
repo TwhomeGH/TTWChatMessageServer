@@ -16,6 +16,7 @@ SESSION_ID=你的TikTok SessionID
 TT_TARGET_IDC=你的TikTok Target IDC
 WHITELIST_AUTHENTICATED_SESSION_ID_HOST=tiktok.eulerstream.com
 
+ODYSEE_CHANNEL_NAME=你的Odysee頻道名稱
 
 
 BARK_API=你的Bark API

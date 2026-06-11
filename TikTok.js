@@ -95,6 +95,7 @@ const keyword = args[0] || ''
 let isTK = args.includes('--tiktok')
 let isTwitch = args.includes('--twitch')
 let isKick = args.includes('--kick')
+let isOdysee = args.includes('--odysee')
 
 
 let isBark = args.includes('--bark')
@@ -111,20 +112,22 @@ if (platformsArg) {
     isTK = list.includes('tiktok')
     isTwitch = list.includes('twitch')
     isKick = list.includes('kick')
+    isOdysee = list.includes('odysee')
 } else if (isBoth) {
     // 向後相容：--both → tiktok + twitch
     isTK = true
     isTwitch = true
 }
 
-console.log('收到參數:', keyword, isTK ? '(TikTok)' : '', isTwitch ? '(Twitch)' : '', isKick ? '(Kick)' : '');
+console.log('收到參數:', keyword, isTK ? '(TikTok)' : '', isTwitch ? '(Twitch)' : '', isKick ? '(Kick)' : '', isOdysee ? '(Odysee)' : '');
 
-console.log('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick);
+console.log('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick, 'isOdysee=', isOdysee);
 console.log('isBoth=', isBoth, 'platforms=', platformsArg ? platformsArg.split('=')[1] : '');
 
 // TikTok 用戶名稱
 
 const tiktokName = keyword.length > 0 ? keyword : process.env.TIKTOK_NAME || "coffeelatte0709";
+const odyseeChannelName = process.env.ODYSEE_CHANNEL_NAME || keyword || '';
 
 
 // --- 4. Socket 客戶端 ---
@@ -684,18 +687,13 @@ var CacheUserList = [] // 用於去重的用戶列表
 var CacheUserNum = 0 // 用於去重的用戶數量
 var TikTokViewerCount = 0
 var TwitchViewerCount = 0
+var OdyseeViewerCount = 0
 
 function updateCombinedViewerCount() {
-    let combined
-    if (isTK && isTwitch) {
-        combined = (TikTokViewerCount || 0) + (TwitchViewerCount || 0)
-    } else if (isTK) {
-        combined = TikTokViewerCount || 0
-    } else if (isTwitch) {
-        combined = TwitchViewerCount || 0
-    } else {
-        combined = 0
-    }
+    let combined = 0
+    if (isTK) combined += TikTokViewerCount || 0
+    if (isTwitch) combined += TwitchViewerCount || 0
+    if (isOdysee) combined += OdyseeViewerCount || 0
     CacheUserNum = combined
     sendSocketMessage("", "", "", "", false, CacheUserNum, CacheUserList)
 }
@@ -1947,6 +1945,185 @@ async function startKickChat() {
         writeLog("Default", `Kick 連線失敗: ${err.message}`, "Error");
         sendBarkNotification("Kick 連線失敗", err.message, "");
     });
+}
+
+// ===== Odysee Live Chat 整合 =====
+
+let odyseeWs = null
+let odyseeViewerInterval = null
+
+async function resolveOdyseeChannelClaimId(channelName) {
+    const cleanName = channelName.startsWith('@') ? channelName : `@${channelName}`
+    try {
+        const res = await axios.post('https://api.na-backend.odysee.com/api/v1/proxy?m=resolve', {
+            jsonrpc: '2.0',
+            method: 'resolve',
+            params: { urls: [`lbry://${cleanName}`] },
+            id: 1
+        }, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 15000
+        })
+        const result = res.data?.result
+        if (!result) throw new Error('resolve 回傳空結果')
+        const claim = Object.values(result)[0]
+        if (!claim) throw new Error('無法解析頻道')
+        return {
+            claimId: claim.claim_id,
+            channelName: claim.name || cleanName
+        }
+    } catch (err) {
+        console.error('❌ Odysee resolve 失敗:', err.message)
+        return null
+    }
+}
+
+async function checkOdyseeIsLive(claimId) {
+    try {
+        const res = await axios.post('https://api.odysee.live/livestream/is_live',
+            new URLSearchParams({ channel_claim_id: claimId }).toString(),
+            {
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                timeout: 10000
+            }
+        )
+        const data = res.data?.data
+        if (!data) return { live: false, viewerCount: 0 }
+        return {
+            live: data.Live === true,
+            viewerCount: data.ViewerCount || 0,
+            videoUrl: data.VideoURL || '',
+            streamClaimId: data.ActiveClaim?.ClaimID || null,
+            isProtected: data.ActiveClaim?.Protected || false
+        }
+    } catch (err) {
+        console.error('❌ Odysee is_live 檢查失敗:', err.message)
+        return { live: false, viewerCount: 0 }
+    }
+}
+
+function connectOdyseeChat(claimId, channelName) {
+    const wsUrl = `wss://sockety.odysee.tv/ws/commentron?id=${claimId}&category=${encodeURIComponent(channelName)}&sub_category=viewer`
+    console.log(`🔌 Odysee WebSocket 連線: ${wsUrl}`)
+    writeLog("Default", `Odysee WebSocket 連線: ${wsUrl}`, "Odysee")
+
+    try {
+        odyseeWs = new WebSocket(wsUrl)
+    } catch (err) {
+        console.error('❌ Odysee WebSocket 建立失敗:', err.message)
+        return
+    }
+
+    odyseeWs.onopen = () => {
+        console.log('✅ Odysee WebSocket 已連線')
+        writeLog("Default", "Odysee WebSocket 已連線", "Odysee")
+        sendBarkNotification("Odysee 連線", `已連線 ${channelName}`, "")
+        sendSocketMessage("系統", `Odysee 已連線 ${channelName}`, "", "", false, CacheUserNum, CacheUserList)
+    }
+
+    odyseeWs.onmessage = (event) => {
+        console.log('[Odysee RAW]', event.data.substring(0, 500))
+        try {
+            const msg = JSON.parse(event.data)
+            if (msg.type === 'delta' && msg.data?.comment) {
+                const comment = msg.data.comment
+                const userName = comment.channel_name || comment.author || '未知'
+                const message = comment.comment || ''
+                const avatar = ''
+
+                console.info(`[Odysee Chat] ${userName} : ${message}`)
+                writeLog("Default", `${userName} : ${message}`, "Odysee Chat Original")
+
+                const fr = processFilter({ user: userName, message })
+                if (fr.blocked) {
+                    console.info('🚫 過濾器阻擋(Odysee):', userName, message, `(規則: ${fr.reason})`)
+                    writeLog("Default", `過濾器阻擋(Odysee): ${userName} : ${message} (規則: ${fr.reason})`, "Filter")
+                    return
+                }
+
+                let tUser = fr.modified && fr.user ? fr.user : userName
+                let tMsg = fr.modified && fr.message ? fr.message : message
+                if (!tUser || !tMsg) {
+                    console.info('⚠️ 過濾後(Odysee) nick/msg 為空，跳過:', userName, message)
+                    return
+                }
+
+                recordMessageStat(tMsg)
+
+                sendBarkNotification(tUser, tMsg, avatar)
+
+                Translate.TranslateText(tMsg).then(RES => {
+                    let RESCHAT = `${tMsg}${tMsg == RES ? "" : `\n${RES}`}`
+                    if (RES.toLowerCase() != tMsg.toLowerCase()) {
+                        sendBarkNotification(tUser, RES, avatar)
+                    }
+                    sendSocketMessage(tUser, RESCHAT, avatar, "", true, CacheUserNum, CacheUserList)
+                    writeLog("Default", `${tUser} : ${RESCHAT}`, "Odysee Chat")
+                })
+            } else if (msg.type === 'viewers') {
+                OdyseeViewerCount = msg.data?.connected || msg.data?.viewerCount || msg.data?.count || 0
+                updateCombinedViewerCount()
+            }
+        } catch (err) {
+            console.error('⚠️ Odysee 訊息解析錯誤:', err.message)
+        }
+    }
+
+    odyseeWs.onerror = (err) => {
+        console.error('⚠️ Odysee WebSocket 錯誤:', err.message || err)
+        writeLog("Default", `Odysee WebSocket 錯誤: ${err.message || err}`, "Error")
+    }
+
+    odyseeWs.onclose = (event) => {
+        console.log(`❌ Odysee WebSocket 斷線: code=${event.code} reason=${event.reason}`)
+        writeLog("Default", `Odysee WebSocket 斷線: ${event.reason || '未知原因'}`, "Odysee")
+        clearInterval(odyseeViewerInterval)
+        odyseeWs = null
+    }
+}
+
+if (isOdysee) {
+    ;(async () => {
+        if (!odyseeChannelName) {
+            console.log('⚠️ 未指定 Odysee 頻道名稱，跳過')
+            writeLog("Default", "未指定 Odysee 頻道名稱", "Odysee")
+            return
+        }
+        console.log(`🎯 正在解析 Odysee 頻道: ${odyseeChannelName}`)
+        writeLog("Default", `正在解析 Odysee 頻道: ${odyseeChannelName}`, "Odysee")
+
+        const info = await resolveOdyseeChannelClaimId(odyseeChannelName)
+        if (!info) {
+            console.log('❌ 無法解析 Odysee 頻道，跳過')
+            sendSocketMessage("系統", "Odysee 頻道解析失敗", "", "", false, CacheUserNum, CacheUserList)
+            return
+        }
+        console.log(`🔍 Odysee 頻道 claim ID: ${info.claimId}`)
+
+        const liveInfo = await checkOdyseeIsLive(info.claimId)
+        if (!liveInfo.live) {
+            console.log('📴 Odysee 頻道未開播，結束程序')
+            writeLog("Default", "Odysee 頻道未開播", "Odysee")
+            sendBarkNotification("Odysee 未開播", `${odyseeChannelName} 目前沒有直播`, "")
+            sendSocketMessage("系統", `Odysee ${odyseeChannelName} 未開播`, "", "", false, CacheUserNum, CacheUserList)
+            return
+        }
+
+        OdyseeViewerCount = liveInfo.viewerCount
+        updateCombinedViewerCount()
+        console.log(`📺 Odysee 直播中，觀眾數: ${liveInfo.viewerCount}`)
+
+        const streamId = liveInfo.streamClaimId
+            ? (liveInfo.isProtected
+                ? liveInfo.streamClaimId.split('').reverse().join('')
+                : liveInfo.streamClaimId)
+            : null
+        if (!streamId) {
+            console.log('❌ 無法取得直播串流 claim ID，跳過')
+            return
+        }
+        connectOdyseeChat(streamId, info.channelName)
+    })()
 }
 
 if (isKick) {

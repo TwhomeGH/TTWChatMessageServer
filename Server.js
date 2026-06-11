@@ -266,10 +266,12 @@ const server = http.createServer((req, res) => {
         const user = url.searchParams.get('user') ?? ''
         const twitchUser = url.searchParams.get('twitchUser') ?? ''
         const kickUser = url.searchParams.get('kickUser') ?? ''
+        const odyseeUser = url.searchParams.get('odyseeUser') ?? ''
 
         var isTK = url.searchParams.get('isTK') === '1'
         var isTwitch = url.searchParams.get('isTwitch') === '1'
         var isKick = url.searchParams.get('isKick') === '1'
+        var isOdysee = url.searchParams.get('isOdysee') === '1'
 
         isBark = url.searchParams.get('isBark') === '1'
         isSocket = url.searchParams.get('isSocket') === '1'
@@ -282,6 +284,7 @@ const server = http.createServer((req, res) => {
             isTK = list.includes('tiktok')
             isTwitch = list.includes('twitch')
             isKick = list.includes('kick')
+            isOdysee = list.includes('odysee')
         } else if (isBoth) {
             // 向後相容：isBoth=1 → tiktok + twitch
             isTK = true
@@ -290,16 +293,18 @@ const server = http.createServer((req, res) => {
 
         if (twitchUser) process.env.TWITCH_USER_NAME = twitchUser;
         if (kickUser) process.env.KICK_USER_NAME = kickUser;
+        if (odyseeUser) process.env.ODYSEE_CHANNEL_NAME = odyseeUser;
 
         pushLog('Starting TikTok.js with user=', user, 'isTK=', isTK);
-        pushLog('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick);
+        pushLog('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick, 'isOdysee=', isOdysee);
         pushLog('isBoth=', isBoth, 'platforms=', platforms);
         if (twitchUser) pushLog('Twitch user=', twitchUser);
         if (kickUser) pushLog('Kick user=', kickUser);
+        if (odyseeUser) pushLog('Odysee user=', odyseeUser);
 
         logs = [];
         pushLog('[SYSTEM] Starting TikTok.js');
-        pushLog(`[SYSTEM] user=${user} ${isTK ? '(TikTok)' : ''}${isTwitch ? '(Twitch)' : ''}${isKick ? '(Kick)' : ''}`);
+        pushLog(`[SYSTEM] user=${user} ${isTK ? '(TikTok)' : ''}${isTwitch ? '(Twitch)' : ''}${isKick ? '(Kick)' : ''}${isOdysee ? '(Odysee)' : ''}`);
 
         // ✅ 關鍵：把參數傳給 node
         const args = ['TikTok.js']
@@ -310,6 +315,7 @@ const server = http.createServer((req, res) => {
         if (isTK) activePlatforms.push('tiktok')
         if (isTwitch) activePlatforms.push('twitch')
         if (isKick) activePlatforms.push('kick')
+        if (isOdysee) activePlatforms.push('odysee')
         if (activePlatforms.length > 0) {
             args.push(`--platforms=${activePlatforms.join(',')}`)
         }
@@ -320,6 +326,7 @@ const server = http.createServer((req, res) => {
         if (isTK) args.push('--tiktok')
         if (isTwitch) args.push('--twitch')
         if (isKick) args.push('--kick')
+        if (isOdysee) args.push('--odysee')
         if (isBoth) args.push('--both')
 
         tiktokProcess = spawn('node', args);
