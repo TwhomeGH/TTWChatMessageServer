@@ -267,11 +267,13 @@ const server = http.createServer((req, res) => {
         const twitchUser = url.searchParams.get('twitchUser') ?? ''
         const kickUser = url.searchParams.get('kickUser') ?? ''
         const odyseeUser = url.searchParams.get('odyseeUser') ?? ''
+        const youtubeUser = url.searchParams.get('youtubeUser') ?? ''
 
         var isTK = url.searchParams.get('isTK') === '1'
         var isTwitch = url.searchParams.get('isTwitch') === '1'
         var isKick = url.searchParams.get('isKick') === '1'
         var isOdysee = url.searchParams.get('isOdysee') === '1'
+        var isYoutube = url.searchParams.get('isYoutube') === '1'
 
         isBark = url.searchParams.get('isBark') === '1'
         isSocket = url.searchParams.get('isSocket') === '1'
@@ -285,6 +287,7 @@ const server = http.createServer((req, res) => {
             isTwitch = list.includes('twitch')
             isKick = list.includes('kick')
             isOdysee = list.includes('odysee')
+            isYoutube = list.includes('youtube')
         } else if (isBoth) {
             // 向後相容：isBoth=1 → tiktok + twitch
             isTK = true
@@ -294,17 +297,19 @@ const server = http.createServer((req, res) => {
         if (twitchUser) process.env.TWITCH_USER_NAME = twitchUser;
         if (kickUser) process.env.KICK_USER_NAME = kickUser;
         if (odyseeUser) process.env.ODYSEE_CHANNEL_NAME = odyseeUser;
+        if (youtubeUser) process.env.YOUTUBE_CHANNEL_ID = youtubeUser;
 
         pushLog('Starting TikTok.js with user=', user, 'isTK=', isTK);
-        pushLog('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick, 'isOdysee=', isOdysee);
+        pushLog('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick, 'isOdysee=', isOdysee, 'isYoutube=', isYoutube);
         pushLog('isBoth=', isBoth, 'platforms=', platforms);
         if (twitchUser) pushLog('Twitch user=', twitchUser);
         if (kickUser) pushLog('Kick user=', kickUser);
         if (odyseeUser) pushLog('Odysee user=', odyseeUser);
+        if (youtubeUser) pushLog('Youtube user=', youtubeUser);
 
         logs = [];
         pushLog('[SYSTEM] Starting TikTok.js');
-        pushLog(`[SYSTEM] user=${user} ${isTK ? '(TikTok)' : ''}${isTwitch ? '(Twitch)' : ''}${isKick ? '(Kick)' : ''}${isOdysee ? '(Odysee)' : ''}`);
+        pushLog(`[SYSTEM] user=${user} ${isTK ? '(TikTok)' : ''}${isTwitch ? '(Twitch)' : ''}${isKick ? '(Kick)' : ''}${isOdysee ? '(Odysee)' : ''}${isYoutube ? '(Youtube)' : ''}`);
 
         // ✅ 關鍵：把參數傳給 node
         const args = ['TikTok.js']
@@ -316,6 +321,7 @@ const server = http.createServer((req, res) => {
         if (isTwitch) activePlatforms.push('twitch')
         if (isKick) activePlatforms.push('kick')
         if (isOdysee) activePlatforms.push('odysee')
+        if (isYoutube) activePlatforms.push('youtube')
         if (activePlatforms.length > 0) {
             args.push(`--platforms=${activePlatforms.join(',')}`)
         }
@@ -327,6 +333,7 @@ const server = http.createServer((req, res) => {
         if (isTwitch) args.push('--twitch')
         if (isKick) args.push('--kick')
         if (isOdysee) args.push('--odysee')
+        if (isYoutube) args.push('--youtube')
         if (isBoth) args.push('--both')
 
         tiktokProcess = spawn('node', args);

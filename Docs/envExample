@@ -18,6 +18,9 @@ WHITELIST_AUTHENTICATED_SESSION_ID_HOST=tiktok.eulerstream.com
 
 ODYSEE_CHANNEL_NAME=你的Odysee頻道名稱
 
+YOUTUBE_API_KEY=你的Google API Key
+YOUTUBE_CHANNEL_ID=你的Youtube頻道名稱
+
 
 BARK_API=你的Bark API
 SOCKET_API=你的Socket API

@@ -2,7 +2,7 @@
 
 ## 簡介
 
-`TTWChatMessageServer` 是一個聊天室訊息服務器，可對接 **TikTok**、**Twitch**、**Kick** 與 **Odysee** 的直播聊天室訊息，支援以下功能：
+`TTWChatMessageServer` 是一個聊天室訊息服務器，可對接 **TikTok**、**Twitch**、**Kick**、**Odysee** 與 **Youtube** 的直播聊天室訊息，支援以下功能：
 
 - 即時接收聊天室訊息
 - 支援禮物、關注、加入、分享等事件
@@ -13,6 +13,15 @@
 ---
 
 ## 最近更新
+
+### 新增 Youtube 直播聊天室支援
+
+- 支援 Youtube 頻道直播聊天室訊息接收
+- 透過 YouTube Data API v3 輪詢方式取得即時訊息
+- 頻道名稱自動解析（支援頻道名稱或 @handle）
+- Youtube 的聊天訊息**有頭像**（API 有提供 `profileImageUrl`）
+- 自動遵循 API 的 `pollingIntervalMillis` 決定輪詢頻率
+- 需要使用 Google API Key（請在 `.env` 設定 `YOUTUBE_API_KEY`）
 
 ### 新增 Odysee 直播聊天室支援
 
@@ -72,6 +81,10 @@ KICK_USER_NAME=你的Kick頻道名稱
 
 # Odysee 設定
 ODYSEE_CHANNEL_NAME=你的Odysee頻道名稱
+
+# Youtube 設定
+YOUTUBE_API_KEY=你的Google API Key
+YOUTUBE_CHANNEL_ID=你的Youtube頻道名稱
 
 # 禮物翻譯設定（可選）
 TRANSLATE_API_URL=https://api.mymemory.translated.net/get
@@ -140,11 +153,13 @@ http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickU
 | twitchUser | Twitch 用戶名稱（給 isTwitch 使用），若不設使用 .env 的值 |
 | kickUser | Kick 頻道名稱（給 isKick 使用），若不設使用 .env 的值 |
 | odyseeUser | Odysee 頻道名稱（給 isOdysee 使用），若不設使用 .env 的值 |
+| youtubeUser | Youtube 頻道名稱或 ID（給 isYoutube 使用），若不設使用 .env 的值 |
 | isTK=1 | 啟用 TikTok 直播聊天室 |
 | isTwitch=1 | 啟用 Twitch 直播聊天室 |
 | isKick=1 | 啟用 Kick 直播聊天室 |
 | isOdysee=1 | 啟用 Odysee 直播聊天室 |
-| platforms=tiktok,twitch,kick,odysee | 自由組合平台（逗號分隔），例如 `twitch,kick`、`tiktok,odysee` |
+| isYoutube=1 | 啟用 Youtube 直播聊天室 |
+| platforms=tiktok,twitch,kick,odysee,youtube | 自由組合平台（逗號分隔），例如 `twitch,kick`、`tiktok,youtube` |
 | isBoth=1 | （已棄用，建議改用 `platforms=tiktok,twitch`） |
 | isBark=1 | 啟用 Bark 推送通知 |
 | isSocket=1 | 啟用 Socket 訊息推送 |
@@ -211,6 +226,63 @@ http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickU
 http://localhost:3332/open?odyseeUser=你的Odysee名&platforms=tiktok,twitch,kick,odysee
 ```
 
+## Youtube 聊天室整合
+
+### 準備工作
+
+需要一組 **Google API Key** 才能使用 Youtube Data API v3：
+
+1. 前往 [Google Cloud Console](https://console.cloud.google.com/)
+2. 建立或選擇一個專案
+3. 啟用 **YouTube Data API v3**
+4. 建立 **API Key**，建議限制僅供 YouTube Data API 使用
+5. 在 `.env` 加入：
+
+```env
+YOUTUBE_API_KEY=你的API金鑰
+YOUTUBE_CHANNEL_ID=你的Youtube頻道名稱或ID
+```
+
+### 快速啟動
+
+```bash
+http://localhost:3332/open?youtubeUser=你的頻道名&isYoutube=1&isSocket=1&isBark=1
+```
+
+或透過 `.env` 設定：
+
+```bash
+http://localhost:3332/open?isYoutube=1&isSocket=1
+```
+
+### 支援的功能
+
+| 功能 | 說明 |
+|------|------|
+| `ChatMessage` | 即時聊天訊息 |
+| 頭像顯示 | ✅ Youtube API 有提供頭像網址 |
+| SuperChat | 付費醒目訊息（未來可擴充） |
+
+### 注意事項
+
+- 使用 **YouTube Data API v3** 輪詢方式，非 WebSocket
+- 免費配額每日 10,000 單位，每次輪詢約花 5 單位
+- 程式會自動遵循 API 回傳的 `pollingIntervalMillis` 決定輪詢頻率
+- 如果頻道未開播，程式會自動退出，不會持續輪詢
+- 可透過 `.env` 的 `YOUTUBE_API_KEY` 設定 API 金鑰
+
+### Youtube + 其他平台同時運行
+
+```bash
+http://localhost:3332/open?user=你的TikTok名&youtubeUser=你的Youtube名&isTK=1&isYoutube=1&isSocket=1
+```
+
+或使用 `platforms`：
+
+```bash
+http://localhost:3332/open?youtubeUser=你的Youtube名&platforms=tiktok,youtube
+```
+
 ## Kick 聊天室整合
 
 ### 快速啟動（不需 OAuth）
@@ -249,10 +321,10 @@ Token 會自動儲存至 `kick_tokens.json`，並在過期時自動刷新。
 http://localhost:3332/open?kickUser=你的頻道名&isKick=1&isBark=1&isSocket=1
 ```
 
-### Kick + Twitch + TikTok 同時運行
+### Kick + Twitch + TikTok + Odysee + Youtube 同時運行
 
 ```bash
-http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickUser=你的Kick名&isTK=1&isTwitch=1&isKick=1
+http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickUser=你的Kick名&odyseeUser=你的Odysee名&youtubeUser=你的Youtube名&isTK=1&isTwitch=1&isKick=1&isOdysee=1&isYoutube=1
 ```
 
 ### 注意事項

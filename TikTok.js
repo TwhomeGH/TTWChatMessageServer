@@ -96,6 +96,7 @@ let isTK = args.includes('--tiktok')
 let isTwitch = args.includes('--twitch')
 let isKick = args.includes('--kick')
 let isOdysee = args.includes('--odysee')
+let isYoutube = args.includes('--youtube')
 
 
 let isBark = args.includes('--bark')
@@ -113,21 +114,24 @@ if (platformsArg) {
     isTwitch = list.includes('twitch')
     isKick = list.includes('kick')
     isOdysee = list.includes('odysee')
+    isYoutube = list.includes('youtube')
 } else if (isBoth) {
     // 向後相容：--both → tiktok + twitch
     isTK = true
     isTwitch = true
 }
 
-console.log('收到參數:', keyword, isTK ? '(TikTok)' : '', isTwitch ? '(Twitch)' : '', isKick ? '(Kick)' : '', isOdysee ? '(Odysee)' : '');
+console.log('收到參數:', keyword, isTK ? '(TikTok)' : '', isTwitch ? '(Twitch)' : '', isKick ? '(Kick)' : '', isOdysee ? '(Odysee)' : '', isYoutube ? '(Youtube)' : '');
 
-console.log('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick, 'isOdysee=', isOdysee);
+console.log('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick, 'isOdysee=', isOdysee, 'isYoutube=', isYoutube);
 console.log('isBoth=', isBoth, 'platforms=', platformsArg ? platformsArg.split('=')[1] : '');
 
 // TikTok 用戶名稱
 
 const tiktokName = keyword.length > 0 ? keyword : process.env.TIKTOK_NAME || "coffeelatte0709";
 const odyseeChannelName = process.env.ODYSEE_CHANNEL_NAME || keyword || '';
+const youtubeChannelName = process.env.YOUTUBE_CHANNEL_ID || keyword || '';
+const youtubeApiKey = process.env.YOUTUBE_API_KEY || '';
 
 
 // --- 4. Socket 客戶端 ---
@@ -688,12 +692,14 @@ var CacheUserNum = 0 // 用於去重的用戶數量
 var TikTokViewerCount = 0
 var TwitchViewerCount = 0
 var OdyseeViewerCount = 0
+var YoutubeViewerCount = 0
 
 function updateCombinedViewerCount() {
     let combined = 0
     if (isTK) combined += TikTokViewerCount || 0
     if (isTwitch) combined += TwitchViewerCount || 0
     if (isOdysee) combined += OdyseeViewerCount || 0
+    if (isYoutube) combined += YoutubeViewerCount || 0
     CacheUserNum = combined
     sendSocketMessage("", "", "", "", false, CacheUserNum, CacheUserList)
 }
@@ -2082,6 +2088,167 @@ function connectOdyseeChat(claimId, channelName) {
     }
 }
 
+// ===== YouTube Live Chat 整合 =====
+
+let youtubePollInterval = null
+let youtubeLiveChatId = null
+let youtubeNextPageToken = null
+
+async function resolveYoutubeChannelId(input) {
+    const q = input.startsWith('@') ? input.substring(1) : input
+    try {
+        const res = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+            params: {
+                part: 'snippet',
+                q: q,
+                type: 'channel',
+                key: youtubeApiKey,
+                maxResults: 1
+            },
+            timeout: 15000
+        })
+        const items = res.data?.items
+        if (!items || items.length === 0) throw new Error('找不到頻道')
+        return {
+            channelId: items[0].snippet.channelId,
+            channelName: items[0].snippet.channelTitle
+        }
+    } catch (err) {
+        console.error('❌ Youtube resolve 失敗:', err.message)
+        return null
+    }
+}
+
+async function checkYoutubeIsLive(channelId) {
+    try {
+        const res = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+            params: {
+                part: 'snippet',
+                channelId: channelId,
+                eventType: 'live',
+                type: 'video',
+                key: youtubeApiKey,
+                maxResults: 1
+            },
+            timeout: 15000
+        })
+        const items = res.data?.items
+        if (!items || items.length === 0) throw new Error('目前沒有直播')
+
+        const videoId = items[0].id.videoId
+
+        const videoRes = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+            params: {
+                part: 'liveStreamingDetails',
+                id: videoId,
+                key: youtubeApiKey,
+                maxResults: 1
+            },
+            timeout: 15000
+        })
+        const video = videoRes.data?.items?.[0]
+        const liveDetails = video?.liveStreamingDetails
+        if (!liveDetails || !liveDetails.activeLiveChatId) throw new Error('無法取得聊天室 ID')
+
+        return {
+            live: true,
+            liveChatId: liveDetails.activeLiveChatId,
+            videoId: videoId,
+            concurrentViewers: parseInt(liveDetails.concurrentViewers) || 0
+        }
+    } catch (err) {
+        console.error('❌ Youtube is_live 檢查失敗:', err.message)
+        return { live: false, liveChatId: null, videoId: null, concurrentViewers: 0 }
+    }
+}
+
+function connectYoutubeChat(liveChatId, channelName) {
+    youtubeLiveChatId = liveChatId
+    youtubeNextPageToken = null
+
+    console.log(`🔌 Youtube 聊天室開始輪詢: liveChatId=${liveChatId}`)
+    writeLog("Default", `Youtube 聊天室開始輪詢: ${liveChatId}`, "Youtube")
+
+    sendBarkNotification("Youtube 連線", `已連線 ${channelName}`, "")
+    sendSocketMessage("系統", `Youtube 已連線 ${channelName}`, "", "", false, CacheUserNum, CacheUserList)
+
+    function poll() {
+        if (!youtubeLiveChatId) return
+
+        const params = {
+            part: 'snippet,authorDetails',
+            liveChatId: youtubeLiveChatId,
+            key: youtubeApiKey,
+            maxResults: 200
+        }
+        if (youtubeNextPageToken) params.pageToken = youtubeNextPageToken
+
+        axios.get('https://www.googleapis.com/youtube/v3/liveChat/messages', { params, timeout: 10000 })
+            .then(res => {
+                const data = res.data
+                youtubeNextPageToken = data.nextPageToken || null
+
+                if (data.items) {
+                    for (const item of data.items) {
+                        if (item.snippet.type === 'textMessageEvent') {
+                            const userName = item.authorDetails.displayName || '未知'
+                            const message = item.snippet.displayMessage || ''
+                            const avatar = item.authorDetails.profileImageUrl || ''
+
+                            console.info(`[Youtube Chat] ${userName} : ${message}`)
+                            writeLog("Default", `${userName} : ${message}`, "Youtube Chat Original")
+
+                            const fr = processFilter({ user: userName, message })
+                            if (fr.blocked) {
+                                console.info('🚫 過濾器阻擋(Youtube):', userName, message, `(規則: ${fr.reason})`)
+                                writeLog("Default", `過濾器阻擋(Youtube): ${userName} : ${message} (規則: ${fr.reason})`, "Filter")
+                                return
+                            }
+
+                            let tUser = fr.modified && fr.user ? fr.user : userName
+                            let tMsg = fr.modified && fr.message ? fr.message : message
+                            if (!tUser || !tMsg) {
+                                console.info('⚠️ 過濾後(Youtube) nick/msg 為空，跳過:', userName, message)
+                                return
+                            }
+
+                            recordMessageStat(tMsg)
+
+                            sendBarkNotification(tUser, tMsg, avatar)
+
+                            Translate.TranslateText(tMsg).then(RES => {
+                                let RESCHAT = `${tMsg}${tMsg == RES ? "" : `\n${RES}`}`
+                                if (RES.toLowerCase() != tMsg.toLowerCase()) {
+                                    sendBarkNotification(tUser, RES, avatar)
+                                }
+                                sendSocketMessage(tUser, RESCHAT, avatar, "", true, CacheUserNum, CacheUserList)
+                                writeLog("Default", `${tUser} : ${RESCHAT}`, "Youtube Chat")
+                            })
+                        }
+                    }
+                }
+
+                const intervalMs = data.pollingIntervalMillis || 5000
+                youtubePollInterval = setTimeout(poll, intervalMs)
+            })
+            .catch(err => {
+                console.error('⚠️ Youtube 輪詢錯誤:', err.message)
+                youtubePollInterval = setTimeout(poll, 10000)
+            })
+    }
+
+    poll()
+}
+
+function disconnectYoutubeChat() {
+    clearTimeout(youtubePollInterval)
+    youtubePollInterval = null
+    youtubeLiveChatId = null
+    youtubeNextPageToken = null
+    console.log('❌ Youtube 聊天室已斷線')
+    writeLog("Default", "Youtube 聊天室已斷線", "Youtube")
+}
+
 if (isOdysee) {
     ;(async () => {
         if (!odyseeChannelName) {
@@ -2123,6 +2290,46 @@ if (isOdysee) {
             return
         }
         connectOdyseeChat(streamId, info.channelName)
+    })()
+}
+
+if (isYoutube) {
+    ;(async () => {
+        if (!youtubeApiKey) {
+            console.log('⚠️ 未設定 YOUTUBE_API_KEY，跳過')
+            writeLog("Default", "未設定 YOUTUBE_API_KEY", "Youtube")
+            return
+        }
+        if (!youtubeChannelName) {
+            console.log('⚠️ 未指定 Youtube 頻道名稱，跳過')
+            writeLog("Default", "未指定 Youtube 頻道名稱", "Youtube")
+            return
+        }
+        console.log(`🎯 正在解析 Youtube 頻道: ${youtubeChannelName}`)
+        writeLog("Default", `正在解析 Youtube 頻道: ${youtubeChannelName}`, "Youtube")
+
+        const info = await resolveYoutubeChannelId(youtubeChannelName)
+        if (!info) {
+            console.log('❌ 無法解析 Youtube 頻道，跳過')
+            sendSocketMessage("系統", "Youtube 頻道解析失敗", "", "", false, CacheUserNum, CacheUserList)
+            return
+        }
+        console.log(`🔍 Youtube 頻道 ID: ${info.channelId}`)
+
+        const liveInfo = await checkYoutubeIsLive(info.channelId)
+        if (!liveInfo.live) {
+            console.log('📴 Youtube 頻道未開播，結束程序')
+            writeLog("Default", "Youtube 頻道未開播", "Youtube")
+            sendBarkNotification("Youtube 未開播", `${info.channelName} 目前沒有直播`, "")
+            sendSocketMessage("系統", `Youtube ${info.channelName} 未開播`, "", "", false, CacheUserNum, CacheUserList)
+            return
+        }
+
+        YoutubeViewerCount = liveInfo.concurrentViewers
+        updateCombinedViewerCount()
+        console.log(`📺 Youtube 直播中，觀眾數: ${liveInfo.concurrentViewers}`)
+
+        connectYoutubeChat(liveInfo.liveChatId, info.channelName)
     })()
 }
 
