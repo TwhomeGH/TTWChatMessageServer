@@ -455,6 +455,15 @@ async function handleExit() {
     process.exit(0);
 }
 
+process.on('unhandledRejection', (reason) => {
+    console.error('未捕獲的 Promise 拒絕，防止崩潰:', reason instanceof Error ? reason.message : reason);
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('未捕獲的例外，防止崩潰:', err.message);
+    sendBarkNotification("TikTok.js 發生錯誤", err.message.substring(0, 100));
+    sendSocketMessage("系統", `TikTok.js 發生錯誤: ${err.message.substring(0, 100)}`, "", "", false, CacheUserNum, CacheUserList);
+});
 
 let stdinBuffer = '';
 
@@ -735,6 +744,9 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,use
     }
 }
 
+var TkRetryCount = 0
+let TkRetryMaxCount = 5
+
 var SocketRetryCount = 0
 let SocketRetryMaxCount = process.env.SOCKET_RETRY_MAX_COUNT || 3
 
@@ -812,33 +824,23 @@ var writeDebugView = false
 function viewCache() {
     console.log("📊 CacheUserNum:", CacheUserNum)
     console.log("📋 CacheUserList:", CacheUserList);
-    
-    try {
-        connection.fetchRoomInfo(RoomID).then(async (roomInfo) => {
 
-            let Viewer = roomInfo.data.user_count
-            
-            if (writeViewCount > 100 && writeDebugView) {
-            writeLog("Default",`DEBUG View:\n${JSON.stringify(roomInfo)}`, "View統計")
-                console.log("🔄 更新觀眾數量 寫入Debug_RoomInfo數據:", Viewer)    
-                writeViewCount=0
-            
-            }
+    connection.fetchRoomInfo(RoomID).then(async (roomInfo) => {
+        let Viewer = roomInfo.data.user_count
 
-            writeViewCount+=1
+        if (writeViewCount > 100 && writeDebugView) {
+            writeLog("Default", `DEBUG View:\n${JSON.stringify(roomInfo)}`, "View統計")
+            console.log("🔄 更新觀眾數量 寫入Debug_RoomInfo數據:", Viewer)
+            writeViewCount = 0
+        }
 
-            TikTokViewerCount = Viewer
-            updateCombinedViewerCount();
+        writeViewCount += 1
+        TikTokViewerCount = Viewer
+        updateCombinedViewerCount();
 
-        })
-
-
-    } catch (err) {
-        console.log("RoomError",err)
-
-    }
-    
-    
+    }).catch(err => {
+        console.log("RoomError", err.message)
+    })
 }
 
 
@@ -860,12 +862,23 @@ if (isTK) {
         sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
         
     }).catch(err => {
+        console.error('Failed to connect', err.message);
+        sendBarkNotification("TikTok 直播間連線失敗", err.message.substring(0, 100));
+        sendSocketMessage("系統", `TikTok 直播間連線失敗: ${err.message}`, "", "", false, CacheUserNum, CacheUserList);
 
-        let DisplayTitle = "None"
-
-        console.error('Failed to connect', err);
-        sendBarkNotification("TikTok 直播間連線失敗", `無法連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "");
-        sendSocketMessage("系統", `TikTok 直播間連線失敗，無法連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
+        if (TkRetryCount < TkRetryMaxCount) {
+            TkRetryCount += 1;
+            console.log(`${TkRetryCount} 秒後嘗試重新連線 (${TkRetryCount}/${TkRetryMaxCount})...`);
+            setTimeout(() => {
+                connection.connect().then(state => {
+                    console.log(`重新連線成功，roomId ${state.roomId}`);
+                    TkRetryCount = 0;
+                    RoomID = state.roomId;
+                }).catch(err => {
+                    console.error("重新連線失敗:", err.message);
+                });
+            }, 15000);
+        }
     });
 
     setInterval(viewCache, 10000); // 每10秒更新一次用戶數量   
@@ -880,40 +893,38 @@ connection.on(ControlEvent.DISCONNECTED, (e) => {
     sendBarkNotification("TikTok 直播間已斷線", `已從 ${tiktokName} 的直播間斷線`, "");
     sendSocketMessage("系統", `TikTok 直播間已斷線，已從 ${tiktokName} 的直播間斷線`, "", "", false,CacheUserNum,CacheUserList);
 
+    clearInterval(viewCache);
+
+    if (isEnd) return;
 
     setTimeout(() => {
-        console.log("需要重新連線 TikTok 直播間...");
-        sendSocketMessage("系統", "需要重新連線 TikTok 直播間...", "", "", false,CacheUserNum,CacheUserList);
+        if (TkRetryCount >= TkRetryMaxCount) {
+            console.log("已達 TikTok 最大重連次數，停止重連");
+            sendSocketMessage("系統", "TikTok 重連已達上限，請重新啟動", "", "", false,CacheUserNum,CacheUserList);
+            return;
+        }
 
-        clearInterval(viewCache);
-        //try {
-        
-        // connection.fetchIsLive().then(isLive => {
-        //     if (isLive) {
-        //         console.log("直播間仍在線上，嘗試重新連線...");
-        //         connection.connect();
-        //     } else {
-        //         console.log("直播間已下線，暫不重新連線");
-        //     }
-        // }).catch(err => {
-        //     console.error("檢查直播狀態失敗:", err);
-        //     });
-            
-        // } catch (err) {
-        
-        //     if (err instanceof errors_1.UserOfflineError) {
-        //         console.log('[INFO] 使用者不在線上');
-        //         return;
-        //     }
+        TkRetryCount += 1;
+        console.log(`TikTok 重新連線嘗試 (${TkRetryCount}/${TkRetryMaxCount})...`);
+        sendSocketMessage("系統", `TikTok 重新連線嘗試 (${TkRetryCount}/${TkRetryMaxCount})...`, "", "", false,CacheUserNum,CacheUserList);
 
-        //     console.error('重新連線失敗:', err);
-            
-        // }
-
+        connection.connect().then(state => {
+            console.log(`重新連線成功，roomId ${state.roomId}`);
+            TkRetryCount = 0;
+            RoomID = state.roomId;
+            setInterval(viewCache, 10000);
+            sendSocketMessage("系統", "TikTok 重新連線成功", "", "", false,CacheUserNum,CacheUserList);
+        }).catch(err => {
+            console.error("重新連線失敗:", err.message);
+            sendSocketMessage("系統", `TikTok 重新連線失敗: ${err.message}`, "", "", false,CacheUserNum,CacheUserList);
+        });
 
     }, 15000);
+});
 
-
+connection.on(ControlEvent.ERROR, (err) => {
+    console.error('TikTok 連線錯誤:', err.message || err);
+    sendSocketMessage("系統", `TikTok 連線錯誤: ${err.message || err}`, "", "", false, CacheUserNum, CacheUserList);
 });
 
 
