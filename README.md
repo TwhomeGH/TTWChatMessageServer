@@ -23,6 +23,19 @@
 - 自動遵循 API 的 `pollingIntervalMillis` 決定輪詢頻率
 - 需要使用 Google API Key（請在 `.env` 設定 `YOUTUBE_API_KEY`）
 
+#### 支援的事件
+
+| 事件 | 類型 | 說明 |
+|------|------|------|
+| 💬 一般聊天 | `textMessageEvent` | 即時聊天訊息，可翻譯與過濾 |
+| 💰 超級感謝 | `superChatEvent` | Super Chat 付費醒目訊息（含金額） |
+| 🖼️ 超級貼圖 | `superStickerEvent` | Super Sticker 付費貼圖（含金額） |
+| 🎉 新會員 | `newSponsorEvent` | 新的頻道會員加入 |
+| 🎁 贈禮會員 | `giftMembershipReceivedEvent` | 收到贈送的會員資格 |
+| ⭐ 會員里程碑 | `memberMilestoneChatEvent` | 會員達到里程碑 |
+
+> **注意**：免費追隨（訂閱按鈕）不會觸發聊天室事件，僅有付費會員相關事件會出現。
+
 ### 新增 Odysee 直播聊天室支援
 
 - 支援 Odysee 頻道直播聊天室訊息接收
@@ -255,13 +268,16 @@ http://localhost:3332/open?youtubeUser=你的頻道名&isYoutube=1&isSocket=1&is
 http://localhost:3332/open?isYoutube=1&isSocket=1
 ```
 
-### 支援的功能
+### 支援的事件
 
-| 功能 | 說明 |
-|------|------|
-| `ChatMessage` | 即時聊天訊息 |
-| 頭像顯示 | ✅ Youtube API 有提供頭像網址 |
-| SuperChat | 付費醒目訊息（未來可擴充） |
+| 事件 | 類型 | 說明 |
+|------|------|------|
+| 💬 一般聊天 | `ChatMessage` | 即時聊天訊息，可翻譯與過濾 |
+| 💰 超級感謝 | `SuperChat` | 付費醒目訊息（含金額） |
+| 🖼️ 超級貼圖 | `SuperSticker` | 付費貼圖（含金額） |
+| 🎉 新會員 | `NewSponsor` | 新頻道會員加入 |
+| 🎁 贈禮會員 | `GiftMembership` | 收到贈送的會員 |
+| ⭐ 會員里程碑 | `MemberMilestone` | 會員達到里程碑 |
 
 ### 注意事項
 

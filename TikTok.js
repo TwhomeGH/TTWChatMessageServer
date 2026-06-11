@@ -2092,7 +2092,9 @@ function connectOdyseeChat(claimId, channelName) {
 
 let youtubePollInterval = null
 let youtubeLiveChatId = null
+let youtubeVideoId = null
 let youtubeNextPageToken = null
+let youtubeViewerInterval = null
 
 async function resolveYoutubeChannelId(input) {
     const q = input.startsWith('@') ? input.substring(1) : input
@@ -2162,7 +2164,7 @@ async function checkYoutubeIsLive(channelId) {
     }
 }
 
-function connectYoutubeChat(liveChatId, channelName) {
+function connectYoutubeChat(liveChatId, videoId, channelName) {
     youtubeLiveChatId = liveChatId
     youtubeNextPageToken = null
 
@@ -2171,6 +2173,29 @@ function connectYoutubeChat(liveChatId, channelName) {
 
     sendBarkNotification("Youtube 連線", `已連線 ${channelName}`, "")
     sendSocketMessage("系統", `Youtube 已連線 ${channelName}`, "", "", false, CacheUserNum, CacheUserList)
+
+    youtubeVideoId = videoId  // 儲存 videoId 供 viewer count 更新用
+
+    // 定期更新觀眾數（每 60 秒）
+    youtubeViewerInterval = setInterval(async () => {
+        if (!youtubeVideoId) return
+        try {
+            const res = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+                params: {
+                    part: 'liveStreamingDetails',
+                    id: youtubeVideoId,
+                    key: youtubeApiKey,
+                    maxResults: 1
+                },
+                timeout: 10000
+            })
+            const cv = res.data?.items?.[0]?.liveStreamingDetails?.concurrentViewers
+            if (cv) {
+                YoutubeViewerCount = parseInt(cv) || 0
+                updateCombinedViewerCount()
+            }
+        } catch (_) { /* ignore poll errors */ }
+    }, 60000)
 
     function poll() {
         if (!youtubeLiveChatId) return
@@ -2190,10 +2215,12 @@ function connectYoutubeChat(liveChatId, channelName) {
 
                 if (data.items) {
                     for (const item of data.items) {
-                        if (item.snippet.type === 'textMessageEvent') {
-                            const userName = item.authorDetails.displayName || '未知'
+                        const type = item.snippet.type
+                        const userName = item.authorDetails?.displayName || '未知'
+                        const avatar = item.authorDetails?.profileImageUrl || ''
+
+                        if (type === 'textMessageEvent') {
                             const message = item.snippet.displayMessage || ''
-                            const avatar = item.authorDetails.profileImageUrl || ''
 
                             console.info(`[Youtube Chat] ${userName} : ${message}`)
                             writeLog("Default", `${userName} : ${message}`, "Youtube Chat Original")
@@ -2202,18 +2229,17 @@ function connectYoutubeChat(liveChatId, channelName) {
                             if (fr.blocked) {
                                 console.info('🚫 過濾器阻擋(Youtube):', userName, message, `(規則: ${fr.reason})`)
                                 writeLog("Default", `過濾器阻擋(Youtube): ${userName} : ${message} (規則: ${fr.reason})`, "Filter")
-                                return
+                                continue
                             }
 
                             let tUser = fr.modified && fr.user ? fr.user : userName
                             let tMsg = fr.modified && fr.message ? fr.message : message
                             if (!tUser || !tMsg) {
                                 console.info('⚠️ 過濾後(Youtube) nick/msg 為空，跳過:', userName, message)
-                                return
+                                continue
                             }
 
                             recordMessageStat(tMsg)
-
                             sendBarkNotification(tUser, tMsg, avatar)
 
                             Translate.TranslateText(tMsg).then(RES => {
@@ -2224,6 +2250,50 @@ function connectYoutubeChat(liveChatId, channelName) {
                                 sendSocketMessage(tUser, RESCHAT, avatar, "", true, CacheUserNum, CacheUserList)
                                 writeLog("Default", `${tUser} : ${RESCHAT}`, "Youtube Chat")
                             })
+
+                        } else if (type === 'superChatEvent') {
+                            const details = item.snippet.superChatDetails
+                            const amount = details?.amountDisplayString || ''
+                            const msg = details?.userComment || ''
+                            const display = msg ? `${msg} (${amount})` : amount
+                            console.info(`💰[Youtube SuperChat] ${userName}: ${display}`)
+                            writeLog("Default", `SuperChat ${userName}: ${display}`, "Youtube")
+                            sendBarkNotification(`💰 ${userName}`, display, avatar)
+                            sendSocketMessage(userName, `💰 超級感謝 ${display}`, avatar, "", true, CacheUserNum, CacheUserList)
+
+                        } else if (type === 'superStickerEvent') {
+                            const details = item.snippet.superStickerDetails
+                            const amount = details?.amountDisplayString || ''
+                            const sticker = details?.superStickerMetadata?.sticker?.localizedDescription || '貼圖'
+                            console.info(`🖼️[Youtube SuperSticker] ${userName}: ${sticker} (${amount})`)
+                            writeLog("Default", `SuperSticker ${userName}: ${sticker} (${amount})`, "Youtube")
+                            sendBarkNotification(`🖼️ ${userName}`, `${sticker} (${amount})`, avatar)
+                            sendSocketMessage(userName, `🖼️ 超級貼圖 ${sticker} (${amount})`, avatar, "", true, CacheUserNum, CacheUserList)
+
+                        } else if (type === 'newSponsorEvent') {
+                            console.info(`🎉[Youtube 新會員] ${userName}`)
+                            writeLog("Default", `新會員 ${userName}`, "Youtube")
+                            sendBarkNotification("🎉 新會員", userName, avatar)
+                            sendSocketMessage(userName, "🎉 成為新會員", avatar, "", true, CacheUserNum, CacheUserList)
+
+                        } else if (type === 'giftMembershipReceivedEvent') {
+                            const details = item.snippet.giftMembershipReceivedDetails
+                            const gifter = details?.gifterChannelId || '未知'
+                            console.info(`🎁[Youtube 收到贈禮] ${userName} 來自 ${gifter}`)
+                            writeLog("Default", `收到贈禮會員 ${userName} 來自 ${gifter}`, "Youtube")
+                            sendBarkNotification("🎁 收到贈禮會員", `${userName} 來自 ${gifter}`, avatar)
+                            sendSocketMessage(userName, `🎁 收到贈送的會員`, avatar, "", true, CacheUserNum, CacheUserList)
+
+                        } else if (type === 'memberMilestoneChatEvent') {
+                            const details = item.snippet.memberMilestoneChatDetails
+                            const tier = details?.memberTierName || '會員'
+                            const months = details?.memberMonth || ''
+                            const msg = details?.userComment || ''
+                            const display = `${tier}${months ? ` ${months}個月` : ''}${msg ? `: ${msg}` : ''}`
+                            console.info(`⭐[Youtube 會員里程碑] ${userName}: ${display}`)
+                            writeLog("Default", `會員里程碑 ${userName}: ${display}`, "Youtube")
+                            sendBarkNotification(`⭐ ${userName}`, display, avatar)
+                            sendSocketMessage(userName, `⭐ 會員里程碑 ${display}`, avatar, "", true, CacheUserNum, CacheUserList)
                         }
                     }
                 }
@@ -2242,8 +2312,11 @@ function connectYoutubeChat(liveChatId, channelName) {
 
 function disconnectYoutubeChat() {
     clearTimeout(youtubePollInterval)
+    clearInterval(youtubeViewerInterval)
     youtubePollInterval = null
+    youtubeViewerInterval = null
     youtubeLiveChatId = null
+    youtubeVideoId = null
     youtubeNextPageToken = null
     console.log('❌ Youtube 聊天室已斷線')
     writeLog("Default", "Youtube 聊天室已斷線", "Youtube")
@@ -2329,7 +2402,7 @@ if (isYoutube) {
         updateCombinedViewerCount()
         console.log(`📺 Youtube 直播中，觀眾數: ${liveInfo.concurrentViewers}`)
 
-        connectYoutubeChat(liveInfo.liveChatId, info.channelName)
+        connectYoutubeChat(liveInfo.liveChatId, liveInfo.videoId, info.channelName)
     })()
 }
 
