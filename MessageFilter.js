@@ -199,13 +199,13 @@ addFilterRules([
         action: 'block',
         test: (u) => {
             const codePoints = [...u];
-            if (codePoints.length < 6) return false;
+            if (codePoints.length < 8) return false;
             const cjk = (u.match(/[\u4e00-\u9fff\u3000-\u303f]/g) || []).length;
             if (cjk === 0) return false;
             const other = codePoints.filter(c => !/[\u4e00-\u9fff\u3000-\u303f\w\s]/u.test(c)).length;
-            if (other < 4) return false;
+            if (other < 6) return false;
             const hasCombining = /[\u0300-\u036f\u20d0-\u20ff\ufe00-\ufe0f]/.test(u);
-            return hasCombining ? other > cjk * 2 : other > cjk * 3;
+            return hasCombining ? other > cjk * 4 : other > cjk * 6;
         },
     },
 
