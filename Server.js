@@ -959,6 +959,75 @@ const server = http.createServer((req, res) => {
         })();
     }
 
+    // =======================
+    // Youtube OAuth
+    // =======================
+    else if (req.url === '/youtube-auth') {
+        const params = new URLSearchParams({
+            client_id: process.env.YOUTUBE_CLIENT_ID || '',
+            redirect_uri: 'http://localhost:3332/get-youtube-token',
+            response_type: 'code',
+            scope: 'https://www.googleapis.com/auth/youtube.force-ssl',
+            access_type: 'offline',
+            prompt: 'consent',
+        });
+        res.writeHead(302, { 'Location': `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
+        res.end();
+    }
+
+    // =======================
+    // Youtube OAuth callback
+    // =======================
+    else if (req.url.startsWith('/get-youtube-token')) {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const code = url.searchParams.get('code');
+        const error = url.searchParams.get('error');
+
+        if (error) {
+            res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(`<h2>❌ 授權失敗</h2><p>${error}</p>`);
+            return;
+        }
+
+        if (!code) {
+            res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end('<h2>缺少授權碼 (code)</h2>');
+            return;
+        }
+
+        (async () => {
+            try {
+                const params = new URLSearchParams({
+                    grant_type: 'authorization_code',
+                    client_id: process.env.YOUTUBE_CLIENT_ID || '',
+                    client_secret: process.env.YOUTUBE_CLIENT_SECRET || '',
+                    redirect_uri: 'http://localhost:3332/get-youtube-token',
+                    code: code,
+                });
+                const res2 = await fetch('https://oauth2.googleapis.com/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params,
+                });
+                if (!res2.ok) throw new Error(`Token exchange failed: ${res2.status} ${await res2.text()}`);
+
+                const tokens = await res2.json();
+                tokens.obtainmentTimestamp = Date.now();
+                const tokenFile = path.join(__dirname, 'youtube_tokens.json');
+                fs.writeFileSync(tokenFile, JSON.stringify(tokens, null, 2));
+                pushLog('✅ Youtube OAuth 成功，已儲存 token');
+
+                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+                res.end(`<h2>✅ Youtube 授權成功！</h2><p>Token 已儲存，可關閉此頁面。</p><a href="/config">回到設定頁</a>`);
+            } catch (err) {
+                console.error('❌ Youtube token exchange 失敗:', err);
+                pushLog('❌ Youtube token exchange 失敗:', err.message);
+                res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+                res.end(`<h2>❌ 授權失敗</h2><p>${err.message}</p>`);
+            }
+        })();
+    }
+
     else if (req.url === '/logout') {
     res.writeHead(200, {
         'Set-Cookie': 'authToken=; HttpOnly; SameSite=Strict; Max-Age=0'
@@ -994,6 +1063,13 @@ Kick OAuth:
 
 /get-kick-token
 Kick OAuth callback endpoint (redirect URI)
+
+Youtube OAuth:
+先至 /youtube-auth 進行 Google 授權，
+或直接訪問 /get-youtube-token?code=xxx 手動設定 token
+
+/get-youtube-token
+Youtube OAuth callback endpoint (redirect URI)
 
 /close
 stops TikTok.js

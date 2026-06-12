@@ -132,6 +132,7 @@ const tiktokName = keyword.length > 0 ? keyword : process.env.TIKTOK_NAME || "co
 const odyseeChannelName = process.env.ODYSEE_CHANNEL_NAME || keyword || '';
 const youtubeChannelName = process.env.YOUTUBE_CHANNEL_ID || keyword || '';
 const youtubeApiKey = process.env.YOUTUBE_API_KEY || '';
+const youtubePollIntervalS = parseInt(process.env.YOUTUBE_POLL_INTERVAL_S) || 30
 
 
 // --- 4. Socket 客戶端 ---
@@ -559,6 +560,7 @@ process.stdin.on('data', async (chunk) => {
                 }
 
                 sendToTCP(json, origUser, origMsg);
+                sendSocketMessage(json.user, json.message, json.img || '', '', true, CacheUserNum, CacheUserList, origUser, origMsg);
                 console.log('📥 收到 JSON 訊息:', json);
             }
 
@@ -2095,18 +2097,98 @@ let youtubeLiveChatId = null
 let youtubeVideoId = null
 let youtubeNextPageToken = null
 let youtubeViewerInterval = null
+let youtubeAccessToken = null
+
+// Youtube OAuth token 管理
+const youtubeTokenFile = path.join(__dirname, 'youtube_tokens.json')
+const youtubeCacheFile = path.join(__dirname, 'youtube_cache.json')
+
+function loadYoutubeCache() {
+    try {
+        if (existsSync(youtubeCacheFile)) return JSON.parse(readFileSync(youtubeCacheFile, 'utf8'))
+    } catch (_) {}
+    return null
+}
+function saveYoutubeCache(data) {
+    try { writeFileSync(youtubeCacheFile, JSON.stringify(data)) } catch (_) {}
+}
+
+function loadYoutubeTokens() {
+    try {
+        if (existsSync(youtubeTokenFile)) {
+            return JSON.parse(readFileSync(youtubeTokenFile, 'utf8'))
+        }
+    } catch (err) {
+        console.error('⚠️ 讀取 youtube_tokens.json 失敗:', err.message)
+    }
+    return null
+}
+
+async function getYoutubeAuthParams() {
+    if (youtubeAccessToken) {
+        console.log('ℹ️ Youtube 使用 OAuth Bearer token（記憶體）')
+        return { headers: { Authorization: `Bearer ${youtubeAccessToken}` }, params: {} }
+    }
+    // 嘗試從檔案載入 token
+    const tokens = loadYoutubeTokens()
+    if (tokens?.access_token) {
+        const expiresAt = (tokens.obtainmentTimestamp || 0) + (tokens.expires_in || 3600) * 1000
+        if (Date.now() < expiresAt - 60000) {
+            youtubeAccessToken = tokens.access_token
+            console.log('ℹ️ Youtube 使用 OAuth Bearer token（檔案）')
+            return { headers: { Authorization: `Bearer ${youtubeAccessToken}` }, params: {} }
+        }
+        // token 過期，嘗試刷新
+        if (tokens.refresh_token) {
+            try {
+                const params = new URLSearchParams({
+                    grant_type: 'refresh_token',
+                    client_id: process.env.YOUTUBE_CLIENT_ID || '',
+                    client_secret: process.env.YOUTUBE_CLIENT_SECRET || '',
+                    refresh_token: tokens.refresh_token,
+                })
+                const res = await fetch('https://oauth2.googleapis.com/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: params,
+                })
+                if (res.ok) {
+                    const newTokens = await res.json()
+                    newTokens.obtainmentTimestamp = Date.now()
+                    writeFileSync(youtubeTokenFile, JSON.stringify(newTokens, null, 2))
+                    youtubeAccessToken = newTokens.access_token
+                    console.log('ℹ️ Youtube OAuth token 已刷新')
+                    return { headers: { Authorization: `Bearer ${youtubeAccessToken}` }, params: {} }
+                } else {
+                    console.error('⚠️ Youtube token 刷新失敗:', res.status, await res.text().catch(() => ''))
+                }
+            } catch (e) {
+                console.error('⚠️ Youtube token 刷新失敗:', e.message)
+            }
+        }
+    }
+    // fallback 到 API key
+    if (!youtubeApiKey) {
+        console.error('❌ 未設定 YOUTUBE_API_KEY 且無有效 OAuth token')
+        return null
+    }
+    console.log('ℹ️ Youtube 使用 API Key 認證（無 OAuth token）')
+    return { headers: {}, params: { key: youtubeApiKey } }
+}
 
 async function resolveYoutubeChannelId(input) {
+    // 如果輸入已經是 UC 開頭的頻道 ID，直接跳過 API 解析（省 100 單位）
+    if (/^UC[\w-]{20,}$/.test(input)) {
+        console.log(`ℹ️ 輸入已是頻道 ID，跳過 resolve API 呼叫`)
+        return { channelId: input, channelName: input }
+    }
     const q = input.startsWith('@') ? input.substring(1) : input
     try {
+        const auth = await getYoutubeAuthParams()
+        if (!auth) throw new Error('無可用認證')
         const res = await axios.get('https://www.googleapis.com/youtube/v3/search', {
-            params: {
-                part: 'snippet',
-                q: q,
-                type: 'channel',
-                key: youtubeApiKey,
-                maxResults: 1
-            },
+            params: { part: 'snippet', q: q, type: 'channel', maxResults: 1, ...auth.params },
+            headers: auth.headers,
             timeout: 15000
         })
         const items = res.data?.items
@@ -2125,16 +2207,39 @@ async function resolveYoutubeChannelId(input) {
 
 async function checkYoutubeIsLive(channelId) {
     try {
+        const auth = await getYoutubeAuthParams()
+        if (!auth) throw new Error('無可用認證')
+
+        // 先嘗試用快取的 videoId（省 100 單位 search）
+        const cache = loadYoutubeCache()
+        if (cache?.videoId) {
+            console.log(`ℹ️ Youtube 嘗試快取 videoId: ${cache.videoId}`)
+            try {
+                const videoRes = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+                    params: { part: 'liveStreamingDetails', id: cache.videoId, maxResults: 1, ...auth.params },
+                    headers: auth.headers,
+                    timeout: 10000
+                })
+                const video = videoRes.data?.items?.[0]
+                const liveDetails = video?.liveStreamingDetails
+                if (liveDetails?.activeLiveChatId) {
+                    console.log(`✅ Youtube 快取 videoId 仍有效`)
+                    saveYoutubeCache({ videoId: cache.videoId, liveChatId: liveDetails.activeLiveChatId, channelId })
+                    return {
+                        live: true,
+                        liveChatId: liveDetails.activeLiveChatId,
+                        videoId: cache.videoId,
+                        concurrentViewers: parseInt(liveDetails.concurrentViewers) || 0
+                    }
+                }
+            } catch (_) { /* 快取失效，繼續 search */ }
+        }
+
+        // 快取失效→用 search.list（100 單位）
         const searchUrl = 'https://www.googleapis.com/youtube/v3/search'
         const res = await axios.get(searchUrl, {
-            params: {
-                part: 'snippet',
-                channelId: channelId,
-                eventType: 'live',
-                type: 'video',
-                key: youtubeApiKey,
-                maxResults: 1
-            },
+            params: { part: 'snippet', channelId: channelId, eventType: 'live', type: 'video', maxResults: 1, ...auth.params },
+            headers: auth.headers,
             timeout: 15000
         })
         const items = res.data?.items
@@ -2146,17 +2251,16 @@ async function checkYoutubeIsLive(channelId) {
         const videoId = items[0].id.videoId
 
         const videoRes = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
-            params: {
-                part: 'liveStreamingDetails',
-                id: videoId,
-                key: youtubeApiKey,
-                maxResults: 1
-            },
+            params: { part: 'liveStreamingDetails', id: videoId, maxResults: 1, ...auth.params },
+            headers: auth.headers,
             timeout: 15000
         })
         const video = videoRes.data?.items?.[0]
         const liveDetails = video?.liveStreamingDetails
         if (!liveDetails || !liveDetails.activeLiveChatId) throw new Error('無法取得聊天室 ID')
+
+        // 快取此 videoId
+        saveYoutubeCache({ videoId, liveChatId: liveDetails.activeLiveChatId, channelId })
 
         return {
             live: true,
@@ -2187,17 +2291,15 @@ function connectYoutubeChat(liveChatId, videoId, channelName) {
 
     youtubeVideoId = videoId  // 儲存 videoId 供 viewer count 更新用
 
-    // 定期更新觀眾數（每 60 秒）
+    // 定期更新觀眾數
     youtubeViewerInterval = setInterval(async () => {
         if (!youtubeVideoId) return
         try {
+            const auth = await getYoutubeAuthParams()
+            if (!auth) return
             const res = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
-                params: {
-                    part: 'liveStreamingDetails',
-                    id: youtubeVideoId,
-                    key: youtubeApiKey,
-                    maxResults: 1
-                },
+                params: { part: 'liveStreamingDetails', id: youtubeVideoId, maxResults: 1, ...auth.params },
+                headers: auth.headers,
                 timeout: 10000
             })
             const cv = res.data?.items?.[0]?.liveStreamingDetails?.concurrentViewers
@@ -2211,15 +2313,18 @@ function connectYoutubeChat(liveChatId, videoId, channelName) {
     function poll() {
         if (!youtubeLiveChatId) return
 
-        const params = {
-            part: 'snippet,authorDetails',
-            liveChatId: youtubeLiveChatId,
-            key: youtubeApiKey,
-            maxResults: 200
-        }
-        if (youtubeNextPageToken) params.pageToken = youtubeNextPageToken
+        getYoutubeAuthParams().then(auth => {
+            if (!auth) { youtubePollInterval = setTimeout(poll, 30000); return }
 
-        axios.get('https://www.googleapis.com/youtube/v3/liveChat/messages', { params, timeout: 10000 })
+            const params = {
+                part: 'snippet,authorDetails',
+                liveChatId: youtubeLiveChatId,
+                maxResults: 200,
+                ...auth.params
+            }
+            if (youtubeNextPageToken) params.pageToken = youtubeNextPageToken
+
+            axios.get('https://www.googleapis.com/youtube/v3/liveChat/messages', { params, headers: auth.headers, timeout: 10000 })
             .then(res => {
                 const data = res.data
                 youtubeNextPageToken = data.nextPageToken || null
@@ -2309,16 +2414,19 @@ function connectYoutubeChat(liveChatId, videoId, channelName) {
                     }
                 }
 
-                const intervalMs = data.pollingIntervalMillis || 5000
+                const apiInterval = data.pollingIntervalMillis || 5000
+                const userInterval = youtubePollIntervalS * 1000
+                const intervalMs = Math.max(apiInterval, userInterval)
                 youtubePollInterval = setTimeout(poll, intervalMs)
             })
             .catch(err => {
                 console.error('⚠️ Youtube 輪詢錯誤:', err.message)
                 youtubePollInterval = setTimeout(poll, 10000)
             })
-    }
+    })
 
     poll()
+}
 }
 
 function disconnectYoutubeChat() {
