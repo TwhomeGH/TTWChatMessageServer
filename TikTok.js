@@ -2116,14 +2116,17 @@ async function resolveYoutubeChannelId(input) {
             channelName: items[0].snippet.channelTitle
         }
     } catch (err) {
-        console.error('❌ Youtube resolve 失敗:', err.message)
+        const status = err.response?.status || ''
+        const data = err.response?.data?.error?.message || err.message
+        console.error(`❌ Youtube resolve 失敗 [${status}]: ${data}`)
         return null
     }
 }
 
 async function checkYoutubeIsLive(channelId) {
     try {
-        const res = await axios.get('https://www.googleapis.com/youtube/v3/search', {
+        const searchUrl = 'https://www.googleapis.com/youtube/v3/search'
+        const res = await axios.get(searchUrl, {
             params: {
                 part: 'snippet',
                 channelId: channelId,
@@ -2135,7 +2138,10 @@ async function checkYoutubeIsLive(channelId) {
             timeout: 15000
         })
         const items = res.data?.items
-        if (!items || items.length === 0) throw new Error('目前沒有直播')
+        if (!items || items.length === 0) {
+            console.log(`ℹ️ Youtube 搜尋直播影片結果為空，頻道可能未開播`)
+            return { live: false, liveChatId: null, videoId: null, concurrentViewers: 0 }
+        }
 
         const videoId = items[0].id.videoId
 
@@ -2159,7 +2165,12 @@ async function checkYoutubeIsLive(channelId) {
             concurrentViewers: parseInt(liveDetails.concurrentViewers) || 0
         }
     } catch (err) {
-        console.error('❌ Youtube is_live 檢查失敗:', err.message)
+        const status = err.response?.status || ''
+        const data = err.response?.data?.error?.message || err.message
+        console.error(`❌ Youtube is_live 檢查失敗 [${status}]: ${data}`)
+        if (status === 403) {
+            console.error('   ⚠️ API 金鑰可能未啟用 YouTube Data API v3 或有限制，請檢查 Google Cloud Console')
+        }
         return { live: false, liveChatId: null, videoId: null, concurrentViewers: 0 }
     }
 }
