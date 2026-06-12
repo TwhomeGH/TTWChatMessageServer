@@ -211,12 +211,6 @@ addFilterRules([
 
     // ── 訊息內容：block ──
     {
-        name: 'msg:僅標點符號',
-        field: 'message',
-        action: 'block',
-        test: (m) => /^[。，、．.．,，\s…\-—‥・·]+$/.test(m),
-    },
-    {
         name: 'msg:僅單一字元',
         field: 'message',
         action: 'block',
