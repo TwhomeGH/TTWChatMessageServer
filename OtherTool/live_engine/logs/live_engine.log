@@ -59,3 +59,6 @@
 [2026-06-15 05:54:42.265] [DEBUG] GlobalHotkey: R was active, cancelled by 0
 [2026-06-15 05:54:56.337] [DEBUG] GlobalHotkey: R pressed (awaiting 8)
 [2026-06-15 05:54:56.385] [DEBUG] GlobalHotkey: R was active, cancelled by 0
+[2026-06-15 05:56:28.100] [DEBUG] GlobalHotkey: R pressed (awaiting 8)
+[2026-06-15 05:56:28.252] [DEBUG] GlobalHotkey: R was active, cancelled by 4
+[2026-06-15 06:02:31.575] GlobalHotkey: pynput listener started (R+8)

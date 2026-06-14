@@ -18,18 +18,19 @@ class FontSystem:
         font = QFont("Microsoft JhengHei", font_size)
         fm = QFontMetrics(font)
 
+        is_multiline = "\n" in text
         text_width = fm.boundingRect(text).width()
 
-        if text_width <= max_width:
-            img_width = text_width + 10
-            img_height = fm.height() + 10
-            flags = QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        else:
+        if is_multiline or text_width > max_width:
             img_width = max_width + 10
-            rect = fm.boundingRect(0, 0, max_width, 10000, 
+            rect = fm.boundingRect(0, 0, max_width, 10000,
                 QtCore.Qt.TextFlag.TextWordWrap, text)
             img_height = rect.height() + 10
             flags = QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop | QtCore.Qt.TextFlag.TextWordWrap
+        else:
+            img_width = text_width + 10
+            img_height = fm.height() + 10
+            flags = QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
 
         img = QImage(img_width, img_height, QImage.Format.Format_RGBA8888)
         img.fill(0)

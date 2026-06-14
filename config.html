@@ -6,6 +6,18 @@
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body class="bg-gray-100 flex items-center justify-center min-h-screen">
+    <div id="safetyOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70">
+      <div class="bg-white rounded-2xl shadow-2xl p-10 max-w-lg mx-4 text-center">
+        <div class="text-6xl mb-4">⚠️</div>
+        <h2 class="text-2xl font-bold text-gray-800 mb-4">安全確認</h2>
+        <p class="text-lg text-gray-600 mb-2">請確認你已在安全環境，</p>
+        <p class="text-lg text-red-600 font-semibold mb-8">未處於直播畫面放送中</p>
+        <button onclick="confirmSafety()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-10 rounded-lg transition text-lg">
+          確認，顯示內容
+        </button>
+      </div>
+    </div>
+    <div id="configContent" class="hidden">
     <div class="bg-white shadow-lg rounded-lg p-8 w-full max-w-md md:max-w-3xl">
       <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">
         修改環境變數
@@ -124,8 +136,14 @@
         </div>
       </form>
     </div>
+    </div>
 
     <script>
+        function confirmSafety() {
+            document.getElementById('safetyOverlay').classList.add('hidden');
+            document.getElementById('configContent').classList.remove('hidden');
+        }
+
         async function logout() {
             try {
             await fetch("/logout", { method: "GET", credentials: "include" });
