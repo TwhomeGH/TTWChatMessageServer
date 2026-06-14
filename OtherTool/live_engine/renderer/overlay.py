@@ -211,7 +211,7 @@ class Overlay(QOpenGLWidget):
         
         for n in self.engine.nodes:
             # 統一 box 定義
-            box_x, box_y, box_w, box_h = 20, int(n.y), 360, 56   # 高度加大，容納兩行
+            box_x, box_y, box_w, box_h = 20, int(n.y), 360, 80   # 增加高度容納換行
 
             # =====================
             # avatar + username (第一行)
@@ -225,19 +225,19 @@ class Overlay(QOpenGLWidget):
             if avatar_tex:
                 self.texture_loader.draw(avatar_tex, avatar_x, avatar_y, avatar_size, avatar_size)
 
-            username_tex, uw, uh = self.font_system.get_text_texture(n.user, QColor(0, 128, 255))
-            username_x = avatar_x + avatar_size + 6
+            username_tex, uw, uh = self.font_system.get_text_texture(n.user, QColor(0, 128, 255), max_width=320)
+            username_x = avatar_x + avatar_size + 8
             username_y = avatar_y + (avatar_size - uh) // 2   # 與頭像垂直置中
 
             self.texture_loader.draw(username_tex, username_x, username_y, uw, uh)
 
             # =====================
-            # message + gift (第二行)
+            # message + gift (第二行) - 緊貼 username 下方
             # =====================
-            message_tex, mw, mh = self.font_system.get_text_texture(n.text, QColor("white"))
+            message_tex, mw, mh = self.font_system.get_text_texture(n.text, QColor("white"), max_width=350)
 
-            message_x = box_x + 6
-            message_y = box_y + 12   # 第二行靠下，避免重疊
+            message_x = username_x  # 與 username 對齊
+            message_y = avatar_y + avatar_size + 4  # 緊貼頭像/username 下方
 
             self.texture_loader.draw(message_tex, message_x, message_y, mw, mh)
 

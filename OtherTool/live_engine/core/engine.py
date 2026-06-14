@@ -54,20 +54,10 @@ class Engine:
         for n in self.nodes:
             n.update()
 
-        # 清理死掉的 node
-        self.nodes = [n for n in self.nodes if not n.dead]
+        # 清理透明度歸零的 node
+        self.nodes = [n for n in self.nodes if n.alpha > 0]
 
-        
-        # 🔥 超出底部的訊息移除
-        max_height = self.height()
-        if self.nodes:
-            # 找到最後一個訊息的底部位置
-            last_node = self.nodes[-1]
-            bottom = last_node.target_y + last_node.get_height(self.font_system)
 
-            # 如果超過視窗高度，移除最早的訊息
-            if bottom > max_height:
-                self.nodes[0].dead = True
 
 
 

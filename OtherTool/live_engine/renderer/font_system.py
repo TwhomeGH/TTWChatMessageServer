@@ -1,4 +1,4 @@
-from PyQt6.QtGui import QImage, QPainter, QFont
+from PyQt6.QtGui import QImage, QPainter, QFont, QFontMetrics
 from PyQt6 import QtCore
 
 from OpenGL.GL import *
@@ -10,22 +10,37 @@ class FontSystem:
     def __init__(self):
         self.cache = {}
 
-    def get_text_texture(self, text, color=QColor("white")):
-        # 如果 cache 要區分顏色，建議把顏色也加進 key
-        cache_key = (text, color.name())
+    def get_text_texture(self, text, color=QColor("white"), max_width=360, font_size=16):
+        cache_key = (text, color.name(), max_width, font_size)
         if cache_key in self.cache:
             return self.cache[cache_key]
 
-        img = QImage(512, 64, QImage.Format.Format_RGBA8888)
+        font = QFont("Microsoft JhengHei", font_size)
+        fm = QFontMetrics(font)
+
+        text_width = fm.boundingRect(text).width()
+
+        if text_width <= max_width:
+            img_width = text_width + 10
+            img_height = fm.height() + 10
+            flags = QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
+        else:
+            img_width = max_width + 10
+            rect = fm.boundingRect(0, 0, max_width, 10000, 
+                QtCore.Qt.TextFlag.TextWordWrap, text)
+            img_height = rect.height() + 10
+            flags = QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop | QtCore.Qt.TextFlag.TextWordWrap
+
+        img = QImage(img_width, img_height, QImage.Format.Format_RGBA8888)
         img.fill(0)
 
         painter = QPainter(img)
-        painter.setPen(color)   # 🔑 使用傳入的顏色
-        painter.setFont(QFont("Microsoft JhengHei", 16))
+        painter.setPen(color)
+        painter.setFont(font)
 
         painter.drawText(
-            img.rect(),
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter,
+            5, 5, max_width, img_height - 10,
+            flags,
             text
         )
         painter.end()

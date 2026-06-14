@@ -13,6 +13,7 @@
         height: 100vh;
         /* 讓容器填滿視窗高度 */
         margin: 0;
+        overflow: hidden;
     }
 
     #Time {
@@ -20,11 +21,52 @@
         /* 根據寬高自適應，取較小值避免溢出 */
         line-height: 1.2em;
         text-align: left;
+        transition: opacity 0.5s ease;
+    }
+
+    #Marquee {
+        font-size: 4vw;
+        line-height: 1.5em;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        width: 100%;
+        opacity: 0;
+        position: absolute;
+        transition: opacity 0.5s ease;
+    }
+
+    #Marquee.visible {
+        opacity: 1;
+    }
+
+    #MarqueeContent {
+        display: inline-block;
+        padding-left: 100%;
+        animation: marquee 20s linear infinite;
+    }
+
+    @keyframes marquee {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(-100%); }
+    }
+
+    #Time.hidden {
+        opacity: 0;
     }
 </style>
 
 <script language="JavaScript" type="text/javascript">
 
+    const MARQUEE_MESSAGES = [
+        "MCBE服務器 IP: coffee3333.ccwu.cc Port: 19132",
+        "松鼠推流 ReplyKIT 適用於iOS端的推流應用！"
+    ];
+
+    let isShowingMarquee = false;
+    let marqueeIndex = 0;
+    let showTimeTimeout = null;
+    let marqueeSwitchTimeout = null;
 
     function TimeCount(NTime) {
         /**
@@ -44,7 +86,10 @@
         ]
         return ResultT
     }
+
     function ShowTime() {
+        if (isShowingMarquee) return;
+
         var NowDate = new Date();
         var D = NowDate.getDay();
         var DayNames = [
@@ -59,18 +104,75 @@
         Display = [
             `目前時間：${NowDate.toLocaleString()}🍫${DayNames[D]}`
         ]
-        // 倒數用
-        //`到${TimeSet.getMonth()+1}/${TimeSet.getDate()} 倒數${CountDown_Time[0]} ${CountDown_Time[1]}${CountDown_Time[2]}${CountDown_Time[3]}`
-
 
         Time.innerHTML = Display.join("");
+        Time.classList.remove("hidden");
 
-        setTimeout('ShowTime()', 10);
+        showTimeTimeout = setTimeout(ShowTime, 10);
+    }
+
+    function ShowMarquee() {
+        if (!isShowingMarquee) return;
+
+        const marquee = document.getElementById('Marquee');
+        const marqueeContent = document.getElementById('MarqueeContent');
+        
+        marqueeContent.textContent = MARQUEE_MESSAGES[marqueeIndex];
+        marquee.classList.add('visible');
+
+        marqueeIndex = (marqueeIndex + 1) % MARQUEE_MESSAGES.length;
+
+        marqueeSwitchTimeout = setTimeout(ShowMarquee, 60000);
+    }
+
+    function SwitchToMarquee() {
+        const timeEl = document.getElementById('Time');
+        const marquee = document.getElementById('Marquee');
+        
+        isShowingMarquee = true;
+        timeEl.classList.add('hidden');
+        
+        if (showTimeTimeout) {
+            clearTimeout(showTimeTimeout);
+            showTimeTimeout = null;
+        }
+
+        setTimeout(() => {
+            ShowMarquee();
+        }, 500);
+
+        setTimeout(SwitchToTime, 60000);
+    }
+
+    function SwitchToTime() {
+        const timeEl = document.getElementById('Time');
+        const marquee = document.getElementById('Marquee');
+        
+        isShowingMarquee = false;
+        marquee.classList.remove('visible');
+        
+        if (marqueeSwitchTimeout) {
+            clearTimeout(marqueeSwitchTimeout);
+            marqueeSwitchTimeout = null;
+        }
+
+        setTimeout(() => {
+            timeEl.classList.remove('hidden');
+            ShowTime();
+        }, 500);
+
+        setTimeout(SwitchToMarquee, 60000);
+    }
+
+    function InitDisplay() {
+        ShowTime();
+        setTimeout(SwitchToMarquee, 60000);
     }
 </script>
 
-<body onload="ShowTime()">
+<body onload="InitDisplay()">
 
     <div id="Time"></div>
+    <div id="Marquee"><span id="MarqueeContent"></span></div>
 
 </body>

@@ -38,8 +38,8 @@ class ChatNode:
         self.y += (self.target_y - self.y) * 0.25
 
 
-        # 檢查時間是否超過 5 秒
-        if time.time() - self.timestamp > 5:
+        # 檢查時間是否超過 15 秒
+        if time.time() - self.timestamp > 15:
             self.dead = True
 
         if self.dead:
