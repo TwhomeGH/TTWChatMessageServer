@@ -232,7 +232,7 @@ class Overlay(QOpenGLWidget):
             # avatar + username (第一行)
             # =====================
             avatar_size = 28
-            avatar_tex = self.texture_loader.load_url(n.avatar_url)
+            avatar_tex = self.texture_loader.load_url_circular(n.avatar_url, 28)
 
             avatar_x = box_x + 6
             avatar_y = box_y + 6   # 第一行靠上

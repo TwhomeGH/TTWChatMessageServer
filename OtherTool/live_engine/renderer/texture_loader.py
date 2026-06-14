@@ -1,5 +1,6 @@
 import requests
-from PyQt6.QtGui import QImage
+from PyQt6.QtGui import QImage, QPainter, QPainterPath
+from PyQt6.QtCore import QRectF
 from OpenGL.GL import *
 
 
@@ -70,7 +71,73 @@ class TextureLoader:
         except Exception as e:
             print("texture error:", e)
             return None
-        
+
+    def load_url_circular(self, url, size):
+        if not url:
+            return None
+
+        cache_key = f"circ:{url}:{size}"
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+
+        try:
+            res = requests.get(url, headers={
+                "User-Agent": "Mozilla/5.0"
+            }, timeout=5)
+
+            if "image" not in res.headers.get("Content-Type", ""):
+                print("❌ not image:", res.url)
+                return None
+
+            src = QImage.fromData(res.content)
+            if src.isNull():
+                print("❌ QImage failed:", url)
+                return None
+
+            src = src.convertToFormat(QImage.Format.Format_RGBA8888)
+
+            # square crop from center
+            side = min(src.width(), src.height())
+            offset_x = (src.width() - side) // 2
+            offset_y = (src.height() - side) // 2
+            src = src.copy(offset_x, offset_y, side, side)
+
+            # scale to target size
+            src = src.scaled(size, size)
+
+            # paint circle mask onto a transparent RGBA image
+            circle = QImage(size, size, QImage.Format.Format_RGBA8888)
+            circle.fill(0)  # transparent
+
+            painter = QPainter(circle)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            path = QPainterPath()
+            path.addEllipse(QRectF(0, 0, size, size))
+            painter.setClipPath(path)
+            painter.drawImage(0, 0, src)
+            painter.end()
+
+            data = qimage_to_bytes(circle)
+
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
+
+            tex = glGenTextures(1)
+            glBindTexture(GL_TEXTURE_2D, tex)
+
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, size, size, 0,
+                         GL_RGBA, GL_UNSIGNED_BYTE, data)
+
+            self.cache[cache_key] = tex
+            return tex
+
+        except Exception as e:
+            print("texture_loader circular error:", e)
+            return None
 
     def draw(self, tex, x, y, w, h):
 
