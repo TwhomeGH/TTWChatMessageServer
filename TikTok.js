@@ -1347,25 +1347,29 @@ connection.on(WebcastEvent.SHARE, data =>{
 
 connection.on(WebcastEvent.ENVELOPE, data => {
     const envelope = data.envelopeInfo;
-    if (envelope) {
-        if (envelope.envelopeId) {
-            console.log(`Envelope ${envelope.envelopeId}`);
-        }
-        if (envelope.sendUserName) {
-            console.log(`From: ${envelope.sendUserName}`);
-        }
-        console.log(`Diamonds: ${envelope.diamondCount}, People: ${envelope.peopleCount}`);
+    if (!envelope) return;
 
-
-        let mess = `送出了寶箱，包含 ${envelope.diamondCount} 鑽石`
-        const senderName = data.nickname || envelope.sendUserName || "未知用戶";
-        const profilePic = data.user?.profilePicture?.url?.[1] || "";
-        sendBarkNotification(senderName, mess, profilePic);
-        sendSocketMessage(senderName, mess, profilePic, "", true, CacheUserNum, CacheUserList);
-
-        writeLog("Default", `${senderName} 送出了寶箱，包含 ${envelope.diamondCount} 鑽石`, "Envelope")
-
+    if (envelope.envelopeId) {
+        console.log(`Envelope ${envelope.envelopeId}`);
     }
+    if (envelope.sendUserName) {
+        console.log(`From: ${envelope.sendUserName}`);
+    }
+    console.log(`Diamonds: ${envelope.diamondCount}, People: ${envelope.peopleCount}`);
+
+    // Skip empty/system envelopes
+    if (!envelope.diamondCount && !envelope.peopleCount) {
+        console.log("⚠️ 跳過空的寶箱事件");
+        return;
+    }
+
+    let mess = `送出了寶箱，包含 ${envelope.diamondCount} 鑽石`
+    const senderName = data.nickname || envelope.sendUserName || "未知用戶";
+    const profilePic = data.user?.profilePicture?.url?.[1] || "";
+    sendBarkNotification(senderName, mess, profilePic);
+    sendSocketMessage(senderName, mess, profilePic, "", true, CacheUserNum, CacheUserList);
+
+    writeLog("Default", `${senderName} 送出了寶箱，包含 ${envelope.diamondCount} 鑽石`, "Envelope")
 });
 
 connection.on(WebcastEvent.SUPER_FAN, (data) => {
