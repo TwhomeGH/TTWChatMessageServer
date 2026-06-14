@@ -1358,10 +1358,12 @@ connection.on(WebcastEvent.ENVELOPE, data => {
 
 
         let mess = `送出了寶箱，包含 ${envelope.diamondCount} 鑽石`
-        sendBarkNotification(data.nickname, mess , data.user.profilePicture.url[1]);
-        sendSocketMessage(data.nickname, mess, data.user.profilePicture.url[1], "", true, CacheUserNum, CacheUserList);
+        const senderName = data.nickname || envelope.sendUserName || "未知用戶";
+        const profilePic = data.user?.profilePicture?.url?.[1] || "";
+        sendBarkNotification(senderName, mess, profilePic);
+        sendSocketMessage(senderName, mess, profilePic, "", true, CacheUserNum, CacheUserList);
 
-        writeLog("Default", `${data.nickname} 送出了寶箱，包含 ${envelope.diamondCount} 鑽石`, "Envelope")
+        writeLog("Default", `${senderName} 送出了寶箱，包含 ${envelope.diamondCount} 鑽石`, "Envelope")
 
     }
 });
