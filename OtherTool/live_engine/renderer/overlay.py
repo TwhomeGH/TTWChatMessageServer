@@ -240,7 +240,7 @@ class Overlay(QOpenGLWidget):
             if avatar_tex:
                 self.texture_loader.draw(avatar_tex, avatar_x, avatar_y, avatar_size, avatar_size)
 
-            username_tex, uw, uh = self.font_system.get_text_texture(n.user, QColor(0, 128, 255), max_width=config.USERNAME_MAX_WIDTH)
+            username_tex, uw, uh = self.font_system.get_text_texture(n.user, QColor(0, 128, 255), max_width=config.USERNAME_MAX_WIDTH, outline_color=QColor("white"))
             username_x = avatar_x + avatar_size + 8
             username_y = avatar_y + (avatar_size - uh) // 2   # 與頭像垂直置中
 
@@ -249,7 +249,7 @@ class Overlay(QOpenGLWidget):
             # =====================
             # message + gift (第二行) - 緊貼 username 下方
             # =====================
-            message_tex, mw, mh = self.font_system.get_text_texture(n.text, QColor("white"), max_width=config.MESSAGE_MAX_WIDTH)
+            message_tex, mw, mh = self.font_system.get_text_texture(n.text, QColor("white"), max_width=config.MESSAGE_MAX_WIDTH, outline_color=QColor("black"))
 
             message_x = username_x  # 與 username 對齊
             message_y = username_y + uh + 4  # 緊貼 username 下方

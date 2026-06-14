@@ -10,8 +10,10 @@ class FontSystem:
     def __init__(self):
         self.cache = {}
 
-    def get_text_texture(self, text, color=QColor("white"), max_width=360, font_size=16):
-        cache_key = (text, color.name(), max_width, font_size)
+    def get_text_texture(self, text, color=QColor("white"), max_width=360, font_size=16, outline_color=None):
+        padding = 10 if outline_color else 5
+        cache_key = (text, color.name(), max_width, font_size,
+                     outline_color.name() if outline_color else None)
         if cache_key in self.cache:
             return self.cache[cache_key]
 
@@ -19,30 +21,37 @@ class FontSystem:
         fm = QFontMetrics(font)
 
         is_multiline = "\n" in text
-        text_width = fm.boundingRect(text).width()
+        text_width = fm.boundingRect(text).width() + 2
 
         if is_multiline or text_width > max_width:
-            img_width = max_width + 10
+            img_width = max_width + padding * 2
             rect = fm.boundingRect(0, 0, max_width, 10000,
                 QtCore.Qt.TextFlag.TextWordWrap, text)
-            img_height = rect.height() + 10
+            img_height = rect.height() + padding * 2
             flags = QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop | QtCore.Qt.TextFlag.TextWordWrap
         else:
-            img_width = text_width + 10
-            img_height = fm.height() + 10
+            img_width = text_width + padding * 2
+            img_height = fm.height() + padding * 2
             flags = QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
 
         img = QImage(img_width, img_height, QImage.Format.Format_RGBA8888)
         img.fill(0)
 
         painter = QPainter(img)
-        painter.setPen(color)
         painter.setFont(font)
 
+        if outline_color:
+            painter.setPen(outline_color)
+            for dx, dy in ((-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)):
+                painter.drawText(
+                    padding + dx, padding + dy, img_width - padding * 2, img_height - padding * 2,
+                    flags, text
+                )
+
+        painter.setPen(color)
         painter.drawText(
-            5, 5, max_width, img_height - 10,
-            flags,
-            text
+            padding, padding, img_width - padding * 2, img_height - padding * 2,
+            flags, text
         )
         painter.end()
 

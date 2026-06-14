@@ -4,8 +4,8 @@ import config
 
 class ChatNode:
     def __init__(self, data):
-        self.user = data.get("user")
-        self.text = data.get("message")
+        self.user = data.get("user") or ""
+        self.text = data.get("message") or ""
         self.avatar_url = data.get("img")
         self.gift_url = data.get("giftImg")
 
@@ -22,10 +22,12 @@ class ChatNode:
 
     def get_height(self, font_system):
         _, _, uh = font_system.get_text_texture(
-            self.user, QColor(0, 128, 255), max_width=config.USERNAME_MAX_WIDTH
+            self.user, QColor(0, 128, 255), max_width=config.USERNAME_MAX_WIDTH,
+            outline_color=QColor("white")
         )
         _, _, mh = font_system.get_text_texture(
-            self.text, QColor("white"), max_width=config.MESSAGE_MAX_WIDTH
+            self.text, QColor("white"), max_width=config.MESSAGE_MAX_WIDTH,
+            outline_color=QColor("black")
         )
 
         avatar_size = 28
@@ -34,7 +36,7 @@ class ChatNode:
         avatar_bottom = top_pad + avatar_size
         message_bottom = top_pad + username_offset + uh + 4 + mh
         content_h = max(avatar_bottom, message_bottom)
-        return content_h + 6
+        return content_h + 4
 
     def update(self):
         # 平滑收斂到目標位置

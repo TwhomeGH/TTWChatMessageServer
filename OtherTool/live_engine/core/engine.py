@@ -43,30 +43,31 @@ class Engine:
         self._sync_tts_settings()
         while not message_queue.empty():
             data = message_queue.get()
-            new_node = ChatNode(data)
 
+            if data.get("type") != "StreamMessage":
+                continue
+
+            new_node = ChatNode(data)
 
             if not self.nodes:
                 new_node.target_y = 50
                 new_node.y = 50
             else:
                 last_node = self.nodes[-1]
-                new_node.target_y = last_node.target_y + last_node.get_height(self.font_system) + 12
+                new_node.target_y = last_node.target_y + last_node.get_height(self.font_system) + 8
                 new_node.y = self.height() - 20
 
             self.nodes.append(new_node)
 
-            if data.get("type") != "StreamMessage":
-                continue
-            if not new_node.text:
-                continue
-            is_main = data.get("isMain", True)
-            tts_service.speak_stream_message(new_node.user, new_node.text, is_main)
+            if new_node.text:
+                tts_service.speak_stream_message(
+                    new_node.user, new_node.text, data.get("isMain", True)
+                )
 
         current_y = 50
         for n in self.nodes:
             row_h = n.get_height(self.font_system)
-            spacing = 12
+            spacing = 8
             n.target_y = current_y
             current_y += row_h + spacing
 
