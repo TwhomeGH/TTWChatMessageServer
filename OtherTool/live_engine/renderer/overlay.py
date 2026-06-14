@@ -23,7 +23,6 @@ def get_text_baseline_y(center_y):
     font = QFont("Microsoft JhengHei", 16)
     fm = QFontMetrics(font)
 
-    # 👉 讓文字「視覺中心對齊」
     return center_y + (fm.ascent() - fm.descent()) // 2
 
 def get_text_width(text, size=16):
@@ -33,14 +32,31 @@ def get_text_width(text, size=16):
 
 
 import os
+import sys
+import subprocess
 
-# 取得當前執行檔案所在的目錄
 base_dir = os.path.dirname(os.path.abspath(__file__))
 
 
 from PyQt6.QtGui import QColor
 
 from PyQt6 import QtCore, QtWidgets
+
+from core.debug_log import log, log_error
+from core.hotkey import GlobalHotkey
+
+
+def _open_settings():
+    log("Global hotkey triggered: opening TTS settings GUI")
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "gui.tts_settings_window"],
+            cwd=os.path.join(base_dir, "..")
+        )
+        log("TTS settings GUI launched, PID:", proc.pid)
+    except Exception as e:
+        log_error("Failed to launch TTS settings GUI:", e)
+
 
 class Overlay(QOpenGLWidget):
 
@@ -49,21 +65,18 @@ class Overlay(QOpenGLWidget):
 
 
         fmt = QtGui.QSurfaceFormat()
-        fmt.setAlphaBufferSize(8)   # 🔑 要有 alpha buffer
+        fmt.setAlphaBufferSize(8)
         self.setFormat(fmt)
 
 
 
-        # 新版 PyQt6 寫法：
         self.setContentsMargins(0, 0, 0, 0)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_NoSystemBackground)
 
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)   
         
-        # 允許滑鼠事件穿透
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
-        # 新版 PyQt6 寫法：
         self.setWindowFlags(
             QtCore.Qt.WindowType.FramelessWindowHint |
             QtCore.Qt.WindowType.WindowStaysOnTopHint |
@@ -76,16 +89,14 @@ class Overlay(QOpenGLWidget):
         screen_width = screen_geometry.width()
         screen_height = screen_geometry.height()
 
-        # 視窗大小
         win_w = config.WIDTH
         win_h = config.HEIGHT
 
         print("Screen:", screen_width, screen_height)
         print("Window:", win_w, win_h)
         
-        # 計算靠右位置
-        x = screen_width - int(win_w*2 - 20)   # 右邊留 20px margin
-        y = 50                        # 距離上方 100px
+        x = screen_width - int(win_w*2 - 20)
+        y = 50
 
         self.setGeometry(x, y, win_w, win_h)
 
@@ -102,6 +113,10 @@ class Overlay(QOpenGLWidget):
         self.timer.timeout.connect(self.loop)
         self.timer.start(int(1000 / config.FPS))
 
+        self._setup_global_hotkey()
+
+    def _setup_global_hotkey(self):
+        self._hotkey = GlobalHotkey(on_trigger=_open_settings)
 
     
     def initializeGL(self):
@@ -225,7 +240,7 @@ class Overlay(QOpenGLWidget):
             if avatar_tex:
                 self.texture_loader.draw(avatar_tex, avatar_x, avatar_y, avatar_size, avatar_size)
 
-            username_tex, uw, uh = self.font_system.get_text_texture(n.user, QColor(0, 128, 255), max_width=320)
+            username_tex, uw, uh = self.font_system.get_text_texture(n.user, QColor(0, 128, 255), max_width=config.USERNAME_MAX_WIDTH)
             username_x = avatar_x + avatar_size + 8
             username_y = avatar_y + (avatar_size - uh) // 2   # 與頭像垂直置中
 
@@ -234,10 +249,10 @@ class Overlay(QOpenGLWidget):
             # =====================
             # message + gift (第二行) - 緊貼 username 下方
             # =====================
-            message_tex, mw, mh = self.font_system.get_text_texture(n.text, QColor("white"), max_width=350)
+            message_tex, mw, mh = self.font_system.get_text_texture(n.text, QColor("white"), max_width=config.MESSAGE_MAX_WIDTH)
 
             message_x = username_x  # 與 username 對齊
-            message_y = avatar_y + avatar_size + 4  # 緊貼頭像/username 下方
+            message_y = username_y + uh + 4  # 緊貼 username 下方
 
             self.texture_loader.draw(message_tex, message_x, message_y, mw, mh)
 

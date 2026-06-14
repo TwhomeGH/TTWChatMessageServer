@@ -1,0 +1,11 @@
+{
+  "block_keywords": [
+    "敏感詞"
+  ],
+  "replace_keywords": {
+    "草": "幹"
+  },
+  "remove_urls": true,
+  "remove_emoji": true,
+  "remove_pure_numbers": false
+}

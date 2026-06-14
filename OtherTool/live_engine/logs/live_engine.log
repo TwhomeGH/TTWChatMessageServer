@@ -1,0 +1,47 @@
+[2026-06-15 05:35:21.779] === Hotkey Test ===
+[2026-06-15 05:35:21.779] Press R then 8 within 3 seconds
+[2026-06-15 05:35:21.781] Ctrl+C to exit
+[2026-06-15 05:35:21.847] GlobalHotkey: pynput listener started (R+8)
+[2026-06-15 05:35:31.864] GlobalHotkey: listener stopped
+[2026-06-15 05:35:31.865] Test ended
+[2026-06-15 05:36:06.295] GlobalHotkey: pynput listener started (R+8)
+[2026-06-15 05:36:09.815] [DEBUG] GlobalHotkey: R pressed (awaiting 8)
+[2026-06-15 05:36:09.862] GlobalHotkey: R+8 sequence detected!
+[2026-06-15 05:36:09.863] Global hotkey triggered: opening TTS settings GUI
+[2026-06-15 05:36:09.872] TTS settings GUI launched, PID: 86296
+[2026-06-15 05:36:09.935] TTS Settings GUI starting up...
+[2026-06-15 05:36:10.638] TTSSettingsWindow: creating QApplication
+[2026-06-15 05:36:10.723] TTSSettingsWindow: showing window
+[2026-06-15 05:36:10.929] TTSSettingsWindow: entering event loop
+[2026-06-15 05:37:37.490] [DEBUG] GlobalHotkey: R pressed (awaiting 8)
+[2026-06-15 05:37:37.505] GlobalHotkey: R+8 sequence detected!
+[2026-06-15 05:37:37.506] Global hotkey triggered: opening TTS settings GUI
+[2026-06-15 05:37:37.511] TTS settings GUI launched, PID: 88464
+[2026-06-15 05:37:37.575] TTS Settings GUI starting up...
+[2026-06-15 05:37:38.261] TTSSettingsWindow: creating QApplication
+[2026-06-15 05:37:38.333] TTSSettingsWindow: showing window
+[2026-06-15 05:37:38.546] TTSSettingsWindow: entering event loop
+[2026-06-15 05:38:43.540] [DEBUG] GlobalHotkey: R pressed (awaiting 8)
+[2026-06-15 05:38:43.643] [DEBUG] GlobalHotkey: R was active, cancelled by .
+[2026-06-15 05:38:51.644] [DEBUG] GlobalHotkey: R pressed (awaiting 8)
+[2026-06-15 05:38:51.723] [DEBUG] GlobalHotkey: R was active, cancelled by u
+[2026-06-15 05:41:53.159] GlobalHotkey: pynput listener started (R+8)
+[2026-06-15 05:44:33.213] GlobalHotkey: pynput listener started (R+8)
+[2026-06-15 05:44:35.687] [DEBUG] GlobalHotkey: R pressed (awaiting 8)
+[2026-06-15 05:44:35.718] [DEBUG] GlobalHotkey: R was active, cancelled by 9
+[2026-06-15 05:44:39.998] [DEBUG] GlobalHotkey: R pressed (awaiting 8)
+[2026-06-15 05:44:40.158] GlobalHotkey: R+8 sequence detected!
+[2026-06-15 05:44:40.159] Global hotkey triggered: opening TTS settings GUI
+[2026-06-15 05:44:40.168] TTS settings GUI launched, PID: 86392
+[2026-06-15 05:44:40.240] TTS Settings GUI starting up...
+[2026-06-15 05:44:40.994] TTSSettingsWindow: creating QApplication
+[2026-06-15 05:44:41.072] TTSSettingsWindow: showing window
+[2026-06-15 05:44:41.292] TTSSettingsWindow: entering event loop
+[2026-06-15 05:46:12.857] [DEBUG] GlobalHotkey: R pressed (awaiting 8)
+[2026-06-15 05:46:12.922] [DEBUG] GlobalHotkey: R was active, cancelled by ,
+[2026-06-15 05:48:04.775] GlobalHotkey: pynput listener started (R+8)
+[2026-06-15 05:51:14.986] [DEBUG] GlobalHotkey: R pressed (awaiting 8)
+[2026-06-15 05:51:15.115] [DEBUG] GlobalHotkey: R was active, cancelled by e
+[2026-06-15 05:51:20.907] [DEBUG] GlobalHotkey: R pressed (awaiting 8)
+[2026-06-15 05:51:21.026] [DEBUG] GlobalHotkey: R was active, cancelled by ,
+[2026-06-15 05:53:42.906] GlobalHotkey: pynput listener started (R+8)

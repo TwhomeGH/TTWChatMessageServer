@@ -1,0 +1,16 @@
+{
+  "tts_enabled": true,
+  "tts_min_length": 3,
+  "tts_read_main_only": true,
+  "tts_read_user_name": false,
+  "tts_max_length": 0,
+  "tts_read_middle_name": "",
+  "tts_interrupt_current": false,
+  "tts_max_queue_size": 0,
+  "tts_queue_overflow_action": 1,
+  "tts_language": "zh-TW",
+  "tts_voice_identifier": "zh-TW-HsiaoChenNeural",
+  "tts_rate": 0.0,
+  "tts_pitch": 0.0,
+  "tts_volume": -21.0
+}
