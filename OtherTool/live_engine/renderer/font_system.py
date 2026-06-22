@@ -7,14 +7,19 @@ from PyQt6.QtGui import QColor
 
 class FontSystem:
 
+    MAX_CACHE_SIZE = 500
+
     def __init__(self):
         self.cache = {}
+        self._cache_order = []
 
     def get_text_texture(self, text, color=QColor("white"), max_width=360, font_size=16, outline_color=None):
         padding = 10 if outline_color else 5
         cache_key = (text, color.name(), max_width, font_size,
                      outline_color.name() if outline_color else None)
         if cache_key in self.cache:
+            self._cache_order.remove(cache_key)
+            self._cache_order.append(cache_key)
             return self.cache[cache_key]
 
         font = QFont("Microsoft JhengHei", font_size)
@@ -72,4 +77,9 @@ class FontSystem:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
 
         self.cache[cache_key] = (tex, w, h)
+        self._cache_order.append(cache_key)
+        if len(self._cache_order) > self.MAX_CACHE_SIZE:
+            old_key = self._cache_order.pop(0)
+            old_tex, _, _ = self.cache.pop(old_key)
+            glDeleteTextures(old_tex)
         return tex, w, h

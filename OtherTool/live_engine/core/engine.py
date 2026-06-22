@@ -19,9 +19,14 @@ class Engine:
 
         self.widget = widget
         self._last_settings_mtime = 0
+        self._last_settings_check = 0.0
         tts_service.update_default()
 
     def _sync_tts_settings(self):
+        now = time.time()
+        if now - self._last_settings_check < 1.0:
+            return
+        self._last_settings_check = now
         try:
             if os.path.exists(SETTINGS_PATH):
                 mtime = os.path.getmtime(SETTINGS_PATH)

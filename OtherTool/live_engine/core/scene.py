@@ -19,8 +19,11 @@ class ChatNode:
 
         self.w = 360
         self.h = 50
+        self._cached_height = None
 
     def get_height(self, font_system):
+        if self._cached_height is not None:
+            return self._cached_height
         _, _, uh = font_system.get_text_texture(
             self.user, QColor(0, 128, 255), max_width=config.USERNAME_MAX_WIDTH,
             outline_color=QColor("white")
@@ -36,7 +39,8 @@ class ChatNode:
         avatar_bottom = top_pad + avatar_size
         message_bottom = top_pad + username_offset + uh + 4 + mh
         content_h = max(avatar_bottom, message_bottom)
-        return content_h + 4
+        self._cached_height = content_h + 4
+        return self._cached_height
 
     def update(self):
         # 平滑收斂到目標位置

@@ -16,7 +16,6 @@ import config
 
 
 
-from PyQt5.QtGui import QFontMetrics, QFont
 
 
 def get_text_baseline_y(center_y):

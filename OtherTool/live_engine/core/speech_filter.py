@@ -29,6 +29,16 @@ class SpeechFilterManager:
         self.remove_emoji: bool = True
         self.remove_pure_numbers: bool = False
 
+        self._url_pattern = re.compile(r"https?://\S+")
+        self._number_pattern = re.compile(r"(?<!\d)\d+(?!\d)")
+        self._emoji_pattern = re.compile(
+            "[\U0001F600-\U0001F64F"
+            "\U0001F300-\U0001F5FF"
+            "\U0001F680-\U0001F6FF"
+            "\u2600-\u26FF"
+            "\u2700-\u27BF]"
+        )
+
         self._load()
 
     def _load(self):
@@ -63,19 +73,13 @@ class SpeechFilterManager:
         result = message
 
         if self.remove_urls:
-            result = re.sub(r"https?://\S+", "", result)
+            result = self._url_pattern.sub("", result)
 
         if self.remove_emoji:
-            result = "".join(
-                ch for ch in result if not (0x1F600 <= ord(ch) <= 0x1F64F or
-                                           0x1F300 <= ord(ch) <= 0x1F5FF or
-                                           0x1F680 <= ord(ch) <= 0x1F6FF or
-                                           0x2600 <= ord(ch) <= 0x26FF or
-                                           0x2700 <= ord(ch) <= 0x27BF)
-            )
+            result = self._emoji_pattern.sub("", result)
 
         if self.remove_pure_numbers:
-            result = re.sub(r"(?<!\d)\d+(?!\d)", "", result)
+            result = self._number_pattern.sub("", result)
 
         for word in self.block_keywords:
             result = result.replace(word, "")
