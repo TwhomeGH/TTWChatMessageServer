@@ -273,7 +273,7 @@ const server = http.createServer((req, res) => {
         var isTwitch = url.searchParams.get('isTwitch') === '1'
         var isKick = url.searchParams.get('isKick') === '1'
         var isOdysee = url.searchParams.get('isOdysee') === '1'
-        var isYoutube = url.searchParams.get('isYoutube') === '1'
+        var isYoutube = url.searchParams.get('isYouTube') === '1'
 
         isBark = url.searchParams.get('isBark') === '1'
         isSocket = url.searchParams.get('isSocket') === '1'
