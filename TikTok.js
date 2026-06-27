@@ -89,7 +89,9 @@ SignConfig.apiKey = sign_api
 const args = process.argv.slice(2)
 
 // 你要的後綴參數
-const keyword = args[0] || ''
+const keyword = args.find(a => !a.startsWith('-')) || ''
+
+console.log('啟動參數:', args.join(' '));
 
 
 let isTK = args.includes('--tiktok')
