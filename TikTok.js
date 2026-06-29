@@ -977,7 +977,7 @@ connection.on(WebcastEvent.ROOM_USER, data => {
 
 connection.on(WebcastEvent.MEMBER,data => {
 
-    let iconn = data.user.profilePicture.url[1]
+    let iconn = data.user.profilePicture?.url?.[1]
     
     console.log(data.user.nickname,"加入了") 
     console.log("STATE View",connection.state.roomInfo.data.user_count,CacheUserNum) 
@@ -1017,7 +1017,7 @@ connection.on(WebcastEvent.MEMBER,data => {
 })
 
 connection.on(WebcastEvent.FOLLOW,data =>{
-    let iconn = data.user.profilePicture.url[1]
+    let iconn = data.user.profilePicture?.url?.[1]
     console.log(data.user.nickname,"關注了主播")
 
     sendBarkNotification(data.user.nickname, "關注了主播",iconn);
@@ -1051,7 +1051,7 @@ connection.on(WebcastEvent.CHAT, data => {
 
     let nickname = fr.modified && fr.user ? fr.user : data.user.nickname;
     let comment = fr.modified && fr.message ? fr.message : data.comment;
-    let iconn = data.user.profilePicture.url[1]
+    let iconn = data.user.profilePicture?.url?.[1]
 
     console.log(`Chat:${nickname} : ${comment}`)
 
@@ -1216,7 +1216,7 @@ function likeUserCount(user, likeCount) {
 
 connection.on(WebcastEvent.LIKE, data => {
 
-    let iconn = data.user.profilePicture.url[1]
+    let iconn = data.user.profilePicture?.url?.[1]
 
     let totalLikeCount = data.totalLikeCount || 0
     let likeCount = likeUserCount(data.user.nickname, data.likeCount || 0)
@@ -1297,7 +1297,7 @@ connection.on(WebcastEvent.GIFT, async data => {
     const originalGiftName = data.giftDetails?.giftName || "";
     const translatedGiftName = await ensureGiftNameTranslation(originalGiftName);
     const giftNameForDisplay = translatedGiftName || originalGiftName;
-    let iconn = data.user.profilePicture.url[1]
+    let iconn = data.user.profilePicture?.url?.[1]
     let giftImg = data.giftDetails.icon.url[1]
 
     if (data.giftType === 1 && !data.repeatEnd) {
@@ -1336,7 +1336,7 @@ connection.on(WebcastEvent.GIFT, async data => {
 
 connection.on(WebcastEvent.SHARE, data =>{
     let mess = "分享直播間"
-    let iconn = data.user.profilePicture.url[1]
+    let iconn = data.user.profilePicture?.url?.[1]
     console.log(`${data.user.nickname} ${mess}`)
     
     sendBarkNotification(data.user.nickname, mess,iconn);
@@ -1378,7 +1378,7 @@ connection.on(WebcastEvent.ENVELOPE, data => {
 connection.on(WebcastEvent.SUPER_FAN, (data) => {
     console.log('A user became a superfan!');
     let mess = "鐵粉出現啦！"
-    let iconn = data.user.profilePicture.url[1]
+    let iconn = data.user.profilePicture?.url?.[1]
     console.log(`${data.user.nickname} ${mess}`)
     
     sendBarkNotification(data.user.nickname, mess,iconn);
