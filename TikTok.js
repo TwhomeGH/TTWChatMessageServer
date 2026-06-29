@@ -868,6 +868,7 @@ if (isTK) {
         
         sendBarkNotification("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "");
         sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
+        fetchAndSyncGifts();
         
     }).catch(err => {
         console.error('Failed to connect', err.message);
@@ -1043,6 +1044,8 @@ connection.on(WebcastEvent.FOLLOW,data =>{
 
 
 connection.on(WebcastEvent.CHAT, data => {
+
+    if (!data.comment) return;
 
     const uniqueKey = `chat_${data.user.nickname}_${data.comment}`;
     if (alreadySent(uniqueKey)) return;
@@ -1429,31 +1432,17 @@ console.log(JSON.stringify({ action },"",4))
 });
 
 
-// Gift
-
-if (isTK) {
-connection.fetchAvailableGifts().then(async (giftList) => {
-    await giftMapReady;
-    console.log(tiktokName,"Tiktok giftList.length:", giftList.length);
-    await syncGiftMapFromGiftList(giftList);
-    await backfillGiftTranslationsFromGiftList(giftList);
-
-    await saveGiftCatalog(giftList);
-    // giftList.forEach(gift => {
-    //     console.log(`id: ${gift.id}, name: ${gift.name}, cost: ${gift.diamond_count}`)
-    // });
-    
-}).catch(err => {
-    console.error(err);
-})
-
-
-writeLog("Default", "開始取得 TikTok禮物列表", "System")
-
-} else {
-    console.log("跳過 TikTok禮物列表取得")
-
-    writeLog("Default", "跳過 TikTok禮物列表取得", "System")
+function fetchAndSyncGifts() {
+    writeLog("Default", "開始取得 TikTok禮物列表", "System")
+    connection.fetchAvailableGifts().then(async (giftList) => {
+        await giftMapReady;
+        console.log(tiktokName,"Tiktok giftList.length:", giftList.length);
+        await syncGiftMapFromGiftList(giftList);
+        await backfillGiftTranslationsFromGiftList(giftList);
+        await saveGiftCatalog(giftList);
+    }).catch(err => {
+        console.error("取得禮物列表失敗:", err.message);
+    })
 }
 
 

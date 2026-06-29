@@ -188,9 +188,13 @@ function pushLog(...line) {
 
 function sendToTikTok(obj) {
 
-    if (tiktokProcess) {
+    if (tiktokProcess && !tiktokProcess.killed) {
         pushLog("正在運行主TikTok,js 傳遞Socket與訊息紀錄")
-        tiktokProcess.stdin.write(JSON.stringify(obj) + '\n');
+        try {
+            tiktokProcess.stdin.write(JSON.stringify(obj) + '\n');
+        } catch (err) {
+            pushLog(`寫入 TikTok 進程失敗: ${err.message}`)
+        }
     } else {
         pushLog("未運行TikTok.js")
     }
