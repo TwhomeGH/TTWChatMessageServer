@@ -116,7 +116,12 @@ async function translateByMyMemory(Chat, sourceLang) {
         params: { q: Chat, langpair: `${sourceLang}|${TRANSLATE_TARGET_LANG}` },
         timeout: 10000
     });
-    return resp?.data?.responseData?.translatedText?.trim() || null;
+    const translated = resp?.data?.responseData?.translatedText?.trim() || null;
+    if (translated && TRANSLATE_TARGET_LANG.toUpperCase().startsWith('ZH') && !/[\u4e00-\u9fff]/.test(translated)) {
+        self_logTo(`MyMemory 結果不含中文，跳過: ${translated}`);
+        return null;
+    }
+    return translated;
 }
 
 async function translateByGoogle(Chat) {
