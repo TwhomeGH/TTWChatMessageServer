@@ -950,10 +950,25 @@ connection.on(WebcastEvent.CAPTION_MESSAGE, (data) => {
     }
 });
 
+// 取得 TikTok v3 使用者頭像（avatarLarge → avatarMedium → avatarThumb）
+function getTikTokProfilePic(user) {
+    if (!user) return "";
+    const urls = user.avatarLarge?.urlList || user.avatarMedium?.urlList || user.avatarThumb?.urlList;
+    if (urls && urls.length > 0) {
+        return urls.find(u => u.includes("100x100") && u.includes(".webp"))
+            || urls.find(u => u.includes("100x100") && u.includes(".jpeg"))
+            || urls.find(u => !u.includes("shrink"))
+            || urls[0]
+            || "";
+    }
+    return "";
+}
+
 // 取得人數和頭號觀眾列表的事件
 
 connection.on(WebcastEvent.ROOM_USER, data => {
-    console.log(`Viewer Count: ${data.viewerCount}`);
+    const viewerCount = data.viewerCount ?? connection.state?.roomInfo?.data?.user_count;
+    console.log(`Viewer Count: ${viewerCount}`);
     const ranksList = data.ranksList || [];
     const topGifter = ranksList[0];
     if (topGifter?.user) {
@@ -968,7 +983,7 @@ connection.on(WebcastEvent.ROOM_USER, data => {
     }
 
     CacheUserList = ranksList.map(item => item.user.nickname);
-    CacheUserNum = data.viewerCount;
+    CacheUserNum = viewerCount;
 
 });
 
@@ -977,7 +992,7 @@ connection.on(WebcastEvent.ROOM_USER, data => {
 
 connection.on(WebcastEvent.MEMBER,data => {
 
-    let iconn = data.user.profilePicture?.url?.[1]
+    let iconn = getTikTokProfilePic(data.user)
     
     console.log(data.user.nickname,"加入了") 
     console.log("STATE View",connection.state.roomInfo.data.user_count,CacheUserNum) 
@@ -1017,7 +1032,7 @@ connection.on(WebcastEvent.MEMBER,data => {
 })
 
 connection.on(WebcastEvent.FOLLOW,data =>{
-    let iconn = data.user.profilePicture?.url?.[1]
+    let iconn = getTikTokProfilePic(data.user)
     console.log(data.user.nickname,"關注了主播")
 
     sendBarkNotification(data.user.nickname, "關注了主播",iconn);
@@ -1051,7 +1066,7 @@ connection.on(WebcastEvent.CHAT, data => {
 
     let nickname = fr.modified && fr.user ? fr.user : data.user.nickname;
     let comment = fr.modified && fr.message ? fr.message : data.comment;
-    let iconn = data.user.profilePicture?.url?.[1]
+    let iconn = getTikTokProfilePic(data.user)
 
     console.log(`Chat:${nickname} : ${comment}`)
 
@@ -1216,7 +1231,7 @@ function likeUserCount(user, likeCount) {
 
 connection.on(WebcastEvent.LIKE, data => {
 
-    let iconn = data.user.profilePicture?.url?.[1]
+    let iconn = getTikTokProfilePic(data.user)
 
     let totalLikeCount = data.totalLikeCount || 0
     let likeCount = likeUserCount(data.user.nickname, data.likeCount || 0)
@@ -1297,7 +1312,7 @@ connection.on(WebcastEvent.GIFT, async data => {
     const originalGiftName = data.giftDetails?.giftName || "";
     const translatedGiftName = await ensureGiftNameTranslation(originalGiftName);
     const giftNameForDisplay = translatedGiftName || originalGiftName;
-    let iconn = data.user.profilePicture?.url?.[1]
+    let iconn = getTikTokProfilePic(data.user)
     let giftImg = data.giftDetails.icon.url[1]
 
     if (data.giftType === 1 && !data.repeatEnd) {
@@ -1336,7 +1351,7 @@ connection.on(WebcastEvent.GIFT, async data => {
 
 connection.on(WebcastEvent.SHARE, data =>{
     let mess = "分享直播間"
-    let iconn = data.user.profilePicture?.url?.[1]
+    let iconn = getTikTokProfilePic(data.user)
     console.log(`${data.user.nickname} ${mess}`)
     
     sendBarkNotification(data.user.nickname, mess,iconn);
@@ -1368,7 +1383,7 @@ connection.on(WebcastEvent.ENVELOPE, data => {
 
     let mess = `送出了寶箱，包含 ${envelope.diamondCount} 鑽石`
     const senderName = data.nickname || envelope.sendUserName || "未知用戶";
-    const profilePic = data.user?.profilePicture?.url?.[1] || "";
+    const profilePic = getTikTokProfilePic(data.user) || "";
     sendBarkNotification(senderName, mess, profilePic);
     sendSocketMessage(senderName, mess, profilePic, "", true, CacheUserNum, CacheUserList);
 
@@ -1378,7 +1393,7 @@ connection.on(WebcastEvent.ENVELOPE, data => {
 connection.on(WebcastEvent.SUPER_FAN, (data) => {
     console.log('A user became a superfan!');
     let mess = "鐵粉出現啦！"
-    let iconn = data.user.profilePicture?.url?.[1]
+    let iconn = getTikTokProfilePic(data.user)
     console.log(`${data.user.nickname} ${mess}`)
     
     sendBarkNotification(data.user.nickname, mess,iconn);
