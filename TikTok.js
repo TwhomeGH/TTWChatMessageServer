@@ -954,7 +954,8 @@ connection.on(WebcastEvent.CAPTION_MESSAGE, (data) => {
 
 connection.on(WebcastEvent.ROOM_USER, data => {
     console.log(`Viewer Count: ${data.viewerCount}`);
-    const topGifter = data.ranksList[0];
+    const ranksList = data.ranksList || [];
+    const topGifter = ranksList[0];
     if (topGifter?.user) {
         const uniqueId = topGifter.user.uniqueId;
         const nickname = topGifter.user.nickname;
@@ -966,7 +967,7 @@ connection.on(WebcastEvent.ROOM_USER, data => {
         }
     }
 
-    CacheUserList = data.ranksList.map(item => item.user.nickname);
+    CacheUserList = ranksList.map(item => item.user.nickname);
     CacheUserNum = data.viewerCount;
 
 });
