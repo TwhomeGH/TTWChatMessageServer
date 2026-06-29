@@ -1076,7 +1076,7 @@ connection.on(WebcastEvent.CHAT, data => {
             writeLog("Default", `${nickname} : ${RESCHAT}`, "Chat")
 
             if (RES.toLowerCase() != comment.toLowerCase() ) {
-                sendBarkNotification(nickname, RES,iconn);
+                sendBarkNotification(nickname + "[翻譯]", RES,iconn);
             }
 
             sendSocketMessage(nickname, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList, data.user.nickname, data.comment);
@@ -1687,7 +1687,7 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
             let RESCHAT=`${tMsg}${tMsg == RES ? "" :`\n${RES}`}`
 
             if (RES.toLowerCase() != tMsg.toLowerCase() ) {
-                sendBarkNotification(tUser, RES, icon);
+                sendBarkNotification(tUser + "[翻譯]", RES, icon);
             }
 
             sendSocketMessage(tUser, RESCHAT,icon,"",true,CacheUserNum,CacheUserList);

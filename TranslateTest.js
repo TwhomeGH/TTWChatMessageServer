@@ -65,6 +65,11 @@ function detectLanguage(text)  {
         return "en";
     }
 
+    // 檢查是否包含 Cyrillic 文字 (俄文等)
+    if (/[\u0400-\u04FF]/.test(text)) {
+        return "ru";
+    }
+
     // 檢查是否包含日文假名 (平假名 + 片假名)
     if (/[\u3040-\u30FF\uFF66-\uFF9F]/.test(text)) {
         return "ja";
