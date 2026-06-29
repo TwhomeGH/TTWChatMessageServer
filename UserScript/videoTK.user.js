@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Video Info Overlay (Dual)
 // @namespace    pip-chat-test
-// @version      2.3
+// @version      2.4
 // @description  顯示 video 原始解析度和頁面顯示尺寸，既掛 body 也掛 live-room-content
 // @match        https://www.tiktok.com/*
 // @grant        none
@@ -158,7 +158,6 @@
 
         if (video.videoWidth && video.videoHeight) {
             video.muted = false;
-            video.volume = 1;
             
             // MRender備用顯示
             //updateInfo(video, container);
