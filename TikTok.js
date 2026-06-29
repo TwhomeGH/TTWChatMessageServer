@@ -968,18 +968,18 @@ function getTikTokProfilePic(user) {
 // 取得人數和頭號觀眾列表的事件
 
 connection.on(WebcastEvent.ROOM_USER, data => {
-    const viewerCount = data.viewerCount ?? connection.state?.roomInfo?.data?.user_count;
+    const viewerCount = data.total ?? data.totalUser ?? connection.state?.roomInfo?.data?.user_count;
     console.log(`Viewer Count: ${viewerCount}`);
-    const ranksList = data.ranksList || [];
+    const ranksList = data.ranks || [];
     const topGifter = ranksList[0];
     if (topGifter?.user) {
-        const uniqueId = topGifter.user.uniqueId;
+        const uniqueId = topGifter.user.displayId;
         const nickname = topGifter.user.nickname;
         if (uniqueId) {
-            console.log(`Top gifter uniqueId: ${uniqueId} (${topGifter.coinCount})`);
+            console.log(`Top gifter uniqueId: ${uniqueId} (${topGifter.score})`);
         }
         if (nickname) {
-            console.log(`Top gifter nickname: ${nickname} (${topGifter.coinCount})`);
+            console.log(`Top gifter nickname: ${nickname} (${topGifter.score})`);
         }
     }
 
@@ -1045,40 +1045,40 @@ connection.on(WebcastEvent.FOLLOW,data =>{
 
 connection.on(WebcastEvent.CHAT, data => {
 
-    if (!data.comment) return;
+    if (!data.content) return;
 
-    const uniqueKey = `chat_${data.user.nickname}_${data.comment}`;
+    const uniqueKey = `chat_${data.user.nickname}_${data.content}`;
     if (alreadySent(uniqueKey)) return;
 
     // 跨路徑去重：檢查是否已被 userscript 路徑送出（檢查 syncBuffer）
-    const isCrossPathDuplicate = isDuplicate(data.user.nickname.trim(), data.comment.trim());
+    const isCrossPathDuplicate = isDuplicate(data.user.nickname.trim(), data.content.trim());
 
     if (isCrossPathDuplicate) {
-        console.log('🚫 跨路徑重複(來自userscript):', data.user.nickname, data.comment);
-        writeLog("Default", `跨路徑重複訊息被過濾(來自userscript): ${data.user.nickname} : ${data.comment}`, "CrossPathDuplicate")
+        console.log('🚫 跨路徑重複(來自userscript):', data.user.nickname, data.content);
+        writeLog("Default", `跨路徑重複訊息被過濾(來自userscript): ${data.user.nickname} : ${data.content}`, "CrossPathDuplicate")
         return;
     }
 
-    const fr = processFilter({ user: data.user.nickname, message: data.comment });
+    const fr = processFilter({ user: data.user.nickname, message: data.content });
     if (fr.blocked) {
-        console.log('🚫 過濾器阻擋:', data.user.nickname, data.comment, `(規則: ${fr.reason})`);
-        writeLog("Default", `過濾器阻擋訊息: ${data.user.nickname} : ${data.comment} (規則: ${fr.reason})`, "FilterBlocked")
-        addToSyncBuffer(data.user.nickname.trim(), data.comment.trim());
+        console.log('🚫 過濾器阻擋:', data.user.nickname, data.content, `(規則: ${fr.reason})`);
+        writeLog("Default", `過濾器阻擋訊息: ${data.user.nickname} : ${data.content} (規則: ${fr.reason})`, "FilterBlocked")
+        addToSyncBuffer(data.user.nickname.trim(), data.content.trim());
         return;
     }
 
     let nickname = fr.modified && fr.user ? fr.user : data.user.nickname;
-    let comment = fr.modified && fr.message ? fr.message : data.comment;
+    let comment = fr.modified && fr.message ? fr.message : data.content;
     let iconn = getTikTokProfilePic(data.user)
 
     console.log(`Chat:${nickname} : ${comment}`)
 
-    writeLog("Default", `原始訊息: ${data.user.nickname} : ${data.comment}\n過濾後訊息: ${nickname} : ${comment}`, "Chat原過濾對比")
+    writeLog("Default", `原始訊息: ${data.user.nickname} : ${data.content}\n過濾後訊息: ${nickname} : ${comment}`, "Chat原過濾對比")
 
     if (!nickname || !comment) {
-        console.log('⚠️ 過濾後 nick/comment 為空，跳過:', data.user.nickname, data.comment);
-        writeLog("Default", `過濾後 nick/comment 為空，跳過: ${data.user.nickname} : ${data.comment}`, "FilterEmpty")
-        addToSyncBuffer(data.user.nickname.trim(), data.comment.trim());
+        console.log('⚠️ 過濾後 nick/comment 為空，跳過:', data.user.nickname, data.content);
+        writeLog("Default", `過濾後 nick/comment 為空，跳過: ${data.user.nickname} : ${data.content}`, "FilterEmpty")
+        addToSyncBuffer(data.user.nickname.trim(), data.content.trim());
         return;
     }
 
@@ -1098,11 +1098,11 @@ connection.on(WebcastEvent.CHAT, data => {
                 sendBarkNotification(nickname + "[翻譯]", RES,iconn);
             }
 
-            sendSocketMessage(nickname, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList, data.user.nickname, data.comment);
+            sendSocketMessage(nickname, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList, data.user.nickname, data.content);
 
             recordMessageStat(RESCHAT);
 
-            addToSyncBuffer(data.user.nickname.trim(), data.comment.trim());
+            addToSyncBuffer(data.user.nickname.trim(), data.content.trim());
         
     })
 
@@ -1120,7 +1120,7 @@ connection.on(WebcastEvent.SOCIAL, data => {
     if (data.action) {
         LOG_SOCIAL.push(`Social action: ${data.action}`);
     }
-    const uniqueId = data.user?.uniqueId;
+    const uniqueId = data.user?.displayId;
     const nickname = data.user?.nickname;
     if (uniqueId) {
         LOG_SOCIAL.push(`User uniqueId: ${uniqueId}`);
@@ -1140,7 +1140,7 @@ connection.on(WebcastEvent.SOCIAL, data => {
 // EMOTE 表情
 
 connection.on(WebcastEvent.EMOTE, (data) => {
-    const uniqueId = data.user?.uniqueId;
+    const uniqueId = data.user?.displayId;
     const nickname = data.user?.nickname;
 
     var LOG_R = [ ]
@@ -1236,8 +1236,8 @@ connection.on(WebcastEvent.LIKE, data => {
 
     let iconn = getTikTokProfilePic(data.user)
 
-    let totalLikeCount = data.totalLikeCount || 0
-    let likeCount = likeUserCount(data.user.nickname, data.likeCount || 0)
+    let totalLikeCount = parseInt(data.total) || 0
+    let likeCount = likeUserCount(data.user.nickname, data.count || 0)
 
     let mess = `喜歡你 ${likeCount} 次`
 
@@ -1312,13 +1312,14 @@ function recordGift(userId, increment = 1) {
 
 connection.on(WebcastEvent.GIFT, async data => {
     await giftMapReady;
-    const originalGiftName = data.giftDetails?.giftName || "";
+    const giftInfo = data.gift;
+    const originalGiftName = giftInfo?.name || "";
     const translatedGiftName = await ensureGiftNameTranslation(originalGiftName);
     const giftNameForDisplay = translatedGiftName || originalGiftName;
     let iconn = getTikTokProfilePic(data.user)
-    let giftImg = data.giftDetails.icon.url[1]
+    let giftImg = giftInfo?.icon?.urlList?.[0] || ""
 
-    if (data.giftType === 1 && !data.repeatEnd) {
+    if (giftInfo?.type === 1 && !data.repeatEnd) {
         // 連擊進行中 → 只發連擊進度，不回到底部
         let mess = `連擊了 ${giftNameForDisplay} ${data.repeatCount} 個`
         console.log(`連擊了 ${data.user.nickname} : ${giftNameForDisplay} x${data.repeatCount}`)
@@ -1339,7 +1340,7 @@ connection.on(WebcastEvent.GIFT, async data => {
     writeLog("Default", `${data.user.nickname} ${mess}`, "Gift")
 
     // 累計送禮次數感謝（同一使用者 60 秒內送禮 >= 5 次）
-    let count = recordGift(data.user.uniqueId);
+    let count = recordGift(data.user.displayId);
     if (count >= 5) {
         let thanks = `${data.user.nickname} 謝謝支持`
         console.log("5次送禮感謝", data.user.nickname, thanks)
@@ -1347,7 +1348,7 @@ connection.on(WebcastEvent.GIFT, async data => {
         sendSocketMessage("感謝大哥的餽贈", thanks, iconn, giftImg, true, CacheUserNum, CacheUserList);
         addToSyncBuffer(data.user.nickname.trim(), thanks);
         writeLog("Default", thanks, "Gift感謝")
-        UserGiftCount.set(data.user.uniqueId, { count: 0, lastGiftTimestamp: Date.now() });
+        UserGiftCount.set(data.user.displayId, { count: 0, lastGiftTimestamp: Date.now() });
     }
 });
 
@@ -1385,8 +1386,8 @@ connection.on(WebcastEvent.ENVELOPE, data => {
     }
 
     let mess = `送出了寶箱，包含 ${envelope.diamondCount} 鑽石`
-    const senderName = data.nickname || envelope.sendUserName || "未知用戶";
-    const profilePic = getTikTokProfilePic(data.user) || "";
+    const senderName = envelope.sendUserName || data.nickname || "未知用戶";
+    const profilePic = getTikTokProfilePic(data.user) || envelope.sendUserAvatar?.urlList?.[0] || "";
     sendBarkNotification(senderName, mess, profilePic);
     sendSocketMessage(senderName, mess, profilePic, "", true, CacheUserNum, CacheUserList);
 
@@ -1397,12 +1398,13 @@ connection.on(WebcastEvent.SUPER_FAN, (data) => {
     console.log('A user became a superfan!');
     let mess = "鐵粉出現啦！"
     let iconn = getTikTokProfilePic(data.user)
-    console.log(`${data.user.nickname} ${mess}`)
-    
-    sendBarkNotification(data.user.nickname, mess,iconn);
-    sendSocketMessage(data.user.nickname, mess,iconn,"",true,CacheUserNum,CacheUserList);
+    const nickname = data.user?.nickname || "用戶"
+    console.log(`${nickname} ${mess}`)
 
-    writeLog("Default", `${data.user.nickname} 成為了鐵粉！`, "SuperFan")
+    sendBarkNotification(nickname, mess, iconn);
+    sendSocketMessage(nickname, mess, iconn, "", true, CacheUserNum, CacheUserList);
+
+    writeLog("Default", `${nickname} 成為了鐵粉！`, "SuperFan")
 
 });
 
