@@ -868,7 +868,7 @@ if (isTK) {
         
         sendBarkNotification("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "");
         sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
-        fetchAndSyncGifts();
+        // fetchAndSyncGifts(); // eulerstream 需付費，禮物名稱由收到事件時即時翻譯
         
     }).catch(err => {
         console.error('Failed to connect', err.message);
