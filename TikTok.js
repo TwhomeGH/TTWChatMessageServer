@@ -142,7 +142,6 @@ const youtubePollIntervalS = parseInt(process.env.YOUTUBE_POLL_INTERVAL_S) || 30
 let client = null;
 let reconnectTimer = null;
 
-let heartbeatTimer = null;
 
 
 const PORT = process.env.SOCKET_API?.split(':')[2] || 9322; // 你的 socket server 端口
@@ -446,10 +445,6 @@ async function handleExit() {
             }) + '\n', () => {
                 // 等到 write callback 確認送出後再關閉
                 client.end(() => {
-
-                    clearTimeout(heartbeatTimer);
-                    heartbeatTimer = null;
-
                     resolve();
                 });
             });
@@ -773,14 +768,6 @@ function connectSocket() {
             reconnectTimer = null;
         }
         sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false,CacheUserNum,CacheUserList);
-    
-        // 啟動心跳
-        heartbeatTimer = setInterval(() => {
-            if (client && !client.destroyed) {
-                client.write(JSON.stringify({ type: 'heartbeat' }) + '\n');
-            }
-        }, 50000); // 每 50 秒送一次心跳
-
     });
 
 
@@ -790,9 +777,6 @@ function connectSocket() {
 
     client.on('close', () => {
         console.log('⚠️ TCP Socket closed, reconnecting in 15s...');
-
-        clearTimeout(heartbeatTimer);
-        heartbeatTimer = null;
 
         if (isEnd){
             console.log("程式已結束，停止重連");
@@ -818,9 +802,6 @@ function connectSocket() {
     client.on('error', (err) => {
         console.error('⚠️ TCP Socket error:', err.message);
         client?.destroy();
-
-        clearTimeout(heartbeatTimer);
-        heartbeatTimer = null;
     });
 }
 
