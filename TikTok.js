@@ -1522,8 +1522,9 @@ function twitchViewCache() {
     apiClient.streams.getStreamByUserId(tuser).then(stream => {
         if (stream) {
             TwitchViewerCount = stream.viewers;
-            console.log(`📊 Twitch 觀眾數: ${TwitchViewerCount}`);
-            writeLog("Default", `Twitch 觀眾數: ${TwitchViewerCount}`, "Twitch View");
+            let DA = new Date()
+            console.log(`📊 Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`);
+            writeLog("Default", `Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`, "Twitch View");
             updateCombinedViewerCount();
         }
     }).catch(err => {
