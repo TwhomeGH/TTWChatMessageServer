@@ -9,7 +9,6 @@ import { config } from 'dotenv';
 
 import net from 'net';
 
-import { SignConfig } from "tiktok-live-connector";
 
 
 import path from 'path';
@@ -77,8 +76,6 @@ const child = fork('TikTok.js', [], {
 
 }
 
-let sign_api= process.env.SIGN_API
-SignConfig.apiKey = sign_api
 
 
 // node 內建：process.argv
@@ -582,8 +579,10 @@ const giftMapReady = loadGiftNameMap();
 
 
 const connection = new TikTokLiveConnection(tiktokName,{
-    sessionId: process.env.SESSION_ID,
-    ttTargetIdc: process.env.TT_TARGET_IDC || "alisg",
+    signApiKey: process.env.SIGN_API,
+    session: {
+        cookie: `sessionid=${process.env.SESSION_ID}; tt-target-idc=${process.env.TT_TARGET_IDC || "alisg"}`
+    },
     authenticateWs: true
 })
 
