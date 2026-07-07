@@ -734,7 +734,7 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,use
         img,
         giftImg,
         isMain:Boolean(isMain),
-        userNum:Int(userNum),
+        userNum:Number(userNum),
         userList
     };
     
