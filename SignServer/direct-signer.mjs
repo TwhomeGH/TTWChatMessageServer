@@ -593,17 +593,21 @@ export async function browserFetchSigned(params) {
         const url = 'https://webcast.tiktok.com/webcast/im/fetch/?' + params.toString();
         const resp = await fetch(url, {
             headers: { 'accept': '*/*', 'content-type': 'application/x-www-form-urlencoded; charset=UTF-8' }
-        });
+        }).catch(() => null);
+        if (!resp) return { bytes: [], status: 0, url: '' };
         const buf = await resp.arrayBuffer();
         return { bytes: Array.from(new Uint8Array(buf)), status: resp.status, url: resp.url.substring(0, 150) };
     }, { roomId: params.room_id, cursor: params.cursor });
 
-    if (rawBytes.status !== 200) {
-        console.warn(`[DirectSigner] im/fetch/ status: ${rawBytes.status}`);
-        // Extract X-Dynosaur from final URL for debugging
-        const ru = new URL(rawBytes.url);
-        const xd = ru.searchParams.get('X-Dynosaur') || '';
-        if (xd) console.log(`[DirectSigner] X-Dynosaur: ${xd.substring(0, 60)}...`);
+    if (!rawBytes || rawBytes.status !== 200) {
+        console.warn('[DirectSigner] im/fetch/ status:', rawBytes?.status);
+        if (rawBytes?.url) {
+            try {
+                const ru = new URL(rawBytes.url);
+                const xd = ru.searchParams.get('X-Dynosaur') || '';
+                if (xd) console.log('[DirectSigner] X-Dynosaur:', xd.substring(0, 60));
+            } catch(e) {}
+        }
         return null;
     }
 

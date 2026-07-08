@@ -59,8 +59,7 @@ export async function setupCustomSignServer() {
                             needAck: false,
                             messages: decoded.messages || []
                         },
-                        fetchResultCookieHeader: '',
-                        fetchResultRoomId: roomId
+                        fetchResultCookieHeader: '', fetchResultRoomId: roomId
                     };
                 }
             }
@@ -75,63 +74,50 @@ export async function setupCustomSignServer() {
         };
     };
 
-    const origSetupWebsocket = TikTokLiveConnection.prototype.setupWebsocket;
+    // Mock WS + im/fetch/ polling for real-time messages
+    const origSetup = TikTokLiveConnection.prototype.setupWebsocket;
     TikTokLiveConnection.prototype.setupWebsocket = async function (wsUrl, wsParams, roomId) {
-        console.log('[SignServer] Mock WS for room', roomId);
+        console.log('[SignServer] Mock WS + imFetch polling');
         const mock = new EventEmitter();
         mock.readyState = 1;
-        Object.assign(mock, {
-            CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3, seqId: 1,
-            close: (code) => { mock.readyState = 3; mock.emit('close', code || 1000, 'closed'); },
-            send: () => {},
-            ping: () => {}, terminate: () => mock.close(), switchRooms: () => {},
+        Object.assign(mock, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3, seqId: 1,
+            close: (code) => { mock.readyState = 3; mock.emit('close', code || 1000); },
+            send: () => {}, ping: () => {}, terminate: () => mock.close(), switchRooms: () => {},
         });
         this._wsClientProvider = () => {
-            setImmediate(() => {
-                mock.emit('open');
-                // Start im/fetch/ polling loop
-                startPolling(roomId, this);
-            });
+            setImmediate(() => { mock.emit('open'); imFetchPollLoop(roomId, this, mock); });
             return mock;
         };
-        return origSetupWebsocket.call(this, wsUrl, wsParams, roomId);
+        return origSetup.call(this, wsUrl, wsParams, roomId);
     };
 }
 
-function startPolling(roomId, connection) {
-    let running = true;
+function imFetchPollLoop(roomId, connection, mock) {
     let cursor = '0';
-    let pollCount = 0;
     let errCount = 0;
-    console.log('[imFetch] Polling started for', roomId);
+    let pollCount = 0;
     const poll = async () => {
-        while (running) {
+        while (connection._wsClientInstance === mock) {
             try {
-                const rawBytes = await browserFetchSigned({ room_id: roomId, cursor });
-                pollCount++;
-                errCount = 0;
-                if (rawBytes && rawBytes.length > 0) {
-                    const decoded = deserializeMessage('ProtoMessageFetchResult', Buffer.from(rawBytes));
-                    if (decoded) {
-                        if (decoded.cursor) cursor = decoded.cursor;
-                        const msgs = decoded.messages || [];
+                const raw = await browserFetchSigned({ room_id: roomId, cursor });
+                if (raw && raw.length > 0) {
+                    const d = deserializeMessage('ProtoMessageFetchResult', Buffer.from(raw));
+                    if (d) {
+                        if (d.cursor) { cursor = d.cursor; errCount = 0; }
+                        const msgs = d.messages || [];
                         if (msgs.length > 0) {
-                            const types = [...new Set(msgs.map(m => m?.common?.method || m?.method || '?'))];
-                            console.log('[imFetch]', pollCount, msgs.length, 'types:', types.slice(0,5).join(','));
-                            if (typeof connection.processProtoMessageFetchResult === 'function') {
-                                await connection.processProtoMessageFetchResult(decoded);
+                            pollCount++;
+                            console.log('[imFetch]', pollCount, 'msgs:', msgs.length);
+                            for (const msg of msgs) {
+                                if (typeof connection._handleMessage === 'function') connection._handleMessage(msg);
                             }
                         }
                     }
                 }
             } catch (e) {
                 errCount++;
-                if (errCount % 10 === 1) console.warn('[imFetch] Error:', e.message);
-                if (errCount > 30) {
-                    console.warn('[imFetch] Restarting after 30 errors...');
-                    errCount = 0;
-                    await new Promise(r => setTimeout(r, 10000));
-                }
+                if (errCount % 10 === 1) console.warn('[imFetch] err:', e.message);
+                if (errCount > 30) { errCount = 0; await new Promise(r => setTimeout(r, 10000)); }
             }
             await new Promise(r => setTimeout(r, errCount > 5 ? 5000 : 2000));
         }
