@@ -16,6 +16,7 @@
     "kick-wss": "^1.0.5",
     "protobufjs": "^8.6.4",
     "tiktok-live-connector": "^2.4.0",
+    "tiktok-signature": "^4.3.6",
     "update": "^0.7.4"
   }
 }

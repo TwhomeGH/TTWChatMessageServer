@@ -21,6 +21,7 @@ const __dirname = path.dirname(__filename);
 
 
 import { TikTokLiveConnection, WebcastEvent,ControlEvent,ControlAction } from 'tiktok-live-connector';
+import { setupCustomSignServer, waitForSigner } from './SignServer/index.js';
 import { type } from 'os';
 import Translate from "./TranslateTest.js"
 import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFilter } from "./MessageFilter.js"
@@ -29,6 +30,7 @@ import console from 'console';
 
 import { fork } from 'child_process'
 
+setupCustomSignServer();
 
 
 
@@ -169,6 +171,11 @@ const MESSAGE_TTL = 5 * 60 * 1000; // 5 分鐘
 async function loadSentMessages() {
     try {
         const raw = await fs.readFile(CACHE_FILE, "utf-8");
+        if (!raw || raw.trim().length === 0) {
+            console.log("⚠️ send_messages.json 為空，初始化空物件");
+            sentMessages = {};
+            return;
+        }
         const data = JSON.parse(raw);
         sentMessages = Object.fromEntries(
             Object.entries(data).map(([k, v]) => [k, new Date(v).getTime()])
@@ -554,7 +561,14 @@ process.stdin.on('data', async (chunk) => {
                 }
 
                 sendToTCP(json, origUser, origMsg);
-                sendSocketMessage(json.user, json.message, json.img || '', '', true, CacheUserNum, CacheUserList, origUser, origMsg);
+
+                
+                sendSocketMessage(json.user, json.message, json.img || '', json.giftImg || '', true, CacheUserNum, CacheUserList, origUser, origMsg);
+
+                let Gift = json.giftImg || ''
+
+                sendBarkNotification(json.user, json.message, json.img || Gift);
+
                 console.log('📥 收到 JSON 訊息:', json);
             }
 
@@ -577,13 +591,18 @@ loadSentMessages()
 const giftMapReady = loadGiftNameMap();
 
 
+console.log("TikTok 直播間名稱:", tiktokName);
 
 const connection = new TikTokLiveConnection(tiktokName,{
-    signApiKey: process.env.SIGN_API,
     session: {
-        cookie: `sessionid=${process.env.SESSION_ID}; tt-target-idc=${process.env.TT_TARGET_IDC || "alisg"}`
-    },
-    authenticateWs: true
+        cookie: {
+            type: 'cookie',
+            value: {
+                sessionId: process.env.SESSION_ID,
+                ttTargetIdc: process.env.TT_TARGET_IDC || "alisg"
+            }
+        }
+    }
 })
 
 
@@ -836,6 +855,11 @@ function viewCache() {
 
 if (isTK) {
     console.log("連接 TikTok 直播間:", tiktokName)
+
+    // 等待簽名服務就緒
+    console.log("等待簽名服務就緒...");
+    await waitForSigner();
+
     // Connect to the chat (await can be used as well)
     connection.connect().then(state => {
         console.info(`Connected to roomId ${state.roomId}`);
@@ -855,19 +879,23 @@ if (isTK) {
         sendBarkNotification("TikTok 直播間連線失敗", err.message.substring(0, 100));
         sendSocketMessage("系統", `TikTok 直播間連線失敗: ${err.message}`, "", "", false, CacheUserNum, CacheUserList);
 
-        if (TkRetryCount < TkRetryMaxCount) {
-            TkRetryCount += 1;
-            console.log(`${TkRetryCount} 秒後嘗試重新連線 (${TkRetryCount}/${TkRetryMaxCount})...`);
-            setTimeout(() => {
-                connection.connect().then(state => {
-                    console.log(`重新連線成功，roomId ${state.roomId}`);
-                    TkRetryCount = 0;
-                    RoomID = state.roomId;
-                }).catch(err => {
-                    console.error("重新連線失敗:", err.message);
-                });
-            }, 15000);
-        }
+        // 暫時停用重連機制，改為直接退出程式，避免無限重試
+        // if (TkRetryCount < TkRetryMaxCount) {
+        //     TkRetryCount += 1;
+        //     //console.log(`${TkRetryCount} 秒後嘗試重新連線 (${TkRetryCount}/${TkRetryMaxCount})...`);
+        //     // setTimeout(() => {
+        //     //     connection.connect().then(state => {
+        //     //         console.log(`重新連線成功，roomId ${state.roomId}`);
+        //     //         TkRetryCount = 0;
+        //     //         RoomID = state.roomId;
+        //     //     }).catch(err => {
+        //     //         console.error("重新連線失敗:", err.message);
+        //     //     });
+        //     // }, 15000);
+
+
+        // }
+
     });
 
     setInterval(viewCache, 10000); // 每10秒更新一次用戶數量   

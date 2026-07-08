@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      2.3
+// @version      2.4
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
@@ -190,22 +190,68 @@ function hasContent(el) {
 
     // 監控聊天室新訊息
     function getNewChatMessages(node) {
-        // node 為新增的 chat message
         if (sentMessages.has(node)) return;
 
         const userName = node.querySelector('[data-e2e="message-owner-name"]')?.innerText?.trim();
-        
-        // 精準抓訊息本身
-        const text = node.querySelector('div.w-full.break-words.align-middle.cursor-pointer')?.innerText?.trim();
-
+        const text = node.querySelector('div.w-full.break-words.align-middle')?.innerText?.trim();
         const avatar = node.querySelector('div[class*="avatar"] img, img[class*="ImgAvatar"]')?.src
             || node.querySelector('img')?.src;
 
         if (userName && text) {
-            sendSocketMessage(userName, text, avatar, null, true,View);
+            sendSocketMessage(userName, text, avatar, null, true, View);
             sentMessages.add(node);
             console.log("New message sent:", { userName, text, avatar });
         }
+    }
+
+    // 監控送禮訊息（無 data-e2e，但有禮物圖 + 用戶名）
+    function watchGiftMessages(callback) {
+        const observer = new MutationObserver(mutations => {
+            for (const mutation of mutations) {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType !== 1) return;
+
+                    // 直接找到沒有 data-e2e 且包含禮物圖的容器
+                    const containers = [];
+                    if (node.matches?.('div.relative.flex.py-4.px-12') &&
+                        !node.hasAttribute('data-e2e') &&
+                        node.querySelector('span.w-\\[20px\\].h-\\[20px\\] img')) {
+                        containers.push(node);
+                    }
+                    node.querySelectorAll?.('div.relative.flex.py-4.px-12:not([data-e2e])')
+                        .forEach(el => {
+                            if (el.querySelector('span.w-\\[20px\\].h-\\[20px\\] img')) {
+                                containers.push(el);
+                            }
+                        });
+
+                    containers.forEach(el => {
+                        if (!sentMessages.has(el)) callback(el);
+                    });
+                });
+            }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        return observer;
+    }
+
+    function getNewGiftMessages(container) {
+        const userName = container.querySelector('[data-e2e="message-owner-name"]')?.innerText?.trim();
+        if (!userName) return;
+
+        const giftImgEl = container.querySelector('span.w-\\[20px\\].h-\\[20px\\] img, span.w-\\[20px\\] img');
+        if (!giftImgEl) return;
+
+        const giftImg = giftImgEl.src;
+        const giftName = container.querySelector('span.break-words.ltr\\:ml-4.rtl\\:mr-4')?.innerText?.trim() || '';
+        const fullText = container.textContent;
+        const qtyMatch = fullText.match(/×\s*(\d+)/);
+        const quantity = qtyMatch ? qtyMatch[1] : '1';
+        const message = `送出 ${giftName} × ${quantity}`;
+
+        sendSocketMessage(userName, message, null, giftImg, true, View);
+        sentMessages.add(container);
+        console.log("Gift message sent:", { userName, giftName, quantity, giftImg });
     }
 
     // 監控觀眾進入訊息
@@ -243,6 +289,8 @@ function hasContent(el) {
     
     // 監控聊天室新訊息
     onElementAdded('div[data-e2e="chat-message"]', getNewChatMessages);
+    // 監控送禮訊息
+    watchGiftMessages(getNewGiftMessages);
 
     }, 5000);
 

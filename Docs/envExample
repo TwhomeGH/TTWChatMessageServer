@@ -14,7 +14,7 @@ KICK_USER_NAME=Kick 用戶名
 
 SESSION_ID=你的TikTok SessionID
 TT_TARGET_IDC=你的TikTok Target IDC
-WHITELIST_AUTHENTICATED_SESSION_ID_HOST=tiktok.eulerstream.com
+WHITELIST_AUTHENTICATED_SESSION_ID_HOST=api.eulerstream.com
 
 ODYSEE_CHANNEL_NAME=你的Odysee頻道名稱
 
@@ -49,6 +49,10 @@ SOCKET_RETRY_MAX_COUNT=3
 
 # DEBUG_CHILD=false 只有在VSCode偵錯 打斷點時使用 正常保持關閉
 # USER_LIKE_CLEAR_TIMER=用戶點讚數清除計時器，單位毫秒，預設60000（1分鐘）。當用戶點讚後，經過這段時間後會清除該用戶的點讚數，以便在聊天室中顯示最新的點讚數。
+
+
+# WHITELIST_AUTHENTICATED_SESSION_ID_HOST= tiktok.eulerstream.com
+# old: tiktok.eulerstream.com new: api.eulerstream.com
 
 # SOCKET_RETRY_MAX_COUNT=最大重試次數
 # CONFIG_KEY=你的配置頁面存取密碼設置
