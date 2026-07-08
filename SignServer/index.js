@@ -1,5 +1,6 @@
-import { RouteConfig, RoomIdRouteConfig } from 'tiktok-live-connector';
-import { initDirectSigner, directSign, signWebSocketForUser, closeDirectSigner } from './direct-signer.mjs';
+import { RouteConfig, RoomIdRouteConfig, TikTokLiveConnection } from 'tiktok-live-connector';
+import { initDirectSigner, directSign, initLivePage, pollLiveMessages, sendLiveMessage, closeLivePage, isLiveWsReady } from './direct-signer.mjs';
+import { EventEmitter } from 'events';
 
 let signerReady = false;
 let signerPromise = null;
@@ -32,12 +33,10 @@ export function waitForSigner() {
 export async function setupCustomSignServer() {
     ensureSigner();
 
-    // Skip Euler Stream — use TikTok API directly
     RoomIdRouteConfig.skipFetchRoomIdFromEulerRoute = true;
     RoomIdRouteConfig.skipFetchRoomInfoFromHtmlRoute = true;
     RoomIdRouteConfig.skipFetchRoomInfoFromApiLiveRoute = false;
 
-    // X-Bogus signing for HTTP API requests
     RouteConfig.fetchWebcastSignatureFromProvider = async ({ url }) => {
         const ready = await ensureSigner();
         if (ready) {
@@ -53,61 +52,82 @@ export async function setupCustomSignServer() {
         return { response: { signedUrl: url } };
     };
 
-    // WebSocket URL resolver: local im/fetch/ → CDP fallback
-    RouteConfig.fetchSignedWebSocketFromProvider = async ({ webClient, roomId, cursor: incomingCursor }) => {
-        const cursor = incomingCursor || '0';
-        let result = null;
-        let fromCache = false;
-
-        // Step 1: Try local im/fetch/ with X-Bogus
-        try {
-            const fetchParams = { room_id: roomId, cursor };
-            result = await webClient.getDeserializedObjectFromWebcastApi(
-                'im/fetch/',
-                fetchParams,
-                'ProtoMessageFetchResult',
-                true
-            );
-            if (result?.pushServer) {
-                console.log(`[SignServer] Local im/fetch/ OK: ${result.pushServer}`);
-            }
-        } catch (e) {
-            console.warn(`[SignServer] Local im/fetch/ failed: ${e.message?.substring(0, 60)}`);
-        }
-
-        // Step 2: If local failed, try CDP capture from live page
-        if (!result?.pushServer && currentUsername) {
-            console.log('[SignServer] Falling back to CDP WS capture...');
-            try {
-                const wsInfo = await signWebSocketForUser(currentUsername);
-                if (wsInfo) {
-                    result = {
-                        cursor: '0',
-                        internalExt: '',
-                        pushServer: wsInfo.pushServer,
-                        routeParams: wsInfo.routeParams,
-                        needAck: false,
-                        messages: []
-                    };
-                    console.log(`[SignServer] CDP captured pushServer: ${wsInfo.pushServer}`);
-                }
-            } catch (e2) {
-                console.warn(`[SignServer] CDP fallback also failed: ${e2.message?.substring(0, 60)}`);
+    // connect override: start CDP live page, then original connect
+    const origConnect = TikTokLiveConnection.prototype.connect;
+    TikTokLiveConnection.prototype.connect = async function (roomId) {
+        if (currentUsername) {
+            console.log(`[SignServer] Initializing CDP live page for ${currentUsername}...`);
+            const cdpReady = await initLivePage(currentUsername);
+            if (cdpReady) {
+                console.log('[SignServer] CDP live page ready, starting message poller');
+                startMessagePoller(this);
+            } else {
+                console.warn('[SignServer] CDP init failed, using fallback');
             }
         }
-
-        // Step 3: Return whatever we got (or defaults)
-        return {
-            fetchResult: result || {
-                cursor,
-                internalExt: '',
-                pushServer: 'wss://webcast-ws.tiktok.com/webcast/im/ws_proxy/ws_reuse_supplement/',
-                routeParams: {},
-                needAck: false,
-                messages: []
-            },
-            fetchResultCookieHeader: '',
-            fetchResultRoomId: roomId
-        };
+        return origConnect.call(this, roomId);
     };
+
+    // setupWebsocket override: CDP mock WS or fallback
+    const origSetupWebsocket = TikTokLiveConnection.prototype.setupWebsocket;
+    TikTokLiveConnection.prototype.setupWebsocket = async function (wsUrl, wsParams, roomId) {
+        if (isLiveWsReady()) {
+            console.log(`[SignServer] CDP proxy WS (pushServer: ${wsUrl?.substring(0, 60)}...)`);
+            const mockWs = new EventEmitter();
+            mockWs.readyState = 1;
+            mockWs.CONNECTING = 0;
+            mockWs.OPEN = 1;
+            mockWs.CLOSING = 2;
+            mockWs.CLOSED = 3;
+            mockWs.close = () => {
+                mockWs.readyState = 3;
+                mockWs.emit('close', 1000, 'CDP proxy closed');
+            };
+            mockWs.send = (data) => {
+                sendLiveMessage(data);
+            };
+            this._wsClientInstance = mockWs;
+            process.nextTick(() => mockWs.emit('open'));
+        } else {
+            console.log('[SignServer] CDP not ready, using original WS');
+            return origSetupWebsocket.call(this, wsUrl, wsParams, roomId);
+        }
+    };
+}
+
+function startMessagePoller(connection) {
+    let running = true;
+    let consecutiveErrors = 0;
+    const poll = async () => {
+        while (running) {
+            try {
+                const messages = await pollLiveMessages();
+                consecutiveErrors = 0;
+                for (const msg of messages) {
+                    if (msg.type === 'message') {
+                        const data = msg.data instanceof Uint8Array
+                            ? Buffer.from(msg.data)
+                            : Buffer.from(msg.data || '');
+                        if (data.length > 0 && connection._wsClientInstance) {
+                            connection._wsClientInstance.emit('message', data);
+                        }
+                    } else if (msg.type === 'close') {
+                        console.warn(`[SignServer] CDP WS closed (code: ${msg.code})`);
+                        running = false;
+                        if (connection._wsClientInstance) {
+                            connection._wsClientInstance.emit('close', msg.code, 'CDP WS closed');
+                        }
+                    }
+                }
+            } catch (e) {
+                consecutiveErrors++;
+                if (consecutiveErrors > 10) {
+                    console.error('[SignServer] Too many poll errors, stopping');
+                    running = false;
+                }
+            }
+            await new Promise(r => setTimeout(r, 50));
+        }
+    };
+    poll();
 }
