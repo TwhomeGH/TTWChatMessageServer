@@ -95,68 +95,66 @@ npm install tiktok-signature@latest
 
 ## 架構演進
 
-### 階段一：Euler Stream（原始）
-tiktok-live-connector v2.4.0 依賴 `tiktok.eulerstream.com` 第三方付費簽名伺服器。當 Euler Stream 回傳 500 時無法連線，且需要付費 API key。
+### v2.1.0 (2026-07-08) — Hybrid: local im/fetch/ + CDP fallback
 
-### 階段二：X-Bogus 直接簽名（current）
-`SignServer/direct-signer.mjs` 使用 Puppeteer headless 瀏覽器注入 TikTok 官方 webmssdk，在本機產生 X-Bogus 簽名。用於 `im/fetch/` API 請求（room/info、聊天資料等），完全繞過 Euler Stream，零成本。
-
-### 階段三：CDP WebSocket Proxy（explored → 備用方案）
-透過 Chrome DevTools Protocol 讓瀏覽器處理 WebSocket 連線，Node.js 只做訊息轉發。後來發現 TikTok 近期已將 WebSocket 基礎設施從 `webcast-ws.tiktok.com` 遷移到 `im-ws-sg.tiktok.com/ws/v2`，改用 `access_key` 認證，原生 library 的 WS 連線不需簽名也能正常工作，CDP 方案因此降為備用。
-
-## CDP 設計說明
-
-> CDP = Chrome DevTools Protocol，Chrome/Chromium 提供的偵錯協定，可用來控制瀏覽器行為。
-
-### 用途
-當 TikTok WebSocket API 需要瀏覽器環境才能建立簽名連線時（例如 `access_key` 由 TikTok 頁面 JavaScript 動態產生），CDP 方案讓 **瀏覽器自己管理 WebSocket**，Node.js 只透過 Puppeteer API 讀取訊息：
+當前版本。雙層解析器：
 
 ```
-Node.js (Event Emitter)  ←→  CDP (Puppeteer)  ←→  Headless Chrome
-                                                       ↓
-                                              TikTok 直播頁面 JS
-                                                       ↓
-                                              WebSocket (access_key)
+fetchSignedWebSocketFromProvider(roomId)
+  ├─ [主] local im/fetch/ + X-Bogus（由 directSign 產生）
+  │    ├─ 成功 → 回傳 pushServer（正確區域端點）
+  │    └─ 403 → CDP fallback（瀏覽器處理 X-Dynosaur）
+  │
+  └─ [備] signWebSocketForUser(username)
+       ├─ Puppeteer 導航到 @使用者/live
+       ├─ 瀏覽器自動產生 X-Dynosaur + 帶 Cookie
+       ├─ 攔截 TikTok 頁面 JS 建立的 WebSocket URL
+       └─ 回傳 pushServer + routeParams（含 access_key）
 ```
 
-### 實作方式
-- `initLivePage(username)` — 導航到 `@使用者/live`，覆寫 `window.WebSocket` 建構子
-- 攔截 `ws.onmessage` → 推入 `window.__wsMessageQueue`
-- `pollLiveMessages()` — Node.js 每 50ms 從瀏覽器輪詢佇列
-- `sendLiveMessage(data)` — 透過 CDP 注入到瀏覽器的 WebSocket
+**特點：**
+- CDP 只在 local 簽名失敗時才啟動，不影響正常連線速度
+- `setupWebsocket` 無 override，全部使用 library 原生 WebSocket
+- 當 TikTok 更新簽名演算法時，CDP 自動適應（瀏覽器處理一切）
+- 本地 X-Bogus 簽名仍用於 room/info/ 等 HTTP API 請求
 
-### 優點
-- 完全不需要理解 TikTok 簽名演算法（access_key、X-Bogus 等），瀏覽器自動處理
-- TikTok 每次改版都自動跟上，不需更新程式碼
-- 瀏覽器管理 session、cookie、重連邏輯
+## 開發歷程
 
-### 缺點
-- 需要一直掛一個 headless Chrome 瀏覽器（約 200MB 記憶體）
-- 每 50ms polling 有輕微延遲（聊天訊息無感）
-- 瀏覽器需要導航到直播頁面才能建立 WS，連線時間較長（~15-20s）
+### 階段一：Euler Stream 依賴（原始問題）
+tiktok-live-connector v2.4.0 依賴 `tiktok.eulerstream.com` 第三方付費簽名伺服器取得 WebSocket 端點。當 Euler Stream 回傳 500 時系統完全無法連線，且需要付費 API key。
 
-### 啟用時機
-目前 CDP 方案為備用：當 `isLiveWsReady()` 回傳 `false` 時，直接使用 library 原生 WebSocket（大部分情況可用）。CDP 可做為 future fallback 保留。
+### 階段二：X-Bogus 直接簽名
+建立 `direct-signer.mjs`，注入 TikTok 官方 webmssdk 到 Puppeteer，在本機產生 X-Bogus。用於 HTTP API 簽名（room/info 等），成功繞過 Euler Stream。
+
+### 階段三：CDP WebSocket Proxy（備用探索）
+讓瀏覽器自己管理 WebSocket，Node.js 只做訊息轉發。後發現 TikTok 已將 WS 基礎設施從 `webcast-ws.tiktok.com` 遷移到 `im-ws-sg.tiktok.com/ws/v2` 改用 `access_key`，原生 library 不需簽名也能連部分區域，CDP proxy 降為備用。
+
+### 階段四（當前）：Hybrid 雙層解析器
+local X-Bogus 簽名為主，403 時自動啟動 CDP 捕捉瀏覽器產生的真實 WS URL（含 X-Dynosaur / access_key），兼顧速度與相容性。
 
 ## 改動記錄
 
-### v2.0.1 (2026-07-08) — 改用 im/fetch/ API 取得正確 WS 端點
+### v2.1.0 (2026-07-08) — Hybrid: local X-Bogus + CDP fallback
 
-- **移除 CDP Proxy**：捨棄 Puppeteer 直播頁 WebSocket 代理（initLivePage / pollLiveMessages / sendLiveMessage）
-- **新增 `fetchSignedWebSocketFromProvider` override**：直接呼叫 TikTok `im/fetch/` API（X-Bogus 簽名），取得正確的區域 WebSocket 端點（eu / sg / us）
-- **簡化 `setupWebsocket`**：不再 override，直接使用 library 原生 WebSocket 連線
-- **清除無關 import**：移除 EventEmitter、CDP 相關函數
+- **雙層解析器**：`fetchSignedWebSocketFromProvider` 先試 local im/fetch/（X-Bogus），403 時自動啟動 CDP fallback (`signWebSocketForUser`)
+- **CDP 僅當備用**：瀏覽器只在 local 簽名失敗才啟動，不影響正常連線速度
+- **無 mock WS**：移除所有 mock WebSocket / EventEmitter，WS 連線全部使用 library 原生
+- **X-Dynosaur 發現**：`im/fetch/` 403 原因是 TikTok 改用 `X-Dynosaur`（base64 簽章）取代 X-Bogus，僅瀏覽器執行環境可產生
+- **簡化 import**：移除 `SIGN_SERVER_CONFIG`、`origSetupWebsocket`、CDP proxy 等無用程式碼
+
+### v2.0.1 (2026-07-08) — im/fetch/ API 端點解析
+
+- 移除 CDP proxy，改呼叫 TikTok `im/fetch/` API 取得區域 WS 端點
+- 因 X-Dynosaur 缺失導致 403，後被 Hybrid 方案取代
 
 ### v2.0.0 (2026-07-08) — CDP WebSocket Proxy
 
-- 導入 Puppeteer CDP 代理，攔截直播頁 WebSocket 並透過 CDP 轉發訊息
-- 後因發現原生 library WS 可正常連線而降為備用方案
+- 導入 Puppeteer CDP 代理攔截直播頁 WS 並轉發訊息
 
 ### v1.2.0 (2026-07-07) — X-Bogus + X-Gnarly 雙簽名
 
-- X-Bogus + X-Gnarly 簽名實作
+- X-Bogus + X-Gnarly 簽名實作（tiktok-signature xgnarly.mjs）
 
 ### v1.1.0 (2026-07-07) — 本機直接簽名器
 
-- 建立 `direct-signer.mjs`：Puppeteer headless 瀏覽器 + injected TikTok SDK
-- `setupCustomSignServer()` 架構確立
+- 建立 `direct-signer.mjs`、`setupCustomSignServer()` 架構
