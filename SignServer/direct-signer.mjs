@@ -6,7 +6,8 @@
  * 3. Reload to stabilize session
  * 4. Use populated tables for signing
  */
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -14,6 +15,9 @@ import { encode as encodeXGnarly } from './xgnarly.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SDK_DIR = path.resolve(__dirname, '../node_modules/tiktok-signature/javascript');
+
+// Apply stealth plugin to avoid bot detection
+puppeteer.use(StealthPlugin());
 
 let browser = null;
 let page = null;
@@ -197,6 +201,34 @@ export async function directSign(url) {
     };
 }
 
+async function setTikTokCookies(page) {
+    const cookiesStr = process.env.TIKTOK_COOKIES;
+    if (cookiesStr) {
+        const cookies = cookiesStr.split(';').map(pair => {
+            const [name, ...rest] = pair.trim().split('=');
+            return { name: name.trim(), value: rest.join('=').trim(), domain: '.tiktok.com' };
+        }).filter(c => c.name && c.value);
+        await page.setCookie(...cookies);
+        console.log(`[DirectSigner] Set ${cookies.length} cookies from TIKTOK_COOKIES`);
+        return;
+    }
+    const sessionId = process.env.SESSION_ID;
+    const targetIdc = process.env.TT_TARGET_IDC || 'alisg';
+    if (sessionId) {
+        await page.setCookie(
+            { name: 'sessionid', value: sessionId, domain: '.tiktok.com' },
+            { name: 'sid_tt', value: sessionId, domain: '.tiktok.com' },
+            { name: 'sessionid_ss', value: sessionId, domain: '.tiktok.com' },
+            { name: 'sid_guard', value: sessionId, domain: '.tiktok.com' },
+            { name: 'tt-target-idc', value: targetIdc, domain: '.tiktok.com' },
+            { name: 'store-idc', value: targetIdc, domain: '.tiktok.com' },
+        );
+        console.log(`[DirectSigner] Set fallback session cookies`);
+    } else {
+        console.warn('[DirectSigner] No TIKTOK_COOKIES or SESSION_ID');
+    }
+}
+
 /**
  * Capture a real signed WebSocket URL from TikTok's LIVE page.
  * Navigates the browser to the live page, lets TikTok's JS create the WS connection,
@@ -216,8 +248,17 @@ export async function signWebSocketForUser(username, timeoutMs = 20000) {
         try { await wsPage.close(); } catch (e) {}
     }
     wsPage = await browser.newPage();
-    await wsPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36');
+    await wsPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0');
     await wsPage.setViewport({ width: 1920, height: 1080 });
+    await wsPage.setExtraHTTPHeaders({ 'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8' });
+    await wsPage.evaluateOnNewDocument(() => {
+        Object.defineProperty(navigator, 'platform', { get: () => 'Win32', configurable: true });
+        Object.defineProperty(navigator, 'language', { get: () => 'zh-TW', configurable: true });
+        Object.defineProperty(navigator, 'languages', { get: () => ['zh-TW', 'zh', 'en'], configurable: true });
+    });
+
+    // Set cookies for authentication
+    await setTikTokCookies(wsPage);
 
     // Inject SDKs and WS capture patch
     await wsPage.evaluateOnNewDocument(() => {
@@ -255,6 +296,21 @@ export async function signWebSocketForUser(username, timeoutMs = 20000) {
         console.log(`[DirectSigner] Navigation warning: ${e.message}`);
     }
 
+    // Diagnostic: check page state after navigation
+    try {
+        const pageInfo = await wsPage.evaluate(() => ({
+            url: location.href,
+            title: document.title,
+            bodyLen: document.body?.innerText?.length || 0,
+            wsCount: window.__capturedWsUrls?.length || 0,
+            hasAkamai: document.body?.innerText?.includes('Reference') || false,
+            hasBlock: document.body?.innerText?.includes('blocked') || false,
+        }));
+        console.log(`[DirectSigner] Page state:`, JSON.stringify(pageInfo));
+    } catch (e) {
+        console.log(`[DirectSigner] Page diag failed: ${e.message}`);
+    }
+
     // Wait for WS URL via the WebSocket constructor override
     const start = Date.now();
     let capturedWsUrl = null;
@@ -266,13 +322,27 @@ export async function signWebSocketForUser(username, timeoutMs = 20000) {
             return len > 0 ? arr.map(x => x.url) : [];
         });
         for (const u of urls) {
-            if (u.includes('webcast-ws') || u.includes('wss://')) {
+            // Prefer the old webcast-ws endpoint (live chat) over im-ws-sg (general IM)
+            if (u.includes('webcast-ws')) {
                 capturedWsUrl = u;
-                console.log(`[DirectSigner] WS URL captured: ...${u.substring(u.length - 100)}`);
+                console.log(`[DirectSigner] Captured webcast-ws URL`);
                 break;
             }
         }
-        if (capturedWsUrl) break;
+        // Fallback: if timeout is close, accept any wss:// URL
+        if (!capturedWsUrl && Date.now() - start > timeoutMs - 3000) {
+            for (const u of urls) {
+                if (u.includes('wss://') && u.includes('room_id')) {
+                    capturedWsUrl = u;
+                    console.log(`[DirectSigner] Captured wss URL (fallback)`);
+                    break;
+                }
+            }
+        }
+        if (capturedWsUrl) {
+            console.log(`[DirectSigner] WS URL: ...${capturedWsUrl.substring(capturedWsUrl.length - 120)}`);
+            break;
+        }
         await new Promise(r => setTimeout(r, 200));
     }
 
@@ -289,10 +359,29 @@ export async function signWebSocketForUser(username, timeoutMs = 20000) {
         capturedRouteParams[key] = value;
     }
 
+    // Capture cookies from the page
+    let cookies = {};
+    try {
+        const pageCookies = await wsPage.cookies();
+        for (const c of pageCookies) {
+            cookies[c.name] = c.value;
+        }
+    } catch (e) {
+        console.warn('[DirectSigner] Cookie capture failed:', e.message);
+    }
+
     console.log(`[DirectSigner] Captured WS URL - pushServer: ${capturedPushServer}`);
     console.log(`[DirectSigner] Params: ${JSON.stringify(capturedRouteParams)}`);
 
-    return { pushServer: capturedPushServer, routeParams: capturedRouteParams };
+    // Close the capture page
+    try { await wsPage.close(); } catch (e) {}
+
+    return {
+        pushServer: capturedPushServer,
+        routeParams: capturedRouteParams,
+        fullUrl: capturedWsUrl,
+        cookies
+    };
 }
 
 /**
@@ -314,19 +403,11 @@ export async function initLivePage(username, timeoutMs = 20000) {
     liveWsReady = false;
 
     const page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36');
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0');
     await page.setViewport({ width: 1920, height: 1080 });
+    await page.setExtraHTTPHeaders({ 'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8' });
 
-    // Inject SDKs
-    const sdk513 = fs.readFileSync(path.join(SDK_DIR, 'webmssdk_5.1.3.js'), 'utf-8');
-    const sdk485 = fs.readFileSync(path.join(SDK_DIR, 'webmssdk_2.0.0.485.js'), 'utf-8');
-    await page.evaluateOnNewDocument(() => {
-        Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel', configurable: true });
-    });
-    await page.evaluateOnNewDocument((code) => { try { eval(code); } catch(e) {} }, sdk513);
-    await page.evaluateOnNewDocument((code) => { try { eval(code); } catch(e) {} }, sdk485);
-
-    // Override WebSocket for capture + provide a message relay interface
+    // Inject WS override BEFORE any page script runs
     await page.evaluateOnNewDocument(() => {
         const captured = [];
         let liveWs = null;
@@ -334,7 +415,6 @@ export async function initLivePage(username, timeoutMs = 20000) {
         window.WebSocket = function(url, protocols) {
             const ws = new OrigWS(url, protocols);
             const urlStr = typeof url === 'string' ? url : url.toString();
-            // Only intercept webcast IM connections
             if (urlStr.includes('im-ws-sg') || urlStr.includes('webcast-ws')) {
                 captured.push({ type: 'created', url: urlStr, time: Date.now() });
                 liveWs = ws;
@@ -347,63 +427,54 @@ export async function initLivePage(username, timeoutMs = 20000) {
                         captured.push({ type: 'message', data: event.data, time: Date.now() });
                     }
                 });
-                ws.addEventListener('close', () => {
-                    captured.push({ type: 'close', code: ws.closeCode || 0, time: Date.now() });
+                ws.addEventListener('close', (evt) => {
+                    captured.push({ type: 'close', code: evt.code || 0, reason: evt.reason || '', time: Date.now() });
                     liveWs = null;
                 });
-                ws.addEventListener('error', (e) => {
-                    captured.push({ type: 'error', message: e.message || 'WS error', time: Date.now() });
+                ws.addEventListener('error', () => {
+                    captured.push({ type: 'error', message: 'WS error', time: Date.now() });
+                });
+                ws.addEventListener('open', () => {
+                    window.__wsReady = true;
                 });
             }
             return ws;
         };
         window.WebSocket.prototype = OrigWS.prototype;
-        window.WebSocket.CONNECTING = OrigWS.CONNECTING;
-        window.WebSocket.OPEN = OrigWS.OPEN;
-        window.WebSocket.CLOSING = OrigWS.CLOSING;
-        window.WebSocket.CLOSED = OrigWS.CLOSED;
-
-        // Message queue for incoming data
         window.__wsMessageQueue = [];
-        window.__wsSend = null;
-
-        // Polled by Node.js: returns any buffered messages
         window.__wsPoll = function() {
-            if (liveWs && liveWs.readyState === 1) {
-                window.__wsReady = true;
-            }
+            if (liveWs && liveWs.readyState === 1) window.__wsReady = true;
             const q = window.__wsMessageQueue;
             window.__wsMessageQueue = [];
             return q;
         };
-
-        // Called by Node.js: sends a message (base64-encoded binary)
-        window.__wsSend = function(b64Data) {
+        window.__wsSend = function(b64) {
             if (!liveWs || liveWs.readyState !== 1) return false;
-            const bytes = Uint8Array.from(atob(b64Data), c => c.charCodeAt(0));
-            liveWs.send(bytes);
+            liveWs.send(Uint8Array.from(atob(b64), c => c.charCodeAt(0)));
             return true;
         };
-
-        // Message capture: converts captured events to the queue format
+        window.__wsDiag = function() {
+            return { wsReadyState: liveWs ? liveWs.readyState : -1, queueLen: captured.length };
+        };
         setInterval(() => {
             while (captured.length > 0) {
                 const evt = captured.shift();
-                if (evt.type === 'message') {
-                    window.__wsMessageQueue.push(evt);
-                }
+                window.__wsMessageQueue.push(evt);
             }
         }, 10);
     });
 
-    // Navigate to the LIVE page
+    // Set cookies then navigate
+    await setTikTokCookies(page);
     const liveUrl = `https://www.tiktok.com/@${username}/live`;
     console.log(`[DirectSigner] Navigating to ${liveUrl}...`);
     try {
-        await page.goto(liveUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.goto(liveUrl, { waitUntil: 'networkidle0', timeout: 45000 });
     } catch (e) {
-        console.log(`[DirectSigner] Navigation warning: ${e.message}`);
+        console.warn(`[DirectSigner] Nav warning: ${e.message}`);
     }
+
+    // Wait for WS to be created
 
     // Wait for WebSocket to be created
     const start = Date.now();
@@ -449,6 +520,95 @@ export async function pollLiveMessages() {
     } catch (e) {
         return [];
     }
+}
+
+/**
+ * Get WebSocket diagnostic info from the browser page.
+ */
+export async function wsDiagnostic() {
+    if (!livePage || livePage.isClosed()) return { error: 'no page' };
+    try {
+        return await livePage.evaluate(() => {
+            if (typeof window.__wsDiag === 'function') return window.__wsDiag();
+            return { error: '__wsDiag not available' };
+        });
+    } catch (e) {
+        return { error: e.message };
+    }
+}
+
+/**
+ * Execute im/fetch/ from within the browser context so TikTok's JS adds X-Dynosaur.
+ * Keeps a dedicated page on tiktok.com for this purpose.
+ */
+let fetchPage = null;
+export async function browserFetchSigned(params) {
+    if (!browser) throw new Error('Signer not initialized');
+
+    if (!fetchPage || fetchPage.isClosed()) {
+        fetchPage = await browser.newPage();
+        await fetchPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0');
+        await fetchPage.setViewport({ width: 1920, height: 1080 });
+        await setTikTokCookies(fetchPage);
+        // Navigate to TikTok homepage to establish session
+        await fetchPage.goto('https://www.tiktok.com/', { waitUntil: 'networkidle0', timeout: 30000 }).catch(() => {});
+        console.log('[DirectSigner] Fetch page ready');
+    }
+
+    // Build URL dynamically inside the browser using its actual environment
+    const rawBytes = await fetchPage.evaluate(async ({ roomId, cursor }) => {
+        // Build params using the browser's real environment
+        const p = (k, v) => [k, v];
+        const params = new URLSearchParams([
+            p('version_code', '180800'),
+            p('device_platform', 'web'),
+            p('cookie_enabled', 'true'),
+            p('screen_width', String(screen.width)),
+            p('screen_height', String(screen.height)),
+            p('browser_language', navigator.language),
+            p('browser_platform', navigator.platform),
+            p('browser_name', 'Mozilla'),
+            p('browser_version', navigator.userAgent),
+            p('browser_online', String(navigator.onLine)),
+            p('tz_name', Intl.DateTimeFormat().resolvedOptions().timeZone),
+            p('ws_direct', '1'),
+            p('aid', '1988'),
+            p('app_name', 'tiktok_web'),
+            p('live_id', '12'),
+            p('version_code', '270000'),
+            p('app_language', navigator.language),
+            p('client_enter', '1'),
+            p('room_id', roomId || ''),
+            p('identity', 'audience'),
+            p('history_comment_count', '6'),
+            p('fetch_rule', '1'),
+            p('last_rtt', '-1'),
+            p('cursor', cursor || '0'),
+            p('internal_ext', '0'),
+            p('sup_ws_ds_opt', '1'),
+            p('resp_content_type', 'protobuf'),
+            p('did_rule', '3'),
+            p('webcast_language', navigator.language),
+        ]);
+        const url = 'https://webcast.tiktok.com/webcast/im/fetch/?' + params.toString();
+        const resp = await fetch(url, {
+            headers: { 'accept': '*/*', 'content-type': 'application/x-www-form-urlencoded; charset=UTF-8' }
+        });
+        const buf = await resp.arrayBuffer();
+        return { bytes: Array.from(new Uint8Array(buf)), status: resp.status, url: resp.url.substring(0, 150) };
+    }, { roomId: params.room_id, cursor: params.cursor });
+
+    if (rawBytes.status !== 200) {
+        console.warn(`[DirectSigner] im/fetch/ status: ${rawBytes.status}`);
+        // Extract X-Dynosaur from final URL for debugging
+        const ru = new URL(rawBytes.url);
+        const xd = ru.searchParams.get('X-Dynosaur') || '';
+        if (xd) console.log(`[DirectSigner] X-Dynosaur: ${xd.substring(0, 60)}...`);
+        return null;
+    }
+
+    console.log(`[DirectSigner] im/fetch/ OK: ${rawBytes.bytes.length} bytes`);
+    return rawBytes.bytes;
 }
 
 /**

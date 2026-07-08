@@ -385,6 +385,11 @@ var WebcastWebSocketClient = class extends WebSocket {
 		this.pingInterval = null;
 		this.on("message", this.onMessage.bind(this));
 		this.on("close", this.onDisconnect.bind(this));
+		this.on("unexpected-response", (req, res) => {
+			let body = "";
+			res.on("data", (c) => body += c);
+			res.on("end", () => console.error("[WS Debug] HTTP " + res.statusCode + ": " + body.substring(0, 2000)));
+		});
 	}
 	get open() {
 		return this.readyState === WebSocket.OPEN;
