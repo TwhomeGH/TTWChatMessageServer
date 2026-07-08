@@ -107,7 +107,8 @@ function imFetchPollLoop(roomId, connection, mock) {
                         const msgs = d.messages || [];
                         if (msgs.length > 0) {
                             pollCount++;
-                            console.log('[imFetch]', pollCount, 'msgs:', msgs.length);
+                            const types = [...new Set(msgs.map(m => m?.common?.method || m?.method || '?'))];
+                            console.log('[imFetch]', pollCount, msgs.length, types.slice(0,5).join(',') + (types.length > 5 ? '...' : ''));
                             for (const msg of msgs) {
                                 if (typeof connection._handleMessage === 'function') connection._handleMessage(msg);
                             }
