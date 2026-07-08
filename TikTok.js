@@ -21,7 +21,7 @@ const __dirname = path.dirname(__filename);
 
 
 import { TikTokLiveConnection, WebcastEvent,ControlEvent,ControlAction } from 'tiktok-live-connector';
-import { setupCustomSignServer, waitForSigner } from './SignServer/index.js';
+import { setupCustomSignServer, waitForSigner, setStreamerName } from './SignServer/index.js';
 import { type } from 'os';
 import Translate from "./TranslateTest.js"
 import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFilter } from "./MessageFilter.js"
@@ -30,7 +30,7 @@ import console from 'console';
 
 import { fork } from 'child_process'
 
-setupCustomSignServer();
+
 
 
 
@@ -592,6 +592,7 @@ const giftMapReady = loadGiftNameMap();
 
 
 console.log("TikTok 直播間名稱:", tiktokName);
+setStreamerName(tiktokName);
 
 const connection = new TikTokLiveConnection(tiktokName,{
     session: {
@@ -856,6 +857,9 @@ function viewCache() {
 if (isTK) {
     console.log("連接 TikTok 直播間:", tiktokName)
 
+    // 初始化簽名服務（僅 TikTok 模式需要）
+    setupCustomSignServer();
+
     // 等待簽名服務就緒
     console.log("等待簽名服務就緒...");
     await waitForSigner();
@@ -875,8 +879,15 @@ if (isTK) {
         // fetchAndSyncGifts(); // eulerstream 需付費，禮物名稱由收到事件時即時翻譯
         
     }).catch(err => {
-        console.error('Failed to connect', err.message);
-        sendBarkNotification("TikTok 直播間連線失敗", err.message.substring(0, 100));
+        const errDetail = err.exception || err;
+        console.error('Failed to connect', errDetail.message || errDetail);
+        console.error('[TikTok] 完整錯誤:', JSON.stringify({
+            message: errDetail.message,
+            info: err.info,
+            code: errDetail.code,
+            type: errDetail.type,
+        }, null, 2));
+        sendBarkNotification("TikTok 直播間連線失敗", (errDetail.message || "").substring(0, 100));
         sendSocketMessage("系統", `TikTok 直播間連線失敗: ${err.message}`, "", "", false, CacheUserNum, CacheUserList);
 
         // 暫時停用重連機制，改為直接退出程式，避免無限重試
@@ -940,13 +951,80 @@ connection.on(ControlEvent.DISCONNECTED, (e) => {
 });
 
 connection.on(ControlEvent.ERROR, (err) => {
-    console.error('TikTok 連線錯誤:', err.message || err);
-    sendSocketMessage("系統", `TikTok 連線錯誤: ${err.message || err}`, "", "", false, CacheUserNum, CacheUserList);
+    const msg = typeof err === 'object' ? (err.message || JSON.stringify(err)) : err;
+    console.error('TikTok 連線錯誤:', msg);
+    if (err && err.message === 'Unexpected server response: 200') {
+        console.error('[TikTok] WebSocket 200 錯誤 — 簽名可能無效或連線協定不符');
+    }
+    sendSocketMessage("系統", `TikTok 連線錯誤: ${msg.substring(0, 100)}`, "", "", false, CacheUserNum, CacheUserList);
 });
 
-
+// ====== 原始訊息 Debug 日誌 ======
+function logRawEvent(eventName, data) {
+    if (!data) { console.log(`[RAW] ${eventName}: (no data)`); return; }
+    const keys = Object.keys(data).filter(k => {
+        const v = data[k];
+        if (v === null || v === undefined) return false;
+        if (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0) return false;
+        return true;
+    });
+    const info = { event: eventName, keys };
+    if (data.user && typeof data.user === 'object') {
+        const u = data.user;
+        info.user = {};
+        if (u.displayId !== undefined) info.user.displayId = u.displayId;
+        if (u.nickname !== undefined) info.user.nickname = u.nickname;
+        if (u.id !== undefined) info.user.id = u.id;
+        if (u.uniqueId !== undefined) info.user.uniqueId = u.uniqueId;
+        if (u.role !== undefined) info.user.role = u.role;
+        if (u.level !== undefined) info.user.level = u.level;
+        if (u.badge !== undefined) info.user.badge = u.badge;
+        if (u.isModerator !== undefined) info.user.isModer = u.isModerator;
+        if (u.isSubscriber !== undefined) info.user.isSub = u.isSubscriber;
+        if (u.isNewGifter !== undefined) info.user.isNewGifter = u.isNewGifter;
+        if (Object.keys(info.user).length === 0) delete info.user;
+    }
+    if (data.gift && typeof data.gift === 'object') {
+        const g = data.gift;
+        info.gift = {};
+        if (g.name !== undefined) info.gift.name = g.name;
+        if (g.id !== undefined) info.gift.id = g.id;
+        if (g.diamondCount !== undefined) info.gift.cost = g.diamondCount;
+        if (g.repeatCount !== undefined) info.gift.repeat = g.repeatCount;
+        if (g.repeatEnd !== undefined) info.gift.repeatEnd = g.repeatEnd;
+        if (g.type !== undefined) info.gift.type = g.type;
+        if (g.streakable !== undefined) info.gift.streakable = g.streakable;
+        if (g.giftType !== undefined) info.gift.giftType = g.giftType;
+        if (Object.keys(info.gift).length === 0) delete info.gift;
+    }
+    // Common fields
+    if (data.content !== undefined) info.content = typeof data.content === 'string' ? data.content.substring(0, 120) : '[non-string]';
+    if (data.action !== undefined) info.action = data.action;
+    if (data.shareType !== undefined) info.shareType = data.shareType;
+    if (data.shareTarget !== undefined) info.shareTarget = data.shareTarget;
+    if (data.likeCount !== undefined) info.likeCount = data.likeCount;
+    if (data.total !== undefined) info.total = data.total;
+    if (data.count !== undefined) info.count = data.count;
+    if (data.describe !== undefined) info.describe = data.describe;
+    if (data.msgId !== undefined) info.msgId = data.msgId;
+    if (data.createTime !== undefined) info.createTime = data.createTime;
+    if (data.emoteId !== undefined) info.emoteId = data.emoteId;
+    if (data.followRole !== undefined) info.followRole = data.followRole;
+    if (data.memberCount !== undefined) info.memberCount = data.memberCount;
+    if (data.viewersCount !== undefined) info.viewersCount = data.viewersCount;
+    if (data.topViewers !== undefined) info.topViewers = data.topViewers;
+    if (data.roomId !== undefined) info.roomId = data.roomId;
+    if (data.subscribeType !== undefined) info.subscribeType = data.subscribeType;
+    if (data.timestampMs !== undefined) info.timestampMs = data.timestampMs;
+    if (data.currency !== undefined) info.currency = data.currency;
+    if (data.amount !== undefined) info.amount = data.amount;
+    if (data.multibuy !== undefined) info.multibuy = data.multibuy;
+    console.log(`[RAW] ${JSON.stringify(info)}`);
+}
+// =================================
 
 connection.on(WebcastEvent.CAPTION_MESSAGE, (data) => {
+    logRawEvent('CAPTION_MESSAGE', data);
     var MES_CAPTION = [""]
 
     if (data.content.length) {
@@ -976,6 +1054,7 @@ function getTikTokProfilePic(user) {
 // 取得人數和頭號觀眾列表的事件
 
 connection.on(WebcastEvent.ROOM_USER, data => {
+    logRawEvent('ROOM_USER', data);
     const viewerCount = data.total ?? data.totalUser ?? connection.state?.roomInfo?.data?.user_count;
     console.log(`Viewer Count: ${viewerCount}`);
     const ranksList = data.ranks || [];
@@ -1000,6 +1079,7 @@ connection.on(WebcastEvent.ROOM_USER, data => {
 // In this case we listen to chat messages (comments)
 
 connection.on(WebcastEvent.MEMBER,data => {
+    logRawEvent('MEMBER', data);
 
     let iconn = getTikTokProfilePic(data.user)
     
@@ -1041,6 +1121,7 @@ connection.on(WebcastEvent.MEMBER,data => {
 })
 
 connection.on(WebcastEvent.FOLLOW,data =>{
+    logRawEvent('FOLLOW', data);
     let iconn = getTikTokProfilePic(data.user)
     console.log(data.user.nickname,"關注了主播")
 
@@ -1052,6 +1133,7 @@ connection.on(WebcastEvent.FOLLOW,data =>{
 
 
 connection.on(WebcastEvent.CHAT, data => {
+    logRawEvent('CHAT', data);
 
     if (!data.content) return;
 
@@ -1122,6 +1204,7 @@ connection.on(WebcastEvent.CHAT, data => {
 // 分享類型
 
 connection.on(WebcastEvent.SOCIAL, data => {
+    logRawEvent('SOCIAL', data);
 
     var LOG_SOCIAL = []
     
@@ -1148,6 +1231,7 @@ connection.on(WebcastEvent.SOCIAL, data => {
 // EMOTE 表情
 
 connection.on(WebcastEvent.EMOTE, (data) => {
+    logRawEvent('EMOTE', data);
     const uniqueId = data.user?.displayId;
     const nickname = data.user?.nickname;
 
@@ -1176,6 +1260,7 @@ connection.on(WebcastEvent.EMOTE, (data) => {
 
 
 connection.on(WebcastEvent.ROOM_MESSAGE, data => {
+    logRawEvent('ROOM_MESSAGE', data);
 
     var LOG_ROOM = []
 
@@ -1241,6 +1326,7 @@ function likeUserCount(user, likeCount) {
 
 
 connection.on(WebcastEvent.LIKE, data => {
+    logRawEvent('LIKE', data);
 
     let iconn = getTikTokProfilePic(data.user)
 
@@ -1319,6 +1405,7 @@ function recordGift(userId, increment = 1) {
 
 
 connection.on(WebcastEvent.GIFT, async data => {
+    logRawEvent('GIFT', data);
     await giftMapReady;
     const giftInfo = data.gift;
     const originalGiftName = giftInfo?.name || "";
@@ -1362,6 +1449,7 @@ connection.on(WebcastEvent.GIFT, async data => {
 
 
 connection.on(WebcastEvent.SHARE, data =>{
+    logRawEvent('SHARE', data);
     let mess = "分享直播間"
     let iconn = getTikTokProfilePic(data.user)
     console.log(`${data.user.nickname} ${mess}`)
@@ -1376,6 +1464,7 @@ connection.on(WebcastEvent.SHARE, data =>{
 
 
 connection.on(WebcastEvent.ENVELOPE, data => {
+    logRawEvent('ENVELOPE', data);
     const envelope = data.envelopeInfo;
     if (!envelope) return;
 
@@ -1403,6 +1492,7 @@ connection.on(WebcastEvent.ENVELOPE, data => {
 });
 
 connection.on(WebcastEvent.SUPER_FAN, (data) => {
+    logRawEvent('SUPER_FAN', data);
     console.log('A user became a superfan!');
     let mess = "鐵粉出現啦！"
     let iconn = getTikTokProfilePic(data.user)

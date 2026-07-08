@@ -1,10 +1,16 @@
-import { RouteConfig, RoomIdRouteConfig, WebSocketConfigDefaults, TikTokLiveConnection } from 'tiktok-live-connector';
-import { SIGN_SERVER_CONFIG } from './config.js';
+import { RouteConfig, RoomIdRouteConfig } from 'tiktok-live-connector';
 import { initDirectSigner, directSign } from './direct-signer.mjs';
+import { SIGN_SERVER_CONFIG } from './config.js';
 
-const { pushServer } = SIGN_SERVER_CONFIG;
 let signerReady = false;
 let signerPromise = null;
+let currentUsername = '';
+let origSetupWebsocket = null; // saved in setupCustomSignServer
+
+export function setStreamerName(name) {
+    currentUsername = name;
+    console.log(`[SignServer] Streamer set: ${name}`);
+}
 
 async function ensureSigner() {
     if (signerReady) return true;
@@ -27,7 +33,6 @@ export function waitForSigner() {
 }
 
 export async function setupCustomSignServer() {
-    // Start initializing the signer immediately (non-blocking)
     ensureSigner();
 
     // Override room ID fetching
@@ -36,96 +41,126 @@ export async function setupCustomSignServer() {
     RoomIdRouteConfig.skipFetchRoomInfoFromApiLiveRoute = false;
 
     // Override HTTP request signing to use direct X-Bogus computation
-    RouteConfig.fetchWebcastSignatureFromProvider = async ({ url, method, userAgent }) => {
+    RouteConfig.fetchWebcastSignatureFromProvider = async ({ url }) => {
         const ready = await ensureSigner();
         if (ready) {
             try {
                 const result = await directSign(url);
                 if (result.xBogus) {
-                    return {
-                        response: {
-                            signedUrl: result.signedUrl,
-                            userAgent,
-                        }
-                    };
+                    return { response: { signedUrl: result.signedUrl } };
                 }
             } catch (e) {
                 console.warn('[SignServer] sign failed:', e.message);
             }
         }
-        console.warn('[SignServer] using unsigned URL');
-        return { response: { signedUrl: url, userAgent } };
+        return { response: { signedUrl: url } };
     };
 
-    // Override WebSocket connection to sign the URL with X-Bogus
-    const origSetupWebsocket = TikTokLiveConnection.prototype.setupWebsocket;
-    TikTokLiveConnection.prototype.setupWebsocket = async function (wsUrl, wsParams, roomId) {
-        const ready = await ensureSigner();
-        if (ready) {
-            try {
-                const fullParams = {
-                    ...WebSocketConfigDefaults.DEFAULT_WS_CLIENT_PARAMS,
-                    ...wsParams,
-                };
-                const fullUrl = wsUrl + '?' +
-                    new URLSearchParams(fullParams).toString() +
-                    (WebSocketConfigDefaults.DEFAULT_WS_CLIENT_PARAMS_APPEND_PARAMETER || '');
-
-                const result = await directSign(fullUrl);
-                if (result.xBogus) {
-                    wsParams['X-Bogus'] = result.xBogus;
-                }
-            } catch (e) {
-                console.warn('[SignServer] WebSocket URL signing failed:', e.message);
+    /**
+     * CDP-based WebSocket proxy.
+     */
+    const origConnect = TikTokLiveConnection.prototype.connect;
+    TikTokLiveConnection.prototype.connect = async function (roomId) {
+        // Initialize the live page - this lets TikTok's JS handle the WS
+        if (currentUsername) {
+            console.log(`[SignServer] Initializing CDP live page for ${currentUsername}...`);
+            const ready = await initLivePage(currentUsername);
+            if (ready) {
+                console.log('[SignServer] CDP live page ready, starting message poller');
+                startMessagePoller(this);
+            } else {
+                console.warn('[SignServer] CDP live page init failed, falling through to normal flow');
             }
         }
-        return origSetupWebsocket.call(this, wsUrl, wsParams, roomId);
+
+        return origConnect.call(this, roomId);
     };
 
-    // Override the WebSocket URL provider
-    RouteConfig.fetchSignedWebSocketFromProvider = async ({ roomId, webClient, cursor: incomingCursor }) => {
-        const cursor = incomingCursor || webClient.clientParams?.cursor || '0';
-
-        const imFetchParams = {
-            ...webClient.clientParams,
-            room_id: roomId,
-            cursor,
-        };
+    // Override fetchSignedWebSocketFromProvider to use im/fetch/ API (signed with X-Bogus)
+    // This gives us the REAL pushServer (correct region) and routeParams from TikTok itself.
+    RouteConfig.fetchSignedWebSocketFromProvider = async ({ webClient, roomId, cursor: incomingCursor }) => {
+        const cursor = incomingCursor || '0';
+        let resolvedPushServer = pushServer;
+        let resolvedRouteParams = {};
+        let resolvedCursor = cursor;
+        let resolvedInternalExt = '';
 
         try {
-            const fetchResult = await webClient.getDeserializedObjectFromWebcastApi(
+            const fetchParams = { room_id: roomId, cursor };
+            const result = await webClient.getDeserializedObjectFromWebcastApi(
                 'im/fetch/',
-                imFetchParams,
+                fetchParams,
                 'ProtoMessageFetchResult',
-                true
+                true // signRequest = true (uses X-Bogus via our fetchWebcastSignatureFromProvider)
             );
+            if (result) {
+                if (result.pushServer) {
+                    resolvedPushServer = result.pushServer;
+                    console.log(`[SignServer] im/fetch/ pushServer: ${resolvedPushServer}`);
+                } else {
+                    console.log(`[SignServer] im/fetch/ no pushServer, keys: ${Object.keys(result).join(', ')}`);
+                }
+                if (result.routeParams) resolvedRouteParams = result.routeParams;
+                if (result.cursor) resolvedCursor = result.cursor;
+                if (result.internalExt) resolvedInternalExt = result.internalExt;
+            }
+        } catch (e) {
+            const msg = e.message || e;
+            console.warn(`[SignServer] im/fetch/ failed: ${msg}, using default pushServer`);
+        }
 
-            return {
-                fetchResult: {
-                    cursor: fetchResult.cursor || cursor,
-                    internalExt: fetchResult.internalExt || '',
-                    pushServer: fetchResult.pushServer || pushServer,
-                    routeParams: {},
-                    needAck: fetchResult.needAck || false,
-                    messages: fetchResult.messages || []
-                },
-                fetchResultCookieHeader: '',
-                fetchResultRoomId: roomId
-            };
-        } catch (err) {
-            console.warn('[SignServer] im/fetch/ failed:', err.message);
-            return {
-                fetchResult: {
-                    cursor: '0',
-                    internalExt: '',
-                    pushServer,
-                    routeParams: {},
-                    needAck: false,
-                    messages: []
-                },
-                fetchResultCookieHeader: '',
-                fetchResultRoomId: roomId
-            };
+        return {
+            fetchResult: {
+                cursor: resolvedCursor,
+                internalExt: resolvedInternalExt,
+                pushServer: resolvedPushServer,
+                routeParams: resolvedRouteParams,
+                needAck: false,
+                messages: []
+            },
+            fetchResultCookieHeader: '',
+            fetchResultRoomId: roomId
+        };
+    };
+
+    // Override setupWebsocket to use the original library WebSocket
+    // (which connects with cursor/room_id params, no X-Bogus needed for most regions)
+    origSetupWebsocket = TikTokLiveConnection.prototype.setupWebsocket;
+}
+
+function startMessagePoller(connection) {
+    let running = true;
+    let consecutiveErrors = 0;
+    const poll = async () => {
+        while (running) {
+            try {
+                const messages = await pollLiveMessages();
+                consecutiveErrors = 0;
+                for (const msg of messages) {
+                    if (msg.type === 'message') {
+                        const data = msg.data instanceof Uint8Array
+                            ? Buffer.from(msg.data)
+                            : Buffer.from(msg.data || '');
+                        if (data.length > 0 && connection._wsClientInstance) {
+                            connection._wsClientInstance.emit('message', data);
+                        }
+                    } else if (msg.type === 'close') {
+                        console.log(`[SignServer] CDP WS closed (code: ${msg.code})`);
+                        running = false;
+                        if (connection._wsClientInstance) {
+                            connection._wsClientInstance.emit('close', msg.code, 'CDP WS closed');
+                        }
+                    }
+                }
+            } catch (e) {
+                consecutiveErrors++;
+                if (consecutiveErrors > 10) {
+                    console.error('[SignServer] Too many poll errors, stopping');
+                    running = false;
+                }
+            }
+            await new Promise(r => setTimeout(r, 50));
         }
     };
+    poll();
 }
