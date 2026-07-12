@@ -1,5 +1,5 @@
 import { RouteConfig, RoomIdRouteConfig, TikTokLiveConnection, deserializeMessage } from 'tiktok-live-connector';
-import { initDirectSigner, directSign, browserFetchSigned } from './direct-signer.mjs';
+import { initDirectSigner, directSign, browserFetchSigned, resetFetchPage } from './direct-signer.mjs';
 import { EventEmitter } from 'events';
 
 let signerReady = false;
@@ -43,8 +43,20 @@ export async function setupCustomSignServer() {
         return { response: { signedUrl: url } };
     };
 
+    const useImFetch = process.env.ENABLE_IMFETCH !== '0';
+    if (useImFetch) console.log('[SignServer] im/fetch enabled (ENABLE_IMFETCH=0 to disable)');
     RouteConfig.fetchSignedWebSocketFromProvider = async ({ roomId, cursor: incomingCursor }) => {
         const cursor = incomingCursor || '0';
+        if (!useImFetch) {
+            return {
+                fetchResult: {
+                    cursor, internalExt: '',
+                    pushServer: 'wss://webcast-ws.tiktok.com/webcast/im/ws_proxy/ws_reuse_supplement/',
+                    routeParams: {}, needAck: false, messages: []
+                },
+                fetchResultCookieHeader: '', fetchResultRoomId: roomId
+            };
+        }
         try {
             const rawBytes = await browserFetchSigned({ room_id: roomId, cursor });
             if (rawBytes && rawBytes.length > 0) {
@@ -74,36 +86,10 @@ export async function setupCustomSignServer() {
         };
     };
 
-    // Real WebSocket with im/fetch/ fallback
+    // Mock WS + imFetch polling (TikTok's live messages come via HTTP, not WS)
+    console.log('[SignServer] Using imFetch polling for messages');
     const origSetup = TikTokLiveConnection.prototype.setupWebsocket;
     TikTokLiveConnection.prototype.setupWebsocket = async function (wsUrl, wsParams, roomId) {
-        // Try real WebSocket first
-        try {
-            const signed = await directSign(wsUrl);
-            if (signed?.signedUrl) {
-                console.log('[SignServer] Creating real WS...');
-                const ws = new WebSocket(signed.signedUrl);
-
-                const wsReady = new Promise((resolve, reject) => {
-                    ws.onopen = () => { console.log('[SignServer] Real WS connected'); resolve(); };
-                    ws.onerror = () => { reject(new Error('WS connection error')); };
-                    setTimeout(() => reject(new Error('WS timeout')), 15000);
-                });
-                await wsReady;
-
-                ws.onclose = (ev) => console.log('[SignServer] Real WS closed:', ev.code, ev.reason || '');
-                ws.onerror = () => {};
-                ws.isTikTokReal = true;
-
-                this._wsClientProvider = () => ws;
-                return origSetup.call(this, signed.signedUrl, wsParams, roomId);
-            }
-        } catch (e) {
-            console.warn('[SignServer] Real WS failed:', e.message);
-        }
-
-        // Fallback: mock WS + imFetch polling
-        console.log('[SignServer] Fallback to imFetch polling');
         const mock = new EventEmitter();
         mock.readyState = 1;
         Object.assign(mock, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3, seqId: 1,
@@ -127,86 +113,83 @@ function pickMsg(msg) {
     return '';
 }
 
-function formatMessage(msg) {
-    const method = msg?.common?.method || msg?.method || '?';
+function fmt(msg) {
+    // Messages from im/fetch have real fields inside decodedData
+    const d = msg?.decodedData || msg;
+    const method = msg?.common?.method || msg?.method || d?.common?.method || d?.method || '?';
     const details = [];
 
     const user =
-        msg?.user?.nickname ||
-        msg?.user?.uniqueId ||
-        msg?.user?.displayId ||
+        d?.user?.nickname ||
+        d?.user?.uniqueId ||
+        d?.user?.displayId ||
         '';
-    const content = msg?.content || '';
+    const content = d?.content || '';
 
     switch (method) {
-        case 'WebcastChatMessage': {
-            if (content) {
-                details.push(`user=${user} msg=${content.substring(0, 120)}`);
-            } else {
-                const keys = Object.keys(msg).filter(k => k !== 'common');
-                details.push(`(raw keys=${keys.slice(0, 8).join(',')})`);
-            }
+        case 'WebcastChatMessage':
+            if (content) details.push(`user=${user} msg=${content.substring(0, 120)}`);
+            else details.push(`(raw keys=${Object.keys(d).filter(k => k !== 'common').slice(0, 8).join(',')})`);
             break;
-        }
         case 'WebcastMemberMessage':
-            details.push(`user=${user} count=${msg.memberCount || ''}`);
+            details.push(`user=${user} count=${d.memberCount || ''}`);
             break;
         case 'WebcastGiftMessage':
-            details.push(`user=${user} gift=${msg.gift?.name || msg.gift?.describe || '?'} x${msg.repeatCount || msg.gift?.repeatCount || 1}`);
+            details.push(`user=${user} gift=${d.gift?.name || d.gift?.describe || '?'} x${d.repeatCount || d.gift?.repeatCount || 1}`);
             break;
         case 'WebcastSocialMessage':
-            details.push(`user=${user} action=${msg.action || 'follow'}`);
+            details.push(`user=${user} action=${d.action || 'follow'}`);
             break;
         case 'WebcastLikeMessage':
-            details.push(`user=${user} likes=${msg.count || msg.likeCount || 0}`);
+            details.push(`user=${user} likes=${d.count || d.likeCount || 0}`);
             break;
         case 'WebcastRoomUserSeqMessage':
-            details.push(`viewers=${msg.total || msg.totalUser || ''}`);
+            details.push(`viewers=${d.total || d.totalUser || ''}`);
             break;
         case 'WebcastShareMessage':
-            details.push(`user=${user} target=${msg.shareTarget || ''}`);
+            details.push(`user=${user} target=${d.shareTarget || ''}`);
             break;
         case 'WebcastRoomMessage':
             if (content) details.push(`content=${content.substring(0, 120)}`);
             break;
         case 'WebcastLiveIntroMessage':
-            details.push(pickMsg(msg) || `id=${msg.id || '?'}`);
+            details.push(pickMsg(d) || `id=${d.id || '?'}`);
             break;
         case 'WebcastRoomPinMessage':
             details.push(content ? `content=${content.substring(0, 120)}` : '(pinned)');
             break;
         case 'WebcastLiveGameIntroMessage':
-            details.push(msg.gameName || msg.label || '(game)');
+            details.push(d.gameName || d.label || '(game)');
             break;
         case 'WebcastInRoomBannerMessage':
             details.push('(banner)');
             break;
         case 'WebcastEnvelopeMessage': {
-            const e = msg.envelopeInfo || msg;
+            const e = d.envelopeInfo || d;
             details.push(`diamonds=${e.diamondCount} people=${e.peopleCount} sender=${e.sendUserName || user || '?'}`);
             break;
         }
         case 'WebcastGoalMessage':
         case 'WebcastSubNotifyMessage':
-            details.push(pickMsg(msg) || '');
+            details.push(pickMsg(d) || '');
             break;
         case 'WebcastControlMessage':
-            details.push(`action=${msg.action || '?'}`);
+            details.push(`action=${d.action || '?'}`);
             break;
         default: {
-            const picked = pickMsg(msg);
+            const picked = pickMsg(d);
             if (picked) details.push(picked);
             if (user) details.push(`user=${user}`);
-            if (msg?.describe) details.push(`describe=${msg.describe}`);
-            if (msg?.label) details.push(`label=${msg.label}`);
-            if (msg?.action) details.push(`action=${msg.action}`);
-            if (msg?.gift?.name) details.push(`gift=${msg.gift.name}`);
-            if (msg?.envelopeInfo) {
-                const e = msg.envelopeInfo;
+            if (d?.describe) details.push(`describe=${d.describe}`);
+            if (d?.label) details.push(`label=${d.label}`);
+            if (d?.action) details.push(`action=${d.action}`);
+            if (d?.gift?.name) details.push(`gift=${d.gift.name}`);
+            if (d?.envelopeInfo) {
+                const e = d.envelopeInfo;
                 details.push(`diamonds=${e.diamondCount} people=${e.peopleCount}`);
             }
             if (details.length === 0) {
-                const keys = Object.keys(msg).filter(k => k !== 'common');
+                const keys = Object.keys(d).filter(k => k !== 'common');
                 if (keys.length > 0) details.push(`keys=${keys.slice(0, 5).join(',')}`);
             }
             break;
@@ -220,31 +203,63 @@ function formatMessage(msg) {
 function imFetchPollLoop(roomId, connection, mock) {
     let cursor = '0';
     let errCount = 0;
-    let pollCount = 0;
+    let silentCount = 0;
+    let consecErrors = 0;
+
     const poll = async () => {
         while (connection._wsClientInstance === mock) {
+            const start = Date.now();
             try {
                 const raw = await browserFetchSigned({ room_id: roomId, cursor });
                 if (raw && raw.length > 0) {
                     const d = deserializeMessage('ProtoMessageFetchResult', Buffer.from(raw));
                     if (d) {
-                        if (d.cursor) { cursor = d.cursor; errCount = 0; }
+                        if (d.cursor) { cursor = d.cursor; }
                         const msgs = d.messages || [];
                         if (msgs.length > 0) {
-                            pollCount++;
+                            errCount = 0;
+                            silentCount = 0;
+                            consecErrors = 0;
                             for (const msg of msgs) {
-                                console.log('[imFetch]', formatMessage(msg));
-                                if (typeof connection._handleMessage === 'function') connection._handleMessage(msg);
+                                console.log('[imFetch]', fmt(msg));
+                                const inner = msg?.decodedData || msg;
+                                if (typeof connection._handleMessage === 'function') connection._handleMessage(inner);
                             }
+                        } else {
+                            silentCount++;
                         }
                     }
                 }
             } catch (e) {
                 errCount++;
+                consecErrors++;
                 if (errCount % 10 === 1) console.warn('[imFetch] err:', e.message);
-                if (errCount > 30) { errCount = 0; await new Promise(r => setTimeout(r, 10000)); }
+                // Health check: reset fetchPage on 3 consecutive errors
+                if (consecErrors >= 3) {
+                    console.warn('[imFetch] 3 consecutive errors, resetting fetch page');
+                    resetFetchPage();
+                    consecErrors = 0;
+                    await new Promise(r => setTimeout(r, 5000));
+                    continue;
+                }
+                if (errCount > 5) {
+                    await new Promise(r => setTimeout(r, 30000));
+                    continue;
+                }
             }
-            await new Promise(r => setTimeout(r, errCount > 5 ? 5000 : 2000));
+
+            // Adaptive interval: 5s active → 60s idle
+            const elapsed = Date.now() - start;
+            let wait;
+            if (errCount > 0) {
+                wait = 30000;
+            } else if (silentCount > 5) {
+                wait = Math.min(10000 + (silentCount - 5) * 5000, 60000);
+            } else {
+                wait = 5000;
+            }
+            wait = Math.max(1, wait - elapsed);
+            await new Promise(r => setTimeout(r, wait));
         }
     };
     poll();

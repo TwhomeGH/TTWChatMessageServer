@@ -315,6 +315,7 @@ export async function initLivePage(username, timeoutMs = 20000) {
             const urlStr = typeof url === 'string' ? url : url.toString();
             if (urlStr.includes('im-ws-sg') || urlStr.includes('webcast-ws')) {
                 captured.push({ type: 'created', url: urlStr, time: Date.now() });
+                console.log('[LiveWS] intercepted:', urlStr.substring(0, 200));
                 liveWs = ws;
                 ws.addEventListener('message', (event) => {
                     if (event.data instanceof Blob) {
@@ -326,7 +327,8 @@ export async function initLivePage(username, timeoutMs = 20000) {
                     }
                 });
                 ws.addEventListener('close', (evt) => {
-                    captured.push({ type: 'close', code: evt.code || 0, reason: evt.reason || '', time: Date.now() });
+                    captured.push({ type: 'close', code: evt.code ?? 0, reason: evt.reason || '', time: Date.now() });
+                    console.log('[LiveWS] close:', evt.code ?? '?', evt.reason || '');
                     liveWs = null;
                 });
                 ws.addEventListener('error', () => {
@@ -505,6 +507,14 @@ export async function closeLivePage() {
         try { await livePage.close(); } catch(e) {}
     }
     livePage = null;
+}
+
+export function resetFetchPage() {
+    if (fetchPage && !fetchPage.isClosed()) {
+        try { fetchPage.close(); } catch(e) {}
+    }
+    fetchPage = null;
+    console.log('[DirectSigner] Fetch page reset');
 }
 
 export async function closeDirectSigner() {
