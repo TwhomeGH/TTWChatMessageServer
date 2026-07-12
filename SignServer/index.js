@@ -104,100 +104,38 @@ export async function setupCustomSignServer() {
     };
 }
 
-function pickMsg(msg) {
-    if (!msg || typeof msg !== 'object') return '';
-    for (const k of ['content', 'describe', 'label', 'action']) {
-        const v = msg[k];
-        if (v && typeof v === 'string') return v.substring(0, 80);
-    }
-    return '';
-}
-
 function fmt(msg) {
-    // Messages from im/fetch have real fields inside decodedData
     const d = msg?.decodedData || msg;
     const method = msg?.common?.method || msg?.method || d?.common?.method || d?.method || '?';
-    const details = [];
 
-    const user =
-        d?.user?.nickname ||
-        d?.user?.uniqueId ||
-        d?.user?.displayId ||
-        '';
-    const content = d?.content || '';
-
-    switch (method) {
-        case 'WebcastChatMessage':
-            if (content) details.push(`user=${user} msg=${content.substring(0, 120)}`);
-            else details.push(`(raw keys=${Object.keys(d).filter(k => k !== 'common').slice(0, 8).join(',')})`);
-            break;
-        case 'WebcastMemberMessage':
-            details.push(`user=${user} count=${d.memberCount || ''}`);
-            break;
-        case 'WebcastGiftMessage':
-            details.push(`user=${user} gift=${d.gift?.name || d.gift?.describe || '?'} x${d.repeatCount || d.gift?.repeatCount || 1}`);
-            break;
-        case 'WebcastSocialMessage':
-            details.push(`user=${user} action=${d.action || 'follow'}`);
-            break;
-        case 'WebcastLikeMessage':
-            details.push(`user=${user} likes=${d.count || d.likeCount || 0}`);
-            break;
-        case 'WebcastRoomUserSeqMessage':
-            details.push(`viewers=${d.total || d.totalUser || ''}`);
-            break;
-        case 'WebcastShareMessage':
-            details.push(`user=${user} target=${d.shareTarget || ''}`);
-            break;
-        case 'WebcastRoomMessage':
-            if (content) details.push(`content=${content.substring(0, 120)}`);
-            break;
-        case 'WebcastLiveIntroMessage':
-            details.push(pickMsg(d) || `id=${d.id || '?'}`);
-            break;
-        case 'WebcastRoomPinMessage':
-            details.push(content ? `content=${content.substring(0, 120)}` : '(pinned)');
-            break;
-        case 'WebcastLiveGameIntroMessage':
-            details.push(d.gameName || d.label || '(game)');
-            break;
-        case 'WebcastInRoomBannerMessage':
-            details.push('(banner)');
-            break;
-        case 'WebcastEnvelopeMessage': {
-            const e = d.envelopeInfo || d;
-            details.push(`diamonds=${e.diamondCount} people=${e.peopleCount} sender=${e.sendUserName || user || '?'}`);
-            break;
-        }
-        case 'WebcastGoalMessage':
-        case 'WebcastSubNotifyMessage':
-            details.push(pickMsg(d) || '');
-            break;
-        case 'WebcastControlMessage':
-            details.push(`action=${d.action || '?'}`);
-            break;
-        default: {
-            const picked = pickMsg(d);
-            if (picked) details.push(picked);
-            if (user) details.push(`user=${user}`);
-            if (d?.describe) details.push(`describe=${d.describe}`);
-            if (d?.label) details.push(`label=${d.label}`);
-            if (d?.action) details.push(`action=${d.action}`);
-            if (d?.gift?.name) details.push(`gift=${d.gift.name}`);
-            if (d?.envelopeInfo) {
-                const e = d.envelopeInfo;
-                details.push(`diamonds=${e.diamondCount} people=${e.peopleCount}`);
+    // Compact JSON dump of the decoded data (skip raw payload/blob fields)
+    const clone = {};
+    for (const [k, v] of Object.entries(d)) {
+        if (k === 'common' || k === 'payload' || k === 'signature') continue;
+        if (typeof v === 'string') {
+            // truncate long strings
+            clone[k] = v.length > 80 ? v.substring(0, 80) + '...' : v;
+        } else if (typeof v === 'number' || typeof v === 'boolean' || v === null) {
+            clone[k] = v;
+        } else if (Array.isArray(v)) {
+            clone[k] = `[${v.length} items]`;
+        } else if (typeof v === 'object') {
+            // user object → extract key fields
+            if (k === 'user' && v) {
+                clone[k] = {
+                    nickname: v.nickname || v.uniqueId || v.displayId || '?',
+                    id: v.id || '?',
+                };
+            } else if (v && Object.keys(v).length <= 3) {
+                clone[k] = v;
+            } else {
+                clone[k] = `{${Object.keys(v).slice(0, 8).join(',')}}`;
             }
-            if (details.length === 0) {
-                const keys = Object.keys(d).filter(k => k !== 'common');
-                if (keys.length > 0) details.push(`keys=${keys.slice(0, 5).join(',')}`);
-            }
-            break;
         }
     }
 
-    const detailStr = details.length > 0 ? ' | ' + details.join(' | ') : '';
-    return method + detailStr;
+    const json = Object.keys(clone).length > 0 ? JSON.stringify(clone) : '(empty)';
+    return method + ' | ' + json;
 }
 
 function imFetchPollLoop(roomId, connection, mock) {
