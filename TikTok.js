@@ -25,6 +25,7 @@ import { setupCustomSignServer, waitForSigner, setStreamerName } from './SignSer
 import { type } from 'os';
 import Translate from "./TranslateTest.js"
 import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFilter } from "./MessageFilter.js"
+import { replaceEmojis, loadEmojiMap } from "./EmojiMap.js"
 import { KickWebSocket } from 'kick-wss';
 import console from 'console';
 
@@ -539,6 +540,7 @@ process.stdin.on('data', async (chunk) => {
                 // 先存原始值供去重比對
                 const origUser = json.user;
                 const origMsg = json.message;
+                json.message = replaceEmojis(json.message);
 
                 const fr = processFilter({ user: json.user, message: json.message });
                 if (fr.blocked) {
@@ -589,6 +591,7 @@ process.on("SIGTERM", async () => {
 
 loadSentMessages()
 const giftMapReady = loadGiftNameMap();
+loadEmojiMap();
 
 
 console.log("TikTok 直播間名稱:", tiktokName);
@@ -642,13 +645,14 @@ function sendToTCP(payload, dedupUser, dedupMessage) {
     console.log('📤 發送 TCP 訊息Sync:', payload);
 
     try {
-        var payload_bak = payload
+        var payload_bak = { ...payload }
+        payload_bak.message = replaceEmojis(payload.message)
 
-        var CHAT_RES = payload.message
+        var CHAT_RES = payload_bak.message
 
-        Translate.TranslateText(payload.message).then(RES=>{
+        Translate.TranslateText(payload_bak.message).then(RES=>{
             
-            if (payload.message != RES) {
+            if (payload_bak.message != RES) {
                 CHAT_RES += `\n${RES}`
             }
 
@@ -746,14 +750,16 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,use
     }
 
     
+    const processedMessage = replaceEmojis(String(message));
+
     const payload = {
         type: 'StreamMessage',
-        user:String(user),
-        message:String(message),
+        user: String(user),
+        message: processedMessage,
         img,
         giftImg,
-        isMain:Boolean(isMain),
-        userNum:Number(userNum),
+        isMain: Boolean(isMain),
+        userNum: Number(userNum),
         userList
     };
     
