@@ -92,6 +92,69 @@ export async function setupCustomSignServer() {
     };
 }
 
+function formatMessage(msg) {
+    const method = msg?.common?.method || msg?.method || '?';
+    const details = [];
+
+    // Chat message
+    if (msg?.content) {
+        const user = msg.user?.nickname || msg.user?.uniqueId || '';
+        details.push(`user=${user} msg=${msg.content.substring(0, 100)}`);
+    }
+    // Member join
+    if (method === 'WebcastMemberMessage') {
+        const user = msg.user?.nickname || msg.user?.uniqueId || '';
+        const count = msg.memberCount || '';
+        details.push(`user=${user} count=${count}`);
+    }
+    // Gift
+    if (method === 'WebcastGiftMessage') {
+        const user = msg.user?.nickname || '';
+        const gift = msg.gift?.name || msg.gift?.describe || '';
+        const repeat = msg.repeatCount || msg.gift?.repeatCount || 1;
+        details.push(`user=${user} gift=${gift} x${repeat}`);
+    }
+    // Follow
+    if (method === 'WebcastSocialMessage') {
+        const user = msg.user?.nickname || '';
+        const action = msg.action || '';
+        details.push(`user=${user} action=${action}`);
+    }
+    // Like
+    if (method === 'WebcastLikeMessage') {
+        const user = msg.user?.nickname || '';
+        const count = msg.count || msg.likeCount || 0;
+        details.push(`user=${user} likes=${count}`);
+    }
+    // Room user count
+    if (method === 'WebcastRoomUserSeqMessage') {
+        const viewerCount = msg.total || msg.totalUser || '';
+        details.push(`viewers=${viewerCount}`);
+    }
+    // Share
+    if (method === 'WebcastShareMessage') {
+        const user = msg.user?.nickname || '';
+        const target = msg.shareTarget || '';
+        details.push(`user=${user} target=${target}`);
+    }
+    // Question / envelope / room message
+    if (method === 'WebcastRoomMessage' && msg.content) {
+        details.push(`content=${msg.content.substring(0, 80)}`);
+    }
+    // Envelope (diamond)
+    if (msg?.envelopeInfo) {
+        const e = msg.envelopeInfo;
+        details.push(`diamonds=${e.diamondCount} people=${e.peopleCount} sender=${e.sendUserName || ''}`);
+    }
+    // Goal / subscription / super fan
+    if (method === 'WebcastInRoomBannerMessage') {
+        details.push('(banner)');
+    }
+
+    const detailStr = details.length > 0 ? ' | ' + details.join(' | ') : '';
+    return method + detailStr;
+}
+
 function imFetchPollLoop(roomId, connection, mock) {
     let cursor = '0';
     let errCount = 0;
@@ -107,9 +170,8 @@ function imFetchPollLoop(roomId, connection, mock) {
                         const msgs = d.messages || [];
                         if (msgs.length > 0) {
                             pollCount++;
-                            const types = [...new Set(msgs.map(m => m?.common?.method || m?.method || '?'))];
-                            console.log('[imFetch]', pollCount, msgs.length, types.slice(0,5).join(',') + (types.length > 5 ? '...' : ''));
                             for (const msg of msgs) {
+                                console.log('[imFetch]', formatMessage(msg));
                                 if (typeof connection._handleMessage === 'function') connection._handleMessage(msg);
                             }
                         }

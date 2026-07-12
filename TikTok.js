@@ -1178,6 +1178,9 @@ connection.on(WebcastEvent.CHAT, data => {
         return;
     }
 
+    // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
+    comment = replaceEmojis(comment);
+
     recordMessageStat(comment);
 
     sendBarkNotification(nickname, comment,iconn);
