@@ -74,10 +74,36 @@ export async function setupCustomSignServer() {
         };
     };
 
-    // Mock WS + im/fetch/ polling for real-time messages
+    // Real WebSocket with im/fetch/ fallback
     const origSetup = TikTokLiveConnection.prototype.setupWebsocket;
     TikTokLiveConnection.prototype.setupWebsocket = async function (wsUrl, wsParams, roomId) {
-        console.log('[SignServer] Mock WS + imFetch polling');
+        // Try real WebSocket first
+        try {
+            const signed = await directSign(wsUrl);
+            if (signed?.signedUrl) {
+                console.log('[SignServer] Creating real WS...');
+                const ws = new WebSocket(signed.signedUrl);
+
+                const wsReady = new Promise((resolve, reject) => {
+                    ws.onopen = () => { console.log('[SignServer] Real WS connected'); resolve(); };
+                    ws.onerror = () => { reject(new Error('WS connection error')); };
+                    setTimeout(() => reject(new Error('WS timeout')), 15000);
+                });
+                await wsReady;
+
+                ws.onclose = (ev) => console.log('[SignServer] Real WS closed:', ev.code, ev.reason || '');
+                ws.onerror = () => {};
+                ws.isTikTokReal = true;
+
+                this._wsClientProvider = () => ws;
+                return origSetup.call(this, signed.signedUrl, wsParams, roomId);
+            }
+        } catch (e) {
+            console.warn('[SignServer] Real WS failed:', e.message);
+        }
+
+        // Fallback: mock WS + imFetch polling
+        console.log('[SignServer] Fallback to imFetch polling');
         const mock = new EventEmitter();
         mock.readyState = 1;
         Object.assign(mock, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3, seqId: 1,
@@ -113,28 +139,27 @@ function formatMessage(msg) {
     const content = msg?.content || '';
 
     switch (method) {
-        case 'WebcastChatMessage':
-            details.push(`user=${user} msg=${content.substring(0, 120)}`);
-            break;
-        case 'WebcastMemberMessage': {
-            const count = msg.memberCount || '';
-            details.push(`user=${user} count=${count}`);
-            break;
-        }
-        case 'WebcastGiftMessage': {
-            const gift = msg.gift?.name || msg.gift?.describe || '';
-            const repeat = msg.repeatCount || msg.gift?.repeatCount || 1;
-            details.push(`user=${user} gift=${gift} x${repeat}`);
+        case 'WebcastChatMessage': {
+            if (content) {
+                details.push(`user=${user} msg=${content.substring(0, 120)}`);
+            } else {
+                const keys = Object.keys(msg).filter(k => k !== 'common');
+                details.push(`(raw keys=${keys.slice(0, 8).join(',')})`);
+            }
             break;
         }
+        case 'WebcastMemberMessage':
+            details.push(`user=${user} count=${msg.memberCount || ''}`);
+            break;
+        case 'WebcastGiftMessage':
+            details.push(`user=${user} gift=${msg.gift?.name || msg.gift?.describe || '?'} x${msg.repeatCount || msg.gift?.repeatCount || 1}`);
+            break;
         case 'WebcastSocialMessage':
             details.push(`user=${user} action=${msg.action || 'follow'}`);
             break;
-        case 'WebcastLikeMessage': {
-            const count = msg.count || msg.likeCount || 0;
-            details.push(`user=${user} likes=${count}`);
+        case 'WebcastLikeMessage':
+            details.push(`user=${user} likes=${msg.count || msg.likeCount || 0}`);
             break;
-        }
         case 'WebcastRoomUserSeqMessage':
             details.push(`viewers=${msg.total || msg.totalUser || ''}`);
             break;
@@ -144,23 +169,15 @@ function formatMessage(msg) {
         case 'WebcastRoomMessage':
             if (content) details.push(`content=${content.substring(0, 120)}`);
             break;
-        case 'WebcastLiveIntroMessage': {
-            const desc = pickMsg(msg);
-            if (desc) details.push(`desc=${desc}`);
-            else details.push(`id=${msg.id || '?'}`);
+        case 'WebcastLiveIntroMessage':
+            details.push(pickMsg(msg) || `id=${msg.id || '?'}`);
             break;
-        }
-        case 'WebcastRoomPinMessage': {
-            if (content) details.push(`content=${content.substring(0, 120)}`);
-            else details.push('(pinned)');
+        case 'WebcastRoomPinMessage':
+            details.push(content ? `content=${content.substring(0, 120)}` : '(pinned)');
             break;
-        }
-        case 'WebcastLiveGameIntroMessage': {
-            const gameName = msg.gameName || msg.label || '';
-            if (gameName) details.push(`game=${gameName}`);
-            else details.push('(game)');
+        case 'WebcastLiveGameIntroMessage':
+            details.push(msg.gameName || msg.label || '(game)');
             break;
-        }
         case 'WebcastInRoomBannerMessage':
             details.push('(banner)');
             break;
@@ -170,34 +187,24 @@ function formatMessage(msg) {
             break;
         }
         case 'WebcastGoalMessage':
-        case 'WebcastSubNotifyMessage': {
-            const desc = pickMsg(msg);
-            if (desc) details.push(desc);
+        case 'WebcastSubNotifyMessage':
+            details.push(pickMsg(msg) || '');
             break;
-        }
         case 'WebcastControlMessage':
             details.push(`action=${msg.action || '?'}`);
             break;
         default: {
-            // fallback: show any useful field found
             const picked = pickMsg(msg);
             if (picked) details.push(picked);
             if (user) details.push(`user=${user}`);
             if (msg?.describe) details.push(`describe=${msg.describe}`);
             if (msg?.label) details.push(`label=${msg.label}`);
             if (msg?.action) details.push(`action=${msg.action}`);
-
-            // show gift if present in any message shape
-            if (msg?.gift?.name) {
-                details.push(`gift=${msg.gift.name}`);
-            }
-            // show envelope fields
+            if (msg?.gift?.name) details.push(`gift=${msg.gift.name}`);
             if (msg?.envelopeInfo) {
                 const e = msg.envelopeInfo;
                 details.push(`diamonds=${e.diamondCount} people=${e.peopleCount}`);
             }
-
-            // for complete silence, dump first key
             if (details.length === 0) {
                 const keys = Object.keys(msg).filter(k => k !== 'common');
                 if (keys.length > 0) details.push(`keys=${keys.slice(0, 5).join(',')}`);
