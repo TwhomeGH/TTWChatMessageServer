@@ -562,10 +562,9 @@ process.stdin.on('data', async (chunk) => {
                     CacheUserList = json.userList;
                 }
 
-                sendToTCP(json, origUser, origMsg);
-
-                
                 sendSocketMessage(json.user, json.message, json.img || '', json.giftImg || '', true, CacheUserNum, CacheUserList, origUser, origMsg);
+
+                // sendToTCP(json, origUser, origMsg);
 
                 let Gift = json.giftImg || ''
 
