@@ -92,63 +92,118 @@ export async function setupCustomSignServer() {
     };
 }
 
+function pickMsg(msg) {
+    if (!msg || typeof msg !== 'object') return '';
+    for (const k of ['content', 'describe', 'label', 'action']) {
+        const v = msg[k];
+        if (v && typeof v === 'string') return v.substring(0, 80);
+    }
+    return '';
+}
+
 function formatMessage(msg) {
     const method = msg?.common?.method || msg?.method || '?';
     const details = [];
 
-    // Chat message
-    if (msg?.content) {
-        const user = msg.user?.nickname || msg.user?.uniqueId || '';
-        details.push(`user=${user} msg=${msg.content.substring(0, 100)}`);
-    }
-    // Member join
-    if (method === 'WebcastMemberMessage') {
-        const user = msg.user?.nickname || msg.user?.uniqueId || '';
-        const count = msg.memberCount || '';
-        details.push(`user=${user} count=${count}`);
-    }
-    // Gift
-    if (method === 'WebcastGiftMessage') {
-        const user = msg.user?.nickname || '';
-        const gift = msg.gift?.name || msg.gift?.describe || '';
-        const repeat = msg.repeatCount || msg.gift?.repeatCount || 1;
-        details.push(`user=${user} gift=${gift} x${repeat}`);
-    }
-    // Follow
-    if (method === 'WebcastSocialMessage') {
-        const user = msg.user?.nickname || '';
-        const action = msg.action || '';
-        details.push(`user=${user} action=${action}`);
-    }
-    // Like
-    if (method === 'WebcastLikeMessage') {
-        const user = msg.user?.nickname || '';
-        const count = msg.count || msg.likeCount || 0;
-        details.push(`user=${user} likes=${count}`);
-    }
-    // Room user count
-    if (method === 'WebcastRoomUserSeqMessage') {
-        const viewerCount = msg.total || msg.totalUser || '';
-        details.push(`viewers=${viewerCount}`);
-    }
-    // Share
-    if (method === 'WebcastShareMessage') {
-        const user = msg.user?.nickname || '';
-        const target = msg.shareTarget || '';
-        details.push(`user=${user} target=${target}`);
-    }
-    // Question / envelope / room message
-    if (method === 'WebcastRoomMessage' && msg.content) {
-        details.push(`content=${msg.content.substring(0, 80)}`);
-    }
-    // Envelope (diamond)
-    if (msg?.envelopeInfo) {
-        const e = msg.envelopeInfo;
-        details.push(`diamonds=${e.diamondCount} people=${e.peopleCount} sender=${e.sendUserName || ''}`);
-    }
-    // Goal / subscription / super fan
-    if (method === 'WebcastInRoomBannerMessage') {
-        details.push('(banner)');
+    const user =
+        msg?.user?.nickname ||
+        msg?.user?.uniqueId ||
+        msg?.user?.displayId ||
+        '';
+    const content = msg?.content || '';
+
+    switch (method) {
+        case 'WebcastChatMessage':
+            details.push(`user=${user} msg=${content.substring(0, 120)}`);
+            break;
+        case 'WebcastMemberMessage': {
+            const count = msg.memberCount || '';
+            details.push(`user=${user} count=${count}`);
+            break;
+        }
+        case 'WebcastGiftMessage': {
+            const gift = msg.gift?.name || msg.gift?.describe || '';
+            const repeat = msg.repeatCount || msg.gift?.repeatCount || 1;
+            details.push(`user=${user} gift=${gift} x${repeat}`);
+            break;
+        }
+        case 'WebcastSocialMessage':
+            details.push(`user=${user} action=${msg.action || 'follow'}`);
+            break;
+        case 'WebcastLikeMessage': {
+            const count = msg.count || msg.likeCount || 0;
+            details.push(`user=${user} likes=${count}`);
+            break;
+        }
+        case 'WebcastRoomUserSeqMessage':
+            details.push(`viewers=${msg.total || msg.totalUser || ''}`);
+            break;
+        case 'WebcastShareMessage':
+            details.push(`user=${user} target=${msg.shareTarget || ''}`);
+            break;
+        case 'WebcastRoomMessage':
+            if (content) details.push(`content=${content.substring(0, 120)}`);
+            break;
+        case 'WebcastLiveIntroMessage': {
+            const desc = pickMsg(msg);
+            if (desc) details.push(`desc=${desc}`);
+            else details.push(`id=${msg.id || '?'}`);
+            break;
+        }
+        case 'WebcastRoomPinMessage': {
+            if (content) details.push(`content=${content.substring(0, 120)}`);
+            else details.push('(pinned)');
+            break;
+        }
+        case 'WebcastLiveGameIntroMessage': {
+            const gameName = msg.gameName || msg.label || '';
+            if (gameName) details.push(`game=${gameName}`);
+            else details.push('(game)');
+            break;
+        }
+        case 'WebcastInRoomBannerMessage':
+            details.push('(banner)');
+            break;
+        case 'WebcastEnvelopeMessage': {
+            const e = msg.envelopeInfo || msg;
+            details.push(`diamonds=${e.diamondCount} people=${e.peopleCount} sender=${e.sendUserName || user || '?'}`);
+            break;
+        }
+        case 'WebcastGoalMessage':
+        case 'WebcastSubNotifyMessage': {
+            const desc = pickMsg(msg);
+            if (desc) details.push(desc);
+            break;
+        }
+        case 'WebcastControlMessage':
+            details.push(`action=${msg.action || '?'}`);
+            break;
+        default: {
+            // fallback: show any useful field found
+            const picked = pickMsg(msg);
+            if (picked) details.push(picked);
+            if (user) details.push(`user=${user}`);
+            if (msg?.describe) details.push(`describe=${msg.describe}`);
+            if (msg?.label) details.push(`label=${msg.label}`);
+            if (msg?.action) details.push(`action=${msg.action}`);
+
+            // show gift if present in any message shape
+            if (msg?.gift?.name) {
+                details.push(`gift=${msg.gift.name}`);
+            }
+            // show envelope fields
+            if (msg?.envelopeInfo) {
+                const e = msg.envelopeInfo;
+                details.push(`diamonds=${e.diamondCount} people=${e.peopleCount}`);
+            }
+
+            // for complete silence, dump first key
+            if (details.length === 0) {
+                const keys = Object.keys(msg).filter(k => k !== 'common');
+                if (keys.length > 0) details.push(`keys=${keys.slice(0, 5).join(',')}`);
+            }
+            break;
+        }
     }
 
     const detailStr = details.length > 0 ? ' | ' + details.join(' | ') : '';
