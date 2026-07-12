@@ -1,5 +1,5 @@
 import { RouteConfig, RoomIdRouteConfig, TikTokLiveConnection, deserializeMessage } from 'tiktok-live-connector';
-import { initDirectSigner, directSign, browserFetchSigned, resetFetchPage } from './direct-signer.mjs';
+import { initDirectSigner, directSign, signWsUrl, browserFetchSigned, resetFetchPage } from './direct-signer.mjs';
 import { EventEmitter } from 'events';
 
 let signerReady = false;
@@ -43,20 +43,8 @@ export async function setupCustomSignServer() {
         return { response: { signedUrl: url } };
     };
 
-    const useImFetch = process.env.ENABLE_IMFETCH !== '0';
-    if (useImFetch) console.log('[SignServer] im/fetch enabled (ENABLE_IMFETCH=0 to disable)');
     RouteConfig.fetchSignedWebSocketFromProvider = async ({ roomId, cursor: incomingCursor }) => {
         const cursor = incomingCursor || '0';
-        if (!useImFetch) {
-            return {
-                fetchResult: {
-                    cursor, internalExt: '',
-                    pushServer: 'wss://webcast-ws.tiktok.com/webcast/im/ws_proxy/ws_reuse_supplement/',
-                    routeParams: {}, needAck: false, messages: []
-                },
-                fetchResultCookieHeader: '', fetchResultRoomId: roomId
-            };
-        }
         try {
             const rawBytes = await browserFetchSigned({ room_id: roomId, cursor });
             if (rawBytes && rawBytes.length > 0) {
@@ -86,10 +74,34 @@ export async function setupCustomSignServer() {
         };
     };
 
-    // Mock WS + imFetch polling (TikTok's live messages come via HTTP, not WS)
+    // Mock WS + imFetch polling (stable path)
     console.log('[SignServer] Using imFetch polling for messages');
     const origSetup = TikTokLiveConnection.prototype.setupWebsocket;
     TikTokLiveConnection.prototype.setupWebsocket = async function (wsUrl, wsParams, roomId) {
+        // Try real WS if signer is ready
+        if (signerReady) {
+            try {
+                const signed = await signWsUrl(wsUrl);
+                if (signed?.signedUrl) {
+                    console.log('[SignServer] Creating signed WS...');
+                    const ws = new WebSocket(signed.signedUrl);
+                    const ready = new Promise((resolve, reject) => {
+                        ws.onopen = () => { console.log('[SignServer] WS connected'); resolve(); };
+                        ws.onerror = (e) => { reject(new Error('WS error: ' + (e?.message || 'unknown'))); };
+                        setTimeout(() => reject(new Error('WS timeout')), 10000);
+                    });
+                    await ready;
+                    ws.onclose = (ev) => console.log('[SignServer] WS closed:', ev.code, ev.reason || '');
+                    ws.onerror = () => {};
+                    this._wsClientProvider = () => ws;
+                    return origSetup.call(this, signed.signedUrl, wsParams, roomId);
+                }
+            } catch (e) {
+                console.warn('[SignServer] Real WS failed:', e.message);
+            }
+        }
+
+        // Fallback: mock WS + imFetch polling
         const mock = new EventEmitter();
         mock.readyState = 1;
         Object.assign(mock, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3, seqId: 1,
@@ -107,39 +119,26 @@ export async function setupCustomSignServer() {
 function fmt(msg) {
     let d = msg?.decodedData || msg;
     let method = msg?.common?.method || msg?.method || d?.common?.method || d?.method || '?';
-
-    // decodedData wraps the real payload in { type, data }
-    // data can be the full object (expanded) or a key summary string
     if (d?.type && d?.data && typeof d.data === 'object' && !Array.isArray(d.data)) {
         method = d.type;
         d = d.data;
     }
 
-    const clone = {};
-    for (const [k, v] of Object.entries(d)) {
-        if (k === 'common' || k === 'payload' || k === 'signature') continue;
-        if (typeof v === 'string') {
-            clone[k] = v.length > 80 ? v.substring(0, 80) + '...' : v;
-        } else if (typeof v === 'number' || typeof v === 'boolean' || v === null) {
-            clone[k] = v;
-        } else if (Array.isArray(v)) {
-            clone[k] = `[${v.length} items]`;
-        } else if (typeof v === 'object') {
-            if (k === 'user' && v) {
-                clone[k] = {
-                    nickname: v.nickname || v.uniqueId || v.displayId || '?',
-                    id: v.id || '?',
-                };
-            } else if (v && Object.keys(v).length <= 4) {
-                clone[k] = v;
-            } else {
-                clone[k] = `{${Object.keys(v).slice(0, 8).join(',')}}`;
-            }
-        }
-    }
+    const user = d?.user?.nickname || d?.user?.uniqueId || d?.user?.displayId || '';
+    const content = (typeof d?.content === 'string') ? d.content.substring(0, 40) : '';
+    const viewers = d?.total || d?.totalUser || '';
+    const memberCount = d?.memberCount || '';
+    const likes = d?.count || d?.likeCount || '';
 
-    const json = Object.keys(clone).length > 0 ? JSON.stringify(clone) : '(empty)';
-    return method + ' | ' + json;
+    const parts = [];
+    if (user) parts.push(`u=${user.substring(0, 16)}`);
+    if (content) parts.push(`msg=${content}`);
+    if (viewers) parts.push(`viewers=${viewers}`);
+    if (memberCount) parts.push(`mem=${memberCount}`);
+    if (likes) parts.push(`likes=${likes}`);
+    if (parts.length === 0) parts.push('(no content)');
+
+    return method + ' | ' + parts.join(' ');
 }
 
 function imFetchPollLoop(roomId, connection, mock) {
@@ -147,9 +146,18 @@ function imFetchPollLoop(roomId, connection, mock) {
     let errCount = 0;
     let silentCount = 0;
     let consecErrors = 0;
+    let isFirstPoll = true;
 
     const poll = async () => {
         while (connection._wsClientInstance === mock) {
+            // Pause if too long without messages (10+ silent polls)
+            if (silentCount >= 10) {
+                console.log('[imFetch] No messages for a while, pausing polling');
+                await new Promise(r => setTimeout(r, 120000));
+                silentCount = 0;
+                continue;
+            }
+
             const start = Date.now();
             try {
                 const raw = await browserFetchSigned({ room_id: roomId, cursor });
@@ -162,16 +170,20 @@ function imFetchPollLoop(roomId, connection, mock) {
                             errCount = 0;
                             silentCount = 0;
                             consecErrors = 0;
-                            for (const msg of msgs) {
+                            // Log first few messages
+                            for (const msg of msgs.slice(0, 5)) {
                                 console.log('[imFetch]', fmt(msg));
-                                // Library routes by msg.method (e.g. "WebcastChatMessage")
-                                // If msg has method at top-level, pass it as-is.
-                                // Otherwise try decodedData, then inner data.
-                                const pass = msg?.method ? msg : (msg?.decodedData?.type ? msg.decodedData : msg);
-                                if (typeof connection._handleMessage === 'function') connection._handleMessage(pass);
                             }
+                            // Skip first poll (library already processed initial batch)
+                            if (!isFirstPoll) {
+                                mock.emit('protoMessageFetchResult', d);
+                            } else {
+                                console.log('[imFetch] Skipped first poll (already processed by library)');
+                            }
+                            isFirstPoll = false;
                         } else {
                             silentCount++;
+                            if (isFirstPoll) isFirstPoll = false;
                         }
                     }
                 }
@@ -179,9 +191,8 @@ function imFetchPollLoop(roomId, connection, mock) {
                 errCount++;
                 consecErrors++;
                 if (errCount % 10 === 1) console.warn('[imFetch] err:', e.message);
-                // Health check: reset fetchPage on 3 consecutive errors
-                if (consecErrors >= 3) {
-                    console.warn('[imFetch] 3 consecutive errors, resetting fetch page');
+                if (consecErrors >= 2) {
+                    console.warn('[imFetch] 2 consecutive errors, resetting fetch page');
                     resetFetchPage();
                     consecErrors = 0;
                     await new Promise(r => setTimeout(r, 5000));
@@ -193,15 +204,15 @@ function imFetchPollLoop(roomId, connection, mock) {
                 }
             }
 
-            // Adaptive interval: 5s active → 60s idle
+            // Adaptive interval: 10s active → 120s idle
             const elapsed = Date.now() - start;
             let wait;
             if (errCount > 0) {
-                wait = 30000;
-            } else if (silentCount > 5) {
-                wait = Math.min(10000 + (silentCount - 5) * 5000, 60000);
+                wait = 60000;
+            } else if (silentCount > 3) {
+                wait = Math.min(15000 + (silentCount - 3) * 10000, 120000);
             } else {
-                wait = 5000;
+                wait = 10000;
             }
             wait = Math.max(1, wait - elapsed);
             await new Promise(r => setTimeout(r, wait));

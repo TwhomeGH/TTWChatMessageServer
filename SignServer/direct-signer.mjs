@@ -13,6 +13,8 @@ const SDK_DIR = path.resolve(__dirname, '../node_modules/tiktok-signature/javasc
 
 puppeteer.use(StealthPlugin());
 
+const BROWSER_URL = process.env.BROWSER_DEBUG_URL || 'http://127.0.0.1:9222';
+
 let browser = null;
 let page = null;
 let wsPage = null;
@@ -122,6 +124,43 @@ export async function directSign(url) {
             return { error: e.message };
         }
     }, url);
+
+    if (result.error) throw new Error(result.error);
+
+    return {
+        xBogus: result.xBogus,
+        signedUrl: result.signedUrl,
+    };
+}
+
+/**
+ * Sign a WebSocket URL using TikTok SDK's WS-specific method:
+ * frontierSign({"X-MS-PAYLOAD": ""}) — different from HTTP signing where query string is passed.
+ */
+export async function signWsUrl(wsUrl) {
+    if (!ready) throw new Error('Signer not initialized');
+
+    const result = await page.evaluate((rawUrl) => {
+        const u = new URL(rawUrl);
+        u.searchParams.delete('X-Bogus');
+        u.searchParams.delete('X-Gnarly');
+
+        if (typeof window.byted_acrawler?.frontierSign !== 'function') {
+            return { error: 'frontierSign not available' };
+        }
+
+        try {
+            // WS signing uses empty X-MS-PAYLOAD object, NOT the query string
+            const signed = window.byted_acrawler.frontierSign({ "X-MS-PAYLOAD": "" });
+            const xb = signed?.['X-Bogus'];
+            if (!xb) return { error: 'X-Bogus computation returned empty' };
+
+            u.searchParams.set('X-Bogus', xb);
+            return { xBogus: xb, signedUrl: u.toString() };
+        } catch (e) {
+            return { error: e.message };
+        }
+    }, wsUrl);
 
     if (result.error) throw new Error(result.error);
 
@@ -421,15 +460,22 @@ export async function wsDiagnostic() {
 }
 
 let fetchPage = null;
+let fetchPageCreated = 0;
 export async function browserFetchSigned(params) {
     if (!browser) throw new Error('Signer not initialized');
 
-    if (!fetchPage || fetchPage.isClosed()) {
+    // Refresh fetch page every 5 minutes to prevent staleness
+    const now = Date.now();
+    if (!fetchPage || fetchPage.isClosed() || (now - fetchPageCreated > 300000)) {
+        if (fetchPage && !fetchPage.isClosed()) {
+            try { await fetchPage.close(); } catch(e) {}
+        }
         fetchPage = await browser.newPage();
         await fetchPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0');
         await fetchPage.setViewport({ width: 1920, height: 1080 });
         await setTikTokCookies(fetchPage);
         await fetchPage.goto('https://www.tiktok.com/', { waitUntil: 'networkidle0', timeout: 30000 }).catch(() => {});
+        fetchPageCreated = now;
         console.log('[DirectSigner] Fetch page ready');
     }
 
@@ -514,6 +560,7 @@ export function resetFetchPage() {
         try { fetchPage.close(); } catch(e) {}
     }
     fetchPage = null;
+    fetchPageCreated = 0;
     console.log('[DirectSigner] Fetch page reset');
 }
 
@@ -522,10 +569,18 @@ export async function closeDirectSigner() {
         try { await livePage.close(); } catch(e) {}
     }
     livePage = null;
-    if (browser) {
-        await browser.close();
-        browser = null;
-        page = null;
-        ready = false;
+    if (fetchPage && !fetchPage.isClosed()) {
+        try { await fetchPage.close(); } catch(e) {}
     }
+    fetchPage = null;
+    if (page && !page.isClosed()) {
+        try { await page.close(); } catch(e) {}
+    }
+    page = null;
+    wsPage = null;
+    if (browser) {
+        try { await browser.close(); } catch(e) {}
+        browser = null;
+    }
+    ready = false;
 }

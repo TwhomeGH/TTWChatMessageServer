@@ -1045,56 +1045,32 @@ const server = http.createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end(`Available endpoints:
 /open?user=xxx&twitchUser=yyy&kickUser=zzz&platforms=tiktok,twitch,kick&isBark=1&isSocket=1
-starts TikTok.js with parameters:
-user=xxx       : 指定 TikTok 用戶名稱
-twitchUser=yyy : 指定 Twitch 用戶名稱
-kickUser=zzz   : 指定 Kick 頻道名稱
-platforms      : 自由組合平台（用逗號分隔），例如：
-                 platforms=tiktok,twitch,kick  (三平台全開)
-                 platforms=twitch,kick         (只開 Twitch+Kick)
-                 platforms=tiktok,twitch       (TikTok+Twitch，同 isBoth=1)
-                 platforms=tiktok              (只開 TikTok)
-isTK=1         : 使用 TikTok（個別旗標，與 platforms 擇一使用）
-isTwitch=1     : 啟用 Twitch 通知（同上）
-isKick=1       : 啟用 Kick 通知（同上）
-isBark=1       : 啟用 Bark 通知
-isSocket=1     : 啟用 Socket 通知
-isBoth=1       : （已棄用，建議改用 platforms=tiktok,twitch）
-
-Kick OAuth:
-先至 https://id.kick.com/oauth/authorize 取得授權，
-或直接訪問 /get-kick-token?code=xxx 手動設定 token
-
-/get-kick-token
-Kick OAuth callback endpoint (redirect URI)
-
-Youtube OAuth:
-先至 /youtube-auth 進行 Google 授權，
-或直接訪問 /get-youtube-token?code=xxx 手動設定 token
-
-/get-youtube-token
-Youtube OAuth callback endpoint (redirect URI)
-
-/close
-stops TikTok.js
-
-/config
-view and edit configuration (.env variables) via HTML form
-
-/status
-once-off status and logs
-
-/status/stream
-streaming status and logs via Server-Sent Events
-
+...
+/relay   POST  relaying WS protobuf messages from WS-Relay userscript to TikTok.js
 /help
-this help message
 /
-shows this HTML page
-Process view logs in real-time.
-
 `);
 
+    }
+
+    else if (req.method === 'POST' && req.url === '/relay') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body);
+                pushLog('[Relay] WS msg:', data.type, data.byteLength + 'B');
+                if (tiktokProcess && !tiktokProcess.killed) {
+                    tiktokProcess.stdin.write(JSON.stringify({ type: 'RelayMessage', ...data }) + '\n');
+                }
+                res.writeHead(200);
+                res.end('OK');
+            } catch (err) {
+                pushLog('[Relay] error:', err.message);
+                res.writeHead(400);
+                res.end('Invalid');
+            }
+        });
     }
 
 
