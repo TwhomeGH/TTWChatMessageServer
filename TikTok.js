@@ -1796,6 +1796,9 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
     sendBarkNotification(tUser, tMsg, icon);
 
+    // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
+    tMsg = replaceEmojis(tMsg);
+
     Translate.TranslateText(tMsg).then(RES=>{
 
             let RESCHAT=`${tMsg}${tMsg == RES ? "" :`\n${RES}`}`
@@ -2013,6 +2016,9 @@ async function startKickChat() {
         console.info(`📢 發送 Bark 通知: ${tUser} - ${tMsg}`);
         sendBarkNotification(tUser, tMsg, avatar);
 
+        // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
+        tMsg = replaceEmojis(tMsg);
+
         Translate.TranslateText(tMsg).then(RES => {
             let RESCHAT = `${tMsg}${tMsg == RES ? "" : `\n${RES}`}`;
             if (RES.toLowerCase() != tMsg.toLowerCase()) {
@@ -2181,6 +2187,9 @@ function connectOdyseeChat(claimId, channelName) {
                 recordMessageStat(tMsg)
 
                 sendBarkNotification(tUser, tMsg, avatar)
+
+                // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
+                tMsg = replaceEmojis(tMsg)
 
                 Translate.TranslateText(tMsg).then(RES => {
                     let RESCHAT = `${tMsg}${tMsg == RES ? "" : `\n${RES}`}`
@@ -2479,6 +2488,9 @@ function connectYoutubeChat(liveChatId, videoId, channelName) {
 
                             recordMessageStat(tMsg)
                             sendBarkNotification(tUser, tMsg, avatar)
+
+                            // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
+                            tMsg = replaceEmojis(tMsg)
 
                             Translate.TranslateText(tMsg).then(RES => {
                                 let RESCHAT = `${tMsg}${tMsg == RES ? "" : `\n${RES}`}`

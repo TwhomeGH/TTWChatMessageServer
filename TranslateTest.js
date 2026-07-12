@@ -60,30 +60,32 @@ function iso6393To1Code(code3 )  {
 
 
 function detectLanguage(text)  {
+    // 移除URL再偵測，避免 emoji 取代後的網址干擾語言判斷
+    const cleanText = text.replace(/https?:\/\/[^\s]+/g, '').trim();
 
-     // 檢查是否包含 Cyrillic 文字 (俄文等)
-    if (/[\u0400-\u04FF]/.test(text)) {
+    // 檢查是否包含 Cyrillic 文字 (俄文等)
+    if (/[\u0400-\u04FF]/.test(cleanText)) {
         return "ru";
     }
 
-    // 先檢查是否純英文 (只含 A-Z, a-z, 空白)
-    if (/^[A-Za-z\s]+$/.test(text)) {
+    // 先檢查是否純英文 (只含 A-Z, a-z, 數字, 常見標點, 空白)
+    if (/^[A-Za-z0-9\s.,!?'"\-_:;@#&()]+$/.test(cleanText)) {
         return "en";
     }
 
 
     // 檢查是否包含日文假名 (平假名 + 片假名)
-    if (/[\u3040-\u30FF\uFF66-\uFF9F]/.test(text)) {
+    if (/[\u3040-\u30FF\uFF66-\uFF9F]/.test(cleanText)) {
         return "ja";
     }
 
     // 檢查是否包含中文 (漢字範圍)
-    if (/[\u4e00-\u9fff]/.test(text)) {
+    if (/[\u4e00-\u9fff]/.test(cleanText)) {
         return "zh-CN";
     }
 
     // 其他情況交給 franc 偵測
-    const res = franc(text, { minLength: text.length });
+    const res = franc(cleanText, { minLength: cleanText.length });
     let RES393 = iso6393To1Code(res)
     return RES393 || "en"; // und = undefined
 }
@@ -152,10 +154,17 @@ async function translateByBing(Chat, sourceLang) {
 }
 
 async function translateByApi(Chat) {
-    let CheckLang = isChinese(Chat)
+    // 移除 emoji URL 避免干擾語言偵測與翻譯
+    const cleanChat = Chat.replace(/https?:\/\/[^\s]+/g, '').trim();
+    if (!cleanChat) {
+        console.log(`純 emoji/URL，跳過翻譯: ${Chat}`)
+        return Chat
+    }
+
+    let CheckLang = isChinese(cleanChat)
 
     const langMinLength = CheckLang.lang === 'ja' ? 2 : TRANSLATE_MIN_LENGTH;
-    if (Chat.length < langMinLength) {
+    if (cleanChat.length < langMinLength) {
         console.log(`太短了取消翻譯 < ${langMinLength}`)
         return Chat
     }
@@ -163,24 +172,24 @@ async function translateByApi(Chat) {
     self_logTo("LangISO6393",CheckLang.langISO6393,"LangCode",CheckLang.lang)
 
     if (CheckLang.isChinese) {
-        self_logTo(`${Chat} -> 這已經是中文`)
+        self_logTo(`${cleanChat} -> 這已經是中文`)
         return Chat;
     }
 
     const apis = [
-        { name: "MyMemory", fn: () => translateByMyMemory(Chat, CheckLang.lang) },
-        { name: "Google", fn: () => translateByGoogle(Chat) },
+        { name: "MyMemory", fn: () => translateByMyMemory(cleanChat, CheckLang.lang) },
+        { name: "Google", fn: () => translateByGoogle(cleanChat) },
     ];
 
     if (BING_TRANSLATE_API_KEY) {
-        apis.push({ name: "Bing", fn: () => translateByBing(Chat, CheckLang.lang) });
+        apis.push({ name: "Bing", fn: () => translateByBing(cleanChat, CheckLang.lang) });
     }
 
     for (const api of apis) {
         try {
             const result = await api.fn();
-            if (result && result.toLowerCase() !== Chat.toLowerCase()) {
-                self_logTo(`🌐 ${api.name} 翻譯成功: ${Chat} -> ${result}`);
+            if (result && result.toLowerCase() !== cleanChat.toLowerCase()) {
+                self_logTo(`🌐 ${api.name} 翻譯成功: ${cleanChat} -> ${result}`);
                 return result;
             }
             if (result) {
@@ -191,7 +200,7 @@ async function translateByApi(Chat) {
         }
     }
 
-    self_logTo(`❌ 所有翻譯API皆無法翻譯: ${Chat}`);
+    self_logTo(`❌ 所有翻譯API皆無法翻譯: ${cleanChat}`);
     return Chat;
 }
 
