@@ -105,28 +105,32 @@ export async function setupCustomSignServer() {
 }
 
 function fmt(msg) {
-    const d = msg?.decodedData || msg;
-    const method = msg?.common?.method || msg?.method || d?.common?.method || d?.method || '?';
+    let d = msg?.decodedData || msg;
+    let method = msg?.common?.method || msg?.method || d?.common?.method || d?.method || '?';
 
-    // Compact JSON dump of the decoded data (skip raw payload/blob fields)
+    // decodedData wraps the real payload in { type, data }
+    // data can be the full object (expanded) or a key summary string
+    if (d?.type && d?.data && typeof d.data === 'object' && !Array.isArray(d.data)) {
+        method = d.type;
+        d = d.data;
+    }
+
     const clone = {};
     for (const [k, v] of Object.entries(d)) {
         if (k === 'common' || k === 'payload' || k === 'signature') continue;
         if (typeof v === 'string') {
-            // truncate long strings
             clone[k] = v.length > 80 ? v.substring(0, 80) + '...' : v;
         } else if (typeof v === 'number' || typeof v === 'boolean' || v === null) {
             clone[k] = v;
         } else if (Array.isArray(v)) {
             clone[k] = `[${v.length} items]`;
         } else if (typeof v === 'object') {
-            // user object → extract key fields
             if (k === 'user' && v) {
                 clone[k] = {
                     nickname: v.nickname || v.uniqueId || v.displayId || '?',
                     id: v.id || '?',
                 };
-            } else if (v && Object.keys(v).length <= 3) {
+            } else if (v && Object.keys(v).length <= 4) {
                 clone[k] = v;
             } else {
                 clone[k] = `{${Object.keys(v).slice(0, 8).join(',')}}`;
@@ -160,8 +164,11 @@ function imFetchPollLoop(roomId, connection, mock) {
                             consecErrors = 0;
                             for (const msg of msgs) {
                                 console.log('[imFetch]', fmt(msg));
-                                const inner = msg?.decodedData || msg;
-                                if (typeof connection._handleMessage === 'function') connection._handleMessage(inner);
+                                // Library routes by msg.method (e.g. "WebcastChatMessage")
+                                // If msg has method at top-level, pass it as-is.
+                                // Otherwise try decodedData, then inner data.
+                                const pass = msg?.method ? msg : (msg?.decodedData?.type ? msg.decodedData : msg);
+                                if (typeof connection._handleMessage === 'function') connection._handleMessage(pass);
                             }
                         } else {
                             silentCount++;
