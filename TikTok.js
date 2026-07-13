@@ -795,6 +795,7 @@ function connectSocket() {
         sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false,CacheUserNum,CacheUserList);
     });
 
+    var buffer = '';
 
     client.on('data', (data) => {
         buffer += data.toString();
@@ -812,6 +813,8 @@ function connectSocket() {
                     client.write(JSON.stringify({ type: 'heartbeat' }) + '\n');
                     console.log('💓 收到 keepalive，已回覆 heartbeat');
                 }
+
+                buffer = ''; // 清空 buffer，避免重複解析
             } catch (e) {
                 console.log('解析失敗:', part);
             }
