@@ -797,17 +797,25 @@ function connectSocket() {
 
 
     client.on('data', (data) => {
-        console.log('收到服務器訊息:', data.toString());
+        buffer += data.toString();
 
-        if (data.toString().startsWith('{') && data.toString().endsWith('}')) {
-            const json = JSON.parse(data.toString());
-            if (json.type === 'keepalive') {
-                client.write(JSON.stringify({ type: 'heartbeat' }) + '\n');
-                console.log('💓 收到 keepalive，已回覆 heartbeat');
+        // 按照換行符號切割
+        let parts = buffer.split('\n');
+        buffer = parts.pop(); // 最後可能是不完整的，留著下次再拼
+
+        for (const part of parts) {
+            try {
+                const json = JSON.parse(part.trim());
+                console.log('收到服務器訊息:', json);
+
+                if (json.type === 'keepalive') {
+                    client.write(JSON.stringify({ type: 'heartbeat' }) + '\n');
+                    console.log('💓 收到 keepalive，已回覆 heartbeat');
+                }
+            } catch (e) {
+                console.log('解析失敗:', part);
             }
         }
-
-
     });
 
     client.on('close', () => {
