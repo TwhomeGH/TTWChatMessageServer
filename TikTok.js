@@ -536,6 +536,12 @@ process.stdin.on('data', async (chunk) => {
         try {
             const json = JSON.parse(msg);
 
+            if (json.type === 'keepalive') {
+                client.write(JSON.stringify({ type: 'heartbeat' }) + '\n');
+                console.log('💓 收到 keepalive，已回覆 heartbeat');
+
+            }
+
             if (json.type === 'StreamMessage') {
                 // 先存原始值供去重比對
                 const origUser = json.user;
