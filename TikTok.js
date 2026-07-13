@@ -799,7 +799,7 @@ function connectSocket() {
     client.on('data', (data) => {
         console.log('收到服務器訊息:', data.toString());
 
-        if (data.startsWith('{') && data.toString().endsWith('}')) {
+        if (data.toString().startsWith('{') && data.toString().endsWith('}')) {
             const json = JSON.parse(data.toString());
             if (json.type === 'keepalive') {
                 client.write(JSON.stringify({ type: 'heartbeat' }) + '\n');
