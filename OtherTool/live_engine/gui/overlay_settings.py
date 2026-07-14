@@ -224,6 +224,11 @@ class OverlaySettingsWindow(QWidget):
         self._timer_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #ccc;")
         layout.addWidget(self._timer_label)
 
+        self._auto_timer_cb = QCheckBox("自動跟隨 Socket 連線")
+        self._auto_timer_cb.setChecked(True)
+        self._auto_timer_cb.toggled.connect(self._on_auto_timer_toggled)
+        layout.addWidget(self._auto_timer_cb)
+
         timer_btn_row = QHBoxLayout()
         self._timer_start_btn = QPushButton("開始")
         self._timer_start_btn.clicked.connect(self._timer_start)
@@ -260,6 +265,11 @@ class OverlaySettingsWindow(QWidget):
     def _timer_reset(self):
         if self._engine:
             self._engine.reset_timer()
+
+    def _on_auto_timer_toggled(self, checked):
+        if self._engine:
+            self._engine.set_manual_control(not checked)
+        log(f"Timer auto-follow socket: {checked}")
 
     def _on_font_size_changed(self, size):
         if self._overlay:

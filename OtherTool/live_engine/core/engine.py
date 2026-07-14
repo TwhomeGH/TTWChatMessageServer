@@ -50,14 +50,12 @@ class Engine:
         self.stream_active = True
         self.stream_start_time = time.time()
         self.stream_paused = False
-        self._manual_control = True
 
     def stop_timer(self):
         if self.stream_active and not self.stream_paused:
             self._stream_elapsed_at_pause = time.time() - self.stream_start_time
         self.stream_active = False
         self.stream_paused = True
-        self._manual_control = True
 
     def reset_timer(self):
         self.stream_start_time = time.time()
@@ -65,6 +63,9 @@ class Engine:
         self.stream_active = True
         self.stream_paused = False
         self._manual_control = True
+
+    def set_manual_control(self, enabled):
+        self._manual_control = enabled
 
     def get_elapsed(self):
         if not self.stream_active:
@@ -105,6 +106,7 @@ class Engine:
                 event = data.get("event", "")
                 if event == "connected" and not self._manual_control:
                     self.start_timer()
+                    self._manual_control = False
                 elif event == "disconnected" and not self._manual_control:
                     self.stop_timer()
                 continue
