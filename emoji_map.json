@@ -1,9 +1,9 @@
 {
-    "coffeel2IMSoTired": "https://cdn.discordapp.com/attachments/1166697125090963556/1525778931557339256/IMG_2681.png?ex=6a549fdc&is=6a534e5c&hm=0b5092c1bc15559f7f207a831262be8ce639a05182fa9c89832f4bddf4b17bdd&",
-    "coffeel2Neuro2": "https://media.discordapp.net/attachments/1166697125090963556/1526047267382104194/Neuro2.png?ex=6a5599c5&is=6a544845&hm=fb8b5a10912cae963127af6c559ed84002e3b1d5a7ff91cc4c2e9a9c798f32de&=&format=webp&quality=lossless",
-    "coffeel2HAA": "https://cdn.discordapp.com/attachments/1525716122656182463/1525716157657645188/4E9D428D-5748-4E8B-8A37-6C59F2AF4BAF.png?ex=6a546566&is=6a5313e6&hm=1f6b227cc7b803d11677c2d4c6b231fecb404b106f9154f57993d8b6324eead4",
-    "coffeel2Elaina":"https://cdn.discordapp.com/attachments/1525716122656182463/1526050499688665168/elaina.png?ex=6a559cc7&is=6a544b47&hm=71edb12071263ae8e851b1c7e11063104ee003d07d91b40b506ca3a578c1327f",
-    "smile": "https://example.com/emojis/smile.png",
-    "heart": "https://example.com/emojis/heart.png",
-    "fire": "https://example.com/emojis/fire.png"
+    "coffeel2IMSoTired": "https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/IMSoTired.png?raw=true",
+    "coffeel2Neuro2": "https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/Neuro2.png?raw=true",
+    "coffeel2HAA": "https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/Cafe.png?raw=true",
+    "coffeel2Elaina":"https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/elaina.png?raw=true",
+    "coffeel2HAAA": "https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/HAA.jpg?raw=true",
+    "heart": "https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/Heart.png?raw=true",
+    "fire": "https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/Fire.png?raw=true"
 }
