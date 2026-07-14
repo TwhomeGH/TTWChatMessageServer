@@ -1,6 +1,6 @@
 import requests
 from PyQt6.QtGui import QImage, QPainter, QPainterPath
-from PyQt6.QtCore import QRectF
+from PyQt6.QtCore import QRectF, Qt
 from OpenGL.GL import *
 
 
@@ -13,10 +13,76 @@ def qimage_to_bytes(img: QImage):
         return ptr.asstring(w * h * 4)
 
 
+MAX_EMOJI_CACHE = 20
+
+
 class TextureLoader:
 
     def __init__(self):
         self.cache = {}
+        self._emoji_order = []
+        self._pending_emojis = {}
+        self._emoji_failed = set()
+
+    def load_emoji(self, url, size=24):
+        if not url:
+            return None
+        key = f"emoji:{url}:{size}"
+        tex = self.cache.get(key)
+        if tex is not None:
+            self._emoji_order.remove(key)
+            self._emoji_order.append(key)
+        return tex
+
+    def preload_emoji(self, url, size=24):
+        if not url:
+            return
+        key = f"emoji:{url}:{size}"
+        if key in self.cache or key in self._pending_emojis or key in self._emoji_failed:
+            return
+        try:
+            res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
+            if res.status_code != 200:
+                self._emoji_failed.add(key)
+                print(f"emoji fail cached: {res.status_code} {url[-40:]}")
+                return
+            img = QImage.fromData(res.content)
+            if img.isNull():
+                self._emoji_failed.add(key)
+                print(f"emoji QImage null cached fail: {url[-40:]}")
+                return
+            img = img.convertToFormat(QImage.Format.Format_RGBA8888)
+            img = img.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self._pending_emojis[key] = img
+        except Exception as e:
+            self._emoji_failed.add(key)
+            print("emoji preload error:", e)
+
+    def process_pending(self):
+        if not self._pending_emojis:
+            return
+        for key, img in list(self._pending_emojis.items()):
+            w, h = img.width(), img.height()
+            data = qimage_to_bytes(img)
+
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
+            tex = glGenTextures(1)
+            glBindTexture(GL_TEXTURE_2D, tex)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data)
+
+            self.cache[key] = tex
+            self._emoji_order.append(key)
+            del self._pending_emojis[key]
+            print(f"emoji texture created: {key}")
+
+            if len(self._emoji_order) > MAX_EMOJI_CACHE:
+                old_key = self._emoji_order.pop(0)
+                old_tex = self.cache.pop(old_key)
+                glDeleteTextures(old_tex)
 
     def load_url(self, url):
         if not url:

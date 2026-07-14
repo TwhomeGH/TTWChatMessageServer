@@ -1,6 +1,9 @@
 from PyQt6.QtGui import QColor
 import time
 import config
+from core.emoji_parser import parse_message
+
+EMOJI_SIZE = 24
 
 class ChatNode:
     def __init__(self, data):
@@ -8,6 +11,9 @@ class ChatNode:
         self.text = data.get("message") or ""
         self.avatar_url = data.get("img")
         self.gift_url = data.get("giftImg")
+
+        self.segments = parse_message(self.text)
+        self.has_emoji = any(s["type"] == "image" for s in self.segments)
 
         self.x = 20
         self.y = 20
@@ -28,10 +34,14 @@ class ChatNode:
             self.user, QColor(0, 128, 255), max_width=config.USERNAME_MAX_WIDTH,
             outline_color=QColor("white")
         )
-        _, _, mh = font_system.get_text_texture(
-            self.text, QColor("white"), max_width=config.MESSAGE_MAX_WIDTH,
-            outline_color=QColor("black")
-        )
+
+        if self.has_emoji:
+            mh = EMOJI_SIZE + 4
+        else:
+            _, _, mh = font_system.get_text_texture(
+                self.text, QColor("white"), max_width=config.MESSAGE_MAX_WIDTH,
+                outline_color=QColor("black")
+            )
 
         avatar_size = 28
         top_pad = 6
@@ -43,11 +53,8 @@ class ChatNode:
         return self._cached_height
 
     def update(self):
-        # 平滑收斂到目標位置
         self.y += (self.target_y - self.y) * 0.25
 
-
-        # 檢查時間是否超過 15 秒
         if time.time() - self.timestamp > 15:
             self.dead = True
 
