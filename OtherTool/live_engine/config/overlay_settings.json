@@ -1,6 +1,12 @@
 {
   "width": 400,
   "height": 400,
-  "x": -1,
-  "y": 50
+  "x": 56,
+  "y": 77,
+  "font_face": "微軟正黑體",
+  "font_size": 15,
+  "spacing": 8,
+  "content_gap": 2,
+  "message_ttl": 15,
+  "fade_speed": 2
 }

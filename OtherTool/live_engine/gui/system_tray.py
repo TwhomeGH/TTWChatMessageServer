@@ -18,36 +18,42 @@ class SystemTray(QObject):
         self._tray = QSystemTrayIcon(icon, parent)
         self._tray.setToolTip("Live Engine - 聊天疊加層")
 
-        menu = QMenu()
+        me = QMenu()
+        self._menu = me
 
         self._toggle_act = QAction("隱藏疊加層")
         self._toggle_act.triggered.connect(self._on_toggle)
-        menu.addAction(self._toggle_act)
+        me.addAction(self._toggle_act)
 
-        menu.addSeparator()
+        me.addSeparator()
 
-        act_overlay = QAction("疊加層設定")
-        act_overlay.triggered.connect(self.show_overlay_settings.emit)
-        menu.addAction(act_overlay)
+        self._act_overlay = QAction("疊加層設定")
+        self._act_overlay.triggered.connect(self.show_overlay_settings.emit)
+        me.addAction(self._act_overlay)
 
-        act_settings = QAction("TTS 朗讀設定")
-        act_settings.triggered.connect(self.show_settings.emit)
-        menu.addAction(act_settings)
+        self._act_tts = QAction("TTS 朗讀設定")
+        self._act_tts.triggered.connect(self.show_settings.emit)
+        me.addAction(self._act_tts)
 
-        act_filter = QAction("過濾器設定")
-        act_filter.triggered.connect(self.show_filter.emit)
-        menu.addAction(act_filter)
+        self._act_filter = QAction("過濾器設定")
+        self._act_filter.triggered.connect(self.show_filter.emit)
+        me.addAction(self._act_filter)
 
-        menu.addSeparator()
+        me.addSeparator()
 
-        act_quit = QAction("結束程式")
-        act_quit.triggered.connect(QApplication.instance().quit)
-        menu.addAction(act_quit)
+        self._act_quit = QAction("關閉")
+        self._act_quit.triggered.connect(self._quit_app)
+        me.addAction(self._act_quit)
 
-        self._tray.setContextMenu(menu)
+        self._tray.setContextMenu(me)
         self._tray.activated.connect(self._on_activated)
 
         self._visible = True
+        log("System tray menu built: toggle, overlay, tts, filter, quit")
+
+    def _quit_app(self):
+        log("Quit triggered from tray menu")
+        QApplication.instance().quit()
 
     def _make_icon(self):
         pm = QPixmap(16, 16)

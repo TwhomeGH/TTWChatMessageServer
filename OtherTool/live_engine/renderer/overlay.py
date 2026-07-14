@@ -66,6 +66,7 @@ class Overlay(QOpenGLWidget):
 
     def __init__(self):
         super().__init__()
+        self._inline_font_size = self.INLINE_FONT_SIZE
         self.setObjectName("Overlay")
 
         fmt = QtGui.QSurfaceFormat()
@@ -89,14 +90,14 @@ class Overlay(QOpenGLWidget):
         self._drag_start_pos = QPoint(0, 0)
         self._drag_window_start = QPoint(0, 0)
 
-        self._load_position_and_size()
-
         self.engine = Engine(widget=self)
         self.renderer = GLRenderer()
 
         self.texture_loader = TextureLoader()
 
         self.font_system = FontSystem()
+
+        self._load_position_and_size()
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.loop)
@@ -111,6 +112,14 @@ class Overlay(QOpenGLWidget):
         cfg = load_overlay_config()
         win_w = cfg.get("width", config.WIDTH)
         win_h = cfg.get("height", config.HEIGHT)
+        self._inline_font_size = cfg.get("font_size", self.INLINE_FONT_SIZE)
+        self.set_font_face(cfg.get("font_face", "Microsoft JhengHei"))
+        self._content_gap = cfg.get("content_gap", 2)
+        if self.engine:
+            self.engine.set_node_spacing(cfg.get("spacing", 8))
+            self.engine.set_content_gap(cfg.get("content_gap", 2))
+            self.engine.set_message_ttl(cfg.get("message_ttl", 15))
+            self.engine.set_fade_speed(cfg.get("fade_speed", 2))
         screen = QtWidgets.QApplication.primaryScreen()
         screen_geometry = screen.geometry()
         screen_width = screen_geometry.width()
@@ -233,7 +242,6 @@ class Overlay(QOpenGLWidget):
 
 
     HEADER_FONT_SIZE = 14
-    EMOJI_SIZE = 24
     INLINE_FONT_SIZE = 15
 
     def loop(self):
@@ -293,9 +301,32 @@ class Overlay(QOpenGLWidget):
         glEnd()
         self.texture_loader.draw(tex, bg_x + 2, bg_y + 2, w, h)
 
+    def set_inline_font_size(self, size):
+        self._inline_font_size = size
+        for n in self.engine.nodes:
+            n.invalidate_height()
+
+    def set_font_face(self, family):
+        self.font_system.set_font_family(family)
+
+    def set_content_gap(self, px):
+        self._content_gap = px
+
     def _render_chat_nodes(self):
-        emoji_size = self.EMOJI_SIZE
-        font_size = self.INLINE_FONT_SIZE
+        font_size = self._inline_font_size
+        emoji_size = int(font_size * 1.6)
+
+        _font = QFont("Microsoft JhengHei", font_size)
+        _fm = QFontMetrics(_font)
+        _text_vc = 10 + _fm.height() / 2
+        _emoji_vc = emoji_size / 2
+        _vc_diff = int(_text_vc - _emoji_vc)
+        if _vc_diff > 0:
+            _emoji_off = _vc_diff
+            _text_off = 0
+        else:
+            _emoji_off = 0
+            _text_off = -_vc_diff
 
         for n in self.engine.nodes:
             box_x, box_y, box_w, box_h = 20, int(n.y), 360, 80
@@ -316,27 +347,39 @@ class Overlay(QOpenGLWidget):
             self.texture_loader.draw(username_tex, username_x, username_y, uw, uh)
 
             msg_x = username_x
-            msg_y = username_y + uh + 2
+            msg_y = username_y + _fm.height() + self._content_gap
             max_msg_w = config.MESSAGE_MAX_WIDTH
             current_x = msg_x
+            line_y = msg_y
+            _single_line_h = _fm.height() + 20
 
             for seg in n.segments:
                 if seg["type"] == "text" and seg["content"].strip():
+                    remaining_w = max_msg_w - (current_x - msg_x)
+                    if remaining_w < 30:
+                        line_y += _single_line_h
+                        current_x = msg_x
+                        remaining_w = max_msg_w
                     seg_tex, tw, th = self.font_system.get_text_texture(
-                        seg["content"], QColor("white"), max_width=max_msg_w,
+                        seg["content"], QColor("white"), max_width=remaining_w,
                         font_size=font_size, outline_color=QColor("black")
                     )
-                    if current_x + tw > msg_x + max_msg_w:
-                        break
-                    self.texture_loader.draw(seg_tex, current_x, msg_y, tw, th)
-                    current_x += tw
+                    if th > _single_line_h:
+                        self.texture_loader.draw(seg_tex, current_x, line_y + _text_off, tw, th)
+                        line_y += th + 2
+                        current_x = msg_x
+                    else:
+                        self.texture_loader.draw(seg_tex, current_x, line_y + _text_off, tw, th)
+                        current_x += tw
                 elif seg["type"] == "image":
+                    remaining_w = max_msg_w - (current_x - msg_x)
+                    if emoji_size + 1 > remaining_w:
+                        line_y += _single_line_h
+                        current_x = msg_x
                     emoji_tex = self.texture_loader.load_emoji(seg["url"], emoji_size)
                     if emoji_tex:
-                        if current_x + emoji_size + 3 > msg_x + max_msg_w:
-                            break
-                        self.texture_loader.draw(emoji_tex, current_x, msg_y, emoji_size, emoji_size)
-                        current_x += emoji_size + 3
+                        self.texture_loader.draw(emoji_tex, current_x, line_y + _emoji_off, emoji_size, emoji_size)
+                        current_x += emoji_size + 1
                     else:
                         if not hasattr(n, '_emoji_logged'):
                             print(f"emoji not cached: {seg['url'][-40:]}")

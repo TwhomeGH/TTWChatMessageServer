@@ -24,6 +24,10 @@ class TTSSettingsWindow(QWidget):
         self._load_settings()
         self._setup_auto_save()
 
+    def closeEvent(self, event):
+        self.hide()
+        event.ignore()
+
     def _build_ui(self):
         tabs = QTabWidget(self)
         main_layout = QVBoxLayout(self)

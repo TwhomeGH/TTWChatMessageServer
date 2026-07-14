@@ -1,5 +1,5 @@
 PyQt6
 PyOpenGL
 edge-tts
-pygame
 aiohttp
+pytest

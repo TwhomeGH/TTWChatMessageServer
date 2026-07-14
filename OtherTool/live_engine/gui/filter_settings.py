@@ -17,6 +17,10 @@ class FilterSettingsWindow(QWidget):
         self._build_ui()
         self._load_data()
 
+    def closeEvent(self, event):
+        self.hide()
+        event.ignore()
+
     def _build_ui(self):
         layout = QVBoxLayout(self)
 

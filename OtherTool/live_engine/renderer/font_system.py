@@ -8,21 +8,34 @@ from PyQt6.QtGui import QColor
 class FontSystem:
 
     MAX_CACHE_SIZE = 500
+    DEFAULT_FONT = "Microsoft JhengHei"
 
     def __init__(self):
         self.cache = {}
         self._cache_order = []
+        self._font_family = self.DEFAULT_FONT
+
+    def set_font_family(self, family):
+        if family and family != self._font_family:
+            self._font_family = family
+            self.clear_cache()
+
+    def clear_cache(self):
+        for tex, _, _ in self.cache.values():
+            glDeleteTextures(tex)
+        self.cache.clear()
+        self._cache_order.clear()
 
     def get_text_texture(self, text, color=QColor("white"), max_width=360, font_size=16, outline_color=None):
         padding = 10 if outline_color else 5
-        cache_key = (text, color.name(), max_width, font_size,
+        cache_key = (text, color.name(), max_width, font_size, self._font_family,
                      outline_color.name() if outline_color else None)
         if cache_key in self.cache:
             self._cache_order.remove(cache_key)
             self._cache_order.append(cache_key)
             return self.cache[cache_key]
 
-        font = QFont("Microsoft JhengHei", font_size)
+        font = QFont(self._font_family, font_size)
         fm = QFontMetrics(font)
 
         is_multiline = "\n" in text

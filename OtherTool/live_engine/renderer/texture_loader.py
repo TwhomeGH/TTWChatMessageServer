@@ -1,7 +1,19 @@
+import os
+import hashlib
 import requests
 from PyQt6.QtGui import QImage, QPainter, QPainterPath
 from PyQt6.QtCore import QRectF, Qt
 from OpenGL.GL import *
+
+
+EMOJI_DISK_CACHE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "cache", "emojis"
+)
+
+
+def _emoji_disk_path(url):
+    h = hashlib.md5(url.encode()).hexdigest()
+    return os.path.join(EMOJI_DISK_CACHE, f"{h}.png")
 
 
 def qimage_to_bytes(img: QImage):
@@ -23,6 +35,7 @@ class TextureLoader:
         self._emoji_order = []
         self._pending_emojis = {}
         self._emoji_failed = set()
+        os.makedirs(EMOJI_DISK_CACHE, exist_ok=True)
 
     def load_emoji(self, url, size=24):
         if not url:
@@ -40,16 +53,33 @@ class TextureLoader:
         key = f"emoji:{url}:{size}"
         if key in self.cache or key in self._pending_emojis or key in self._emoji_failed:
             return
+
+        disk_path = _emoji_disk_path(url)
+        if os.path.exists(disk_path):
+            img = QImage(disk_path)
+            if not img.isNull():
+                img = img.convertToFormat(QImage.Format.Format_RGBA8888)
+                img = img.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                self._pending_emojis[key] = img
+                print(f"emoji disk cache hit: {url[-40:]}")
+                return
+            else:
+                os.remove(disk_path)
+
         try:
             res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5)
             if res.status_code != 200:
                 self._emoji_failed.add(key)
                 print(f"emoji fail cached: {res.status_code} {url[-40:]}")
                 return
+            os.makedirs(os.path.dirname(disk_path), exist_ok=True)
+            with open(disk_path, "wb") as f:
+                f.write(res.content)
             img = QImage.fromData(res.content)
             if img.isNull():
                 self._emoji_failed.add(key)
-                print(f"emoji QImage null cached fail: {url[-40:]}")
+                os.remove(disk_path)
+                print(f"emoji QImage null, removed: {url[-40:]}")
                 return
             img = img.convertToFormat(QImage.Format.Format_RGBA8888)
             img = img.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)

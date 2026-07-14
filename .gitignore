@@ -15,3 +15,4 @@ kick_tokens.json
 youtube_tokens.json
 OtherTool/live_engine/logs/live_engine.log
 youtube_cache.json
+OtherTool/live_engine/cache/*

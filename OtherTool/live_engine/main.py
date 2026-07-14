@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
     def _open_overlay_settings():
         if _tray_wins["overlay"] is None:
-            _tray_wins["overlay"] = OverlaySettingsWindow(overlay=w, engine=w.engine)
+            _tray_wins["overlay"] = OverlaySettingsWindow(overlay=w, engine=w.engine, on_open_tts=_open_settings)
         _tray_wins["overlay"].show()
         _tray_wins["overlay"].raise_()
 

@@ -29,6 +29,22 @@ class Engine:
         self.stream_paused = False
         self._stream_elapsed_at_pause = 0.0
         self._manual_control = False
+        self.node_spacing = 8
+        self.content_gap = 2
+        self.message_ttl = 15
+        self.fade_speed = 0.02
+
+    def set_node_spacing(self, px):
+        self.node_spacing = max(0, int(px))
+
+    def set_content_gap(self, px):
+        self.content_gap = max(0, int(px))
+
+    def set_message_ttl(self, seconds):
+        self.message_ttl = max(3, int(seconds))
+
+    def set_fade_speed(self, rate):
+        self.fade_speed = max(0.001, min(0.5, rate / 100.0))
 
     def start_timer(self):
         self.stream_active = True
@@ -111,7 +127,7 @@ class Engine:
                 new_node.y = 50
             else:
                 last_node = self.nodes[-1]
-                new_node.target_y = last_node.target_y + last_node.get_height(self.font_system) + 8
+                new_node.target_y = last_node.target_y + last_node.get_height(self.font_system, self.content_gap) + self.node_spacing
                 new_node.y = self.height() - 20
 
             self.nodes.append(new_node)
@@ -119,7 +135,6 @@ class Engine:
             if new_node.has_emoji:
                 w = self.widget
                 has_tl = hasattr(w, 'texture_loader') if w else False
-                print(f"ENGINE: has_emoji={new_node.has_emoji} widget={'OK' if w else 'NONE'} has_tl={has_tl}")
                 if w and has_tl:
                     tl = w.texture_loader
                     for seg in new_node.segments:
@@ -136,10 +151,9 @@ class Engine:
 
         current_y = 50
         for n in self.nodes:
-            row_h = n.get_height(self.font_system)
-            spacing = 8
+            row_h = n.get_height(self.font_system, self.content_gap)
             n.target_y = current_y
-            current_y += row_h + spacing
+            current_y += row_h + self.node_spacing
 
         total_height = current_y - 50
         window_height = self.height()
@@ -152,6 +166,6 @@ class Engine:
                     n.dead = True
 
         for n in self.nodes:
-            n.update()
+            n.update(ttl=self.message_ttl, fade=self.fade_speed)
 
         self.nodes = [n for n in self.nodes if n.alpha > 0]
