@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      2.4
+// @version      2.5
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
@@ -23,6 +23,7 @@
     // 只發送一次的訊息 Set
     const sentMessages = new WeakSet();
     var View = 0
+    var ViewUserList = []
     var FailCount = 0
     let MaxFail = 5
 
@@ -33,6 +34,16 @@
             console.log("FailCount 已重置為 0");
         }
     }, 30000);
+
+    function sendAudienceUpdate() {
+        const payload = { type: 'audience', userNum: View, userList: ViewUserList };
+        const sendURL = `http://${HTTP_HOST}:${HTTP_PORT}/chat`;
+        GM_xmlhttpRequest({
+            method: "POST", url: sendURL, data: JSON.stringify(payload),
+            headers: { "Content-Type": "application/json" },
+            onerror: () => { /* ignore */ }
+        });
+    }
 
     function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum,userList=null) {
         const payload = { type: 'StreamMessage', user, message, img, giftImg, isMain ,userNum,userList};
@@ -280,6 +291,7 @@ function hasContent(el) {
         const viewers = getViewerCount();
         console.log('觀眾人數:', viewers);
         View = viewers
+        sendAudienceUpdate();
 
     }, 15000); // 每 15 秒更新一次觀眾列表
 

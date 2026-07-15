@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat → Socket Bridge
 // @namespace    pip-chat-bridge
-// @version      1.7
+// @version      1.8
 // @description  Listen TikTok live chat and forward to socket server
 // @author       Nuclear0709
 // @match        https://livecenter.tiktok.com/*
@@ -36,6 +36,16 @@
             console.log("liveCenter FailCount 已重置為 0");
         }
     }, 30000);
+
+function sendAudienceUpdate(userNum, userList) {
+    const payload = { type: 'audience', userNum, userList };
+    const sendURL = `http://${HTTP_HOST}:${HTTP_PORT}/chat`;
+    GM_xmlhttpRequest({
+        method: "POST", url: sendURL, data: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        onerror: () => { /* ignore */ }
+    });
+}
 
 function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 0, userList = []) {
 
@@ -112,6 +122,7 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 
         setTimeout( ()=>{
             console.log(`已送出 ${username} ${message} ${avatarUrl} 人數:${users.length} ${users}`)
             sendSocketMessage(username, message, avatarUrl, null, true, users.length, users);
+            sendAudienceUpdate(users.length, users);
         },800)
     }
 

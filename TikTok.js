@@ -141,6 +141,9 @@ const youtubePollIntervalS = parseInt(process.env.YOUTUBE_POLL_INTERVAL_S) || 30
 
 let client = null;
 let reconnectTimer = null;
+let socketIdleTimer = null;
+var isFirstSocketConnect = true;
+const SOCKET_IDLE_TIMEOUT = parseInt(process.env.SOCKET_IDLE_TIMEOUT) || 120000; // 預設 2 分鐘無訊息則主動斷線重連
 
 
 
@@ -537,6 +540,12 @@ process.stdin.on('data', async (chunk) => {
             const json = JSON.parse(msg);
 
 
+            if (json.type === 'audience') {
+                CacheUserNum = json.userNum ?? CacheUserNum;
+                if (json.userList) CacheUserList = json.userList;
+                return;
+            }
+
             if (json.type === 'StreamMessage') {
                 // 先存原始值供去重比對
                 const origUser = json.user;
@@ -716,6 +725,16 @@ var TwitchViewerCount = 0
 var OdyseeViewerCount = 0
 var YoutubeViewerCount = 0
 
+function sendAudienceUpdate() {
+    if (!client || client.destroyed) return;
+    const payload = { type: 'audience', userNum: CacheUserNum, userList: CacheUserList };
+    try {
+        client.write(JSON.stringify(payload) + '\n');
+    } catch (err) {
+        console.error('⚠️ 發送 Audience 訊息失敗:', err.message);
+    }
+}
+
 function updateCombinedViewerCount() {
     let combined = 0
     if (isTK) combined += TikTokViewerCount || 0
@@ -723,7 +742,7 @@ function updateCombinedViewerCount() {
     if (isOdysee) combined += OdyseeViewerCount || 0
     if (isYoutube) combined += YoutubeViewerCount || 0
     CacheUserNum = combined
-    sendSocketMessage("", "", "", "", false, CacheUserNum, CacheUserList)
+    sendAudienceUpdate()
 }
 
 /**
@@ -775,10 +794,16 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,use
 var TkRetryCount = 0
 let TkRetryMaxCount = 5
 
-var SocketRetryCount = 0
-let SocketRetryMaxCount = process.env.SOCKET_RETRY_MAX_COUNT || 3
-
-
+function resetSocketIdleTimer() {
+    if (socketIdleTimer) {
+        clearTimeout(socketIdleTimer);
+    }
+    socketIdleTimer = setTimeout(() => {
+        console.log('⏰ Socket 閒置逾時，主動斷線重連');
+        client?.destroy();
+        client?.end();
+    }, SOCKET_IDLE_TIMEOUT);
+}
 
 function connectSocket() {
     if (!isSocket) { return }
@@ -792,12 +817,17 @@ function connectSocket() {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
         }
-        sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false,CacheUserNum,CacheUserList);
+        if (isFirstSocketConnect) {
+            sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false,CacheUserNum,CacheUserList);
+            isFirstSocketConnect = false;
+        }
+        resetSocketIdleTimer();
     });
 
     var buffer = '';
 
     client.on('data', (data) => {
+        resetSocketIdleTimer();
         buffer += data.toString();
 
         // 按照換行符號切割
@@ -829,19 +859,8 @@ function connectSocket() {
             return; 
         }// 如果是程式結束就不重連
 
-        SocketRetryCount += 1 
-
-        if (SocketRetryCount < SocketRetryMaxCount ) {
-            
-            console.log(`當前 ${SocketRetryCount} 最多重試上限 -> ${SocketRetryMaxCount}`)
-            reconnectTimer = setTimeout(connectSocket, 15000);
-
-        } else {
-
-            console.log("已達最大重試次數 取消重連")
-            sendBarkNotification("Socket重試已停止","請重新透過/open啟動")
-
-        }
+        console.log(`Socket 斷線，15 秒後自動重連`)
+        reconnectTimer = setTimeout(connectSocket, 15000);
         
     });
 
@@ -1099,6 +1118,7 @@ connection.on(WebcastEvent.ROOM_USER, data => {
 
     CacheUserList = ranksList.map(item => item.user.nickname);
     CacheUserNum = viewerCount;
+    sendAudienceUpdate();
 
 });
 
