@@ -141,9 +141,7 @@ const youtubePollIntervalS = parseInt(process.env.YOUTUBE_POLL_INTERVAL_S) || 30
 
 let client = null;
 let reconnectTimer = null;
-let socketIdleTimer = null;
 var isFirstSocketConnect = true;
-const SOCKET_IDLE_TIMEOUT = parseInt(process.env.SOCKET_IDLE_TIMEOUT) || 120000; // 預設 2 分鐘無訊息則主動斷線重連
 
 
 
@@ -840,17 +838,6 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,use
 var TkRetryCount = 0
 let TkRetryMaxCount = 5
 
-function resetSocketIdleTimer() {
-    if (socketIdleTimer) {
-        clearTimeout(socketIdleTimer);
-    }
-    socketIdleTimer = setTimeout(() => {
-        console.log('⏰ Socket 閒置逾時，主動斷線重連');
-        client?.destroy();
-        client?.end();
-    }, SOCKET_IDLE_TIMEOUT);
-}
-
 function connectSocket() {
     if (!isSocket) { return }
     if (client && !client.destroyed) return; // 已經連線中
@@ -867,13 +854,11 @@ function connectSocket() {
             sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false,CacheUserNum,CacheUserList);
             isFirstSocketConnect = false;
         }
-        resetSocketIdleTimer();
     });
 
     var buffer = '';
 
     client.on('data', (data) => {
-        resetSocketIdleTimer();
         buffer += data.toString();
 
         // 按照換行符號切割

@@ -209,6 +209,24 @@ http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickU
 > - isDelay 啟用延遲2秒後檢查重複訊息
 > - isRepeat 啟用重複訊息檢查
 
+## Socket 連線機制
+
+系統使用 TCP Socket (預設 port 9322) 將各平台的訊息統一推送給用戶端。
+
+### 閒置處理方式
+
+Socket **不會主動因閒置斷線**，連線生命週期完全由 Server 端程式（WebSocket.js / 用戶端）控制：
+
+- 有資料時正常推送
+- 無資料時保持連線，不做主動中斷
+- Server 端若主動斷線，本系統會在 15 秒後自動重連
+- 無需再設定 `SOCKET_IDLE_TIMEOUT`
+
+**好處：**
+- 減少無意義的斷線重連循環（之前閒置 2 分鐘斷線 → 15 秒重連 → 又閒置 2 分鐘斷線）
+- 降低 CPU 和網路消耗
+- 用戶端（如 iOS App）不需頻繁處理斷線重連狀態
+
 範例：
 
 ```bash
