@@ -25,7 +25,7 @@ import { setupCustomSignServer, waitForSigner, setStreamerName } from './SignSer
 import { type } from 'os';
 import Translate from "./TranslateTest.js"
 import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFilter } from "./MessageFilter.js"
-import { replaceEmojis, loadEmojiMap } from "./EmojiMap.js"
+import { replaceEmojis, loadEmojiMap, getEmojiMap } from "./EmojiMap.js"
 import { KickWebSocket } from 'kick-wss';
 import console from 'console';
 
@@ -633,15 +633,43 @@ const connection = new TikTokLiveConnection(tiktokName, connOpts)
 
 
 
+function stripEmojiUrls(text) {
+    if (!text || typeof text !== 'string') return text;
+    return text.replace(/https?:\/\/[^\s]+(?:png|jpg|jpeg|gif|webp)[^\s]*/gi, '').trim();
+}
+
+function pickEmojiIcon(comment) {
+    if (!comment || typeof comment !== 'string') return null;
+    const map = getEmojiMap();
+    const matched = Object.entries(map).filter(([code]) => comment.includes(code));
+    if (matched.length === 0) return null;
+    const pick = matched[Math.floor(Math.random() * matched.length)];
+    return { code: pick[0], url: pick[1] };
+}
+
+function stripEmojiCodes(text, keepCode) {
+    if (!text || typeof text !== 'string') return text;
+    const map = getEmojiMap();
+    let result = text;
+    for (const code of Object.keys(map)) {
+        if (code === keepCode) continue;
+        result = result.split(code).join('');
+    }
+    return result.replace(/\s+/g, ' ').trim();
+}
+
 async function sendBarkNotification(title = "Twitch", comment, icon) {
 
     if (!isBark) { return }
     if (!Bark || Bark.toLowerCase() === "none") return;
-    try {
 
-        console.info(`📢 發送 Bark 通知: ${title} - ${comment}`);
-        await axios.post(Bark, { title, body: comment, icon }, { headers: { "Content-Type": "application/json; charset=utf-8" } });
-        
+    try {
+        const pick = pickEmojiIcon(comment);
+        const finalIcon = pick ? pick.url : icon;
+        const body = stripEmojiCodes(stripEmojiUrls(comment), pick ? pick.code : null);
+        console.info(`📢 發送 Bark 通知: ${title} - ${body}`);
+        await axios.post(Bark, { title, body, icon: finalIcon }, { headers: { "Content-Type": "application/json; charset=utf-8" } });
+
         console.info("✅ Bark 推送成功");
     } catch (err) {
         console.error("❌ Bark 推送錯誤:", err.message);
@@ -1136,6 +1164,22 @@ connection.on(WebcastEvent.ROOM_USER, data => {
 // Define the events that you want to handle
 // In this case we listen to chat messages (comments)
 
+let memberBarkAccum = [];
+let memberBarkTimer = null;
+
+function flushMemberBark() {
+    if (memberBarkAccum.length === 0) return;
+    const count = memberBarkAccum.length;
+    const names = memberBarkAccum.map(e => e.nickname);
+    const randomAvatar = memberBarkAccum[Math.floor(Math.random() * count)].avatar;
+    const body = count > 5
+        ? `${names.slice(0, 5).join('、')}⋯等${count}人`
+        : names.join('、');
+    sendBarkNotification('👋 加入', body, randomAvatar);
+    memberBarkAccum = [];
+    memberBarkTimer = null;
+}
+
 connection.on(WebcastEvent.MEMBER,data => {
     logRawEvent('MEMBER', data);
 
@@ -1171,8 +1215,13 @@ connection.on(WebcastEvent.MEMBER,data => {
         return;
     }
 
-    sendBarkNotification(nickname, "來了",iconn);
+    // socket：維持逐筆發送
     sendSocketMessage(nickname, "來了",iconn,"",false,CacheUserNum,CacheUserList, data.user.nickname, "加入了");
+
+    // bark：累計後合併發送
+    memberBarkAccum.push({ nickname, avatar: iconn });
+    if (memberBarkTimer) clearTimeout(memberBarkTimer);
+    memberBarkTimer = setTimeout(flushMemberBark, 3000);
 
     addToSyncBuffer(data.user.nickname.trim(), "加入了");
 
