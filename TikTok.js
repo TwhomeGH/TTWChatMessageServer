@@ -149,14 +149,19 @@ function flushPendingQueue() {
     if (pendingQueue.length === 0) return;
     if (!client || client.destroyed) return;
     const batch = pendingQueue.splice(0);
-    for (const payload of batch) {
+    let idx = 0;
+    const sendNext = () => {
+        if (idx >= batch.length || !client || client.destroyed) return;
         try {
-            client.write(JSON.stringify(payload) + '\n');
+            client.write(JSON.stringify(batch[idx]) + '\n');
         } catch (err) {
             console.error('⚠️ 補發佇列訊息失敗:', err.message);
         }
-    }
-    console.log(`📤[TK] 補發 ${batch.length} 筆暫存訊息`);
+        idx++;
+        setTimeout(sendNext, 300);
+    };
+    console.log(`📤[TK] 開始低頻補發 ${batch.length} 筆暫存訊息 (300ms/筆)`);
+    sendNext();
 }
 
 
