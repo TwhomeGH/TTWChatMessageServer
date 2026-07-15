@@ -1,58 +1,92 @@
 # .env File參數參考以下
 
+# ─── Twitch ──────────────────────────────────────────
 CLIENT_ID=Twitch ClientID 你的AppID
-CLIENT_SECRET=Twitch ClientID 你的AppSecrt
-
-SIGN_API=EulerStream API 簽名API
-
+CLIENT_SECRET=Twitch ClientID 你的AppSecret
 TWITCH_USER_NAME=你的Twitch頻道 用戶名
+
+# ─── TikTok ──────────────────────────────────────────
 TIKTOK_NAME=你的TikTok 用戶名
 
-KICK_CLIENT_ID=Kick ClientID 你的AppID
-KICK_CLIENT_SECRET=Kick ClientID 你的AppSecrt
-KICK_USER_NAME=Kick 用戶名
+# [方法A] TikTok Cookie 完整字串（建議）
+# 從瀏覽器 DevTools → Application → Cookies → tiktok.com
+# 複製所有 Cookie（或從 Network 請求的 Request Header 複製）
+TIKTOK_COOKIES=fblo_xxx=yyy; sessionid=xxx; tt-target-idc=alisg; ...
 
+# [方法B] TikTok Session ID（純 sessionid，相容舊版）
 SESSION_ID=你的TikTok SessionID
-TT_TARGET_IDC=你的TikTok Target IDC
-WHITELIST_AUTHENTICATED_SESSION_ID_HOST=api.eulerstream.com
+TT_TARGET_IDC=你的TikTok Target IDC (預設 alisg)
 
+# [方法C] EulerStream API Key（不使用 direct-signer 時）
+# 若只想用原始 EulerStream 簽名服務，不注入 Cookie，設定此項即可
+# SIGN_API_KEY=你的EulerStream API Key
+
+# ─── Sign Server ─────────────────────────────────────
+# 推送伺服器（WebSocket proxy endpoint）
+# SIGN_PUSH_SERVER=wss://webcast-ws.tiktok.com/webcast/im/ws_proxy/ws_reuse_supplement/
+
+# ─── Kick ────────────────────────────────────────────
+KICK_CLIENT_ID=Kick ClientID 你的AppID
+KICK_CLIENT_SECRET=Kick ClientID 你的AppSecret
+KICK_USER_NAME=你的Kick頻道名稱
+KICK_CHANNEL_ID=你的Kick頻道ID
+
+# ─── Odysee ──────────────────────────────────────────
 ODYSEE_CHANNEL_NAME=你的Odysee頻道名稱
 
-YOUTUBE_API_KEY=你的Google API Key
-YOUTUBE_CHANNEL_ID=你的Youtube頻道名稱
+# ─── Youtube ─────────────────────────────────────────
+YOUTUBE_API_KEY=你的Google API Key (YouTube Data API v3)
+YOUTUBE_CHANNEL_ID=你的Youtube頻道名稱或ID
+YOUTUBE_CLIENT_ID=Youtube OAuth ClientID (選填，某些API需要)
+YOUTUBE_CLIENT_SECRET=Youtube OAuth ClientSecret (選填)
 
-
+# ─── 推送 ────────────────────────────────────────────
 BARK_API=你的Bark API
-SOCKET_API=你的Socket API
+SOCKET_API=你的Socket API (格式: http://主機:埠號)
 WEB_API=http://localhost:3001/sendSync
+
+# ─── 翻譯 ────────────────────────────────────────────
 TRANSLATE_API_URL=https://api.mymemory.translated.net/get
 TRANSLATE_SOURCE_LANG=en
 TRANSLATE_TARGET_LANG=zh-TW
 TRANSLATE_DEBUG=false
 TRANSLATE_MIN_LENGTH=5
-
+BING_TRANSLATE_API_KEY= (選填，Bing翻譯API金鑰)
 GIFT_TRANSLATE_PREFILL_LIMIT=10
 
-DEBUG_CHILD=false
+# ─── 進階設定 ────────────────────────────────────────
+DEBUG_CHILD=false          # VSCode除錯模式，正常保持關閉
+USER_LIKE_CLEAR_TIMER=60000 # 用戶點讚數清除計器(毫秒)
+SOCKET_IDLE_TIMEOUT=120000  # Socket閒置超時(毫秒)
+SOCKET_RETRY_MAX_COUNT=3    # Socket最大重試次數
+CONFIG_KEY=07090709         # 配置頁面存取密碼
+WHITELIST_AUTHENTICATED_SESSION_ID_HOST=api.eulerstream.com
 
-USER_LIKE_CLEAR_TIMER=60000
-
-SOCKET_RETRY_MAX_COUNT=3 
-
-# WebAPI是用於WebSocket.js的API地址，默認為http://localhost:3001/sendSync，如果你有修改WebSocket.js中的API地址，請相應修改此處。
-# TRANSLATE_API_URL 是禮物名稱翻譯 API，預設使用免費的 MyMemory 介面。
-# TRANSLATE_SOURCE_LANG / TRANSLATE_TARGET_LANG 是禮物名稱翻譯的來源與目標語言。
-
-# TRANSLATE_DEBUG 用來檢查翻譯訊息 運行情況用的日誌
+# ─── 各項說明 ────────────────────────────────────────
+# WEB_API 是WebSocket.js的API地址，默認為http://localhost:3001/sendSync
+# TRANSLATE_API_URL 是禮物名稱翻譯API，預設使用免費的MyMemory介面
+# TRANSLATE_SOURCE_LANG / TRANSLATE_TARGET_LANG 是翻譯來源與目標語言
+# TRANSLATE_DEBUG 用來檢查翻譯訊息運行情況的日誌
 # TRANSLATE_MIN_LENGTH 最小翻譯字數要求 預設5個字
-# GIFT_TRANSLATE_PREFILL_LIMIT 是啟動時用 giftList 預先補翻譯的最大數量，避免一次打太多免費 API。
+# GIFT_TRANSLATE_PREFILL_LIMIT 啟動時用giftList預先補翻譯的最大數量
+# DEBUG_CHILD 只有在VSCode偵錯打斷點時使用，正常保持關閉
+# USER_LIKE_CLEAR_TIMER 用戶點讚數清除計時器，預設60000(1分鐘)
+# WHITELIST_AUTHENTICATED_SESSION_ID_HOST sign server域名白名單
+#   old: tiktok.eulerstream.com  new: api.eulerstream.com
 
-# DEBUG_CHILD=false 只有在VSCode偵錯 打斷點時使用 正常保持關閉
-# USER_LIKE_CLEAR_TIMER=用戶點讚數清除計時器，單位毫秒，預設60000（1分鐘）。當用戶點讚後，經過這段時間後會清除該用戶的點讚數，以便在聊天室中顯示最新的點讚數。
-
-
-# WHITELIST_AUTHENTICATED_SESSION_ID_HOST= tiktok.eulerstream.com
-# old: tiktok.eulerstream.com new: api.eulerstream.com
-
-# SOCKET_RETRY_MAX_COUNT=最大重試次數
-# CONFIG_KEY=你的配置頁面存取密碼設置
+# ─── 如何取得 TIKTOK_COOKIES ─────────────────────────
+# 方法1：DevTools → Application → Cookies → tiktok.com
+#   在已登入的TikTok頁面按F12，切到Application分頁
+#   左側選Cookies → tiktok.com，全選所有cookie後複製
+#   貼到 .env 的 TIKTOK_COOKIES= 後面
+#
+# 方法2：DevTools → Network → 任意請求
+#   重新整理頁面，點任意tiktok.com的請求
+#   在 Request Headers 找到 Cookie: ... 整段複製
+#
+# 方法3：Console 一行指令
+#   在 TikTok 頁面的 DevTools Console 執行：
+#   copy(document.cookie)
+#   然後貼到 .env 的 TIKTOK_COOKIES=
+#
+# 注意：Cookie 有時效性，過期後需重新取得

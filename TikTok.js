@@ -606,17 +606,28 @@ loadEmojiMap();
 console.log("TikTok 直播間名稱:", tiktokName);
 setStreamerName(tiktokName);
 
-const connection = new TikTokLiveConnection(tiktokName,{
-    session: {
+const hasDirectCreds = !!(process.env.TIKTOK_COOKIES || process.env.SESSION_ID);
+const connOpts = {};
+
+if (hasDirectCreds) {
+    connOpts.session = {
         cookie: {
             type: 'cookie',
             value: {
-                sessionId: process.env.SESSION_ID,
-                ttTargetIdc: process.env.TT_TARGET_IDC || "alisg"
+                sessionId: process.env.SESSION_ID || '',
+                ttTargetIdc: process.env.TT_TARGET_IDC || 'alisg'
             }
         }
-    }
-})
+    };
+    console.log('[TikTok] Using direct signer (TIKTOK_COOKIES/SESSION_ID)');
+} else if (process.env.SIGN_API_KEY) {
+    connOpts.signApiKey = process.env.SIGN_API_KEY;
+    console.log('[TikTok] Using EulerStream signer (SIGN_API_KEY)');
+} else {
+    console.warn('[TikTok] No TIKTOK_COOKIES/SESSION_ID or SIGN_API_KEY — signing may fail');
+}
+
+const connection = new TikTokLiveConnection(tiktokName, connOpts)
 
 
 

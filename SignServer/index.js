@@ -23,9 +23,24 @@ async function ensureSigner() {
     return signerPromise;
 }
 
-export function waitForSigner() { return ensureSigner(); }
+export function waitForSigner() {
+    if (!hasDirectSignCreds()) return Promise.resolve(true);
+    return ensureSigner();
+}
+
+function hasDirectSignCreds() {
+    return !!(process.env.TIKTOK_COOKIES || process.env.SESSION_ID);
+}
 
 export async function setupCustomSignServer() {
+    const useDirect = hasDirectSignCreds();
+
+    if (!useDirect) {
+        console.log('[SignServer] No TIKTOK_COOKIES or SESSION_ID — using EulerStream (native signer).');
+        return;
+    }
+
+    console.log('[SignServer] TIKTOK_COOKIES/SESSION_ID found — using direct signer.');
     ensureSigner();
 
     RoomIdRouteConfig.skipFetchRoomIdFromEulerRoute = true;

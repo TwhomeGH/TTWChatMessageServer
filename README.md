@@ -66,22 +66,31 @@ npm install
 
 ### 2. 建立 .env 檔案
 
-在 TikTok.js 目錄下建立 .env，可參考範例：
+在專案目錄下建立 .env，可參考範例：
 
-主要請以 `Docs/envExample` 裡的為準
+主要請以 `Docs/envExample` 裡的為準（或複製 `.env.example` 修改）
 
 ```env
 # Twitch 設定
 CLIENT_ID=你的Twitch Client ID
 CLIENT_SECRET=你的Twitch Client Secret
-
-# EulerStream API 簽名API (TikTok用)
-SIGN_API=你的簽名API
+TWITCH_USER_NAME=你的Twitch頻道名稱
 
 # TikTok 設定
-TIKTOK_NAME=coffeelatte0709
+TIKTOK_NAME=你的TikTok用戶名
+
+# ─── 三種 TikTok 認證方式，擇一即可 ───
+
+# [方法A] 完整 Cookie（建議，功能最完整）
+# 從已登入 TikTok 的瀏覽器 DevTools 取得
+TIKTOK_COOKIES=fblo_xxx=yyy; sessionid=xxx; ...
+
+# [方法B] Session ID（舊版相容）
 SESSION_ID=你的TikTok sessionid
 TT_TARGET_IDC=你的TikTok Target IDC
+
+# [方法C] EulerStream API Key（不用 Cookie，走原始簽名服務）
+# SIGN_API_KEY=你的EulerStream API Key
 
 # 推送設定
 BARK_API=https://api.day.app/你的BarkKey
@@ -91,6 +100,7 @@ SOCKET_API=http://192.168.0.195:9322
 KICK_CLIENT_ID=你的Kick Client ID
 KICK_CLIENT_SECRET=你的Kick Client Secret
 KICK_USER_NAME=你的Kick頻道名稱
+KICK_CHANNEL_ID=你的Kick頻道ID
 
 # Odysee 設定
 ODYSEE_CHANNEL_NAME=你的Odysee頻道名稱
@@ -106,7 +116,19 @@ TRANSLATE_TARGET_LANG=zh-TW
 GIFT_TRANSLATE_PREFILL_LIMIT=10
 ```
 
-⚠️SESSION_ID / TT_TARGET_IDC 需要從已登入TikTok網頁Cookie裡取得
+**👉 如何取得 TIKTOK_COOKIES（方法A）：**
+
+| 方式 | 步驟 |
+|------|------|
+| **DevTools Cookie 管理** | 在已登入的 TikTok 頁面按 `F12` → **Application** → 左側 **Cookies** → `tiktok.com` → 全選所有 Cookie 項目 → 複製 → 貼到 `TIKTOK_COOKIES=` |
+| **DevTools Network** | 在已登入的 TikTok 頁面按 `F12` → **Network** → 重新整理 → 點任意請求 → 在 **Request Headers** 找到 `Cookie:` 整段複製 |
+| **Console 快速複製** | 在已登入的 TikTok 頁面按 `F12` → **Console** → 輸入 `copy(document.cookie)` → 直接貼到 `TIKTOK_COOKIES=` |
+
+> ⚠️ Cookie 有時效性（約數天~數週），過期後需重新取得。系統啟動時會在 log 顯示設定狀態。
+
+**方法B（SESSION_ID）** 只需從 Cookie 中找到 `sessionid` 的值填入即可，相容舊版配置。
+
+**方法C（SIGN_API_KEY）** 適用于不使用 Puppeteer direct-signer 的情境，需有 EulerStream 服務的 API Key。
 
 ⚠️CLIENT_ID / CLIENT_SECRET 需從 Twitch 開發者平台取得
 
