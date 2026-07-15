@@ -142,6 +142,22 @@ const youtubePollIntervalS = parseInt(process.env.YOUTUBE_POLL_INTERVAL_S) || 30
 let client = null;
 let reconnectTimer = null;
 var isFirstSocketConnect = true;
+const pendingQueue = [];
+const MAX_PENDING = 50;
+
+function flushPendingQueue() {
+    if (pendingQueue.length === 0) return;
+    if (!client || client.destroyed) return;
+    const batch = pendingQueue.splice(0);
+    for (const payload of batch) {
+        try {
+            client.write(JSON.stringify(payload) + '\n');
+        } catch (err) {
+            console.error('⚠️ 補發佇列訊息失敗:', err.message);
+        }
+    }
+    console.log(`📤[TK] 補發 ${batch.length} 筆暫存訊息`);
+}
 
 
 
@@ -572,6 +588,8 @@ process.stdin.on('data', async (chunk) => {
 
                 sendSocketMessage(json.user, json.message, json.img || '', json.giftImg || '', true, CacheUserNum, CacheUserList, origUser, origMsg);
 
+                addToSyncBuffer(origUser, origMsg);
+
                 // sendToTCP(json, origUser, origMsg);
 
                 let Gift = json.giftImg || ''
@@ -783,12 +801,16 @@ var OdyseeViewerCount = 0
 var YoutubeViewerCount = 0
 
 function sendAudienceUpdate() {
-    if (!client || client.destroyed) return;
     const payload = { type: 'audience', userNum: CacheUserNum, userList: CacheUserList };
+    if (!client || client.destroyed) {
+        pendingQueue.push(payload);
+        return;
+    }
     try {
         client.write(JSON.stringify(payload) + '\n');
     } catch (err) {
         console.error('⚠️ 發送 Audience 訊息失敗:', err.message);
+        pendingQueue.push(payload);
     }
 }
 
@@ -815,9 +837,7 @@ function updateCombinedViewerCount() {
  * @returns 
  */
 function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,userList=[], dedupUser, dedupMessage) {
-    if (!client || client.destroyed) return;
 
-    
     const checkUser = dedupUser ?? user;
     const checkMsg = dedupMessage ?? message;
     if (isDuplicate(checkUser.trim(), checkMsg.trim())) {
@@ -838,13 +858,22 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,use
         userNum: Number(userNum),
         userList
     };
+
+    if (!client || client.destroyed) {
+        if (pendingQueue.length < MAX_PENDING) {
+            pendingQueue.push(payload);
+        }
+        return;
+    }
     
     try {
         console.log('📤[TK] 發送 Socket 訊息:', payload);
-        client.write(JSON.stringify(payload) + '\n'); // '\n' 可以讓 server 分行處理
+        client.write(JSON.stringify(payload) + '\n');
     } catch (err) {
-
         console.error('⚠️ 發送 Socket 訊息失敗:', err.message);
+        if (pendingQueue.length < MAX_PENDING) {
+            pendingQueue.push(payload);
+        }
     }
 }
 
@@ -863,6 +892,7 @@ function connectSocket() {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
         }
+        flushPendingQueue();
         if (isFirstSocketConnect) {
             sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false,CacheUserNum,CacheUserList);
             isFirstSocketConnect = false;
