@@ -59,7 +59,7 @@ DEBUG_CHILD=false          # VSCode除錯模式，正常保持關閉
 USER_LIKE_CLEAR_TIMER=60000 # 用戶點讚數清除計器(毫秒)
 SOCKET_IDLE_TIMEOUT=120000  # Socket閒置超時(毫秒)
 SOCKET_RETRY_MAX_COUNT=3    # Socket最大重試次數
-CONFIG_KEY=07090709         # 配置頁面存取密碼
+CONFIG_KEY=0709         # 配置頁面存取密碼
 WHITELIST_AUTHENTICATED_SESSION_ID_HOST=api.eulerstream.com
 
 # ─── 各項說明 ────────────────────────────────────────
