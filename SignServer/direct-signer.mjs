@@ -352,7 +352,7 @@ export async function initLivePage(username, timeoutMs = 20000) {
         window.WebSocket = function(url, protocols) {
             const ws = new OrigWS(url, protocols);
             const urlStr = typeof url === 'string' ? url : url.toString();
-            if (urlStr.includes('im-ws-sg') || urlStr.includes('webcast-ws')) {
+            if (urlStr.includes('webcast-ws')) {
                 captured.push({ type: 'created', url: urlStr, time: Date.now() });
                 console.log('[LiveWS] intercepted:', urlStr.substring(0, 200));
                 liveWs = ws;
