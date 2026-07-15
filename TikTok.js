@@ -655,6 +655,13 @@ function stripEmojiCodes(text, keepCode) {
         if (code === keepCode) continue;
         result = result.split(code).join('');
     }
+    if (keepCode) {
+        const count = (result.match(new RegExp(keepCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+        if (count > 1) {
+            result = result.replace(new RegExp(keepCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '').trim();
+            result = keepCode + ' x' + count + (result ? ' ' + result : '');
+        }
+    }
     return result.replace(/\s+/g, ' ').trim();
 }
 
