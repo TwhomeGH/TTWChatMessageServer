@@ -20,6 +20,7 @@ TT_TARGET_IDC=你的TikTok Target IDC (預設 alisg)
 # [方法C] EulerStream API Key（不使用 direct-signer 時）
 # 若只想用原始 EulerStream 簽名服務，不注入 Cookie，設定此項即可
 # SIGN_API_KEY=你的EulerStream API Key
+# （相容舊寫法 SIGN_API=...）
 
 # ─── Sign Server ─────────────────────────────────────
 # 推送伺服器（WebSocket proxy endpoint）
@@ -61,6 +62,11 @@ SOCKET_IDLE_TIMEOUT=120000  # Socket閒置超時(毫秒)
 SOCKET_RETRY_MAX_COUNT=3    # Socket最大重試次數
 CONFIG_KEY=0709         # 配置頁面存取密碼
 WHITELIST_AUTHENTICATED_SESSION_ID_HOST=api.eulerstream.com
+
+# ─── Puppeteer / Direct Signer ───────────────────────
+# PUPPETEER_HEADED=true     # 顯示瀏覽器視窗（預設 headless），便於除錯
+# DISABLE_SANDBOX=1         # 停用瀏覽器沙箱（預設啟用，不建議關閉）
+# DIRECT_SIGNER_PRIORITY=1  # 同時有 TIKTOK_COOKIES + SIGN_API_KEY 時，優先使用 direct signer
 
 # ─── 各項說明 ────────────────────────────────────────
 # WEB_API 是WebSocket.js的API地址，默認為http://localhost:3001/sendSync

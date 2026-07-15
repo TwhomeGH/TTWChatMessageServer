@@ -25,6 +25,7 @@ async function ensureSigner() {
 
 export function waitForSigner() {
     if (!hasDirectSignCreds()) return Promise.resolve(true);
+    if (hasEulerKey() && process.env.DIRECT_SIGNER_PRIORITY !== '1') return Promise.resolve(true);
     return ensureSigner();
 }
 
@@ -32,16 +33,27 @@ function hasDirectSignCreds() {
     return !!(process.env.TIKTOK_COOKIES || process.env.SESSION_ID);
 }
 
+function hasEulerKey() {
+    return !!(process.env.SIGN_API_KEY || process.env.SIGN_API);
+}
+
 export async function setupCustomSignServer() {
     const useDirect = hasDirectSignCreds();
+    const eulerAvail = hasEulerKey();
 
     if (!useDirect) {
         console.log('[SignServer] No TIKTOK_COOKIES or SESSION_ID — using EulerStream (native signer).');
         return;
     }
 
+    // Both direct creds and EulerStream key present — prefer EulerStream since it's working
+    if (eulerAvail && process.env.DIRECT_SIGNER_PRIORITY !== '1') {
+        console.log('[SignServer] Both TIKTOK_COOKIES and SIGN_API_KEY found — using EulerStream (set DIRECT_SIGNER_PRIORITY=1 to force direct signer)');
+        return;
+    }
+
     console.log('[SignServer] TIKTOK_COOKIES/SESSION_ID found — using direct signer.');
-    ensureSigner();
+    await ensureSigner();
 
     RoomIdRouteConfig.skipFetchRoomIdFromEulerRoute = true;
     RoomIdRouteConfig.skipFetchRoomInfoFromHtmlRoute = true;
@@ -161,7 +173,6 @@ function imFetchPollLoop(roomId, connection, mock) {
     let errCount = 0;
     let silentCount = 0;
     let consecErrors = 0;
-    let isFirstPoll = true;
 
     const poll = async () => {
         while (connection._wsClientInstance === mock) {
@@ -189,16 +200,9 @@ function imFetchPollLoop(roomId, connection, mock) {
                             for (const msg of msgs.slice(0, 5)) {
                                 console.log('[imFetch]', fmt(msg));
                             }
-                            // Skip first poll (library already processed initial batch)
-                            if (!isFirstPoll) {
-                                mock.emit('protoMessageFetchResult', d);
-                            } else {
-                                console.log('[imFetch] Skipped first poll (already processed by library)');
-                            }
-                            isFirstPoll = false;
+                            mock.emit('protoMessageFetchResult', d);
                         } else {
                             silentCount++;
-                            if (isFirstPoll) isFirstPoll = false;
                         }
                     }
                 }

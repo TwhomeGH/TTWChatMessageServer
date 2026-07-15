@@ -472,6 +472,14 @@ const server = http.createServer((req, res) => {
 
                 const { user, message } = data;
 
+                if (data.type === 'audience') {
+                    sendToTikTok(data);
+                    pushLog('📩 發送 Audience:', data.userNum, `(${(data.userList||[]).length}人)`);
+                    res.writeHead(200);
+                    res.end("OK");
+                    return;
+                }
+
                 const fr = processFilter({ user, message });
                 if (fr.blocked) {
                     pushLog('🚫 過濾器阻擋(/chat):', user, message, `(規則: ${fr.reason})`);

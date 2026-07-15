@@ -28,12 +28,12 @@ export async function initDirectSigner() {
     console.log('[DirectSigner] Loading SDK (v5.1.3)...');
     const sdk513 = fs.readFileSync(path.join(SDK_DIR, 'webmssdk_5.1.3.js'), 'utf-8');
 
-    console.log('[DirectSigner] Launching headless browser...');
+    const isHeaded = process.env.PUPPETEER_HEADED === 'true' || process.env.PUPPETEER_HEADED === '1';
+    console.log('[DirectSigner] Launching ' + (isHeaded ? 'headed' : 'headless') + ' browser...');
     browser = await puppeteer.launch({
-        headless: 'new',
+        headless: isHeaded ? false : 'new',
         args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
+            ...(process.env.DISABLE_SANDBOX === '1' ? ['--no-sandbox', '--disable-setuid-sandbox'] : []),
             '--disable-dev-shm-usage',
             '--disable-gpu',
             '--window-size=1920,1080',
