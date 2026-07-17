@@ -1914,8 +1914,11 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
                 var res = event.messageText.split(" ")
 
                 let useTTS = event.messageText.includes("TTS") || event.messageText.includes("tts")
+                let iconURL = event.messageText.includes("icon=") ? event.messageText.split("icon=")[1].split(" ")[0] : null
+                let icon = iconURL || icon
                 
                 res = res.filter(e => e.toLowerCase() !== "tts") // 去掉 TTS
+                res.splice(res.findIndex(e => e.startsWith("icon=")), 1) // 去掉 icon=xxx
 
                 res.shift() // 去掉 G#Ad
 
@@ -1923,7 +1926,7 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
                 logRawEvent('G#Ad 自訂義廣告事件', { user: event.chatterDisplayName, message: res.join(" "), useTTS });
                 console.log(`✅ ${event.chatterDisplayName} 使用 G#Ad 指令成功，訊息: ${res.join(" ")}, TTS: ${useTTS}`);
-                
+
 
             }
 
