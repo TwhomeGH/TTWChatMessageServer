@@ -805,6 +805,30 @@ var TwitchViewerCount = 0
 var OdyseeViewerCount = 0
 var YoutubeViewerCount = 0
 
+
+function sendAdOverylayMessage(user,text,iconURL,userTTS){
+
+    const payload = { type: 'AdOverlay', user, text, iconURL, userTTS };
+    
+    if (!client || client.destroyed) {
+        pendingQueue.push(payload);
+        return;
+    }
+    
+    try {
+        client.write(JSON.stringify(payload) + '\n');
+    } catch (err) {
+        console.error('⚠️ 發送 AdOverlay 訊息失敗:', err.message);
+        pendingQueue.push(payload);
+    }
+    
+}
+
+/**
+ * 觀眾人數更新
+ *
+ * @return {*} 
+ */
 function sendAudienceUpdate() {
     const payload = { type: 'audience', userNum: CacheUserNum, userList: CacheUserList };
     if (!client || client.destroyed) {
@@ -1880,11 +1904,42 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
     
     console.log(`${event.chatterDisplayName} : ${event.messageText}`);
 
+    // 需要先確認是不是Twitch訂閱者 才能使用 G#Ad
+    apiClient.subscriptions.checkUserSubscription(tuser, event.chatterId).then(subRes => {
+        if (subRes.isSubscribed) {
+            console.log(`${event.chatterDisplayName} 是訂閱者，可以使用 G#Ad 指令`);
+
+            if (event.messageText.startsWith("G#Ad") ) {
+
+                var res = event.messageText.split(" ")
+
+                let useTTS = event.messageText.includes("TTS") || event.messageText.includes("tts")
+                
+                res = res.filter(e => e.toLowerCase() !== "tts") // 去掉 TTS
+
+                res.shift() // 去掉 G#Ad
+
+                sendAdOverylayMessage(event.chatterDisplayName, res.join(" "), icon,useTTS);
+
+                logRawEvent('G#Ad 自訂義廣告事件', { user: event.chatterDisplayName, message: res.join(" "), useTTS });
+                console.log(`✅ ${event.chatterDisplayName} 使用 G#Ad 指令成功，訊息: ${res.join(" ")}, TTS: ${useTTS}`);
+                
+
+            }
+
+        } else {
+            console.log(`${event.chatterDisplayName} 不是訂閱者，無法使用 G#Ad 指令`);
+        }
+
+    }).catch(err => {
+        console.error('⚠️ 檢查訂閱狀態失敗:', err.message);
+    });
+    
 
     if (event.messageText.startsWith("G#clip")) {
 
         let res = event.messageText.split(" ")
-        res.shift() // 去掉 R#clip
+        res.shift() // 去掉 G#clip
 
         const title = res.length > 0 ? res.join(" ") : null
         
