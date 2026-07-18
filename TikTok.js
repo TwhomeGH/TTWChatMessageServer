@@ -806,10 +806,11 @@ var OdyseeViewerCount = 0
 var YoutubeViewerCount = 0
 
 
-function sendAdOverylayMessage(user,text,iconURL,userTTS){
+function sendAdOverylayMessage(user,text,iconURL,useTTS){
 
-    const payload = { type: 'AdOverlay', user, text, iconURL, userTTS };
+    const payload = { type: 'AdOverlay', user, text, iconURL, useTTS };
     
+    console.log('📤 發送 AdOverlay 訊息:', payload);
     if (!client || client.destroyed) {
         pendingQueue.push(payload);
         return;
@@ -944,7 +945,7 @@ function connectSocket() {
 
                 if (json.type === 'keepalive') {
                     client.write(JSON.stringify({ type: 'heartbeat' }) + '\n');
-                    console.log('💓 收到 keepalive，已回覆 heartbeat');
+                    console.log('💓 收到 keepalive，已回覆 heartbeat ' + new Date().toLocaleString());
                 }
 
                 buffer = ''; // 清空 buffer，避免重複解析
@@ -2024,11 +2025,13 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
     if (event.chatterId === tuser) {
         console.log(`${event.chatterDisplayName} 是主播本人，視同訂閱者可以使用 G#Ad 指令`);
         handleGAd(event);
+        return;
     } else {
         apiClient.subscriptions.checkUserSubscription(tuser, event.chatterId).then(subRes => {
             if (subRes.isSubscribed) {
                 console.log(`${event.chatterDisplayName} 是訂閱者（${subRes.tier || '?'} 方案, 累計 ${subRes.totalMonths || 0} 月），可以使用 G#Ad 指令`);
                 handleGAd(event);
+                return;
             } else {
                 console.log(`${event.chatterDisplayName} 不是訂閱者（API 回傳 isSubscribed=false），無法使用 G#Ad 指令`);
             }
@@ -2050,16 +2053,16 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
             var res = event.messageText.split(" ")
 
-            let useTTS = event.messageText.includes("TTS") || event.messageText.includes("tts")
+            let useTTS = event.messageText.toLowerCase().includes("tts")
             let iconURL = event.messageText.includes("icon=") ? event.messageText.split("icon=")[1].split(" ")[0] : null
-            let icon = iconURL || icon
+            let displayIcon = iconURL || icon
             
             res = res.filter(e => e.toLowerCase() !== "tts") // 去掉 TTS
             res.splice(res.findIndex(e => e.startsWith("icon=")), 1) // 去掉 icon=xxx
 
             res.shift() // 去掉 G#Ad
 
-            sendAdOverylayMessage(event.chatterDisplayName, res.join(" "), icon,useTTS);
+            sendAdOverylayMessage(event.chatterDisplayName, res.join(" "), displayIcon, useTTS);
 
             logRawEvent('G#Ad 自訂義廣告事件', { user: event.chatterDisplayName, message: res.join(" "), useTTS });
             console.log(`✅ ${event.chatterDisplayName} 使用 G#Ad 指令成功，訊息: ${res.join(" ")}, TTS: ${useTTS}`);
