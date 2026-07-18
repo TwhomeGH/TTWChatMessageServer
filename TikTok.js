@@ -2070,10 +2070,12 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
             res.shift() // 去掉 G#Ad
 
-            sendAdOverylayMessage(overlayUser, res.join(" "), displayIcon, useTTS);
+            let lastMsg=replaceEmojis(res.join(" "));
 
-            logRawEvent('G#Ad 自訂義廣告事件', { user: overlayUser, message: res.join(" "), useTTS });
-            console.log(`✅ ${event.chatterDisplayName} 使用 G#Ad 指令成功，user=${overlayUser}, 訊息: ${res.join(" ")}, TTS: ${useTTS}`);
+            sendAdOverylayMessage(overlayUser, lastMsg, displayIcon, useTTS);
+
+            logRawEvent('G#Ad 自訂義廣告事件', { user: overlayUser, message: lastMsg, useTTS });
+            console.log(`✅ ${event.chatterDisplayName} 使用 G#Ad 指令成功，user=${overlayUser}, 訊息: ${lastMsg}, TTS: ${useTTS}`);
 
 
         }
