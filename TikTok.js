@@ -8,7 +8,6 @@ import axios from 'axios';
 import { config } from 'dotenv';
 
 import net from 'net';
-import readline from 'readline';
 
 
 
@@ -1751,9 +1750,16 @@ const emptyTokenTemplate = {
 
 async function loadTokens() {
     try {
-        // 嘗試讀檔
         const data = await fs.readFile(tokenPath, 'utf-8');
-        return JSON.parse(data);
+        const raw = JSON.parse(data);
+        // 標準化：將 snake_case（Twitch API 原始格式）轉為 camelCase（twurple 格式）
+        if (raw.access_token && !raw.accessToken) {
+            raw.accessToken = raw.access_token;
+            raw.refreshToken = raw.refresh_token || raw.refreshToken;
+            raw.expiresIn = raw.expires_in ?? raw.expiresIn;
+            raw.obtainmentTimestamp = raw.obtainmentTimestamp || Date.now();
+        }
+        return raw;
     } catch (err) {
         if (err.code === 'ENOENT') {
             // 檔案不存在 → 建立空範本
@@ -1766,7 +1772,7 @@ async function loadTokens() {
     }
 }
 
-const REQUIRED_TWITCH_SCOPES = ['user:read:subscriptions'];
+    const REQUIRED_TWITCH_SCOPES = ['user:read:subscriptions'];
 
 async function ensureTwitchScopes(tokenData, authProvider) {
     const missing = REQUIRED_TWITCH_SCOPES.filter(s => !tokenData.scope?.includes(s));
@@ -1775,27 +1781,55 @@ async function ensureTwitchScopes(tokenData, authProvider) {
         return;
     }
 
-    console.warn('⚠️ Twitch token 缺少 scope:', missing.join(', '));
+    console.warn(`⚠️ Twitch token 缺少 scope:`, missing.join(', '));
+    console.log(`📋 目前 scope: ${(tokenData.scope || []).join(', ')}`);
     console.log('需重新授權以取得完整權限。');
 
-    const redirectUri = process.env.TWITCH_REDIRECT_URI || 'http://localhost:3332';
+    const SERVER_PORT = process.env.TWITCH_REDIRECT_URI
+        ? new URL(process.env.TWITCH_REDIRECT_URI).port || '3332'
+        : '3332';
+    const redirectUri = `http://localhost:${SERVER_PORT}/twitch-oauth-callback`;
+    console.log(`ℹ️ 回調網址: ${redirectUri}`);
+
     const scopes = [...new Set([...(tokenData.scope || []), ...REQUIRED_TWITCH_SCOPES])].join(' ');
     const authUrl = `https://id.twitch.tv/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}`;
 
-    console.log(`\n🔗 請在瀏覽器中開啟此連結並授權：\n${authUrl}\n`);
-    console.log('授權完成後，瀏覽器會導向到一個空白頁（或錯誤頁面），請複製完整網址並貼到這裡：');
+    console.log(`🔗 正在瀏覽器中開啟 Twitch 授權頁面…`);
+    try {
+        const { execSync } = await import('child_process');
+        execSync(`start "" "${authUrl}"`, { timeout: 5000 });
+    } catch (_) {
+        console.log(`若瀏覽器未自動開啟，請手動訪問授權連結`);
+    }
 
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    const fullUrl = await new Promise(resolve => rl.question('完整網址 > ', resolve));
-    rl.close();
+    let code = null;
+    const pollUrl = `http://localhost:${SERVER_PORT}/twitch-oauth-poll`;
+    const deadline = Date.now() + 120000;
+    console.log(`⏳ 等待用戶授權中（最長 120 秒）...`);
+    while (Date.now() < deadline) {
+        try {
+            const res = await fetch(pollUrl);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.code) {
+                    code = data.code;
+                    console.log(`✅ 收到授權碼，正在交換 token...`);
+                    break;
+                }
+            }
+        } catch (_) {
+            // Server.js not ready yet
+        }
+        await new Promise(r => setTimeout(r, 1000));
+    }
 
-    const urlParams = new URL(fullUrl);
-    const code = urlParams.searchParams.get('code');
     if (!code) {
-        console.error('❌ 無法從網址擷取授權碼，請確認貼上的是完整的 redirect URL');
+        console.error('❌ Twitch OAuth 逾時（2分鐘），請重啟程式再試');
+        console.warn('💡 也可透過 Config 頁面手動重新授權: http://localhost:3332/config');
         return;
     }
 
+    console.log(`🔄 正在交換 authorization code 為 access token...`);
     const tokenRes = await fetch('https://id.twitch.tv/oauth2/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1809,19 +1843,32 @@ async function ensureTwitchScopes(tokenData, authProvider) {
     });
 
     if (!tokenRes.ok) {
-        console.error('❌ Token 交換失敗:', tokenRes.status, await tokenRes.text().catch(() => ''));
+        const errText = await tokenRes.text().catch(() => '');
+        console.error('❌ Token 交換失敗:', tokenRes.status, errText);
         return;
     }
 
     const newToken = await tokenRes.json();
-    newToken.obtainmentTimestamp = Date.now();
-    newToken.scope = newToken.scope || scopes.split(' ');
+    console.log(`📦 Token 回應: access_token=***${newToken.access_token?.slice(-6)}, expires_in=${newToken.expires_in}s, scope=${(newToken.scope || []).join(',')}`);
 
-    await fs.writeFile(tokenPath, JSON.stringify(newToken, null, 4), 'utf-8');
-    console.log('✅ Twitch OAuth token 已重新取得並儲存');
+    const normalizedToken = {
+        accessToken: newToken.access_token,
+        refreshToken: newToken.refresh_token,
+        expiresIn: newToken.expires_in,
+        scope: newToken.scope || scopes.split(' '),
+        obtainmentTimestamp: Date.now()
+    };
 
-    await authProvider.addUserForToken(newToken);
-    console.log('✅ Twitch authProvider 已更新');
+    await fs.writeFile(tokenPath, JSON.stringify(normalizedToken, null, 4), 'utf-8');
+    console.log('✅ tokens.json 已更新');
+
+    console.log(`🔄 正在更新 authProvider...`);
+    try {
+        await authProvider.addUserForToken(normalizedToken);
+        console.log('✅ Twitch OAuth 完成，Token 已生效');
+    } catch (err) {
+        console.error('❌ authProvider 更新失敗:', err.message);
+    }
 }
 
 const tokenData = await loadTokens();
@@ -1830,28 +1877,36 @@ const authProvider = new RefreshingAuthProvider({ clientId, clientSecret });
 authProvider.onRefresh(async (userId, newTokenData) => {
     await fs.writeFile(`./tokens.json`, JSON.stringify(newTokenData, null, 4), 'utf-8');
 });
-await authProvider.addUserForToken(tokenData);
+await authProvider.addUserForToken(tokenData).catch(err => {
+    console.warn('⚠️ Twitch token 無效，可透過 Config 頁面重新授權:', err.message);
+});
 if (isTwitch) await ensureTwitchScopes(tokenData, authProvider);
 
-const apiClient = new ApiClient({ authProvider });
+let apiClient, listener, tuser;
+try {
+    apiClient = new ApiClient({ authProvider });
 
-let TwitchUserName = process.env.TWITCH_USER_NAME || "coffeelatte0709"
-const user = await apiClient.users.getUserByName(TwitchUserName);
-const tuser = user.id;
+    let TwitchUserName = process.env.TWITCH_USER_NAME || "coffeelatte0709"
+    const user = await apiClient.users.getUserByName(TwitchUserName);
+    tuser = user.id;
 
-console.log("[Twitch] UserID", tuser);
-writeLog("Default", `取得 Twitch UserID: ${tuser}`, "System")
+    console.log("[Twitch] UserID", tuser);
+    writeLog("Default", `取得 Twitch UserID: ${tuser}`, "System")
 
 
-// --- 2. EventSub WebSocket ---
-const listener = new EventSubWsListener({ apiClient, port: 0 });
+    // --- 2. EventSub WebSocket ---
+    listener = new EventSubWsListener({ apiClient, port: 0 });
 
-if (isTwitch) {
-    console.log("啟用 Twitch 事件監聽");
+    if (isTwitch) {
+        console.log("啟用 Twitch 事件監聽");
 
-    writeLog("Default", "啟用 Twitch 事件監聽", "System")
+        writeLog("Default", "啟用 Twitch 事件監聽", "System")
 
-    listener.start();
+        listener.start();
+    }
+} catch (err) {
+    console.error('⚠️ Twitch 初始化失敗（token 無效或缺少權限），Twitch 功能已停用:', err.message);
+    console.warn('💡 可透過 Config 頁面重新授權: http://localhost:3332/config');
 }
 
 

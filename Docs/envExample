@@ -60,7 +60,8 @@ DEBUG_CHILD=false          # VSCode除錯模式，正常保持關閉
 USER_LIKE_CLEAR_TIMER=60000 # 用戶點讚數清除計器(毫秒)
 SOCKET_IDLE_TIMEOUT=120000  # Socket閒置超時(毫秒)
 SOCKET_RETRY_MAX_COUNT=3    # Socket最大重試次數
-# TWITCH_REDIRECT_URI=http://localhost:3332  # Twitch OAuth 回調網址（需與開發者平台註冊一致）
+# TWITCH_REDIRECT_URI=http://localhost:3332  # Twitch OAuth 回調網址（需與開發者平台註冊一致，預設從 SERVER_PORT 推導）
+# TWITCH_REDIRECT_URI=http://localhost:3000  # 若你的 Server 不在 3332 可自行指定
 CONFIG_KEY=0709         # 配置頁面存取密碼
 WHITELIST_AUTHENTICATED_SESSION_ID_HOST=api.eulerstream.com
 

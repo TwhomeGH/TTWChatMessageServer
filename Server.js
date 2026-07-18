@@ -18,6 +18,7 @@ function base64URLEncode(buffer) {
 
 let pkceVerifier = null;
 let pkceChallenge = null;
+let _twitchOAuthCode = null;
 let isBark = false;
 let isSocket = false;
 
@@ -1172,6 +1173,84 @@ const server = http.createServer((req, res) => {
         });
     }
 
+
+    // =======================
+    // Twitch OAuth (config page)
+    // =======================
+    else if (req.url === '/twitch-auth') {
+        const scopes = [
+            'bits:read', 'channel:read:goals', 'channel:read:redemptions',
+            'channel:read:subscriptions', 'chat:read', 'clips:edit',
+            'moderator:read:followers', 'user:read:chat', 'user:read:subscriptions'
+        ].join(' ');
+        const params = new URLSearchParams({
+            client_id: process.env.CLIENT_ID || '',
+            redirect_uri: 'http://localhost:3332/twitch-oauth-callback',
+            response_type: 'code',
+            scope: scopes,
+        });
+        res.writeHead(302, { 'Location': `https://id.twitch.tv/oauth2/authorize?${params}` });
+        res.end();
+    }
+
+    // =======================
+    // Twitch OAuth callback
+    // =======================
+    else if (req.url.startsWith('/twitch-oauth-callback')) {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const code = url.searchParams.get('code');
+        if (code) {
+            pushLog(`ℹ️ [TwitchAuth] 收到授權碼: ${code.slice(0, 8)}...`);
+            _twitchOAuthCode = code;
+            // 在背景交換 token
+            (async () => {
+                try {
+                    pushLog(`🔄 [TwitchAuth] 正在交換 token...`);
+                    const tokenRes = await fetch('https://id.twitch.tv/oauth2/token', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: new URLSearchParams({
+                            client_id: process.env.CLIENT_ID || '',
+                            client_secret: process.env.CLIENT_SECRET || '',
+                            code,
+                            grant_type: 'authorization_code',
+                            redirect_uri: 'http://localhost:3332/twitch-oauth-callback',
+                        })
+                    });
+                    if (tokenRes.ok) {
+                        const raw = await tokenRes.json();
+                        pushLog(`📦 [TwitchAuth] Token 回應: expires_in=${raw.expires_in}s, scope=${(raw.scope||[]).join(', ')}, has_refresh=${!!raw.refresh_token}`);
+                        const tokenPath = path.resolve('./tokens.json');
+                        const normalized = {
+                            accessToken: raw.access_token,
+                            refreshToken: raw.refresh_token,
+                            expiresIn: raw.expires_in,
+                            scope: raw.scope || [],
+                            obtainmentTimestamp: Date.now()
+                        };
+                        await fs.promises.writeFile(tokenPath, JSON.stringify(normalized, null, 4), 'utf-8');
+                        pushLog(`✅ [TwitchAuth] tokens.json 已更新`);
+                    } else {
+                        const errText = await tokenRes.text().catch(() => '');
+                        pushLog(`❌ [TwitchAuth] Token 交換失敗: ${tokenRes.status} ${errText}`);
+                    }
+                } catch (err) {
+                    pushLog(`❌ [TwitchAuth] 交換異常: ${err.message}`);
+                }
+            })();
+        } else {
+            pushLog('⚠️ [TwitchAuth] 回調缺少 code 參數');
+        }
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`<html><body><h2>✅ Twitch 授權成功！</h2><p>Token 已儲存。</p><a href="/config">回到設定頁</a></body></html>`);
+    }
+
+    else if (req.url === '/twitch-oauth-poll') {
+        const code = _twitchOAuthCode;
+        _twitchOAuthCode = null; // one-time read
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ code }));
+    }
 
     else {
         res.statusCode = 404;
