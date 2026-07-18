@@ -2056,16 +2056,24 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
             let useTTS = event.messageText.toLowerCase().includes("tts")
             let iconURL = event.messageText.includes("icon=") ? event.messageText.split("icon=")[1].split(" ")[0] : null
             let displayIcon = iconURL || icon
-            
+
+            // 自訂 user：若訊息含 user=xxx 則使用該值，否則用用戶名
+            let overlayUser = event.chatterDisplayName;
+            let userValue = event.messageText.includes("user=") ? event.messageText.split("user=")[1].split(" ")[0] : null;
+            if (userValue) overlayUser = userValue;
+
             res = res.filter(e => e.toLowerCase() !== "tts") // 去掉 TTS
-            res.splice(res.findIndex(e => e.startsWith("icon=")), 1) // 去掉 icon=xxx
+            const iconIdx = res.findIndex(e => e.startsWith("icon="));
+            if (iconIdx !== -1) res.splice(iconIdx, 1); // 去掉 icon=xxx
+            const userIdx = res.findIndex(e => e.startsWith("user="));
+            if (userIdx !== -1) res.splice(userIdx, 1); // 去掉 user=xxx
 
             res.shift() // 去掉 G#Ad
 
-            sendAdOverylayMessage(event.chatterDisplayName, res.join(" "), displayIcon, useTTS);
+            sendAdOverylayMessage(overlayUser, res.join(" "), displayIcon, useTTS);
 
-            logRawEvent('G#Ad 自訂義廣告事件', { user: event.chatterDisplayName, message: res.join(" "), useTTS });
-            console.log(`✅ ${event.chatterDisplayName} 使用 G#Ad 指令成功，訊息: ${res.join(" ")}, TTS: ${useTTS}`);
+            logRawEvent('G#Ad 自訂義廣告事件', { user: overlayUser, message: res.join(" "), useTTS });
+            console.log(`✅ ${event.chatterDisplayName} 使用 G#Ad 指令成功，user=${overlayUser}, 訊息: ${res.join(" ")}, TTS: ${useTTS}`);
 
 
         }
