@@ -2022,7 +2022,7 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
     console.log(`${event.chatterDisplayName} : ${event.messageText}`);
 
     // 需要先確認是不是Twitch訂閱者（或主播本人）才能使用 G#Ad
-    if (event.chatterId === tuser) {
+    if (event.chatterId === tuser && event.messageText.startsWith("G#Ad")) {
         console.log(`${event.chatterDisplayName} 是主播本人，視同訂閱者可以使用 G#Ad 指令`);
         handleGAd(event);
         return;
