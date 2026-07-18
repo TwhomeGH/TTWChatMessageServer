@@ -2022,30 +2022,34 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
     console.log(`${event.chatterDisplayName} : ${event.messageText}`);
 
     // 需要先確認是不是Twitch訂閱者（或主播本人）才能使用 G#Ad
-    if (event.chatterId === tuser && event.messageText.startsWith("G#Ad")) {
-        console.log(`${event.chatterDisplayName} 是主播本人，視同訂閱者可以使用 G#Ad 指令`);
-        handleGAd(event);
-        return;
-    } else {
-        apiClient.subscriptions.checkUserSubscription(tuser, event.chatterId).then(subRes => {
-            if (subRes.isSubscribed) {
-                console.log(`${event.chatterDisplayName} 是訂閱者（${subRes.tier || '?'} 方案, 累計 ${subRes.totalMonths || 0} 月），可以使用 G#Ad 指令`);
-                handleGAd(event);
-                return;
-            } else {
-                console.log(`${event.chatterDisplayName} 不是訂閱者（API 回傳 isSubscribed=false），無法使用 G#Ad 指令`);
-            }
+    if (event.messageText.startsWith("G#Ad")) {
 
-        }).catch(err => {
-            console.error(`⚠️ [訂閱檢查] ${event.chatterDisplayName} 查詢失敗: ${err.message} (status=${err.response?.status || 'N/A'})`);
-            if (err.response?.status === 404) {
-                console.log(`   → 使用者 ${event.chatterDisplayName} 未訂閱此頻道（404）`);
-            } else if (err.message?.includes('scope')) {
-                console.warn('   → 缺少 scope: user:read:subscriptions，可透過 Config 重新授權');
-            } else {
-                console.log(`   → 完整錯誤:`, err.response?.data?.message || err.message);
-            }
-        });
+        if (event.chatterId === tuser) {
+            console.log(`${event.chatterDisplayName} 是主播本人，視同訂閱者可以使用 G#Ad 指令`);
+            handleGAd(event);
+            return;
+        } else {
+            apiClient.subscriptions.checkUserSubscription(tuser, event.chatterId).then(subRes => {
+                if (subRes.isSubscribed) {
+                    console.log(`${event.chatterDisplayName} 是訂閱者（${subRes.tier || '?'} 方案, 累計 ${subRes.totalMonths || 0} 月），可以使用 G#Ad 指令`);
+                    handleGAd(event);
+                    return;
+                } else {
+                    console.log(`${event.chatterDisplayName} 不是訂閱者（API 回傳 isSubscribed=false），無法使用 G#Ad 指令`);
+                }
+
+            }).catch(err => {
+                console.error(`⚠️ [訂閱檢查] ${event.chatterDisplayName} 查詢失敗: ${err.message} (status=${err.response?.status || 'N/A'})`);
+                if (err.response?.status === 404) {
+                    console.log(`   → 使用者 ${event.chatterDisplayName} 未訂閱此頻道（404）`);
+                } else if (err.message?.includes('scope')) {
+                    console.warn('   → 缺少 scope: user:read:subscriptions，可透過 Config 重新授權');
+                } else {
+                    console.log(`   → 完整錯誤:`, err.response?.data?.message || err.message);
+                }
+            });
+        }
+
     }
 
     function handleGAd(event) {
