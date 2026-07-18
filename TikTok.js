@@ -2020,42 +2020,53 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
     
     console.log(`${event.chatterDisplayName} : ${event.messageText}`);
 
-    // 需要先確認是不是Twitch訂閱者 才能使用 G#Ad
-    apiClient.subscriptions.checkUserSubscription(tuser, event.chatterId).then(subRes => {
-        if (subRes.isSubscribed) {
-            console.log(`${event.chatterDisplayName} 是訂閱者，可以使用 G#Ad 指令`);
-
-            if (event.messageText.startsWith("G#Ad") ) {
-
-                var res = event.messageText.split(" ")
-
-                let useTTS = event.messageText.includes("TTS") || event.messageText.includes("tts")
-                let iconURL = event.messageText.includes("icon=") ? event.messageText.split("icon=")[1].split(" ")[0] : null
-                let icon = iconURL || icon
-                
-                res = res.filter(e => e.toLowerCase() !== "tts") // 去掉 TTS
-                res.splice(res.findIndex(e => e.startsWith("icon=")), 1) // 去掉 icon=xxx
-
-                res.shift() // 去掉 G#Ad
-
-                sendAdOverylayMessage(event.chatterDisplayName, res.join(" "), icon,useTTS);
-
-                logRawEvent('G#Ad 自訂義廣告事件', { user: event.chatterDisplayName, message: res.join(" "), useTTS });
-                console.log(`✅ ${event.chatterDisplayName} 使用 G#Ad 指令成功，訊息: ${res.join(" ")}, TTS: ${useTTS}`);
-
-
+    // 需要先確認是不是Twitch訂閱者（或主播本人）才能使用 G#Ad
+    if (event.chatterId === tuser) {
+        console.log(`${event.chatterDisplayName} 是主播本人，視同訂閱者可以使用 G#Ad 指令`);
+        handleGAd(event);
+    } else {
+        apiClient.subscriptions.checkUserSubscription(tuser, event.chatterId).then(subRes => {
+            if (subRes.isSubscribed) {
+                console.log(`${event.chatterDisplayName} 是訂閱者（${subRes.tier || '?'} 方案, 累計 ${subRes.totalMonths || 0} 月），可以使用 G#Ad 指令`);
+                handleGAd(event);
+            } else {
+                console.log(`${event.chatterDisplayName} 不是訂閱者（API 回傳 isSubscribed=false），無法使用 G#Ad 指令`);
             }
 
-        } else {
-            console.log(`${event.chatterDisplayName} 不是訂閱者，無法使用 G#Ad 指令`);
-        }
+        }).catch(err => {
+            console.error(`⚠️ [訂閱檢查] ${event.chatterDisplayName} 查詢失敗: ${err.message} (status=${err.response?.status || 'N/A'})`);
+            if (err.response?.status === 404) {
+                console.log(`   → 使用者 ${event.chatterDisplayName} 未訂閱此頻道（404）`);
+            } else if (err.message?.includes('scope')) {
+                console.warn('   → 缺少 scope: user:read:subscriptions，可透過 Config 重新授權');
+            } else {
+                console.log(`   → 完整錯誤:`, err.response?.data?.message || err.message);
+            }
+        });
+    }
 
-    }).catch(err => {
-        console.error('⚠️ 檢查訂閱狀態失敗:', err.message);
-        if (err.message?.includes('scope')) {
-            console.warn('💡 缺少 scope: user:read:subscriptions，請在啟動時重新授權 Twitch 以補齊權限');
+    function handleGAd(event) {
+        if (event.messageText.startsWith("G#Ad") ) {
+
+            var res = event.messageText.split(" ")
+
+            let useTTS = event.messageText.includes("TTS") || event.messageText.includes("tts")
+            let iconURL = event.messageText.includes("icon=") ? event.messageText.split("icon=")[1].split(" ")[0] : null
+            let icon = iconURL || icon
+            
+            res = res.filter(e => e.toLowerCase() !== "tts") // 去掉 TTS
+            res.splice(res.findIndex(e => e.startsWith("icon=")), 1) // 去掉 icon=xxx
+
+            res.shift() // 去掉 G#Ad
+
+            sendAdOverylayMessage(event.chatterDisplayName, res.join(" "), icon,useTTS);
+
+            logRawEvent('G#Ad 自訂義廣告事件', { user: event.chatterDisplayName, message: res.join(" "), useTTS });
+            console.log(`✅ ${event.chatterDisplayName} 使用 G#Ad 指令成功，訊息: ${res.join(" ")}, TTS: ${useTTS}`);
+
+
         }
-    });
+    }
     
 
     if (event.messageText.startsWith("G#clip")) {
