@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      2.5
+// @version      2.6
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
