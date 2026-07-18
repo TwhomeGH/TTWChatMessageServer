@@ -180,7 +180,7 @@ function hasContent(el) {
             .find(el => el.textContent.includes('觀眾人數'));
 
 
-        if (!container) return null;
+        if (!container) return 0;
 
         const digits = container.querySelectorAll('.inline-flex.justify-center.w-9');
 
