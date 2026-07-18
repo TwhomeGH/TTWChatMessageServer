@@ -157,12 +157,26 @@ GIFT_TRANSLATE_PREFILL_LIMIT=10
     "chat:read",
     "clips:edit",
     "moderator:read:followers",
-    "user:read:chat"
+    "user:read:chat",
+    "user:read:subscriptions"
   ],
   "expiresIn": 0,
   "obtainmentTimestamp": 0
 }
 ```
+
+### 4. Twitch OAuth Scope 自動檢查與重新授權
+
+啟動 Twitch 模式時，系統會自動檢查 `tokens.json` 內的 scope 是否包含 `user:read:subscriptions`（用於檢查聊天室的訂閱者身份）。
+
+若缺少 scope，系統會：
+1. 印出 Twitch OAuth 授權連結（包含所有必要 scope）
+2. 引導你在瀏覽器中授權
+3. 請你貼上授權後瀏覽器導向的完整網址
+4. 自動交換 authorization code → access token → 更新 `tokens.json`
+5. 自動更新 `authProvider`，不需重啟程式
+
+此機制與 Youtube OAuth 的自動刷新類比，確保 token 權限完整。若無需訂閱者檢查功能（`G#Ad` 指令），可忽略 scope 不足的警告。
 
 ## 啟動服務
 

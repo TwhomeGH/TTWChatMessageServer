@@ -8,6 +8,7 @@ import axios from 'axios';
 import { config } from 'dotenv';
 
 import net from 'net';
+import readline from 'readline';
 
 
 
@@ -1740,7 +1741,8 @@ const emptyTokenTemplate = {
         "chat:read",
         "clips:edit",
         "moderator:read:followers",
-        "user:read:chat"
+        "user:read:chat",
+        "user:read:subscriptions"
     ],
     expiresIn: 0,
     obtainmentTimestamp: Date.now()
@@ -1764,6 +1766,64 @@ async function loadTokens() {
     }
 }
 
+const REQUIRED_TWITCH_SCOPES = ['user:read:subscriptions'];
+
+async function ensureTwitchScopes(tokenData, authProvider) {
+    const missing = REQUIRED_TWITCH_SCOPES.filter(s => !tokenData.scope?.includes(s));
+    if (missing.length === 0) {
+        console.log('✅ Twitch OAuth scope 完整');
+        return;
+    }
+
+    console.warn('⚠️ Twitch token 缺少 scope:', missing.join(', '));
+    console.log('需重新授權以取得完整權限。');
+
+    const redirectUri = process.env.TWITCH_REDIRECT_URI || 'http://localhost:3332';
+    const scopes = [...new Set([...(tokenData.scope || []), ...REQUIRED_TWITCH_SCOPES])].join(' ');
+    const authUrl = `https://id.twitch.tv/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}`;
+
+    console.log(`\n🔗 請在瀏覽器中開啟此連結並授權：\n${authUrl}\n`);
+    console.log('授權完成後，瀏覽器會導向到一個空白頁（或錯誤頁面），請複製完整網址並貼到這裡：');
+
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    const fullUrl = await new Promise(resolve => rl.question('完整網址 > ', resolve));
+    rl.close();
+
+    const urlParams = new URL(fullUrl);
+    const code = urlParams.searchParams.get('code');
+    if (!code) {
+        console.error('❌ 無法從網址擷取授權碼，請確認貼上的是完整的 redirect URL');
+        return;
+    }
+
+    const tokenRes = await fetch('https://id.twitch.tv/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            client_id: clientId,
+            client_secret: clientSecret,
+            code,
+            grant_type: 'authorization_code',
+            redirect_uri: redirectUri,
+        })
+    });
+
+    if (!tokenRes.ok) {
+        console.error('❌ Token 交換失敗:', tokenRes.status, await tokenRes.text().catch(() => ''));
+        return;
+    }
+
+    const newToken = await tokenRes.json();
+    newToken.obtainmentTimestamp = Date.now();
+    newToken.scope = newToken.scope || scopes.split(' ');
+
+    await fs.writeFile(tokenPath, JSON.stringify(newToken, null, 4), 'utf-8');
+    console.log('✅ Twitch OAuth token 已重新取得並儲存');
+
+    await authProvider.addUserForToken(newToken);
+    console.log('✅ Twitch authProvider 已更新');
+}
+
 const tokenData = await loadTokens();
 
 const authProvider = new RefreshingAuthProvider({ clientId, clientSecret });
@@ -1771,6 +1831,7 @@ authProvider.onRefresh(async (userId, newTokenData) => {
     await fs.writeFile(`./tokens.json`, JSON.stringify(newTokenData, null, 4), 'utf-8');
 });
 await authProvider.addUserForToken(tokenData);
+if (isTwitch) await ensureTwitchScopes(tokenData, authProvider);
 
 const apiClient = new ApiClient({ authProvider });
 
@@ -1936,6 +1997,9 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
     }).catch(err => {
         console.error('⚠️ 檢查訂閱狀態失敗:', err.message);
+        if (err.message?.includes('scope')) {
+            console.warn('💡 缺少 scope: user:read:subscriptions，請在啟動時重新授權 Twitch 以補齊權限');
+        }
     });
     
 
