@@ -435,7 +435,10 @@ function updateCountdowns() {
             el.textContent = `⏳ 下次發送: ${m}分${s}秒後`;
         }
     });
-    if (needsReload) loadAds();
+    if (needsReload) {
+        checkServerStatus();
+        loadAds();
+    }
 }
 
 loadAds();
