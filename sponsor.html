@@ -377,6 +377,8 @@ function updateCountdowns() {
 }
 
 loadAds();
+// 每 15 秒自動刷新資料，讓 countdown 在伺服器發送後正確更新
+setInterval(loadAds, 15000);
 setInterval(updateCountdowns, 1000);
 </script>
 </body>
