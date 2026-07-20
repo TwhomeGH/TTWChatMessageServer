@@ -113,7 +113,7 @@ function render() {
         for (const ad of user.ads) {
             const status = ad.approved === null ? 'pending' : (ad.approved ? 'approved' : 'rejected');
             const statusText = status === 'approved' ? '已通過' : (status === 'pending' ? '待審核' : '已拒絕');
-            html += `<div class="border border-gray-700 rounded-xl p-4 mb-3 ${ad.enabled ? '' : 'opacity-60'}">`;
+            html += `<div class="border border-gray-700 rounded-xl p-4 mb-3 ${ad.intervalMinutes > 0 && !ad.enabled ? 'opacity-60' : ''}">`;
             html += `<div class="flex items-start justify-between gap-4">`;
             html += `<div class="flex-1 min-w-0">`;
             html += `<div class="flex items-center gap-3 mb-2 flex-wrap">`;
@@ -121,13 +121,13 @@ function render() {
             html += `<span class="text-sm font-medium">${statusText}</span>`;
             if (ad.intervalMinutes > 0) {
                 html += `<span class="text-xs bg-gray-700 px-2 py-0.5 rounded">每 ${ad.intervalMinutes} 分鐘</span>`;
+                if (ad.enabled) {
+                    html += `<span class="text-xs bg-green-900 text-green-300 px-2 py-0.5 rounded">啟用中</span>`;
+                } else {
+                    html += `<span class="text-xs bg-gray-700 text-gray-400 px-2 py-0.5 rounded">已停用</span>`;
+                }
             } else {
                 html += `<span class="text-xs bg-gray-700 px-2 py-0.5 rounded">單次</span>`;
-            }
-            if (ad.enabled) {
-                html += `<span class="text-xs bg-green-900 text-green-300 px-2 py-0.5 rounded">啟用中</span>`;
-            } else {
-                html += `<span class="text-xs bg-gray-700 text-gray-400 px-2 py-0.5 rounded">已停用</span>`;
             }
             html += `</div>`;
             html += `<p class="text-gray-200 break-words">${renderMessage(ad.message)}</p>`;
@@ -147,7 +147,9 @@ function render() {
                 html += `<button onclick="approveAd('${ad.id}', true)" class="bg-green-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-green-700 transition">✅ 通過</button>`;
                 html += `<button onclick="approveAd('${ad.id}', false)" class="bg-red-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-red-700 transition">❌ 拒絕</button>`;
             }
-            html += `<button onclick="toggleAd('${ad.id}', ${!ad.enabled})" class="bg-gray-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-gray-500 transition">${ad.enabled ? '⏸️ 停用' : '▶️ 啟用'}</button>`;
+            if (ad.intervalMinutes > 0) {
+                html += `<button onclick="toggleAd('${ad.id}', ${!ad.enabled})" class="bg-gray-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-gray-500 transition">${ad.enabled ? '⏸️ 停用' : '▶️ 啟用'}</button>`;
+            }
             html += `<button onclick="deleteAd('${ad.id}')" class="bg-red-800 text-red-200 text-xs px-3 py-1.5 rounded-lg hover:bg-red-700 transition">🗑️ 刪除</button>`;
             html += `</div>`;
             html += `</div>`;

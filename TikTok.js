@@ -2296,6 +2296,10 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
                 sendBarkNotification(`📋 贊助廣告待審核 (${overlayUser})`, lastMsg, icon, SPONSOR_MANAGE_URL);
                 sendAdOverylayMessage(overlayUser, `📋 贊助廣告已送審，待管理員審核`, icon, false);
                 logRawEvent('G#Ad 待審核', { user: overlayUser, message: lastMsg });
+            } else {
+                // none 模式：通知管理員有人使用贊助廣告
+                const intervalText = intervalMinutes >= 15 ? `每${intervalMinutes}分鐘` : '單次';
+                sendBarkNotification(`📢 贊助廣告 (${overlayUser})`, `[${intervalText}] ${lastMsg}`, icon, SPONSOR_MANAGE_URL);
             }
 
             // ---- 持久化 & 定時器 ----
