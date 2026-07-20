@@ -180,6 +180,7 @@ const GIFT_TRANSLATE_PREFILL_LIMIT = Number(process.env.GIFT_TRANSLATE_PREFILL_L
 
 // ---- 贊助廣告 (G#Ad) 持久化 ----
 const SPONSOR_ADS_FILE = path.join(__dirname, 'sponsor_ads.json');
+const SPONSOR_MANAGE_URL = process.env.SPONSOR_MANAGE_URL || 'http://localhost:3332/sponsor';
 let sponsorAds = {};
 let adTimers = {}; // { adId: setTimeout handle }
 
@@ -796,7 +797,7 @@ function stripEmojiCodes(text, keepCode) {
     return result.replace(/\s+/g, ' ').trim();
 }
 
-async function sendBarkNotification(title = "Twitch", comment, icon) {
+async function sendBarkNotification(title = "Twitch", comment, icon, url) {
 
     if (!isBark) { return }
     if (!Bark || Bark.toLowerCase() === "none") return;
@@ -805,8 +806,10 @@ async function sendBarkNotification(title = "Twitch", comment, icon) {
         const pick = pickEmojiIcon(comment);
         const finalIcon = pick ? pick.url : icon;
         const body = stripEmojiCodes(stripEmojiUrls(comment), pick ? pick.code : null);
+        const payload = { title, body, icon: finalIcon };
+        if (url) payload.url = url;
         console.info(`📢 發送 Bark 通知: ${title} - ${body}`);
-        await axios.post(Bark, { title, body, icon: finalIcon }, { headers: { "Content-Type": "application/json; charset=utf-8" } });
+        await axios.post(Bark, payload, { headers: { "Content-Type": "application/json; charset=utf-8" } });
 
         console.info("✅ Bark 推送成功");
     } catch (err) {
@@ -973,7 +976,7 @@ function scheduleAdTimer(adId, userId, intervalMinutes, adData) {
     adTimers[adId] = setTimeout(() => {
         console.log(`⏰ 贊助廣告定時觸發: ${adData.overlayUser} - ${adData.text}`);
         sendAdOverylayMessage(adData.overlayUser, adData.text, adData.iconURL, adData.useTTS);
-        sendBarkNotification(`⏰ 贊助廣告 (${adData.overlayUser})`, adData.text, adData.iconURL || '');
+        sendBarkNotification(`⏰ 贊助廣告 (${adData.overlayUser})`, adData.text, adData.iconURL || '', SPONSOR_MANAGE_URL);
         scheduleAdTimer(adId, userId, intervalMinutes, adData);
     }, ms);
     const sponsor = sponsorAds.users[userId];
@@ -2290,7 +2293,7 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
             } else if (reviewMode === 'manual') {
                 approved = null; // 待審核
                 console.log(`📋 [G#Ad] 贊助廣告待審核: ${overlayUser} - ${lastMsg}`);
-                sendBarkNotification(`📋 贊助廣告待審核 (${overlayUser})`, lastMsg, icon);
+                sendBarkNotification(`📋 贊助廣告待審核 (${overlayUser})`, lastMsg, icon, SPONSOR_MANAGE_URL);
                 sendAdOverylayMessage(overlayUser, `📋 贊助廣告已送審，待管理員審核`, icon, false);
                 logRawEvent('G#Ad 待審核', { user: overlayUser, message: lastMsg });
             }
