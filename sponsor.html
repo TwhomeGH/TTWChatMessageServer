@@ -362,23 +362,27 @@ function renderMessage(msg) {
 
 function updateCountdowns() {
     const now = Date.now();
+    let needsReload = false;
     document.querySelectorAll('.countdown').forEach(el => {
         const nextMs = parseInt(el.dataset.next);
         if (!nextMs) return;
         const diff = nextMs - now;
+        const wasPending = el.dataset.pending === 'true';
         if (diff <= 0) {
             el.textContent = '⏳ 即將發送...';
+            el.dataset.pending = 'true';
+            if (!wasPending) needsReload = true;
         } else {
+            el.dataset.pending = 'false';
             const m = Math.floor(diff / 60000);
             const s = Math.floor((diff % 60000) / 1000);
             el.textContent = `⏳ 下次發送: ${m}分${s}秒後`;
         }
     });
+    if (needsReload) loadAds();
 }
 
 loadAds();
-// 每 15 秒自動刷新資料，讓 countdown 在伺服器發送後正確更新
-setInterval(loadAds, 15000);
 setInterval(updateCountdowns, 1000);
 </script>
 </body>
