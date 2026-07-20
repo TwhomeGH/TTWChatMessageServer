@@ -187,7 +187,10 @@ function render() {
             }
             if (ad.intervalMinutes > 0 && ad.enabled && ad.lastSentAt) {
                 const nextMs = new Date(ad.lastSentAt).getTime() + ad.intervalMinutes * 60 * 1000;
-                html += `<p class="text-xs mt-1 countdown" data-ad-id="${escapeHtml(ad.id)}" data-next="${nextMs}">⏳ 下次發送: 計算中...</p>`;
+                // 如果已超過一個完整週期還沒更新，代表伺服器重啟後定時器遺失，不顯示倒數
+                if (nextMs > Date.now() - ad.intervalMinutes * 60 * 1000) {
+                    html += `<p class="text-xs mt-1 countdown" data-next="${nextMs}">⏳ 下次發送: 計算中...</p>`;
+                }
             }
             html += `<p class="text-xs text-gray-600 mt-1">建立: ${new Date(ad.createdAt).toLocaleString()}</p>`;
             html += `</div>`;
@@ -371,9 +374,16 @@ function updateCountdowns() {
         if (diff <= 0) {
             el.textContent = '⏳ 即將發送...';
             el.dataset.pending = 'true';
-            if (!wasPending) needsReload = true;
+            if (!wasPending) {
+                el.dataset.zeroAt = String(now);
+            } else {
+                const zeroAt = parseInt(el.dataset.zeroAt) || now;
+                // 倒數歸零超過 3 秒才 reload，給伺服器時間更新 lastSentAt
+                if (now - zeroAt > 3000) needsReload = true;
+            }
         } else {
             el.dataset.pending = 'false';
+            el.dataset.zeroAt = '';
             const m = Math.floor(diff / 60000);
             const s = Math.floor((diff % 60000) / 1000);
             el.textContent = `⏳ 下次發送: ${m}分${s}秒後`;
