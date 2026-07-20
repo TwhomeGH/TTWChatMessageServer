@@ -54,6 +54,47 @@ body { font-family: system-ui, -apple-system, sans-serif; }
     <p id="settingsStatus" class="text-sm mt-3 hidden"></p>
 </div>
 
+<!-- 手動新增廣告 -->
+<div class="bg-gray-800 rounded-2xl shadow-lg p-6 mb-6">
+    <h2 class="text-lg font-semibold mb-4">➕ 手動新增贊助廣告</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">使用者 ID *</label>
+            <input id="newUserId" class="w-full bg-gray-700 text-gray-200 rounded-lg px-3 py-2 text-sm border border-gray-600 focus:border-blue-500 outline-none" placeholder="Twitch 使用者 ID">
+        </div>
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">顯示名稱</label>
+            <input id="newDisplayName" class="w-full bg-gray-700 text-gray-200 rounded-lg px-3 py-2 text-sm border border-gray-600 focus:border-blue-500 outline-none" placeholder="留空則用使用者 ID">
+        </div>
+        <div class="md:col-span-2">
+            <label class="block text-sm text-gray-400 mb-1">廣告訊息 *</label>
+            <textarea id="newMessage" class="w-full bg-gray-700 text-gray-200 rounded-lg px-3 py-2 text-sm border border-gray-600 focus:border-blue-500 outline-none" rows="2" placeholder="輸入廣告文字，支援 emoji 圖片網址"></textarea>
+        </div>
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">圖示 URL（選填）</label>
+            <input id="newIconURL" class="w-full bg-gray-700 text-gray-200 rounded-lg px-3 py-2 text-sm border border-gray-600 focus:border-blue-500 outline-none" placeholder="https://example.com/icon.png">
+        </div>
+        <div>
+            <label class="block text-sm text-gray-400 mb-1">自訂顯示名稱</label>
+            <input id="newOverlayUser" class="w-full bg-gray-700 text-gray-200 rounded-lg px-3 py-2 text-sm border border-gray-600 focus:border-blue-500 outline-none" placeholder="疊加層顯示的名稱">
+        </div>
+        <div class="flex items-center gap-6">
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="newUseTTS" class="accent-blue-500">
+                <span class="text-sm">啟用 TTS</span>
+            </label>
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">間隔（分鐘）</label>
+                <input id="newInterval" type="number" min="0" class="w-24 bg-gray-700 text-gray-200 rounded-lg px-3 py-2 text-sm border border-gray-600 focus:border-blue-500 outline-none" placeholder="0=單次" value="0">
+            </div>
+        </div>
+    </div>
+    <div class="mt-4 flex items-center gap-3">
+        <button onclick="createAd()" id="createAdBtn" class="bg-green-600 text-white px-5 py-2 rounded-lg hover:bg-green-700 transition">建立廣告</button>
+        <span id="createStatus" class="text-sm hidden"></span>
+    </div>
+</div>
+
 <!-- 贊助廣告列表 -->
 <div id="adsContainer">
     <div class="text-center text-gray-500 py-12">載入中...</div>
@@ -162,6 +203,55 @@ function render() {
 
 function onSettingsChange() {
     document.getElementById('saveSettingsBtn').disabled = false;
+}
+
+async function createAd() {
+    const userId = document.getElementById('newUserId').value.trim();
+    const message = document.getElementById('newMessage').value.trim();
+    if (!userId || !message) {
+        alert('請填寫使用者 ID 與廣告訊息');
+        return;
+    }
+    const payload = {
+        userId,
+        displayName: document.getElementById('newDisplayName').value.trim() || userId,
+        overlayUser: document.getElementById('newOverlayUser').value.trim() || null,
+        message,
+        iconURL: document.getElementById('newIconURL').value.trim() || null,
+        useTTS: document.getElementById('newUseTTS').checked,
+        intervalMinutes: parseInt(document.getElementById('newInterval').value) || 0
+    };
+    const btn = document.getElementById('createAdBtn');
+    const statusEl = document.getElementById('createStatus');
+    btn.disabled = true;
+    btn.textContent = '建立中...';
+    statusEl.className = 'text-sm hidden';
+    try {
+        const res = await fetch('/api/sponsor-ads/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(await res.text());
+        statusEl.className = 'text-sm text-green-400';
+        statusEl.textContent = '✅ 廣告已建立';
+        statusEl.classList.remove('hidden');
+        document.getElementById('newUserId').value = '';
+        document.getElementById('newDisplayName').value = '';
+        document.getElementById('newOverlayUser').value = '';
+        document.getElementById('newMessage').value = '';
+        document.getElementById('newIconURL').value = '';
+        document.getElementById('newUseTTS').checked = false;
+        document.getElementById('newInterval').value = '0';
+        setTimeout(() => { statusEl.classList.add('hidden'); }, 3000);
+        await loadAds();
+    } catch (err) {
+        statusEl.className = 'text-sm text-red-400';
+        statusEl.textContent = `❌ 建立失敗: ${err.message}`;
+        statusEl.classList.remove('hidden');
+    }
+    btn.disabled = false;
+    btn.textContent = '建立廣告';
 }
 
 async function saveSettings() {

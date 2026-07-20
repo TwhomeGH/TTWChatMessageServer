@@ -1217,6 +1217,29 @@ const server = http.createServer((req, res) => {
         return;
     }
 
+    else if (req.url === '/api/sponsor-ads/create' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body);
+                if (!data.userId || !data.message) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: '缺少必要欄位 userId 或 message' }));
+                    return;
+                }
+                sendToTikTok({ type: 'SPONSOR_CREATE', ...data });
+                pushLog(`📢 手動建立贊助廣告: ${data.overlayUser || data.userId} - ${data.message}`);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+            } catch (err) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message }));
+            }
+        });
+        return;
+    }
+
     else if (req.url === '/help') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end(`Available endpoints:

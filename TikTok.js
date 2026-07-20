@@ -701,6 +701,48 @@ process.stdin.on('data', async (chunk) => {
                 return;
             }
 
+            if (json.type === 'SPONSOR_CREATE') {
+                const { userId, displayName, message, iconURL, useTTS, overlayUser, intervalMinutes } = json;
+                if (!userId || !message) {
+                    console.warn('⚠️ SPONSOR_CREATE 缺少必要欄位');
+                    return;
+                }
+                const adId = `ad_${userId}_${Date.now()}`;
+                const sponsor = getOrCreateSponsor(userId, displayName || userId);
+                for (const existing of sponsor.ads) {
+                    clearAdTimer(existing.id);
+                }
+                sponsor.ads = [];
+                const now = new Date().toISOString();
+                const adRecord = {
+                    id: adId,
+                    message,
+                    iconURL: iconURL || null,
+                    useTTS: !!useTTS,
+                    overlayUser: overlayUser || displayName || userId,
+                    intervalMinutes: intervalMinutes || 0,
+                    approved: true,
+                    enabled: true,
+                    createdAt: now,
+                    updatedAt: now,
+                    lastSentAt: now
+                };
+                sponsor.ads.push(adRecord);
+                saveSponsorAds();
+                sendAdOverylayMessage(adRecord.overlayUser, message, adRecord.iconURL || '', adRecord.useTTS);
+                if (intervalMinutes >= 15) {
+                    scheduleAdTimer(adId, userId, intervalMinutes, {
+                        overlayUser: adRecord.overlayUser,
+                        text: message,
+                        iconURL: adRecord.iconURL || '',
+                        useTTS: adRecord.useTTS
+                    });
+                }
+                console.log(`✅ 手動建立贊助廣告成功: ${adRecord.overlayUser} - ${message}`);
+                process.stdout.write(JSON.stringify({ type: 'SPONSOR_CREATED', adId }) + '\n');
+                return;
+            }
+
         } catch (e) {
             console.error('stdin JSON 解析失敗:', msg);
         }
@@ -804,7 +846,11 @@ async function sendBarkNotification(title = "Twitch", comment, icon, url) {
 
     try {
         const pick = pickEmojiIcon(comment);
-        const finalIcon = pick ? pick.url : icon;
+        let finalIcon = pick ? pick.url : icon;
+        if (!pick) {
+            const imgMatch = comment.match(/https?:\/\/[^\s]+?\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s]*)?/i);
+            if (imgMatch) finalIcon = imgMatch[0];
+        }
         const body = stripEmojiCodes(stripEmojiUrls(comment), pick ? pick.code : null);
         const payload = { title, body, icon: finalIcon };
         if (url) payload.url = url;
@@ -2303,6 +2349,12 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
             }
 
             // ---- 持久化 & 定時器 ----
+            // 同一個使用者重複發送 G#Ad → 取代舊的
+            for (const existing of sponsor.ads) {
+                clearAdTimer(existing.id);
+            }
+            sponsor.ads = [];
+
             const adRecord = {
                 id: adId,
                 message: lastMsg,
