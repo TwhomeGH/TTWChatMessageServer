@@ -90,6 +90,18 @@ function render() {
         return;
     }
     let html = '';
+    // 預先收集所有圖片 URL 並載入快取
+    const imgRegex = /(https?:\/\/[^\s<>]+?\.(?:png|jpg|jpeg|gif|webp|svg)(?:\?[^\s<>]*)?)/gi;
+    for (const uid of userIds) {
+        const user = users[uid];
+        if (!user.ads) continue;
+        for (const ad of user.ads) {
+            let m;
+            imgRegex.lastIndex = 0;
+            while ((m = imgRegex.exec(ad.message || '')) !== null) preloadEmoji(m[1]);
+            if (ad.iconURL) preloadEmoji(ad.iconURL);
+        }
+    }
     for (const uid of userIds) {
         const user = users[uid];
         if (!user.ads || user.ads.length === 0) continue;
@@ -229,11 +241,21 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+// ---- Emoji 圖片快取 ----
+const emojiCache = new Set();
+
+function preloadEmoji(url) {
+    if (!url || emojiCache.has(url)) return;
+    emojiCache.add(url);
+    const img = new Image();
+    img.src = url;
+}
+
 function renderMessage(msg) {
     if (!msg) return '';
     const escaped = escapeHtml(msg);
     return escaped.replace(/(https?:\/\/[^\s<>]+?\.(?:png|jpg|jpeg|gif|webp|svg)(?:\?[^\s<>]*)?)/gi,
-        '<img src="$1" class="inline-block w-5 h-5 align-middle mx-0.5" onerror="this.style.display=\'none\'" title="$1">');
+        '<img src="$1" class="inline-block w-5 h-5 align-middle mx-0.5" title="$1">');
 }
 
 loadAds();
