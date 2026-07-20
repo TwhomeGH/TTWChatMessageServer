@@ -53,9 +53,7 @@
 
         const data = await res.json();
         if (data.success) {
-          // 後端已經透過 Set-Cookie 寫入 authToken
-          // 前端只要跳轉到 /config，瀏覽器會自動帶上 Cookie
-          window.location.href = '/config';
+          window.location.href = typeof REDIRECT_AFTER_LOGIN !== 'undefined' ? REDIRECT_AFTER_LOGIN : '/config';
         } else {
           errorBox.textContent = '登入失敗';
         }

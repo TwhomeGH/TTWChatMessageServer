@@ -1055,14 +1055,17 @@ const server = http.createServer((req, res) => {
     else if (req.url === '/sponsor') {
         const cookies = parseCookies(req);
         if (!isValidToken(cookies.authToken)) {
-            fs.readFile('./login.html', (err, data) => {
+            const loginPath = path.join(__dirname, 'login.html');
+            fs.readFile(loginPath, 'utf8', (err, html) => {
                 if (err) {
                     res.writeHead(500);
                     res.end('Error loading login');
                     return;
                 }
+                const redirectUrl = '/sponsor';
+                html = html.replace('</head>', `<script>const REDIRECT_AFTER_LOGIN='${redirectUrl}';</script></head>`);
                 res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-                res.end(data);
+                res.end(html);
             });
             return;
         }

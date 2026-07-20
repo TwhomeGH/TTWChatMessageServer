@@ -18,7 +18,10 @@ body { font-family: system-ui, -apple-system, sans-serif; }
 <div class="max-w-5xl mx-auto">
 
 <div class="flex items-center justify-between mb-8">
-    <h1 class="text-2xl font-bold">📢 贊助廣告管理</h1>
+    <div class="flex items-center gap-3">
+        <h1 class="text-2xl font-bold">📢 贊助廣告管理</h1>
+        <span id="serverStatus" class="text-xs px-2 py-1 rounded-full bg-gray-700 text-gray-400">檢查中...</span>
+    </div>
     <div class="flex gap-3">
         <a href="/" class="text-blue-400 hover:text-blue-300 underline text-sm">首頁</a>
         <a href="/config" class="text-blue-400 hover:text-blue-300 underline text-sm">設定</a>
@@ -106,8 +109,33 @@ body { font-family: system-ui, -apple-system, sans-serif; }
 
 </div>
 
+<!-- Toast 通知 -->
+<div id="toast" class="fixed top-6 right-6 z-50 max-w-sm rounded-xl shadow-2xl px-5 py-4 text-sm transition-all duration-300" style="display:none"></div>
+
 <script>
 let currentData = { settings: { reviewMode: 'none' }, users: {} };
+let serverRunning = false;
+
+async function checkServerStatus() {
+    try {
+        const res = await fetch('/status');
+        const text = await res.text();
+        serverRunning = text.startsWith('Running: YES');
+        const el = document.getElementById('serverStatus');
+        if (serverRunning) {
+            el.textContent = '🟢 運行中';
+            el.className = 'text-xs px-2 py-1 rounded-full bg-green-900 text-green-300';
+        } else {
+            el.textContent = '🔴 未運行';
+            el.className = 'text-xs px-2 py-1 rounded-full bg-red-900 text-red-300';
+        }
+    } catch {
+        serverRunning = false;
+        document.getElementById('serverStatus').textContent = '❌ 無法連線';
+    }
+    // 狀態更新後重新渲染，讓 countdown 正確出現
+    if (currentData.users && Object.keys(currentData.users).length > 0) render();
+}
 
 async function loadAds() {
     try {
@@ -185,7 +213,7 @@ function render() {
             if (ad.lastSentAt) {
                 html += `<p class="text-xs text-gray-500 mt-1">最後發送: ${new Date(ad.lastSentAt).toLocaleString()}</p>`;
             }
-            if (ad.intervalMinutes > 0 && ad.enabled && ad.lastSentAt) {
+            if (ad.intervalMinutes > 0 && ad.enabled && ad.lastSentAt && serverRunning) {
                 const nextMs = new Date(ad.lastSentAt).getTime() + ad.intervalMinutes * 60 * 1000;
                 // 如果已超過一個完整週期還沒更新，代表伺服器重啟後定時器遺失，不顯示倒數
                 if (nextMs > Date.now() - ad.intervalMinutes * 60 * 1000) {
@@ -216,11 +244,24 @@ function onSettingsChange() {
     document.getElementById('saveSettingsBtn').disabled = false;
 }
 
+function showToast(msg, type) {
+    const el = document.getElementById('toast');
+    const colors = { error: 'border-red-600 bg-red-900/80 text-red-200', success: 'border-green-600 bg-green-900/80 text-green-200', warning: 'border-yellow-600 bg-yellow-900/80 text-yellow-200' };
+    el.className = `fixed top-6 right-6 z-50 max-w-sm border rounded-xl shadow-2xl px-5 py-4 text-sm transition-all duration-300 ${colors[type] || 'border-gray-600 bg-gray-800 text-gray-200'}`;
+    el.textContent = msg;
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
 async function createAd() {
     const userId = document.getElementById('newUserId').value.trim();
     const message = document.getElementById('newMessage').value.trim();
     if (!userId || !message) {
-        alert('請填寫使用者 ID 與廣告訊息');
+        showToast('請填寫使用者 ID 與廣告訊息', 'warning');
+        return;
+    }
+    if (!serverRunning) {
+        showToast('⚠️ 主服務器未運行，無法發送廣告，請先啟動 TikTok.js', 'error');
         return;
     }
     const payload = {
@@ -303,7 +344,7 @@ async function approveAd(adId, approved) {
         if (!res.ok) throw new Error(await res.text());
         await loadAds();
     } catch (err) {
-        alert(`操作失敗: ${err.message}`);
+        showToast(`操作失敗: ${err.message}`, 'error');
     }
 }
 
@@ -317,7 +358,7 @@ async function toggleAd(adId, enabled) {
         if (!res.ok) throw new Error(await res.text());
         await loadAds();
     } catch (err) {
-        alert(`操作失敗: ${err.message}`);
+        showToast(`操作失敗: ${err.message}`, 'error');
     }
 }
 
@@ -332,7 +373,7 @@ async function deleteAd(adId) {
         if (!res.ok) throw new Error(await res.text());
         await loadAds();
     } catch (err) {
-        alert(`操作失敗: ${err.message}`);
+        showToast(`操作失敗: ${err.message}`, 'error');
     }
 }
 
@@ -364,6 +405,7 @@ function renderMessage(msg) {
 }
 
 function updateCountdowns() {
+    if (!serverRunning) return;
     const now = Date.now();
     let needsReload = false;
     document.querySelectorAll('.countdown').forEach(el => {
@@ -393,6 +435,9 @@ function updateCountdowns() {
 }
 
 loadAds();
+checkServerStatus();
+// 每 30 秒檢查一次伺服器狀態
+setInterval(checkServerStatus, 30000);
 setInterval(updateCountdowns, 1000);
 </script>
 </body>
