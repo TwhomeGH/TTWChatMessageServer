@@ -2307,7 +2307,7 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
                 overlayUser,
                 intervalMinutes,
                 approved,
-                enabled: intervalMinutes > 0 && approved !== false,
+                enabled: approved !== false,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 lastSentAt: approved === true ? new Date().toISOString() : null

@@ -118,7 +118,7 @@ function render() {
                 html += `<span class="text-xs bg-gray-700 text-gray-400 px-2 py-0.5 rounded">已停用</span>`;
             }
             html += `</div>`;
-            html += `<p class="text-gray-200 break-words">${escapeHtml(ad.message)}</p>`;
+            html += `<p class="text-gray-200 break-words">${renderMessage(ad.message)}</p>`;
             if (ad.overlayUser) {
                 html += `<p class="text-xs text-gray-500 mt-1">顯示名稱: ${escapeHtml(ad.overlayUser)}</p>`;
             }
@@ -227,6 +227,13 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str || '';
     return div.innerHTML;
+}
+
+function renderMessage(msg) {
+    if (!msg) return '';
+    const escaped = escapeHtml(msg);
+    return escaped.replace(/(https?:\/\/[^\s<>]+?\.(?:png|jpg|jpeg|gif|webp|svg)(?:\?[^\s<>]*)?)/gi,
+        '<img src="$1" class="inline-block w-5 h-5 align-middle mx-0.5" onerror="this.style.display=\'none\'" title="$1">');
 }
 
 loadAds();
