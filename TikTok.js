@@ -178,6 +178,11 @@ const TRANSLATE_TARGET_LANG = process.env.TRANSLATE_TARGET_LANG || "zh-TW";
 
 const GIFT_TRANSLATE_PREFILL_LIMIT = Number(process.env.GIFT_TRANSLATE_PREFILL_LIMIT || 10);
 
+// ---- 贊助廣告 (G#Ad) 持久化 ----
+const SPONSOR_ADS_FILE = path.join(__dirname, 'sponsor_ads.json');
+let sponsorAds = {};
+let adTimers = {}; // { adId: setTimeout handle }
+
 
 const CACHE_FILE = path.resolve("./send_messages.json");
 const GIFT_MAP_FILE = path.resolve("./gift_map.json");
@@ -478,6 +483,9 @@ async function handleExit() {
         });
     }
 
+    clearAllAdTimers();
+    saveSponsorAds();
+
     await saveSentMessages();
 
     await saveStatsToFile();
@@ -602,6 +610,94 @@ process.stdin.on('data', async (chunk) => {
                 sendBarkNotification(json.user, json.message, json.img || Gift);
 
                 console.log('📥 收到 JSON 訊息:', json);
+                return;
+            }
+
+            // ---- 贊助廣告管理指令 ----
+            if (json.type === 'SPONSOR_SETTINGS' && json.settings) {
+                sponsorAds.settings = { ...sponsorAds.settings, ...json.settings };
+                saveSponsorAds();
+                console.log('⚙️ 贊助廣告設定已更新:', sponsorAds.settings);
+                return;
+            }
+
+            if (json.type === 'SPONSOR_APPROVE' && json.adId) {
+                for (const uid of Object.keys(sponsorAds.users)) {
+                    const ad = sponsorAds.users[uid].ads.find(a => a.id === json.adId);
+                    if (ad) {
+                        ad.approved = json.approved;
+                        ad.updatedAt = new Date().toISOString();
+                        if (json.approved === true) {
+                            ad.enabled = ad.intervalMinutes >= 15;
+                            sendAdOverylayMessage(ad.overlayUser, ad.message, ad.iconURL || '', ad.useTTS);
+                            console.log(`✅ 已審核通過贊助廣告: ${ad.overlayUser} - ${ad.message}`);
+                            if (ad.intervalMinutes >= 15) {
+                                scheduleAdTimer(ad.id, uid, ad.intervalMinutes, {
+                                    overlayUser: ad.overlayUser,
+                                    text: ad.message,
+                                    iconURL: ad.iconURL || '',
+                                    useTTS: ad.useTTS
+                                });
+                            }
+                        } else {
+                            clearAdTimer(ad.id);
+                            ad.enabled = false;
+                            console.log(`❌ 已拒絕贊助廣告: ${ad.overlayUser} - ${ad.message}`);
+                        }
+                        saveSponsorAds();
+                        process.stdout.write(JSON.stringify({ type: 'SPONSOR_UPDATED', adId: ad.id, approved: ad.approved }) + '\n');
+                        return;
+                    }
+                }
+                console.warn(`⚠️ 未找到贊助廣告: ${json.adId}`);
+                return;
+            }
+
+            if (json.type === 'SPONSOR_TOGGLE' && json.adId) {
+                for (const uid of Object.keys(sponsorAds.users)) {
+                    const ad = sponsorAds.users[uid].ads.find(a => a.id === json.adId);
+                    if (ad) {
+                        ad.enabled = json.enabled;
+                        ad.updatedAt = new Date().toISOString();
+                        if (json.enabled && ad.approved !== false && ad.intervalMinutes >= 15) {
+                            scheduleAdTimer(ad.id, uid, ad.intervalMinutes, {
+                                overlayUser: ad.overlayUser,
+                                text: ad.message,
+                                iconURL: ad.iconURL || '',
+                                useTTS: ad.useTTS
+                            });
+                            if (!ad.lastSentAt) {
+                                sendAdOverylayMessage(ad.overlayUser, ad.message, ad.iconURL || '', ad.useTTS);
+                                ad.lastSentAt = new Date().toISOString();
+                            }
+                        } else {
+                            clearAdTimer(ad.id);
+                        }
+                        saveSponsorAds();
+                        console.log(`🔁 贊助廣告已${json.enabled ? '啟用' : '停用'}: ${ad.overlayUser} - ${ad.message}`);
+                        return;
+                    }
+                }
+                console.warn(`⚠️ 未找到贊助廣告: ${json.adId}`);
+                return;
+            }
+
+            if (json.type === 'SPONSOR_DELETE' && json.adId) {
+                for (const uid of Object.keys(sponsorAds.users)) {
+                    const idx = sponsorAds.users[uid].ads.findIndex(a => a.id === json.adId);
+                    if (idx !== -1) {
+                        clearAdTimer(json.adId);
+                        sponsorAds.users[uid].ads.splice(idx, 1);
+                        if (sponsorAds.users[uid].ads.length === 0) {
+                            delete sponsorAds.users[uid];
+                        }
+                        saveSponsorAds();
+                        console.log(`🗑️ 已刪除贊助廣告: ${json.adId}`);
+                        return;
+                    }
+                }
+                console.warn(`⚠️ 未找到贊助廣告: ${json.adId}`);
+                return;
             }
 
         } catch (e) {
@@ -622,6 +718,7 @@ process.on("SIGTERM", async () => {
 loadSentMessages()
 const giftMapReady = loadGiftNameMap();
 loadEmojiMap();
+loadSponsorAds();
 
 
 console.log("TikTok 直播間名稱:", tiktokName);
@@ -823,6 +920,86 @@ function sendAdOverylayMessage(user,text,iconURL,useTTS){
         pendingQueue.push(payload);
     }
     
+}
+
+// ---- 贊助廣告持久化 ----
+function loadSponsorAds() {
+    try {
+        if (existsSync(SPONSOR_ADS_FILE)) {
+            const data = JSON.parse(readFileSync(SPONSOR_ADS_FILE, 'utf-8'));
+            if (!data.settings && !data.users) {
+                sponsorAds = { settings: { reviewMode: 'none' }, users: data };
+                saveSponsorAds();
+            } else {
+                sponsorAds = data;
+            }
+            if (!sponsorAds.settings) sponsorAds.settings = { reviewMode: 'none' };
+            if (!sponsorAds.users) sponsorAds.users = {};
+            console.log(`📂 已載入贊助廣告資料 (${Object.keys(sponsorAds.users).length} 位贊助者)`);
+        } else {
+            sponsorAds = { settings: { reviewMode: 'none' }, users: {} };
+        }
+    } catch (err) {
+        console.error('⚠️ 載入贊助廣告資料失敗:', err.message);
+        sponsorAds = { settings: { reviewMode: 'none' }, users: {} };
+    }
+}
+
+function saveSponsorAds() {
+    try {
+        writeFileSync(SPONSOR_ADS_FILE, JSON.stringify(sponsorAds, null, 2), 'utf-8');
+    } catch (err) {
+        console.error('⚠️ 儲存贊助廣告資料失敗:', err.message);
+    }
+}
+
+function getOrCreateSponsor(userId, displayName) {
+    if (!sponsorAds.users[userId]) {
+        sponsorAds.users[userId] = {
+            userId,
+            displayName,
+            ads: []
+        };
+    } else {
+        sponsorAds.users[userId].displayName = displayName;
+    }
+    return sponsorAds.users[userId];
+}
+
+function scheduleAdTimer(adId, userId, intervalMinutes, adData) {
+    clearAdTimer(adId);
+    if (!intervalMinutes || intervalMinutes < 15) return;
+    const ms = intervalMinutes * 60 * 1000;
+    adTimers[adId] = setTimeout(() => {
+        console.log(`⏰ 贊助廣告定時觸發: ${adData.overlayUser} - ${adData.text}`);
+        sendAdOverylayMessage(adData.overlayUser, adData.text, adData.iconURL, adData.useTTS);
+        sendBarkNotification(`⏰ 贊助廣告 (${adData.overlayUser})`, adData.text, adData.iconURL || '');
+        scheduleAdTimer(adId, userId, intervalMinutes, adData);
+    }, ms);
+    const sponsor = sponsorAds.users[userId];
+    if (sponsor) {
+        const ad = sponsor.ads.find(a => a.id === adId);
+        if (ad) {
+            ad.lastSentAt = new Date().toISOString();
+            ad.intervalMinutes = intervalMinutes;
+        }
+        saveSponsorAds();
+    }
+    console.log(`⏰ 已設定贊助廣告定時器: ${adId} (每 ${intervalMinutes} 分鐘)`);
+}
+
+function clearAdTimer(adId) {
+    if (adTimers[adId]) {
+        clearTimeout(adTimers[adId]);
+        delete adTimers[adId];
+    }
+}
+
+function clearAllAdTimers() {
+    for (const adId of Object.keys(adTimers)) {
+        clearTimeout(adTimers[adId]);
+    }
+    adTimers = {};
 }
 
 /**
@@ -2066,20 +2243,89 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
             let userValue = event.messageText.includes("user=") ? event.messageText.split("user=")[1].split(" ")[0] : null;
             if (userValue) overlayUser = userValue;
 
+            // 解析 interval=N（分鐘）
+            let intervalMinutes = 0;
+            let rawInterval = event.messageText.includes("interval=") ? parseInt(event.messageText.split("interval=")[1].split(" ")[0]) : 0;
+            if (!isNaN(rawInterval) && rawInterval > 0) {
+                if (rawInterval < 15) {
+                    intervalMinutes = 15;
+                    const warnMsg = `${overlayUser}，您設定的廣告間隔為 ${rawInterval} 分鐘，最低不能低於 15 分鐘，已自動調整為 15 分鐘`;
+                    console.warn(`⚠️ [G#Ad] ${warnMsg}`);
+                    sendBarkNotification(`⚠️ 贊助廣告間隔調整 (${overlayUser})`, warnMsg, icon);
+                    sendAdOverylayMessage(overlayUser, `⚠️ ${warnMsg}`, icon, false);
+                    logRawEvent('G#Ad 間隔調整', { user: overlayUser, rawInterval, adjusted: 15 });
+                } else {
+                    intervalMinutes = rawInterval;
+                }
+            }
+
             res = res.filter(e => e.toLowerCase() !== "tts") // 去掉 TTS
             const iconIdx = res.findIndex(e => e.startsWith("icon="));
             if (iconIdx !== -1) res.splice(iconIdx, 1); // 去掉 icon=xxx
             const userIdx = res.findIndex(e => e.startsWith("user="));
             if (userIdx !== -1) res.splice(userIdx, 1); // 去掉 user=xxx
+            const intervalIdx = res.findIndex(e => e.startsWith("interval="));
+            if (intervalIdx !== -1) res.splice(intervalIdx, 1); // 去掉 interval=xxx
 
             res.shift() // 去掉 G#Ad
 
             let lastMsg=replaceEmojis(res.join(" "));
 
-            sendAdOverylayMessage(overlayUser, lastMsg, displayIcon, useTTS);
+            const adId = `ad_${event.chatterId}_${Date.now()}`;
+            const sponsor = getOrCreateSponsor(event.chatterId, event.chatterDisplayName);
 
-            logRawEvent('G#Ad 自訂義廣告事件', { user: overlayUser, message: lastMsg, useTTS });
-            console.log(`✅ ${event.chatterDisplayName} 使用 G#Ad 指令成功，user=${overlayUser}, 訊息: ${lastMsg}, TTS: ${useTTS}`);
+            // ---- 審核判定 ----
+            let approved = true;
+            const reviewMode = sponsorAds.settings.reviewMode || 'none';
+            if (reviewMode === 'filter') {
+                const fr = processFilter({ user: overlayUser, message: lastMsg });
+                if (fr.blocked) {
+                    approved = false;
+                    const rejectReason = `過濾器阻擋: ${fr.reason || '不符合規範'}`;
+                    console.log(`🚫 [G#Ad] 贊助廣告被過濾器阻擋: ${overlayUser} - ${lastMsg}`);
+                    sendBarkNotification(`🚫 贊助廣告被阻擋 (${overlayUser})`, rejectReason, icon);
+                    sendAdOverylayMessage(overlayUser, `⚠️ ${rejectReason}`, icon, false);
+                    logRawEvent('G#Ad 審核拒絕', { user: overlayUser, message: lastMsg, reason: fr.reason });
+                }
+            } else if (reviewMode === 'manual') {
+                approved = null; // 待審核
+                console.log(`📋 [G#Ad] 贊助廣告待審核: ${overlayUser} - ${lastMsg}`);
+                sendBarkNotification(`📋 贊助廣告待審核 (${overlayUser})`, lastMsg, icon);
+                sendAdOverylayMessage(overlayUser, `📋 贊助廣告已送審，待管理員審核`, icon, false);
+                logRawEvent('G#Ad 待審核', { user: overlayUser, message: lastMsg });
+            }
+
+            // ---- 持久化 & 定時器 ----
+            const adRecord = {
+                id: adId,
+                message: lastMsg,
+                iconURL: iconURL,
+                useTTS,
+                overlayUser,
+                intervalMinutes,
+                approved,
+                enabled: intervalMinutes > 0 && approved !== false,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                lastSentAt: approved === true ? new Date().toISOString() : null
+            };
+            sponsor.ads.push(adRecord);
+            saveSponsorAds();
+
+            if (approved === true) {
+                sendAdOverylayMessage(overlayUser, lastMsg, displayIcon, useTTS);
+                if (intervalMinutes >= 15) {
+                    scheduleAdTimer(adId, event.chatterId, intervalMinutes, {
+                        overlayUser,
+                        text: lastMsg,
+                        iconURL: displayIcon,
+                        useTTS
+                    });
+                }
+            }
+
+            logRawEvent('G#Ad 自訂義廣告事件', { user: overlayUser, message: lastMsg, useTTS, intervalMinutes, approved });
+            console.log(`✅ ${event.chatterDisplayName} 使用 G#Ad 指令成功，user=${overlayUser}, 訊息: ${lastMsg}, TTS: ${useTTS}, 間隔: ${intervalMinutes > 0 ? intervalMinutes + ' 分鐘' : '單次'}`);
 
 
         }

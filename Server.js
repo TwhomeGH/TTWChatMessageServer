@@ -251,6 +251,16 @@ function isValidToken(token) {
     return true;
 }
 
+function parseCookies(req) {
+    const cookies = req.headers.cookie || '';
+    const result = {};
+    cookies.split(';').forEach(c => {
+        const parts = c.trim().split('=');
+        if (parts.length >= 2) result[parts[0].trim()] = parts.slice(1).join('=');
+    });
+    return result;
+}
+
 const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
 
@@ -645,7 +655,6 @@ const server = http.createServer((req, res) => {
 
             if (!tiktokProcess) {
 
-                pushLog('未運行使用快取資料推送 top10 關鍵字統計');
                 cacheKeywordDataTop = getTopMessages(10);
                 if (cacheKeywordDataTop.length > 0) {
                     res.write(`data: ${JSON.stringify({
@@ -655,7 +664,6 @@ const server = http.createServer((req, res) => {
                 }
 
             } else {
-                pushLog('請求 TikTok.js 推送 top10 關鍵字統計');
                 tiktokProcess.stdin.write('GETTOP\n');
 
                 if (cacheKeywordDataTop.length > 0) {
@@ -674,7 +682,6 @@ const server = http.createServer((req, res) => {
         function sendKeywordDataCacheAll() {
 
             if (!tiktokProcess) {
-                pushLog('TikTok.js not running, cannot get ALL keyword data');
 
                 cacheKeywordDataAll = getAllMessageStatsSorted();
                 if (cacheKeywordDataAll.length > 0) {
@@ -687,7 +694,6 @@ const server = http.createServer((req, res) => {
 
             } else {
 
-                pushLog('請求 All Keyword TikTok.js');
                 tiktokProcess.stdin.write('GETALL\n');
 
                 if (cacheKeywordDataAll.length > 0) {
@@ -705,16 +711,12 @@ const server = http.createServer((req, res) => {
                 const raw = fs.readFileSync('./message_stats.json', 'utf-8');
                 const json = JSON.parse(raw);
 
-                pushLog('📈 讀取 message_stats.json:', json);
 
                 const stats = json || [];
 
                 const top10 = stats
                     .slice(0, 10); // 你存檔時已排序就直接 slice
 
-
-                pushLog('📈 傳送 top10:', top10);
-                pushLog('📈 傳送 all stats:', stats);
 
                 res.write(`data: ${JSON.stringify({
                     type: 'top10',
@@ -746,8 +748,6 @@ const server = http.createServer((req, res) => {
         req.on('close', () => {
             clearInterval(interval);
             clearInterval(intervalAll);
-
-            pushLog('Client 中斷，停止推送關鍵字資料[TikTokJS 未運行，使用快取資料]');
 
             if (!tiktokProcess) {
                 SaveCacheKeywordDataAll();
@@ -1049,6 +1049,173 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ success: true }));
     }
 
+    // =======================
+    // 贊助廣告管理頁面
+    // =======================
+    else if (req.url === '/sponsor') {
+        const cookies = parseCookies(req);
+        if (!isValidToken(cookies.authToken)) {
+            fs.readFile('./login.html', (err, data) => {
+                if (err) {
+                    res.writeHead(500);
+                    res.end('Error loading login');
+                    return;
+                }
+                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+                res.end(data);
+            });
+            return;
+        }
+        fs.readFile('./sponsor.html', (err, data) => {
+            if (err) {
+                res.writeHead(500);
+                res.end('Error loading sponsor.html');
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(data);
+        });
+        return;
+    }
+
+    // =======================
+    // 贊助廣告 API
+    // =======================
+    else if (req.url === '/api/sponsor-ads' && req.method === 'GET') {
+        const SPONSOR_FILE = path.join(__dirname, 'sponsor_ads.json');
+        try {
+            const data = fs.existsSync(SPONSOR_FILE)
+                ? JSON.parse(fs.readFileSync(SPONSOR_FILE, 'utf-8'))
+                : { settings: { reviewMode: 'none' }, users: {} };
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify(data));
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+        }
+        return;
+    }
+
+    else if (req.url === '/api/sponsor-ads/settings' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const { settings } = JSON.parse(body);
+                const SPONSOR_FILE = path.join(__dirname, 'sponsor_ads.json');
+                let data = fs.existsSync(SPONSOR_FILE)
+                    ? JSON.parse(fs.readFileSync(SPONSOR_FILE, 'utf-8'))
+                    : { settings: { reviewMode: 'none' }, users: {} };
+                data.settings = { ...data.settings, ...settings };
+                fs.writeFileSync(SPONSOR_FILE, JSON.stringify(data, null, 2));
+                sendToTikTok({ type: 'SPONSOR_SETTINGS', settings: data.settings });
+                pushLog('⚙️ 贊助廣告設定已更新:', data.settings);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+            } catch (err) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message }));
+            }
+        });
+        return;
+    }
+
+    else if (req.url === '/api/sponsor-ads/approve' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const { adId, approved } = JSON.parse(body);
+                const SPONSOR_FILE = path.join(__dirname, 'sponsor_ads.json');
+                let data = fs.existsSync(SPONSOR_FILE)
+                    ? JSON.parse(fs.readFileSync(SPONSOR_FILE, 'utf-8'))
+                    : { settings: { reviewMode: 'none' }, users: {} };
+                for (const uid of Object.keys(data.users)) {
+                    const ad = data.users[uid].ads.find(a => a.id === adId);
+                    if (ad) {
+                        ad.approved = approved;
+                        ad.updatedAt = new Date().toISOString();
+                        if (approved) ad.enabled = ad.intervalMinutes >= 15;
+                        else ad.enabled = false;
+                        break;
+                    }
+                }
+                fs.writeFileSync(SPONSOR_FILE, JSON.stringify(data, null, 2));
+                sendToTikTok({ type: 'SPONSOR_APPROVE', adId, approved });
+                pushLog(`✅ 贊助廣告審核: ${adId} -> ${approved ? '通過' : '拒絕'}`);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+            } catch (err) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message }));
+            }
+        });
+        return;
+    }
+
+    else if (req.url === '/api/sponsor-ads/toggle' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const { adId, enabled } = JSON.parse(body);
+                const SPONSOR_FILE = path.join(__dirname, 'sponsor_ads.json');
+                let data = fs.existsSync(SPONSOR_FILE)
+                    ? JSON.parse(fs.readFileSync(SPONSOR_FILE, 'utf-8'))
+                    : { settings: { reviewMode: 'none' }, users: {} };
+                for (const uid of Object.keys(data.users)) {
+                    const ad = data.users[uid].ads.find(a => a.id === adId);
+                    if (ad) {
+                        ad.enabled = enabled;
+                        ad.updatedAt = new Date().toISOString();
+                        break;
+                    }
+                }
+                fs.writeFileSync(SPONSOR_FILE, JSON.stringify(data, null, 2));
+                sendToTikTok({ type: 'SPONSOR_TOGGLE', adId, enabled });
+                pushLog(`🔁 贊助廣告 ${adId} -> ${enabled ? '啟用' : '停用'}`);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+            } catch (err) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message }));
+            }
+        });
+        return;
+    }
+
+    else if (req.url === '/api/sponsor-ads/delete' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const { adId } = JSON.parse(body);
+                const SPONSOR_FILE = path.join(__dirname, 'sponsor_ads.json');
+                let data = fs.existsSync(SPONSOR_FILE)
+                    ? JSON.parse(fs.readFileSync(SPONSOR_FILE, 'utf-8'))
+                    : { settings: { reviewMode: 'none' }, users: {} };
+                for (const uid of Object.keys(data.users)) {
+                    const idx = data.users[uid].ads.findIndex(a => a.id === adId);
+                    if (idx !== -1) {
+                        data.users[uid].ads.splice(idx, 1);
+                        if (data.users[uid].ads.length === 0) {
+                            delete data.users[uid];
+                        }
+                        break;
+                    }
+                }
+                fs.writeFileSync(SPONSOR_FILE, JSON.stringify(data, null, 2));
+                sendToTikTok({ type: 'SPONSOR_DELETE', adId });
+                pushLog(`🗑️ 贊助廣告已刪除: ${adId}`);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true }));
+            } catch (err) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message }));
+            }
+        });
+        return;
+    }
 
     else if (req.url === '/help') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });

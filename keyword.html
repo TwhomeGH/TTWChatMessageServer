@@ -14,7 +14,15 @@
 
 <div class="max-w-5xl mx-auto space-y-8">
 
-    <h1 class="text-3xl font-bold text-center">📊 Keyword Stats</h1>
+    <div class="flex items-center justify-between">
+      <h1 class="text-3xl font-bold">📊 Keyword Stats</h1>
+      <nav class="flex gap-2 flex-wrap text-sm">
+        <a href="/" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">🏠 主控台</a>
+        <a href="/logViewer" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📋 日誌檔案</a>
+        <a href="/config" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">⚙️ 設定</a>
+        <a href="/sponsor" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📢 贊助廣告</a>
+      </nav>
+    </div>
 
     <!-- Top 10 -->
     <div class="bg-gray-800 rounded-2xl shadow-lg p-6">
@@ -34,7 +42,7 @@
 const top10El = document.getElementById('top10');
 const allEl = document.getElementById('all');
 
-const evt = new EventSource('http://192.168.0.102:3332/status/keyword');
+const evt = new EventSource('/status/keyword');
 
 evt.onmessage = (event) => {
     const msg = JSON.parse(event.data);
@@ -114,6 +122,12 @@ function fallbackCopy(text) {
     document.body.removeChild(textarea);
 
 }
+// 頁面隱藏時關閉 SSE，避免返回上一頁後連線殘留
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) evt.close();
+});
+window.addEventListener('beforeunload', () => evt.close());
+
 document.addEventListener("click", async (e) => {
     if (e.target.classList.contains("copy-btn")) {
         const text = e.target.dataset.text;

@@ -9,7 +9,15 @@
 <body class="bg-gray-900 text-gray-200 font-mono min-h-screen p-4">
 
   <div class="bg-gray-800 rounded-lg shadow-lg p-6 w-full h-[90vh] flex flex-col">
-    <h1 class="text-xl font-bold text-green-400 mb-4">系統日誌 Console</h1>
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <h1 class="text-xl font-bold text-green-400">系統日誌 Console</h1>
+      <nav class="flex gap-2 flex-wrap text-sm">
+        <a href="/logViewer" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📋 日誌檔案</a>
+        <a href="/config" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">⚙️ 設定</a>
+        <a href="/sponsor" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📢 贊助廣告</a>
+        <a href="/keyword" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📊 關鍵字</a>
+      </nav>
+    </div>
     
     <!-- 日誌區塊 -->
     <div class="bg-black rounded-lg p-4 flex-1 overflow-auto w-full">
