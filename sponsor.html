@@ -185,6 +185,10 @@ function render() {
             if (ad.lastSentAt) {
                 html += `<p class="text-xs text-gray-500 mt-1">最後發送: ${new Date(ad.lastSentAt).toLocaleString()}</p>`;
             }
+            if (ad.intervalMinutes > 0 && ad.enabled && ad.lastSentAt) {
+                const nextMs = new Date(ad.lastSentAt).getTime() + ad.intervalMinutes * 60 * 1000;
+                html += `<p class="text-xs mt-1 countdown" data-ad-id="${escapeHtml(ad.id)}" data-next="${nextMs}">⏳ 下次發送: 計算中...</p>`;
+            }
             html += `<p class="text-xs text-gray-600 mt-1">建立: ${new Date(ad.createdAt).toLocaleString()}</p>`;
             html += `</div>`;
             html += `<div class="flex flex-col gap-2 shrink-0">`;
@@ -356,7 +360,24 @@ function renderMessage(msg) {
         '<img src="$1" class="inline-block w-5 h-5 align-middle mx-0.5" title="$1">');
 }
 
+function updateCountdowns() {
+    const now = Date.now();
+    document.querySelectorAll('.countdown').forEach(el => {
+        const nextMs = parseInt(el.dataset.next);
+        if (!nextMs) return;
+        const diff = nextMs - now;
+        if (diff <= 0) {
+            el.textContent = '⏳ 即將發送...';
+        } else {
+            const m = Math.floor(diff / 60000);
+            const s = Math.floor((diff % 60000) / 1000);
+            el.textContent = `⏳ 下次發送: ${m}分${s}秒後`;
+        }
+    });
+}
+
 loadAds();
+setInterval(updateCountdowns, 1000);
 </script>
 </body>
 </html>
