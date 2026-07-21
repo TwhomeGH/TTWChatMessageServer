@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat → Socket Bridge
 // @namespace    pip-chat-bridge
-// @version      1.8
+// @version      1.9
 // @description  Listen TikTok live chat and forward to socket server
 // @author       Nuclear0709
 // @match        https://livecenter.tiktok.com/*
@@ -118,12 +118,9 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 
 
         console.log("📩 新訊息:", username, message);
 
-        console.log("等待0.8秒後送出")
-        setTimeout( ()=>{
-            console.log(`已送出 ${username} ${message} ${avatarUrl} 人數:${users.length} ${users}`)
-            sendSocketMessage(username, message, avatarUrl, null, true, users.length, users);
-            sendAudienceUpdate(users.length, users);
-        },800)
+        console.log(`已送出 ${username} ${message} ${avatarUrl} 人數:${users.length} ${users}`)
+        sendSocketMessage(username, message, avatarUrl, null, true, users.length, users);
+        sendAudienceUpdate(users.length, users);
     }
 
 
@@ -200,6 +197,15 @@ function getTopFanUsers() {
             }, 5000); // 每5秒更新一次頭號觀眾列表
 
         }, 3000); // 等頁面穩定
+    });
+
+    // 分頁從凍結/背景回到前景時，重新檢查並觸發頭號觀眾更新
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            console.log('liveCenter 分頁回到前景，重新整理觀眾資料');
+            const users = getTopFanUsers();
+            sendAudienceUpdate(users.length, users);
+        }
     });
 
 })();
