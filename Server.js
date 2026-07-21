@@ -1090,7 +1090,12 @@ const server = http.createServer((req, res) => {
             const data = fs.existsSync(SPONSOR_FILE)
                 ? JSON.parse(fs.readFileSync(SPONSOR_FILE, 'utf-8'))
                 : { settings: { reviewMode: 'none' }, users: {} };
-            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.writeHead(200, {
+                'Content-Type': 'application/json; charset=utf-8',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            });
             res.end(JSON.stringify(data));
         } catch (err) {
             res.writeHead(500, { 'Content-Type': 'application/json' });
