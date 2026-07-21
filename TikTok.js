@@ -778,6 +778,7 @@ loadSentMessages()
 const giftMapReady = loadGiftNameMap();
 loadEmojiMap();
 loadSponsorAds();
+resumeAdTimers();
 
 
 console.log("TikTok 直播間名稱:", tiktokName);
@@ -1067,6 +1068,41 @@ function clearAllAdTimers() {
     adTimers = {};
 }
 
+// 啟動時恢復有效廣告的定時器
+function resumeAdTimers() {
+    let count = 0;
+    const now = Date.now();
+    for (const uid of Object.keys(sponsorAds.users)) {
+        for (const ad of sponsorAds.users[uid].ads) {
+            if (!ad.enabled || !ad.intervalMinutes || ad.intervalMinutes < 15 || ad.approved === false) continue;
+            let delayMs;
+            if (ad.lastSentAt) {
+                const nextMs = new Date(ad.lastSentAt).getTime() + ad.intervalMinutes * 60 * 1000;
+                delayMs = Math.max(0, nextMs - now);
+                if (delayMs === 0) {
+                    // 已錯過發送時間，從現在起算下個週期
+                    delayMs = ad.intervalMinutes * 60 * 1000;
+                }
+            } else {
+                delayMs = ad.intervalMinutes * 60 * 1000;
+            }
+            adTimers[ad.id] = setTimeout(() => {
+                console.log(`⏰ 贊助廣告定時觸發(恢復): ${ad.overlayUser} - ${ad.message}`);
+                sendAdOverylayMessage(ad.overlayUser, ad.message, ad.iconURL || '', ad.useTTS);
+                sendBarkNotification(`⏰ 贊助廣告 (${ad.overlayUser})`, ad.message, ad.iconURL || '', SPONSOR_MANAGE_URL);
+                ad.lastSentAt = new Date().toISOString();
+                saveSponsorAds();
+                scheduleAdTimer(ad.id, uid, ad.intervalMinutes, {
+                    overlayUser: ad.overlayUser, text: ad.message, iconURL: ad.iconURL || '', useTTS: ad.useTTS
+                });
+            }, delayMs);
+            count++;
+            console.log(`⏰ 已恢復贊助廣告定時器: ${ad.id} (${Math.round(delayMs/60000)} 分鐘後首次發送)`);
+        }
+    }
+    if (count > 0) console.log(`⏰ 恢復了 ${count} 個贊助廣告定時器`);
+}
+
 /**
  * 觀眾人數更新
  *
@@ -1268,6 +1304,8 @@ if (isTK) {
         
         sendBarkNotification("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "");
         sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
+        // 連線成功後恢復贊助廣告定時器
+        resumeAdTimers();
         // fetchAndSyncGifts(); // eulerstream 需付費，禮物名稱由收到事件時即時翻譯
         
     }).catch(err => {
