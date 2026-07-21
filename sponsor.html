@@ -213,16 +213,11 @@ function render() {
             if (ad.lastSentAt) {
                 html += `<p class="text-xs text-gray-500 mt-1">最後發送: ${new Date(ad.lastSentAt).toLocaleString()}</p>`;
             }
-            if (ad.intervalMinutes > 0 && ad.enabled && serverRunning) {
-                const intervalMs = ad.intervalMinutes * 60 * 1000;
-                let nextMs;
-                if (ad.lastSentAt) {
-                    nextMs = new Date(ad.lastSentAt).getTime() + intervalMs;
-                    if (nextMs < Date.now()) nextMs = Date.now() + intervalMs;
-                } else {
-                    nextMs = Date.now() + intervalMs;
+            if (ad.intervalMinutes > 0 && ad.enabled && serverRunning && ad.lastSentAt) {
+                const nextMs = new Date(ad.lastSentAt).getTime() + ad.intervalMinutes * 60 * 1000;
+                if (nextMs > Date.now()) {
+                    html += `<p class="text-xs mt-1 countdown" data-next="${nextMs}">⏳ 下次發送: 計算中...</p>`;
                 }
-                html += `<p class="text-xs mt-1 countdown" data-next="${nextMs}">⏳ 下次發送: 計算中...</p>`;
             }
             html += `<p class="text-xs text-gray-600 mt-1">建立: ${new Date(ad.createdAt).toLocaleString()}</p>`;
             html += `</div>`;
