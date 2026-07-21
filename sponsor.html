@@ -139,7 +139,7 @@ async function checkServerStatus() {
 
 async function loadAds() {
     try {
-        const res = await fetch('/api/sponsor-ads?_=' + Date.now());
+        const res = await fetch('/api/sponsor-ads');
         currentData = await res.json();
         render();
     } catch (err) {
