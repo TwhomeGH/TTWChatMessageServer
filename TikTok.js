@@ -1549,7 +1549,13 @@ connection.on(WebcastEvent.FOLLOW,data =>{
 connection.on(WebcastEvent.CHAT, data => {
     logRawEvent('CHAT', data);
 
-    if (!data.content) return;
+    if (!data.content) {
+        if (data.emotes && data.emotes.length > 0) {
+            data.content = `[表情] ${data.emotes[0]?.emoteId || ''}`;
+        } else {
+            return;
+        }
+    }
 
     const uniqueKey = `chat_${data.user.nickname}_${data.content}`;
     if (alreadySent(uniqueKey)) return;
@@ -1651,6 +1657,7 @@ connection.on(WebcastEvent.EMOTE, (data) => {
     logRawEvent('EMOTE', data);
     const uniqueId = data.user?.displayId;
     const nickname = data.user?.nickname;
+    const profilePic = getTikTokProfilePic(data.user);
 
     var LOG_R = [ ]
 
@@ -1662,14 +1669,13 @@ connection.on(WebcastEvent.EMOTE, (data) => {
     }
 
     
-    const emoteId = data.emoteList[0]?.emoteId;
+    const emoteId = data.emoteList?.[0]?.emoteId;
     
     if (emoteId) {
         LOG_R.push(`Emote id: ${emoteId}`);
-        LOG_R.push(emoteList)
-        LOG_R.push("原始數據:")
-        LOG_R.push(data)
-
+        const mess = `發送了表情 ${emoteId}`;
+        sendSocketMessage(nickname, mess, profilePic, "", true, CacheUserNum, CacheUserList);
+        sendBarkNotification(nickname, mess, profilePic);
         writeLog("Default",LOG_R.join("\n"), "Emote表情")
     }
     
