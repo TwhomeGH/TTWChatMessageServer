@@ -142,6 +142,12 @@ const youtubePollIntervalS = parseInt(process.env.YOUTUBE_POLL_INTERVAL_S) || 30
 let client = null;
 let reconnectTimer = null;
 var isFirstSocketConnect = true;
+let socketRetryCount = 0;
+let socketRetryInterval = 15000; // 起始 15 秒
+const SOCKET_RETRY_THRESHOLD = 10; // 連續 10 次失敗後開始調大
+const SOCKET_RETRY_STEP = 5000;   // 每次增加 5 秒
+const SOCKET_RETRY_MAX = 300000;  // 最長 5 分鐘
+const SOCKET_RETRY_BASE = 15000;  // 基礎重連間隔 15 秒
 const pendingQueue = [];
 const MAX_PENDING = 50;
 
@@ -486,6 +492,9 @@ async function handleExit() {
 
     clearAllAdTimers();
     saveSponsorAds();
+    // 關閉時重置 Socket 重連狀態，下次啟動從 15s 開始
+    socketRetryCount = 0;
+    socketRetryInterval = SOCKET_RETRY_BASE;
 
     await saveSentMessages();
 
@@ -1200,6 +1209,9 @@ function connectSocket() {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
         }
+        // 連線成功 → 清空重連計數與間隔
+        socketRetryCount = 0;
+        socketRetryInterval = SOCKET_RETRY_BASE;
         flushPendingQueue();
         if (isFirstSocketConnect) {
             sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false,CacheUserNum,CacheUserList);
@@ -1234,15 +1246,17 @@ function connectSocket() {
     });
 
     client.on('close', () => {
-        console.log('⚠️ TCP Socket closed, reconnecting in 15s...');
-
         if (isEnd){
             console.log("程式已結束，停止重連");
             return; 
-        }// 如果是程式結束就不重連
+        }
 
-        console.log(`Socket 斷線，15 秒後自動重連`)
-        reconnectTimer = setTimeout(connectSocket, 15000);
+        socketRetryCount++;
+        if (socketRetryCount > SOCKET_RETRY_THRESHOLD) {
+            socketRetryInterval = Math.min(socketRetryInterval + SOCKET_RETRY_STEP, SOCKET_RETRY_MAX);
+        }
+        console.log(`⚠️ TCP Socket closed，${socketRetryCount} 次斷線，${Math.round(socketRetryInterval/1000)} 秒後重連`);
+        reconnectTimer = setTimeout(connectSocket, socketRetryInterval);
         
     });
 
