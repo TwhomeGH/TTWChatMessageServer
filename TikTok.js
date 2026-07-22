@@ -1046,10 +1046,14 @@ function scheduleAdTimer(adId, userId, intervalMinutes, adData) {
     if (!intervalMinutes || intervalMinutes < 15) return;
     const ms = intervalMinutes * 60 * 1000;
     adTimers[adId] = setTimeout(() => {
-        console.log(`⏰ 贊助廣告定時觸發: ${adData.overlayUser} - ${adData.text}`);
-        sendAdOverylayMessage(adData.overlayUser, adData.text, adData.iconURL, adData.useTTS);
-        sendBarkNotification(`⏰ 贊助廣告 (${adData.overlayUser})`, adData.text, adData.iconURL || '', SPONSOR_MANAGE_URL);
-        scheduleAdTimer(adId, userId, intervalMinutes, adData);
+        try {
+            console.log(`⏰ 贊助廣告定時觸發: ${adData.overlayUser} - ${adData.text}`);
+            sendAdOverylayMessage(adData.overlayUser, adData.text, adData.iconURL, adData.useTTS);
+            sendBarkNotification(`⏰ 贊助廣告 (${adData.overlayUser})`, adData.text, adData.iconURL || '', SPONSOR_MANAGE_URL);
+            scheduleAdTimer(adId, userId, intervalMinutes, adData);
+        } catch (err) {
+            console.error(`❌ 贊助廣告定時器錯誤: ${err.message}`);
+        }
     }, ms);
     const sponsor = sponsorAds.users[userId];
     if (sponsor) {
@@ -1057,6 +1061,7 @@ function scheduleAdTimer(adId, userId, intervalMinutes, adData) {
         if (ad) {
             ad.lastSentAt = new Date().toISOString();
             ad.intervalMinutes = intervalMinutes;
+            console.log(`📝 贊助廣告 lastSentAt 已更新: ${adId} -> ${ad.lastSentAt}`);
         }
         saveSponsorAds();
     }
@@ -1096,14 +1101,18 @@ function resumeAdTimers() {
                 delayMs = ad.intervalMinutes * 60 * 1000;
             }
             adTimers[ad.id] = setTimeout(() => {
-                console.log(`⏰ 贊助廣告定時觸發(恢復): ${ad.overlayUser} - ${ad.message}`);
-                sendAdOverylayMessage(ad.overlayUser, ad.message, ad.iconURL || '', ad.useTTS);
-                sendBarkNotification(`⏰ 贊助廣告 (${ad.overlayUser})`, ad.message, ad.iconURL || '', SPONSOR_MANAGE_URL);
-                ad.lastSentAt = new Date().toISOString();
-                saveSponsorAds();
-                scheduleAdTimer(ad.id, uid, ad.intervalMinutes, {
-                    overlayUser: ad.overlayUser, text: ad.message, iconURL: ad.iconURL || '', useTTS: ad.useTTS
-                });
+                try {
+                    console.log(`⏰ 贊助廣告定時觸發(恢復): ${ad.overlayUser} - ${ad.message}`);
+                    sendAdOverylayMessage(ad.overlayUser, ad.message, ad.iconURL || '', ad.useTTS);
+                    sendBarkNotification(`⏰ 贊助廣告 (${ad.overlayUser})`, ad.message, ad.iconURL || '', SPONSOR_MANAGE_URL);
+                    ad.lastSentAt = new Date().toISOString();
+                    saveSponsorAds();
+                    scheduleAdTimer(ad.id, uid, ad.intervalMinutes, {
+                        overlayUser: ad.overlayUser, text: ad.message, iconURL: ad.iconURL || '', useTTS: ad.useTTS
+                    });
+                } catch (err) {
+                    console.error(`❌ 贊助廣告恢復定時器錯誤: ${err.message}`);
+                }
             }, delayMs);
             count++;
             console.log(`⏰ 已恢復贊助廣告定時器: ${ad.id} (${Math.round(delayMs/60000)} 分鐘後首次發送)`);
