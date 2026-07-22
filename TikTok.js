@@ -1047,24 +1047,26 @@ function scheduleAdTimer(adId, userId, intervalMinutes, adData) {
     const ms = intervalMinutes * 60 * 1000;
     adTimers[adId] = setTimeout(() => {
         try {
+            const now = new Date().toISOString();
             console.log(`⏰ 贊助廣告定時觸發: ${adData.overlayUser} - ${adData.text}`);
             sendAdOverylayMessage(adData.overlayUser, adData.text, adData.iconURL, adData.useTTS);
             sendBarkNotification(`⏰ 贊助廣告 (${adData.overlayUser})`, adData.text, adData.iconURL || '', SPONSOR_MANAGE_URL);
+            // 在定時器 callback 內更新 lastSentAt，確保寫入的是實際觸發時間
+            const sponsor = sponsorAds.users[userId];
+            if (sponsor) {
+                const ad = sponsor.ads.find(a => a.id === adId);
+                if (ad) {
+                    ad.lastSentAt = now;
+                    ad.intervalMinutes = intervalMinutes;
+                    console.log(`📝 贊助廣告 lastSentAt 已更新: ${adId} -> ${now} (${new Date(now).toLocaleString()})`);
+                }
+                saveSponsorAds();
+            }
             scheduleAdTimer(adId, userId, intervalMinutes, adData);
         } catch (err) {
             console.error(`❌ 贊助廣告定時器錯誤: ${err.message}`);
         }
     }, ms);
-    const sponsor = sponsorAds.users[userId];
-    if (sponsor) {
-        const ad = sponsor.ads.find(a => a.id === adId);
-        if (ad) {
-            ad.lastSentAt = new Date().toISOString();
-            ad.intervalMinutes = intervalMinutes;
-            console.log(`📝 贊助廣告 lastSentAt 已更新: ${adId} -> ${ad.lastSentAt} (${new Date(ad.lastSentAt).toLocaleString()})`);
-        }
-        saveSponsorAds();
-    }
     console.log(`⏰ 已設定贊助廣告定時器: ${adId} (${Math.round(ms/60000)} 分鐘後, 預計 ${new Date(Date.now()+ms).toLocaleString()} 發送)`);
 }
 
