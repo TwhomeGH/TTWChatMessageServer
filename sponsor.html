@@ -115,6 +115,7 @@ body { font-family: system-ui, -apple-system, sans-serif; }
 <script>
 let currentData = { settings: { reviewMode: 'none' }, users: {} };
 let serverRunning = false;
+let prevServerRunning = false;
 
 async function checkServerStatus() {
     try {
@@ -133,8 +134,11 @@ async function checkServerStatus() {
         serverRunning = false;
         document.getElementById('serverStatus').textContent = '❌ 無法連線';
     }
-    // 狀態更新後重新渲染，讓 countdown 正確出現
-    if (currentData.users && Object.keys(currentData.users).length > 0) render();
+    // 狀態有變化才重新渲染，避免每 30 秒刷新重置倒數
+    if (serverRunning !== prevServerRunning) {
+        prevServerRunning = serverRunning;
+        if (currentData.users && Object.keys(currentData.users).length > 0) render();
+    }
 }
 
 async function loadAds() {
