@@ -1061,11 +1061,11 @@ function scheduleAdTimer(adId, userId, intervalMinutes, adData) {
         if (ad) {
             ad.lastSentAt = new Date().toISOString();
             ad.intervalMinutes = intervalMinutes;
-            console.log(`📝 贊助廣告 lastSentAt 已更新: ${adId} -> ${ad.lastSentAt}`);
+            console.log(`📝 贊助廣告 lastSentAt 已更新: ${adId} -> ${ad.lastSentAt} (${new Date(ad.lastSentAt).toLocaleString()})`);
         }
         saveSponsorAds();
     }
-    console.log(`⏰ 已設定贊助廣告定時器: ${adId} (每 ${intervalMinutes} 分鐘)`);
+    console.log(`⏰ 已設定贊助廣告定時器: ${adId} (${Math.round(ms/60000)} 分鐘後, 預計 ${new Date(Date.now()+ms).toLocaleString()} 發送)`);
 }
 
 function clearAdTimer(adId) {
@@ -1115,7 +1115,8 @@ function resumeAdTimers() {
                 }
             }, delayMs);
             count++;
-            console.log(`⏰ 已恢復贊助廣告定時器: ${ad.id} (${Math.round(delayMs/60000)} 分鐘後首次發送)`);
+            const eta = new Date(Date.now() + delayMs);
+            console.log(`⏰ 已恢復贊助廣告定時器: ${ad.id} (${Math.round(delayMs/60000)} 分鐘後, 預計 ${eta.toLocaleString()} 發送)`);
         }
     }
     if (count > 0) console.log(`⏰ 恢復了 ${count} 個贊助廣告定時器`);
