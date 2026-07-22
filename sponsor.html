@@ -203,15 +203,25 @@ function render() {
                 html += `<span class="text-xs bg-gray-700 px-2 py-0.5 rounded">單次</span>`;
             }
             html += `</div>`;
-            html += `<p class="text-gray-200 break-words">${renderMessage(ad.message)}</p>`;
-            if (ad.overlayUser) {
-                html += `<p class="text-xs text-gray-500 mt-1">顯示名稱: ${escapeHtml(ad.overlayUser)}</p>`;
-            }
+            // 訊息行：icon + 顯示名稱 + 訊息
+            html += `<div class="flex items-center gap-3 mt-2">`;
             if (ad.iconURL) {
-                html += `<div class="flex items-center gap-2 mt-1"><img src="${escapeHtml(ad.iconURL)}" class="w-5 h-5 rounded" onerror="this.style.display='none'"><span class="text-xs text-gray-500 truncate">${escapeHtml(ad.iconURL)}</span></div>`;
+                html += `<a href="${escapeHtml(ad.iconURL)}" target="_blank" rel="noopener"><img src="${escapeHtml(ad.iconURL)}" class="w-8 h-8 rounded-full shrink-0 cursor-pointer hover:ring-2 hover:ring-blue-500" title="點擊查看大圖"></a>`;
+            } else {
+                html += `<div class="w-8 h-8 rounded-full bg-gray-700 shrink-0 flex items-center justify-center text-xs text-gray-500" title="無圖示">📢</div>`;
             }
+            html += `<div class="flex-1 min-w-0">`;
+            html += `<div class="flex items-center gap-2 flex-wrap">`;
+            if (ad.overlayUser) {
+                html += `<span class="text-sm font-medium text-gray-200">${escapeHtml(ad.overlayUser)}</span>`;
+            }
+            html += `</div>`;
+            html += `<div class="text-gray-200 break-words mt-0.5">${renderMessage(ad.message)}</div>`;
+            html += `</div></div>`;
+            // 時間資訊列
+            html += `<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-2">`;
             if (ad.lastSentAt) {
-                html += `<p class="text-xs text-gray-500 mt-1">最後發送: ${new Date(ad.lastSentAt).toLocaleString()}</p>`;
+                html += `<span>最後發送: ${new Date(ad.lastSentAt).toLocaleString()}</span>`;
             }
             if (ad.intervalMinutes > 0 && ad.enabled && serverRunning) {
                 const intervalMs = ad.intervalMinutes * 60 * 1000;
@@ -222,9 +232,10 @@ function render() {
                 } else {
                     nextMs = Date.now() + intervalMs;
                 }
-                html += `<p class="text-xs mt-1 countdown" data-next="${nextMs}">⏳ 下次發送: 計算中...</p>`;
+                html += `<span class="countdown" data-next="${nextMs}">⏳ 下次發送: 計算中...</span>`;
             }
-            html += `<p class="text-xs text-gray-600 mt-1">建立: ${new Date(ad.createdAt).toLocaleString()}</p>`;
+            html += `<span>建立: ${new Date(ad.createdAt).toLocaleString()}</span>`;
+            html += `</div>`;
             html += `</div>`;
             html += `<div class="flex flex-col gap-2 shrink-0">`;
             if (status === 'pending') {
@@ -405,7 +416,7 @@ function renderMessage(msg) {
     if (!msg) return '';
     const escaped = escapeHtml(msg);
     return escaped.replace(/(https?:\/\/[^\s<>]+?\.(?:png|jpg|jpeg|gif|webp|svg)(?:\?[^\s<>]*)?)/gi,
-        '<img src="$1" class="inline-block w-5 h-5 align-middle mx-0.5" title="$1">');
+        '<a href="$1" target="_blank" rel="noopener"><img src="$1" class="inline-block w-5 h-5 align-middle mx-0.5 cursor-pointer hover:ring-2 hover:ring-blue-500 rounded" title="點擊查看大圖"></a>');
 }
 
 function updateCountdowns() {
