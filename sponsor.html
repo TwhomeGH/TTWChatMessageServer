@@ -231,8 +231,11 @@ function render() {
                 const intervalMs = ad.intervalMinutes * 60 * 1000;
                 let nextMs;
                 if (ad.lastSentAt) {
-                    nextMs = new Date(ad.lastSentAt).getTime() + intervalMs;
-                    if (nextMs < Date.now()) nextMs = Date.now() + intervalMs;
+                    const lastMs = new Date(ad.lastSentAt).getTime();
+                    // 從最後發送時間往後推算下一個未到的週期（不受多次 render 影響）
+                    const elapsed = Date.now() - lastMs;
+                    const missed = Math.floor(elapsed / intervalMs);
+                    nextMs = lastMs + (missed + 1) * intervalMs;
                 } else {
                     nextMs = Date.now() + intervalMs;
                 }
