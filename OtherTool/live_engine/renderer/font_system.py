@@ -22,7 +22,7 @@ class FontSystem:
 
     def clear_cache(self):
         for tex, _, _ in self.cache.values():
-            glDeleteTextures(tex)
+            glDeleteTextures([int(tex)])
         self.cache.clear()
         self._cache_order.clear()
 
@@ -94,5 +94,5 @@ class FontSystem:
         if len(self._cache_order) > self.MAX_CACHE_SIZE:
             old_key = self._cache_order.pop(0)
             old_tex, _, _ = self.cache.pop(old_key)
-            glDeleteTextures(old_tex)
+            glDeleteTextures([int(old_tex)])
         return tex, w, h
