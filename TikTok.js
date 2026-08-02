@@ -2383,7 +2383,7 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
                 }
             }
 
-            res = res.filter(e => e.toLowerCase() !== "tts") // 去掉 TTS
+            res = res.filter(e => { const l = e.toLowerCase(); return l !== "tts" && l !== "usetts"; }) // 去掉 TTS / useTTS
             const iconIdx = res.findIndex(e => e.startsWith("icon="));
             if (iconIdx !== -1) res.splice(iconIdx, 1); // 去掉 icon=xxx
             const userIdx = res.findIndex(e => e.startsWith("user="));

@@ -120,6 +120,16 @@ class Overlay(QOpenGLWidget):
             self.engine.set_content_gap(cfg.get("content_gap", 2))
             self.engine.set_message_ttl(cfg.get("message_ttl", 15))
             self.engine.set_fade_speed(cfg.get("fade_speed", 2))
+            self.engine.set_ad_overlay_duration(cfg.get("ad_overlay_duration", 10))
+            self.engine.set_ad_overlay_font_size(cfg.get("ad_overlay_font_size", 16))
+            self.engine.set_ad_avatar_size(cfg.get("ad_avatar_size", 40))
+            self.engine.set_ad_show_avatar(cfg.get("ad_show_avatar", True))
+            self.engine.set_ad_avatar_offset(cfg.get("ad_avatar_offset", 3))
+            self.engine.set_ad_bg_color(cfg.get("ad_bg_color", "#1E1E2E"))
+            self.engine.set_ad_accent_color(cfg.get("ad_accent_color", "#4C9EFF"))
+            self.engine.set_ad_user_color(cfg.get("ad_user_color", "#8AB4FF"))
+            self.engine.set_ad_text_color(cfg.get("ad_text_color", "#FFFFFF"))
+            self.engine.set_ad_bg_opacity(cfg.get("ad_bg_opacity", 88))
         screen = QtWidgets.QApplication.primaryScreen()
         screen_geometry = screen.geometry()
         screen_width = screen_geometry.width()
@@ -272,6 +282,7 @@ class Overlay(QOpenGLWidget):
 
         self.texture_loader.process_pending()
         self._render_header()
+        self._render_ad_overlay()
         self._render_chat_nodes()
 
     def _render_header(self):
@@ -301,6 +312,69 @@ class Overlay(QOpenGLWidget):
         glEnd()
         self.texture_loader.draw(tex, bg_x + 2, bg_y + 2, w, h)
 
+    def _render_ad_overlay(self):
+        ad = self.engine.ad_overlay
+        if ad is None:
+            return
+
+        eng = self.engine
+        font_size = eng.ad_overlay_font_size
+        x = 8
+        y = 8
+        box_w = self.width() - 16
+
+        lay = ad.layout(self.font_system, box_w, eng.ad_user_color, eng.ad_text_color, eng.ad_show_avatar)
+        box_h = lay["box_h"]
+        emoji_size = lay["emoji_size"]
+        outline = lay["outline_color"]
+        user_color = lay["user_color"]
+        text_color = lay["text_color"]
+
+        bg = eng.ad_bg_color
+        glColor4f(bg.redF(), bg.greenF(), bg.blueF(), eng.ad_bg_opacity)
+        glBegin(GL_QUADS)
+        glVertex2f(x, y)
+        glVertex2f(x + box_w, y)
+        glVertex2f(x + box_w, y + box_h)
+        glVertex2f(x, y + box_h)
+        glEnd()
+
+        accent = eng.ad_accent_color
+        glColor4f(accent.redF(), accent.greenF(), accent.blueF(), 0.9)
+        glLineWidth(2)
+        glBegin(GL_LINE_LOOP)
+        glVertex2f(x + 1, y + 1)
+        glVertex2f(x + box_w - 1, y + 1)
+        glVertex2f(x + box_w - 1, y + box_h - 1)
+        glVertex2f(x + 1, y + box_h - 1)
+        glEnd()
+
+        glColor4f(accent.redF(), accent.greenF(), accent.blueF(), 0.9)
+        glBegin(GL_QUADS)
+        glVertex2f(x + 1, y + 1)
+        glVertex2f(x + box_w - 1, y + 1)
+        glVertex2f(x + box_w - 1, y + 3)
+        glVertex2f(x + 1, y + 3)
+        glEnd()
+
+        if eng.ad_show_avatar:
+            icon_x, icon_y, icon_size = lay["icon"]
+            icon_tex = self.texture_loader.load_url_circular(ad.icon_url, icon_size)
+            if icon_tex:
+                self.texture_loader.draw(icon_tex, x + icon_x, y + icon_y, icon_size, icon_size)
+
+        for kind, content, ix, iy, iw, ih, mw in lay["items"]:
+            if kind in ("username", "text"):
+                color = user_color if kind == "username" else text_color
+                tex, tw, th = self.font_system.get_text_texture(
+                    content, color, max_width=mw, font_size=font_size, outline_color=outline
+                )
+                self.texture_loader.draw(tex, x + ix, y + iy, tw, th)
+            elif kind == "image":
+                emoji_tex = self.texture_loader.load_emoji(content, emoji_size)
+                if emoji_tex:
+                    self.texture_loader.draw(emoji_tex, x + ix, y + iy, iw, ih)
+
     def set_inline_font_size(self, size):
         self._inline_font_size = size
         for n in self.engine.nodes:
@@ -308,6 +382,8 @@ class Overlay(QOpenGLWidget):
 
     def set_font_face(self, family):
         self.font_system.set_font_family(family)
+        if self.engine:
+            self.engine.font_system.set_font_family(family)
 
     def set_content_gap(self, px):
         self._content_gap = px

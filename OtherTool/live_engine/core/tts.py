@@ -109,6 +109,31 @@ class TTSService:
 
         self._speak_async(text)
 
+    def speak_ad(self, user: str, message: str):
+        if not self.is_enabled:
+            return
+
+        filtered = filter_manager.process_message(message)
+        trimmed = filtered.strip()
+        if not trimmed:
+            return
+
+        max_length = self.max_len if self.max_len > 0 else 120
+
+        text_parts = []
+        if self.include_user and user:
+            text_parts.append(user)
+        if self.read_middle_name:
+            text_parts.append(self.read_middle_name)
+        text_parts.append(trimmed)
+
+        text = " ".join(text_parts)
+
+        if len(text) > max_length:
+            text = text[:max_length]
+
+        self._speak_async(text)
+
     def _speak_async(self, text: str):
         if not text:
             return

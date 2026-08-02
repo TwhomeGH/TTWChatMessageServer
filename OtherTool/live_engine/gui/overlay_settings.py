@@ -5,9 +5,10 @@ from ctypes import wintypes
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QTabWidget,
-    QSpinBox, QPushButton, QLabel, QCheckBox, QComboBox
+    QSpinBox, QPushButton, QLabel, QCheckBox, QComboBox, QColorDialog
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QColor
 
 from core.debug_log import log
 
@@ -17,7 +18,7 @@ CONFIG_PATH = os.path.join(
 
 
 def load_overlay_config() -> dict:
-    defaults = {"width": 420, "height": 400, "x": -1, "y": 50, "font_face": "Microsoft JhengHei", "font_size": 15, "spacing": 8, "content_gap": 2, "message_ttl": 15, "fade_speed": 2}
+    defaults = {"width": 420, "height": 400, "x": -1, "y": 50, "font_face": "Microsoft JhengHei", "font_size": 15, "spacing": 8, "content_gap": 2, "message_ttl": 15, "fade_speed": 2, "ad_overlay_duration": 10, "ad_overlay_font_size": 16, "ad_avatar_size": 40, "ad_show_avatar": True, "ad_avatar_offset": 3, "ad_bg_color": "#1E1E2E", "ad_accent_color": "#4C9EFF", "ad_user_color": "#8AB4FF", "ad_text_color": "#FFFFFF", "ad_bg_opacity": 88}
     try:
         if os.path.exists(CONFIG_PATH):
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
@@ -29,7 +30,7 @@ def load_overlay_config() -> dict:
 
 
 def save_overlay_config(data: dict):
-    merged = {"width": 420, "height": 400, "x": -1, "y": 50, "font_face": "Microsoft JhengHei", "font_size": 15, "spacing": 8, "content_gap": 2, "message_ttl": 15, "fade_speed": 2}
+    merged = {"width": 420, "height": 400, "x": -1, "y": 50, "font_face": "Microsoft JhengHei", "font_size": 15, "spacing": 8, "content_gap": 2, "message_ttl": 15, "fade_speed": 2, "ad_overlay_duration": 10, "ad_overlay_font_size": 16, "ad_avatar_size": 40, "ad_show_avatar": True, "ad_avatar_offset": 3, "ad_bg_color": "#1E1E2E", "ad_accent_color": "#4C9EFF", "ad_user_color": "#8AB4FF", "ad_text_color": "#FFFFFF", "ad_bg_opacity": 88}
     merged.update(data)
     os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
@@ -85,6 +86,38 @@ def _get_system_fonts():
     ]
 
 
+class _ColorButton(QPushButton):
+    colorChanged = pyqtSignal(QColor)
+
+    def __init__(self, color="#FFFFFF", parent=None):
+        super().__init__(parent)
+        self._color = QColor(color)
+        self._refresh_style()
+        self.clicked.connect(self._pick)
+
+    def _refresh_style(self):
+        name = self._color.name().upper()
+        fg = "#000" if self._color.lightness() > 128 else "#fff"
+        self.setText(name)
+        self.setStyleSheet(
+            f"background-color: {name}; color: {fg}; border: 1px solid #666;"
+        )
+
+    def color(self):
+        return self._color
+
+    def set_color(self, color):
+        self._color = QColor(color)
+        self._refresh_style()
+
+    def _pick(self):
+        c = QColorDialog.getColor(self._color, self, "選擇顏色")
+        if c.isValid():
+            self._color = c
+            self._refresh_style()
+            self.colorChanged.emit(c)
+
+
 class OverlaySettingsWindow(QWidget):
     def __init__(self, overlay=None, engine=None, on_open_tts=None):
         super().__init__()
@@ -109,6 +142,7 @@ class OverlaySettingsWindow(QWidget):
         self._build_spacing_tab(tabs)
         self._build_position_tab(tabs)
         self._build_timer_tab(tabs)
+        self._build_ad_tab(tabs)
 
         self._save_timer = QTimer()
         self._save_timer.setSingleShot(True)
@@ -244,6 +278,71 @@ class OverlaySettingsWindow(QWidget):
         layout.addStretch()
         tabs.addTab(tab, "計時器")
 
+    def _build_ad_tab(self, tabs):
+        tab = QWidget()
+        root = QVBoxLayout(tab)
+
+        basic_box = QGroupBox("基本")
+        basic_form = QFormLayout(basic_box)
+        self._ad_duration_spin = QSpinBox()
+        self._ad_duration_spin.setRange(3, 120)
+        self._ad_duration_spin.setValue(10)
+        self._ad_duration_spin.setSuffix(" 秒")
+        self._ad_duration_spin.valueChanged.connect(self._on_ad_duration_changed)
+        basic_form.addRow("顯示時長:", self._ad_duration_spin)
+        self._ad_font_size_spin = QSpinBox()
+        self._ad_font_size_spin.setRange(10, 30)
+        self._ad_font_size_spin.setValue(16)
+        self._ad_font_size_spin.setSuffix(" px")
+        self._ad_font_size_spin.valueChanged.connect(self._on_ad_font_size_changed)
+        basic_form.addRow("字體大小:", self._ad_font_size_spin)
+        self._ad_avatar_size_spin = QSpinBox()
+        self._ad_avatar_size_spin.setRange(20, 80)
+        self._ad_avatar_size_spin.setValue(40)
+        self._ad_avatar_size_spin.setSuffix(" px")
+        self._ad_avatar_size_spin.valueChanged.connect(self._on_ad_avatar_size_changed)
+        basic_form.addRow("頭像大小:", self._ad_avatar_size_spin)
+        self._ad_show_avatar_cb = QCheckBox("顯示頭像")
+        self._ad_show_avatar_cb.setChecked(True)
+        self._ad_show_avatar_cb.toggled.connect(self._on_ad_show_avatar_changed)
+        basic_form.addRow(self._ad_show_avatar_cb)
+        self._ad_avatar_offset_spin = QSpinBox()
+        self._ad_avatar_offset_spin.setRange(-20, 20)
+        self._ad_avatar_offset_spin.setValue(3)
+        self._ad_avatar_offset_spin.setSuffix(" px")
+        self._ad_avatar_offset_spin.setToolTip("正數=頭像下移，負數=上移")
+        self._ad_avatar_offset_spin.valueChanged.connect(self._on_ad_avatar_offset_changed)
+        basic_form.addRow("頭像垂直微調:", self._ad_avatar_offset_spin)
+        root.addWidget(basic_box)
+
+        style_box = QGroupBox("樣式")
+        style_form = QFormLayout(style_box)
+        self._ad_bg_color_btn = _ColorButton("#1E1E2E")
+        self._ad_bg_color_btn.colorChanged.connect(self._on_ad_bg_color_changed)
+        style_form.addRow("背景顏色:", self._ad_bg_color_btn)
+        self._ad_accent_color_btn = _ColorButton("#4C9EFF")
+        self._ad_accent_color_btn.colorChanged.connect(self._on_ad_accent_color_changed)
+        style_form.addRow("邊框/強調色:", self._ad_accent_color_btn)
+        self._ad_user_color_btn = _ColorButton("#8AB4FF")
+        self._ad_user_color_btn.colorChanged.connect(self._on_ad_user_color_changed)
+        style_form.addRow("用戶名顏色:", self._ad_user_color_btn)
+        self._ad_text_color_btn = _ColorButton("#FFFFFF")
+        self._ad_text_color_btn.colorChanged.connect(self._on_ad_text_color_changed)
+        style_form.addRow("訊息文字顏色:", self._ad_text_color_btn)
+        self._ad_bg_opacity_spin = QSpinBox()
+        self._ad_bg_opacity_spin.setRange(0, 100)
+        self._ad_bg_opacity_spin.setValue(88)
+        self._ad_bg_opacity_spin.setSuffix(" %")
+        self._ad_bg_opacity_spin.valueChanged.connect(self._on_ad_bg_opacity_changed)
+        style_form.addRow("背景不透明度:", self._ad_bg_opacity_spin)
+        reset_btn = QPushButton("恢復預設樣式")
+        reset_btn.clicked.connect(self._on_ad_style_reset)
+        style_form.addRow(reset_btn)
+        root.addWidget(style_box)
+
+        root.addStretch()
+        tabs.addTab(tab, "贊助橫幅")
+
     def _on_drag_toggled(self, state):
         self.toggle_drag_mode(state == Qt.CheckState.Checked.value)
 
@@ -303,6 +402,80 @@ class OverlaySettingsWindow(QWidget):
             self._engine.set_fade_speed(rate)
         self._save_timer.start(500)
 
+    def _on_ad_duration_changed(self, sec):
+        if self._engine:
+            self._engine.set_ad_overlay_duration(sec)
+        self._save_timer.start(500)
+
+    def _on_ad_font_size_changed(self, size):
+        if self._engine:
+            self._engine.set_ad_overlay_font_size(size)
+        self._save_timer.start(500)
+
+    def _on_ad_avatar_size_changed(self, size):
+        if self._engine:
+            self._engine.set_ad_avatar_size(size)
+        self._save_timer.start(500)
+
+    def _on_ad_show_avatar_changed(self, checked):
+        if self._engine:
+            self._engine.set_ad_show_avatar(checked)
+        self._save_timer.start(500)
+
+    def _on_ad_avatar_offset_changed(self, px):
+        if self._engine:
+            self._engine.set_ad_avatar_offset(px)
+        self._save_timer.start(500)
+
+    def _on_ad_bg_color_changed(self, color):
+        if self._engine:
+            self._engine.set_ad_bg_color(color.name())
+        self._save_timer.start(500)
+
+    def _on_ad_accent_color_changed(self, color):
+        if self._engine:
+            self._engine.set_ad_accent_color(color.name())
+        self._save_timer.start(500)
+
+    def _on_ad_user_color_changed(self, color):
+        if self._engine:
+            self._engine.set_ad_user_color(color.name())
+        self._save_timer.start(500)
+
+    def _on_ad_text_color_changed(self, color):
+        if self._engine:
+            self._engine.set_ad_text_color(color.name())
+        self._save_timer.start(500)
+
+    def _on_ad_bg_opacity_changed(self, pct):
+        if self._engine:
+            self._engine.set_ad_bg_opacity(pct)
+        self._save_timer.start(500)
+
+    def _on_ad_style_reset(self):
+        self._ad_avatar_size_spin.setValue(40)
+        self._ad_show_avatar_cb.setChecked(True)
+        self._ad_avatar_offset_spin.setValue(3)
+        self._ad_bg_color_btn.set_color("#1E1E2E")
+        self._ad_accent_color_btn.set_color("#4C9EFF")
+        self._ad_user_color_btn.set_color("#8AB4FF")
+        self._ad_text_color_btn.set_color("#FFFFFF")
+        self._ad_bg_opacity_spin.setValue(88)
+        self._apply_ad_style_to_engine()
+        self._save_timer.start(100)
+
+    def _apply_ad_style_to_engine(self):
+        if not self._engine:
+            return
+        self._engine.set_ad_avatar_size(self._ad_avatar_size_spin.value())
+        self._engine.set_ad_show_avatar(self._ad_show_avatar_cb.isChecked())
+        self._engine.set_ad_avatar_offset(self._ad_avatar_offset_spin.value())
+        self._engine.set_ad_bg_color(self._ad_bg_color_btn.color().name())
+        self._engine.set_ad_accent_color(self._ad_accent_color_btn.color().name())
+        self._engine.set_ad_user_color(self._ad_user_color_btn.color().name())
+        self._engine.set_ad_text_color(self._ad_text_color_btn.color().name())
+        self._engine.set_ad_bg_opacity(self._ad_bg_opacity_spin.value())
+
     def _on_size_changed(self):
         if self._overlay:
             self._overlay.resize_overlay(self._width_spin.value(), self._height_spin.value())
@@ -318,6 +491,16 @@ class OverlaySettingsWindow(QWidget):
             "content_gap": self._content_gap_spin.value(),
             "message_ttl": self._ttl_spin.value(),
             "fade_speed": self._fade_spin.value(),
+            "ad_overlay_duration": self._ad_duration_spin.value(),
+            "ad_overlay_font_size": self._ad_font_size_spin.value(),
+            "ad_avatar_size": self._ad_avatar_size_spin.value(),
+            "ad_show_avatar": self._ad_show_avatar_cb.isChecked(),
+            "ad_avatar_offset": self._ad_avatar_offset_spin.value(),
+            "ad_bg_color": self._ad_bg_color_btn.color().name(),
+            "ad_accent_color": self._ad_accent_color_btn.color().name(),
+            "ad_user_color": self._ad_user_color_btn.color().name(),
+            "ad_text_color": self._ad_text_color_btn.color().name(),
+            "ad_bg_opacity": self._ad_bg_opacity_spin.value(),
         }
         existing = load_overlay_config()
         data["x"] = existing.get("x", -1)
@@ -334,6 +517,16 @@ class OverlaySettingsWindow(QWidget):
         self._content_gap_spin.setValue(cfg.get("content_gap", 2))
         self._ttl_spin.setValue(cfg.get("message_ttl", 15))
         self._fade_spin.setValue(cfg.get("fade_speed", 2))
+        self._ad_duration_spin.setValue(cfg.get("ad_overlay_duration", 10))
+        self._ad_font_size_spin.setValue(cfg.get("ad_overlay_font_size", 16))
+        self._ad_avatar_size_spin.setValue(cfg.get("ad_avatar_size", 40))
+        self._ad_show_avatar_cb.setChecked(cfg.get("ad_show_avatar", True))
+        self._ad_avatar_offset_spin.setValue(cfg.get("ad_avatar_offset", 3))
+        self._ad_bg_color_btn.set_color(cfg.get("ad_bg_color", "#1E1E2E"))
+        self._ad_accent_color_btn.set_color(cfg.get("ad_accent_color", "#4C9EFF"))
+        self._ad_user_color_btn.set_color(cfg.get("ad_user_color", "#8AB4FF"))
+        self._ad_text_color_btn.set_color(cfg.get("ad_text_color", "#FFFFFF"))
+        self._ad_bg_opacity_spin.setValue(cfg.get("ad_bg_opacity", 88))
         self._update_pos_label(cfg.get("x", -1), cfg.get("y", 50))
 
     def _update_pos_label(self, x, y):

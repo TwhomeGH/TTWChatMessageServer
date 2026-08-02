@@ -8,5 +8,7 @@
   "spacing": 8,
   "content_gap": 2,
   "message_ttl": 15,
-  "fade_speed": 2
+  "fade_speed": 2,
+  "ad_overlay_duration": 30,
+  "ad_overlay_font_size": 22
 }

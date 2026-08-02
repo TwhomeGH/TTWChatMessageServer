@@ -23,9 +23,10 @@
 - **語音過濾器** — 排除/替換關鍵字、移除 URL、Emoji、純數字
 - **佇列管理** — 佇列上限、滿載策略（跳過/停止舊/清空）
 - **可調參數** — 語速、音量、語音、最小/最大字數
-- **疊加層設定 GUI** — 四頁分頁：基本（字型、大小）、間距、位置（拖曳）、計時器
+- **疊加層設定 GUI** — 五頁分頁：基本（字型、大小）、間距、位置（拖曳）、計時器、贊助橫幅（樣式自訂）
+- **贊助橫幅 (AdOverlay)** — 接收 `AdOverlay` 訊息顯示個性化贊助橫幅：圓形頭像 + 用戶名 + 內嵌表情與自動換行文字，可自訂背景/邊框/文字顏色、頭像大小與垂直微調、顯示時長；顯示期間聊天訊息自動讓路並暫停清理，結束後滑回原位
 - **字型選擇** — GDI EnumFontFamiliesW 列舉系統所有已安裝字型
-- **pytest 測試** — 核心邏輯 42 項單元測試
+- **pytest 測試** — 核心邏輯 57 項單元測試
 
 ---
 
@@ -49,6 +50,7 @@ live_engine/
 ├── core/
 │   ├── engine.py                # 主更新迴圈、佈局計算、計時器、觀眾人數
 │   ├── scene.py                 # ChatNode 資料模型（含分段解析）
+│   ├── ad_overlay.py            # AdOverlayNode 贊助橫幅資料模型與排版
 │   ├── emoji_parser.py          # 訊息中圖片 URL 擷取與分段
 │   ├── tts.py                   # edge-tts 語音朗讀服務
 │   ├── speech_filter.py         # 語音過濾器（關鍵字、URL、Emoji）
@@ -62,6 +64,13 @@ live_engine/
 │   └── settings_manager.py      # JSON 設定讀寫
 ├── network/
 │   └── socket_server.py         # TCP Server (port 9322)
+├── tests/
+│   ├── conftest.py              # QApplication fixture（供 QFontMetrics 測試）
+│   ├── test_emoji_parser.py
+│   ├── test_scene.py
+│   ├── test_overlay_config.py
+│   ├── test_speech_filter.py
+│   └── test_ad_overlay.py       # 贊助橫幅節點與引擎讓路/暫停清理測試
 ├── config/
 │   ├── tts_settings.json        # TTS 設定（執行期自動產生）
 │   ├── tts_filter.json          # 過濾規則（執行期自動產生）
@@ -105,7 +114,7 @@ python main.py --settings
 |------|------|
 | 雙擊圖示 | 開啟疊加層設定視窗 |
 | 右鍵 → 隱藏/顯示疊加層 | 切換疊層可見性 |
-| 右鍵 → 疊加層設定 | 基本、間距、位置、計時器四頁設定 |
+| 右鍵 → 疊加層設定 | 基本、間距、位置、計時器、贊助橫幅五頁設定 |
 | 右鍵 → TTS 朗讀設定 | 語音參數與佇列設定 |
 | 右鍵 → 過濾器設定 | 關鍵字過濾與排除規則 |
 | 右鍵 → 關閉 | 結束整個應用程式 |
@@ -116,7 +125,7 @@ python main.py --settings
 
 ## 疊加層設定 GUI
 
-可從系統托盤 → 疊加層設定 開啟，分為四個頁籤：
+可從系統托盤 → 疊加層設定 開啟，分為五個頁籤：
 
 **基本**
 - **寬度/高度** — 視窗尺寸調整（立即生效，自動儲存）
@@ -134,6 +143,11 @@ python main.py --settings
 
 **計時器**
 - 顯示目前計時（HH:MM:SS），可手動開始/停止/重設
+
+**贊助橫幅**
+- **基本** — 顯示時長（3~120 秒，預設 10）、字體大小（10~30px，預設 16）、頭像大小（20~80px，預設 40）、顯示頭像開關、頭像垂直微調（-20~+20px，正值下移）
+- **樣式** — 背景顏色、邊框/強調色、用戶名顏色、訊息文字顏色（顏色選擇器即時預覽）、背景不透明度（0~100%）、恢復預設樣式按鈕
+- 所有設定即時套用並存入 `config/overlay_settings.json`
 
 ---
 
@@ -155,6 +169,23 @@ Socket port **9322**，每行一個 JSON：
 | `isMain` | 是否為主訊息 |
 | `userNum` | 觀眾人數（顯示於疊層頂部） |
 | `userList` | 觀眾列表（有提供時顯示其長度為人數） |
+
+### 贊助橫幅 (AdOverlay)
+
+獨立於聊天訊息之外的贊助橫幅：
+
+```json
+{"type":"AdOverlay","user":"贊助者","text":"歡迎光臨 https://…/emoji.png","iconURL":"https://…/avatar.png","useTTS":true}
+```
+
+| 欄位 | 說明 |
+|------|------|
+| `user` | 橫幅顯示的用戶名稱 |
+| `text` | 橫幅文字（內嵌圖片 URL 自動解析為表情、自動換行；獨立 token `useTTS` 會被過濾不顯示） |
+| `iconURL` | 橫幅頭像圖片 URL（圓形裁切） |
+| `useTTS` | 是否朗讀此句（true 時朗讀，跳過最短長度限制） |
+
+收到時橫幅顯示於疊層頂部（header 下方），聊天訊息自動下移讓路並**暫停自動清理**（訊息 TTL 不計時、不因溢出被清除）；橫幅時間到後訊息滑回原位並恢復自動清理。設定於 設定 → 疊加層設定 → **贊助橫幅** 分頁。
 
 ### 圖片 URL 解析
 
@@ -208,7 +239,7 @@ Socket 連線/斷線時引擎會自動觸發計時器啟停，無需手動操作
 |------|------|
 | `config/tts_settings.json` | TTS 設定（GUI 修改後自動儲存） |
 | `config/tts_filter.json` | 過濾規則（GUI 修改後自動儲存） |
-| `config/overlay_settings.json` | 疊加層位置、大小、字型、間距（修改立即儲存） |
+| `config/overlay_settings.json` | 疊加層位置、大小、字型、間距、贊助橫幅時長與樣式（修改立即儲存） |
 
 設定修改後引擎會自動偵測並同步，無需重啟。
 
@@ -226,7 +257,7 @@ Socket 連線/斷線時引擎會自動觸發計時器啟停，無需手動操作
 python -m pytest tests/
 ```
 
-執行 42 項單元測試，涵蓋：
+執行 57 項單元測試，涵蓋：
 
 | 模組 | 測試內容 |
 |------|----------|
@@ -234,3 +265,4 @@ python -m pytest tests/
 | `test_speech_filter` | URL/Emoji 過濾、關鍵字封鎖與取代、數字過濾 |
 | `test_scene` | ChatNode 資料欄位、生命週期（alpha/dead） |
 | `test_overlay_config` | JSON 讀寫、預設值合併、遺漏鍵值處理 |
+| `test_ad_overlay` | 贊助橫幅欄位/表情解析/`useTTS` 過濾、佈局（讓路偏移、頭像隱藏、自訂顏色）、引擎 TTL 暫停與恢復 |

@@ -1,6 +1,7 @@
 import os
 from network.socket_server import message_queue
 from core.scene import ChatNode
+from core.ad_overlay import AdOverlayNode
 from core.tts import tts_service
 from core.emoji_parser import strip_image_urls
 
@@ -34,6 +35,18 @@ class Engine:
         self.message_ttl = 15
         self.fade_speed = 0.02
 
+        self.ad_overlay = None
+        self.ad_overlay_duration = 10
+        self.ad_overlay_font_size = 16
+        self.ad_avatar_size = 40
+        self.ad_show_avatar = True
+        self.ad_avatar_offset = 3
+        self.ad_bg_color = QColor("#1E1E2E")
+        self.ad_accent_color = QColor("#4C9EFF")
+        self.ad_user_color = QColor("#8AB4FF")
+        self.ad_text_color = QColor("#FFFFFF")
+        self.ad_bg_opacity = 0.88
+
     def set_node_spacing(self, px):
         self.node_spacing = max(0, int(px))
 
@@ -45,6 +58,36 @@ class Engine:
 
     def set_fade_speed(self, rate):
         self.fade_speed = max(0.001, min(0.5, rate / 100.0))
+
+    def set_ad_overlay_duration(self, seconds):
+        self.ad_overlay_duration = max(1, int(seconds))
+
+    def set_ad_overlay_font_size(self, size):
+        self.ad_overlay_font_size = max(8, int(size))
+
+    def set_ad_avatar_size(self, size):
+        self.ad_avatar_size = max(20, min(80, int(size)))
+
+    def set_ad_show_avatar(self, enabled):
+        self.ad_show_avatar = bool(enabled)
+
+    def set_ad_avatar_offset(self, px):
+        self.ad_avatar_offset = max(-20, min(20, int(px)))
+
+    def set_ad_bg_color(self, color):
+        self.ad_bg_color = QColor(color)
+
+    def set_ad_accent_color(self, color):
+        self.ad_accent_color = QColor(color)
+
+    def set_ad_user_color(self, color):
+        self.ad_user_color = QColor(color)
+
+    def set_ad_text_color(self, color):
+        self.ad_text_color = QColor(color)
+
+    def set_ad_bg_opacity(self, pct):
+        self.ad_bg_opacity = max(0, min(100, int(pct))) / 100.0
 
     def start_timer(self):
         self.stream_active = True
@@ -97,6 +140,12 @@ class Engine:
         else:
             return config.HEIGHT
 
+    def width(self):
+        if self.widget is not None:
+            return self.widget.width()
+        else:
+            return config.WIDTH
+
     def update(self):
         self._sync_tts_settings()
         while not message_queue.empty():
@@ -109,6 +158,10 @@ class Engine:
                     self._manual_control = False
                 elif event == "disconnected" and not self._manual_control:
                     self.stop_timer()
+                continue
+
+            if data.get("type") == "AdOverlay":
+                self._handle_ad_overlay(data)
                 continue
 
             if data.get("type") != "StreamMessage":
@@ -151,7 +204,25 @@ class Engine:
                         new_node.user, tts_text, data.get("isMain", True)
                     )
 
-        current_y = 50
+        if self.ad_overlay is not None:
+            if time.time() - self.ad_overlay.start_time > self.ad_overlay.duration:
+                self.ad_overlay = None
+            else:
+                self.ad_overlay.duration = self.ad_overlay_duration
+                self.ad_overlay.font_size = self.ad_overlay_font_size
+                self.ad_overlay.icon_size = self.ad_avatar_size
+                self.ad_overlay.avatar_offset = self.ad_avatar_offset
+                self.ad_overlay.invalidate_height()
+
+        banner_offset = 0
+        if self.ad_overlay is not None:
+            ad_h = self.ad_overlay.get_height(
+                self.font_system, self.width() - 16,
+                self.ad_user_color, self.ad_text_color, self.ad_show_avatar
+            )
+            banner_offset = ad_h + self.node_spacing
+
+        current_y = 50 + banner_offset
         for n in self.nodes:
             row_h = n.get_height(self.font_system, self.content_gap)
             n.target_y = current_y
@@ -160,7 +231,7 @@ class Engine:
         total_height = current_y - 50
         window_height = self.height()
         header_height = 30
-        if total_height > window_height - header_height:
+        if self.ad_overlay is None and total_height > window_height - header_height:
             overflow = total_height - (window_height - header_height) + 10
             for n in self.nodes:
                 n.target_y -= overflow
@@ -168,6 +239,30 @@ class Engine:
                     n.dead = True
 
         for n in self.nodes:
+            if self.ad_overlay is not None and not n.dead:
+                n.timestamp = time.time()
             n.update(ttl=self.message_ttl, fade=self.fade_speed)
 
         self.nodes = [n for n in self.nodes if n.alpha > 0]
+
+    def _handle_ad_overlay(self, data):
+        node = AdOverlayNode(data, font_size=self.ad_overlay_font_size)
+        node.duration = self.ad_overlay_duration
+        node.icon_size = self.ad_avatar_size
+        node.avatar_offset = self.ad_avatar_offset
+        self.ad_overlay = node
+
+        w = self.widget
+        if w is not None and hasattr(w, 'texture_loader'):
+            tl = w.texture_loader
+            if node.has_emoji:
+                emoji_size = int(self.ad_overlay_font_size * 1.6)
+                for seg in node.segments:
+                    if seg["type"] == "image":
+                        print(f"preloading ad emoji: {seg['url'][-40:]}")
+                        tl.preload_emoji(seg["url"], emoji_size)
+
+        if node.use_tts:
+            tts_text = strip_image_urls(node.text)
+            if tts_text:
+                tts_service.speak_ad(node.user, tts_text)
