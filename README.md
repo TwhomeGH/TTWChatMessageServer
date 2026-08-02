@@ -14,6 +14,14 @@
 
 ## 最近更新
 
+### G#clip 剪輯系統修正
+
+- **指令不再洩漏**：`G#clip` 處理後即 `return`，不再被當一般聊天訊息轉發、送去翻譯或寫入過濾器（原 log 中「G#clip」被當普通訊息送出 + 觸發翻譯 API）
+- **剪輯訊息品質**：原本回傳 `null FitPerfectSlothOSsloth-VOD2-62CGySUmMP8`（title 為空顯示 null、只有剪輯 ID），改為組合成可點擊的 `https://clips.twitch.tv/<id>` 連結；未指定標題時顯示預設文案
+- **權限限制**：原本任何人輸入 `G#clip` 都能建立剪輯，現在限縮為**主播本人、訂閱者或追隨者**
+- **錯誤處理**：新增 `createClip` 失敗的 catch，推送錯誤原因到疊加層與 log
+- **順帶修正 G#Ad 訂閱者路徑**：原本訂閱者發 `G#Ad` 時，非同步訂閱檢查讓原始指令文字洩漏進一般聊天，現改為 `await` 檢查並 `return`
+
 ### 贊助廣告頭像改進
 
 改進前後差異：
@@ -389,6 +397,29 @@ G#Ad 快來參加抽獎！ tts icon=https://i.imgur.com/xyz.png user=抽獎活�
 # 若管理頁面不在 localhost，需設為實際 IP
 SPONSOR_MANAGE_URL=http://localhost:3332/sponsor
 ```
+
+## 剪輯建立 (G#clip) 系統
+
+Twitch 聊天室中**主播本人、訂閱者或追隨者**輸入 `G#clip` 即可為目前直播建立一段 60 秒的剪輯：
+
+```txt
+# 建立剪輯（預設標題）
+G#clip
+
+# 建立剪輯並指定標題
+G#clip 這波操作太秀了
+```
+
+| 項目 | 說明 |
+|------|------|
+| 權限 | 主播本人、**訂閱者或追隨者**（非追隨者會被拒絕） |
+| 剪輯長度 | 60 秒（`createAfterDelay`） |
+| 回饋 | 建立成功後推送 `🎬 剪輯已建立：https://clips.twitch.tv/<id>` 到疊加層與 Bark；失敗則顯示錯誤原因 |
+| 指令消耗 | 處理後即 `return`，`G#clip` 不會被當成一般聊天訊息轉發或送去翻譯 |
+
+> 權限檢查順序：主播本人 → 訂閱者（`checkUserSubscription`）→ 追隨者（`getChannelFollowers`，需 `moderator:read:followers` scope，授權範本已含）。任一通過即可建立剪輯。
+
+> 剪輯內容是**指令發送時間點往前的一段直播畫面**（Twitch 剪輯機制），成功後由 Twitch 非同步處理，通常幾秒內即可在頻道的 Clips 頁面看到。
 
 ## 啟動服務
 

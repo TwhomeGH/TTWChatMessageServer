@@ -2330,16 +2330,10 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
             handleGAd(event);
             return;
         } else {
-            apiClient.subscriptions.checkUserSubscription(tuser, event.chatterId).then(subRes => {
-                if (subRes.isSubscribed) {
-                    console.log(`${event.chatterDisplayName} 是訂閱者（${subRes.tier || '?'} 方案, 累計 ${subRes.totalMonths || 0} 月），可以使用 G#Ad 指令`);
-                    handleGAd(event);
-                    return;
-                } else {
-                    console.log(`${event.chatterDisplayName} 不是訂閱者（API 回傳 isSubscribed=false），無法使用 G#Ad 指令`);
-                }
-
-            }).catch(err => {
+            let subRes;
+            try {
+                subRes = await apiClient.subscriptions.checkUserSubscription(tuser, event.chatterId);
+            } catch (err) {
                 console.error(`⚠️ [訂閱檢查] ${event.chatterDisplayName} 查詢失敗: ${err.message} (status=${err.response?.status || 'N/A'})`);
                 if (err.response?.status === 404) {
                     console.log(`   → 使用者 ${event.chatterDisplayName} 未訂閱此頻道（404）`);
@@ -2348,7 +2342,14 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
                 } else {
                     console.log(`   → 完整錯誤:`, err.response?.data?.message || err.message);
                 }
-            });
+            }
+            if (subRes?.isSubscribed) {
+                console.log(`${event.chatterDisplayName} 是訂閱者（${subRes.tier || '?'} 方案, 累計 ${subRes.totalMonths || 0} 月），可以使用 G#Ad 指令`);
+                handleGAd(event);
+            } else {
+                console.log(`${event.chatterDisplayName} 不是訂閱者（API 回傳 isSubscribed=false），無法使用 G#Ad 指令`);
+            }
+            return;
         }
 
     }
@@ -2512,6 +2513,27 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
     if (event.messageText.startsWith("G#clip")) {
 
+        // 權限檢查：主播本人、訂閱者或追隨者才能建剪輯
+        let authorized = event.chatterId === tuser;
+        if (!authorized) {
+            const subRes = await apiClient.subscriptions.checkUserSubscription(tuser, event.chatterId).catch(err => {
+                console.error(`⚠️ [G#clip] ${event.chatterDisplayName} 訂閱檢查失敗: ${err.message}`);
+                return { isSubscribed: false };
+            });
+            authorized = !!subRes?.isSubscribed;
+        }
+        if (!authorized) {
+            const follows = await apiClient.channels.getChannelFollowers(tuser, event.chatterId).catch(err => {
+                console.error(`⚠️ [G#clip] ${event.chatterDisplayName} 追隨檢查失敗: ${err.message}`);
+                return { data: [] };
+            });
+            authorized = follows.data.length > 0;
+        }
+        if (!authorized) {
+            console.log(`🚫 [G#clip] ${event.chatterDisplayName} 不是主播、訂閱者或追隨者，無法使用 G#clip 指令`);
+            return;
+        }
+
         let res = event.messageText.split(" ")
         res.shift() // 去掉 G#clip
 
@@ -2522,20 +2544,22 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
             duration:60,
             createAfterDelay:true,
             ...(title ? { title } : {})
-        }).then( (e)=>{
-            
+        }).then( (clipId)=>{
+            const clipURL = `https://clips.twitch.tv/${clipId}`
+            const displayText = title ? `🎬 剪輯已建立「${title}」：${clipURL}` : `🎬 剪輯已建立：${clipURL}`
 
-            console.log("剪輯資訊",e)
-            writeLog("Default",`[剪輯建立] ${title} ${e}`)
-            sendBarkNotification("剪輯建立",`${title} ${e}`,icon)
-            sendSocketMessage("剪輯建立",`${title} ${e}`,icon)
-            
-        
-            
-        }
-        )       
+            console.log("剪輯資訊", clipURL)
+            writeLog("Default",`[剪輯建立] ${displayText}`)
+            sendBarkNotification("剪輯建立", displayText, icon)
+            sendSocketMessage("剪輯建立", displayText, icon, '')
+        }).catch(err => {
+            const errMsg = `剪輯建立失敗: ${err.message} (status=${err.response?.status || 'N/A'})`
+            console.error(`❌ [G#clip] ${errMsg}`)
+            writeLog("Default", `[${errMsg}]`, "Error")
+            sendSocketMessage("剪輯建立", `❌ ${errMsg}`, icon, '')
+        })
 
-        
+        return; // 指令已處理，不再當一般訊息轉發
         
     }
 
