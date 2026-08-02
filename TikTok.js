@@ -24,7 +24,7 @@ import { TikTokLiveConnection, WebcastEvent,ControlEvent,ControlAction } from 't
 import { setupCustomSignServer, waitForSigner, setStreamerName } from './SignServer/index.js';
 import { type } from 'os';
 import Translate from "./TranslateTest.js"
-import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFilter } from "./MessageFilter.js"
+import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFilter, clearStats } from "./MessageFilter.js"
 import { replaceEmojis, loadEmojiMap, getEmojiMap } from "./EmojiMap.js"
 import { KickWebSocket } from 'kick-wss';
 import console from 'console';
@@ -399,25 +399,6 @@ async function backfillGiftTranslationsFromGiftList(giftList) {
 
 
 
-async function saveStatsToFile(filePath = './message_stats.json') {
-    const data = getAllMessageStatsSorted();
-
-    try {
-    console.log("訊息統計:", data);
-
-    console.log(`正在儲存訊息統計到 ${filePath}... 共 ${data.length} 條訊息統計`);
-
-    await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
-    console.log(`✅ 已進行儲存訊息統計到 ${filePath}`);
-
-    console.log(`📊 訊息統計:\n`, data.slice(0, 20)); // 顯示前 20 條統計
-
-    } catch (err) {
-        console.error('❌ 儲存訊息統計失敗:', err);
-    }
-    
-}
-
 async function saveSentMessages() {
     try {
         const data = Object.fromEntries(
@@ -498,11 +479,12 @@ async function handleExit() {
 
     await saveSentMessages();
 
-    await saveStatsToFile();
-    
-    console.log("✅ 優雅退出完成");
-
-    process.exit(0);
+    // 統計統一由 Server.js 管理：此處把最終快照回傳，讓 Server.js 合併進它自己的統計
+    const allStats = getAllMessageStatsSorted();
+    process.stdout.write(JSON.stringify({ type: "all", data: allStats }) + '\n', () => {
+        console.log("✅ 優雅退出完成");
+        process.exit(0);
+    });
 }
 
 process.on('unhandledRejection', (reason) => {
@@ -548,7 +530,7 @@ process.stdin.on('data', async (chunk) => {
 
             return;
         }
-         // 🔴 純文字指令
+        // 🔴 純文字指令
         if (msg === 'GETALL') {
             const allMessages = getAllMessageStatsSorted();
             
@@ -560,6 +542,13 @@ process.stdin.on('data', async (chunk) => {
                 data: allMessages
             }) + '\n');
 
+            return;
+        }
+
+        // 🔴 純文字指令：清空統計（由 Server.js 的 /keyword/clear 觸發）
+        if (msg === 'CLEAR') {
+            clearStats();
+            console.log('🗑️ 已清空關鍵字統計 (由 Server 要求)');
             return;
         }
 

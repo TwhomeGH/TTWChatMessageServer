@@ -27,6 +27,22 @@ export function getMessageStats() {
     return messageStats;
 }
 
+/**
+ * 將外部快照以 max 合併進統計 map（只增不減，不會覆蓋較高計數）
+ * 用於：Server.js 收到 TikTok.js 子進程的 all 快照時合併
+ * @param {Array<{message: string, count: number}>} entries
+ */
+export function mergeStats(entries) {
+    if (!Array.isArray(entries)) return;
+    for (const { message, count } of entries) {
+        if (!message || typeof count !== 'number') continue;
+        const current = messageStats.get(message) || 0;
+        if (count > current) {
+            messageStats.set(message, count);
+        }
+    }
+}
+
 export async function saveStatsToFile(filePath = STATS_FILE) {
     const data = getAllMessageStatsSorted();
     await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
@@ -270,6 +286,7 @@ export default {
     getTopMessages,
     getAllMessageStatsSorted,
     getMessageStats,
+    mergeStats,
     saveStatsToFile,
     loadStatsFromFile,
     clearStats,

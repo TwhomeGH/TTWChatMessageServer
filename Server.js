@@ -127,10 +127,36 @@ function processFilter({ user, message } = {}) {
     return messageFilter ? messageFilter.processFilter({ user, message }) : { user, message, blocked: false, modified: false };
 }
 
+function mergeWithFileStats(snapshot) {
+    const map = new Map();
+    try {
+        const raw = fs.readFileSync('./message_stats.json', 'utf-8');
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) {
+            for (const { message, count } of arr) {
+                if (message && typeof count === 'number') {
+                    map.set(message, Math.max(map.get(message) || 0, count));
+                }
+            }
+        }
+    } catch (err) {
+        // 檔案不存在或解析失敗 → 以目前快照為準
+    }
+    for (const { message, count } of snapshot) {
+        if (message && typeof count === 'number') {
+            map.set(message, Math.max(map.get(message) || 0, count));
+        }
+    }
+    return [...map.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([message, count]) => ({ message, count }));
+}
+
 function SaveCacheKeywordDataAll() {
-    cacheKeywordDataAll = getAllMessageStatsSorted();
-    fs.writeFileSync('./message_stats.json', JSON.stringify(cacheKeywordDataAll, null, 2));
-    pushLog('💾 已將所有關鍵字統計寫入 message_stats.json');
+    const merged = mergeWithFileStats(getAllMessageStatsSorted());
+    cacheKeywordDataAll = merged;
+    fs.writeFileSync('./message_stats.json', JSON.stringify(merged, null, 2));
+    pushLog('💾 已將所有關鍵字統計寫入 message_stats.json (合併檔案, 共 ' + merged.length + ' 條)', "Top", cacheKeywordDataTop);
 }
 
 
@@ -374,6 +400,7 @@ const server = http.createServer((req, res) => {
                     cacheKeywordDataTop = json.data
                 } else if (PType == "all") {
                     cacheKeywordDataAll = json.data
+                    if (messageFilter) messageFilter.mergeStats(json.data);
                 }
 
                 pushLog('📈 TikTok.js 回傳解析後:', json)
@@ -771,6 +798,25 @@ const server = http.createServer((req, res) => {
             res.writeHead(200, { 'Content-Type': 'text/html' });
             res.end(data);
         });
+    }
+
+    // 清空關鍵字統計
+    else if (req.url === '/keyword/clear' && req.method === 'POST') {
+        try {
+            if (messageFilter) messageFilter.clearStats();
+            fs.writeFileSync('./message_stats.json', '[]');
+            cacheKeywordDataTop = [];
+            cacheKeywordDataAll = [];
+            if (tiktokProcess && !tiktokProcess.killed) {
+                tiktokProcess.stdin.write('CLEAR\n');
+            }
+            pushLog('🗑️ 已清空關鍵字統計 (記憶體 + message_stats.json' + (tiktokProcess ? ' + TikTok.js' : '') + ')');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true }));
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+        }
     }
 
     // 登入 API
@@ -1476,8 +1522,7 @@ async function handleExit() {
     pushLog("Exiting...");
 
     if (!tiktokProcess) {
-        SaveCacheKeywordDataAll();
-        pushLog('TikTok.js not running, saved cache keyword data to file on exit');
+        pushLog('TikTok.js not running');
     }
     if (tiktokProcess) {
         const proc = tiktokProcess;
@@ -1497,6 +1542,9 @@ async function handleExit() {
         pushLog("✅ TikTok.js process exited");
 
     }
+
+    // 最終合併寫入一次，確保子進程最後回傳的快照也已納入
+    SaveCacheKeywordDataAll();
 
     pushLog("TikTok.js exited, exiting main process");
 

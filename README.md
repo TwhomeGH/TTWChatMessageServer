@@ -14,6 +14,13 @@
 
 ## 最近更新
 
+### 關鍵字統計集中管理改進
+
+- **統計統一由 Server.js 管理**：`message_stats.json` 現在只有 Server.js 會寫入，TikTok.js 不再直接寫檔，改為退出時把最終統計快照回傳給 Server.js 合併
+- **寫檔只增不減（max-merge）**：每次寫入前先讀取現有檔案，與記憶體統計做「取較大值」合併後才寫入，避免 TikTok.js 未運行時舊的快取快照覆蓋掉完整統計
+- **手動清空統計**：`/keyword` 頁面新增「🗑️ 清空統計」按鈕（POST `/keyword/clear`），一次清空記憶體、`message_stats.json`，並同步通知 TikTok.js 清空（若在運行）
+- **子進程統計併入**：Server.js 收到 TikTok.js 的 `all` 統計快照時會 `mergeStats()` 併入自己的統計 map，TikTok.js 直連收到的訊息也能納入統計
+
 ### Socket 重連改進
 
 - 新進階重連邏輯：前 10 次斷線固定 15 秒重連，之後每次 +5 秒，最多拉長到 5 分鐘
@@ -673,6 +680,11 @@ http://localhost:3332/sponsor
 
 以便後續加入封鎖關鍵字 或**自動禁言規則**裡
 
+> [!NOTE]
+> **統計資料由 Server.js 統一管理**，寫入 `message_stats.json` 時會與現有檔案做 **max-merge（只增不減）**，不會被舊快照覆蓋。
+> TikTok.js 在運行時其直連收到的訊息統計會同步併入；不在運行時 `/chat` 進來的訊息仍照常累計。
+> 頁面右上角「🗑️ 清空統計」可一鍵清空記憶體與檔案（含 TikTok.js 統計），清空後從頭累計。
+
 ### 2. 修改環境變數
 
 可快速修改 .env 的 BARK_API 與 SOCKET_API：
@@ -730,6 +742,9 @@ http://localhost:3332/config
 
 `MessageFilter.js` 為統一的訊息過濾與統計模組，同時被 `TikTok.js` 與 `Server.js` 引用，提供三種過濾動作：
 
+> [!NOTE]
+> **統計統一由 Server.js 管理**。Server.js 是 `message_stats.json` 的唯一寫入者，寫入時與現有檔案做 **max-merge（只增不減）**；TikTok.js 不再寫檔，改為將統計快照回傳給 Server.js 用 `mergeStats()` 併入。`/keyword` 頁面的「清空統計」按鈕（POST `/keyword/clear`）會清空記憶體、檔案並通知 TikTok.js 清空。
+
 ### 規則結構
 
 ```js
@@ -766,6 +781,21 @@ http://localhost:3332/config
 | `isFiltered(input)` | `checkFilter` 的布林捷徑 |
 | `getFilterRules()` | 取得當前所有規則 |
 | `clearFilterRules()` | 清除所有規則 |
+
+### 統計 API（訊息次數統計）
+
+| 函數 | 說明 |
+|------|------|
+| `recordMessageStat(message)` | 累加一則訊息的出現次數 |
+| `getTopMessages(limit)` | 取得出現次數最高的前 N 筆（預設 10） |
+| `getAllMessageStatsSorted()` | 取得全部統計，依次數由高到低排序 |
+| `mergeStats(entries)` | 以 **max-merge** 併入外部快照（只增不減，不覆蓋較高計數） |
+| `saveStatsToFile(filePath)` | 將統計寫入檔案（預設 `./message_stats.json`） |
+| `loadStatsFromFile(filePath)` | 從檔案載入統計進記憶體（預設 `./message_stats.json`） |
+| `clearStats()` | 清空所有統計（記憶體） |
+
+> [!NOTE]
+> `message_stats.json` 的實際寫入統一由 Server.js 負責（`SaveCacheKeywordDataAll` 會先與現有檔案做 max-merge 再寫入）；TikTok.js 在退出時僅將最終快照以 `{ type: "all", data }` 回傳給 Server.js 併入。
 
 ### 預設規則
 

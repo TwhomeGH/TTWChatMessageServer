@@ -26,7 +26,12 @@
 
     <!-- Top 10 -->
     <div class="bg-gray-800 rounded-2xl shadow-lg p-6">
-        <h2 class="text-xl font-semibold text-red-400 mb-4">🔥 Top 10 關鍵字</h2>
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-semibold text-red-400">🔥 Top 10 關鍵字</h2>
+            <button id="clearBtn" class="px-3 py-1.5 text-sm bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition">
+                🗑️ 清空統計
+            </button>
+        </div>
         <ul id="top10" class="space-y-2"></ul>
     </div>
 
@@ -127,6 +132,37 @@ document.addEventListener('visibilitychange', () => {
     if (document.hidden) evt.close();
 });
 window.addEventListener('beforeunload', () => evt.close());
+
+// 清空統計
+document.getElementById('clearBtn').addEventListener('click', async () => {
+    if (!confirm('確定要清空所有關鍵字統計嗎？此操作無法復原。')) return;
+
+    const btn = document.getElementById('clearBtn');
+    btn.disabled = true;
+    btn.textContent = '清空中...';
+
+    try {
+        const res = await fetch('/keyword/clear', { method: 'POST' });
+        const result = await res.json();
+        if (result.success) {
+            top10El.innerHTML = '<li class="text-gray-500">已清空</li>';
+            allEl.innerHTML = '<li class="text-gray-500">已清空</li>';
+            btn.textContent = '✅ 已清空';
+        } else {
+            btn.textContent = '❌ 失敗';
+            alert('清空失敗: ' + (result.error || '未知錯誤'));
+        }
+    } catch (err) {
+        btn.textContent = '❌ 失敗';
+        alert('清空失敗: ' + err.message);
+    }
+
+    setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = '🗑️ 清空統計';
+    }, 1500);
+});
+
 
 document.addEventListener("click", async (e) => {
     if (e.target.classList.contains("copy-btn")) {
