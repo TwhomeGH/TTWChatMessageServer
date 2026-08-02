@@ -164,6 +164,15 @@ class Engine:
                 self._handle_ad_overlay(data)
                 continue
 
+            if data.get("type") == "audience":
+                viewer = data.get("userNum")
+                viewer_list = data.get("userList")
+                if viewer is not None:
+                    self.viewer_count = int(viewer)
+                elif viewer_list is not None:
+                    self.viewer_count = len(viewer_list)
+                continue
+
             if data.get("type") != "StreamMessage":
                 continue
 
