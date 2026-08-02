@@ -293,6 +293,7 @@ class Overlay(QOpenGLWidget):
         if engine.viewer_count > 0:
             parts.append(f"\U0001f441 {engine.viewer_count}")
         if not parts:
+            self._header_bottom = 0
             return
         text = "  ".join(parts)
         tex, w, h = self.font_system.get_text_texture(
@@ -303,6 +304,7 @@ class Overlay(QOpenGLWidget):
         bg_y = 4
         bg_w = w + 4
         bg_h = h + 4
+        self._header_bottom = bg_y + bg_h
         glColor4f(0, 0, 0, 0.55)
         glBegin(GL_QUADS)
         glVertex2f(bg_x, bg_y)
@@ -320,7 +322,7 @@ class Overlay(QOpenGLWidget):
         eng = self.engine
         font_size = eng.ad_overlay_font_size
         x = 8
-        y = 8
+        y = getattr(self, "_header_bottom", 0) + 8
         box_w = self.width() - 16
 
         lay = ad.layout(self.font_system, box_w, eng.ad_user_color, eng.ad_text_color, eng.ad_show_avatar)
