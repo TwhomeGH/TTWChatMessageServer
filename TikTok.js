@@ -2400,6 +2400,17 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
             res.shift() // 去掉 G#Ad
 
+            // B: 無 icon= 時自動偵測訊息文字中的圖片網址作為頭像，並從文字中移除
+            if (!iconURL) {
+                const IMG_URL_RE = /^https?:\/\/\S+\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?[\w=&.,-]*)?$/i;
+                const imgIdx = res.findIndex(t => IMG_URL_RE.test(t));
+                if (imgIdx !== -1) {
+                    iconURL = res[imgIdx];
+                    res.splice(imgIdx, 1);
+                }
+            }
+            displayIcon = iconURL || icon
+
             let lastMsg=replaceEmojis(res.join(" "));
 
             const sponsor = getOrCreateSponsor(event.chatterId, event.chatterDisplayName);
@@ -2444,9 +2455,11 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
                 // ---- 更新現有廣告 ----
                 clearAdTimer(targetAd.id);
                 targetAd.message = lastMsg;
-                targetAd.iconURL = iconURL;
+                // A+C: 沒帶 icon= 時保留舊頭像，避免被覆寫成 null；有帶則存已解析值（含 Twitch fallback）
+                targetAd.iconURL = iconURL ? displayIcon : (targetAd.iconURL || icon);
                 targetAd.useTTS = useTTS;
-                targetAd.overlayUser = overlayUser;
+                // 沒帶 user= 時保留原 overlayUser
+                targetAd.overlayUser = userValue ? overlayUser : (targetAd.overlayUser || overlayUser);
                 targetAd.intervalMinutes = intervalMinutes;
                 targetAd.approved = approved;
                 targetAd.enabled = approved !== false;
@@ -2455,10 +2468,10 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
                 const adId = targetAd.id;
 
                 if (approved === true) {
-                    sendAdOverylayMessage(overlayUser, lastMsg, displayIcon, useTTS);
+                    sendAdOverylayMessage(targetAd.overlayUser, lastMsg, targetAd.iconURL || '', useTTS);
                     if (intervalMinutes >= 15) {
                         scheduleAdTimer(adId, event.chatterId, intervalMinutes, {
-                            overlayUser, text: lastMsg, iconURL: displayIcon, useTTS
+                            overlayUser: targetAd.overlayUser, text: lastMsg, iconURL: targetAd.iconURL || '', useTTS
                         });
                     }
                 }
@@ -2473,7 +2486,7 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
                 }
                 const adId = `ad_${event.chatterId}_${Date.now()}`;
                 const adRecord = {
-                    id: adId, message: lastMsg, iconURL, useTTS, overlayUser,
+                    id: adId, message: lastMsg, iconURL: displayIcon, useTTS, overlayUser,
                     intervalMinutes, approved, enabled: approved !== false,
                     createdAt: now, updatedAt: now,
                     lastSentAt: approved === true ? now : null
