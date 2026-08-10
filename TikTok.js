@@ -973,6 +973,7 @@ var TikTokViewerCount = 0
 var TwitchViewerCount = 0
 var OdyseeViewerCount = 0
 var YoutubeViewerCount = 0
+var lastAutoClipSampleAt = 0 // AutoClip 觀眾採樣限流用
 
 
 function sendAdOverylayMessage(user,text,iconURL,useTTS){
@@ -1148,6 +1149,11 @@ function updateCombinedViewerCount() {
     if (isYoutube) combined += YoutubeViewerCount || 0
     CacheUserNum = combined
     sendAudienceUpdate()
+    // AutoClip：餵入「全平台總合」觀眾數（限流，避免過度採樣）
+    if (autoClip && Date.now() - lastAutoClipSampleAt >= 5000) {
+        lastAutoClipSampleAt = Date.now();
+        autoClip.updateViewers(combined);
+    }
 }
 
 /**
@@ -1657,6 +1663,8 @@ connection.on(WebcastEvent.CHAT, data => {
     comment = replaceEmojis(comment);
 
     recordMessageStat(comment);
+
+    autoClip?.onChatMessage(comment);
 
     sendBarkNotification(nickname, comment,iconn);
 
@@ -2285,7 +2293,6 @@ function twitchViewCache() {
             console.log(`📊 Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`);
             writeLog("Default", `Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`, "Twitch View");
             updateCombinedViewerCount();
-            autoClip?.updateViewers(TwitchViewerCount);
         }
     }).catch(err => {
         console.error("⚠️ Twitch 觀眾數取得失敗:", err.message);
@@ -2950,6 +2957,8 @@ async function startKickChat() {
 
         recordMessageStat(tMsg);
 
+        autoClip?.onChatMessage(tMsg);
+
         console.info(`📢 發送 Bark 通知: ${tUser} - ${tMsg}`);
         sendBarkNotification(tUser, tMsg, avatar);
 
@@ -3122,6 +3131,8 @@ function connectOdyseeChat(claimId, channelName) {
                 }
 
                 recordMessageStat(tMsg)
+
+                autoClip?.onChatMessage(tMsg)
 
                 sendBarkNotification(tUser, tMsg, avatar)
 
@@ -3424,6 +3435,7 @@ function connectYoutubeChat(liveChatId, videoId, channelName) {
                             }
 
                             recordMessageStat(tMsg)
+                            autoClip?.onChatMessage(tMsg)
                             sendBarkNotification(tUser, tMsg, avatar)
 
                             // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
