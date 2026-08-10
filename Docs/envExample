@@ -5,6 +5,22 @@ CLIENT_ID=Twitch ClientID 你的AppID
 CLIENT_SECRET=Twitch ClientID 你的AppSecret
 TWITCH_USER_NAME=你的Twitch頻道 用戶名
 
+# ─── Twitch 自動剪輯 (AutoClip) ──────────────────────
+# 以頻道自己的近期平均為基準，觀眾數/聊天速率相對平常出現高峰時自動建立剪輯
+# score = W_VIEWERS·(觀眾/基準) + W_MSG·(訊息速率/基準)，超過門檻即觸發
+# 需同時 isTwitch=1 才生效
+# AUTO_CLIP_ENABLED=0
+# AUTO_CLIP_W_VIEWERS=0.5
+# AUTO_CLIP_W_MSG=0.5
+# AUTO_CLIP_SCORE_THRESHOLD=1.8
+# AUTO_CLIP_BASELINE_WINDOW_MIN=30
+# AUTO_CLIP_RATE_WINDOW_MIN=5
+# AUTO_CLIP_WINDOW_MIN=30
+# AUTO_CLIP_FLOOR_VIEWERS=2
+# AUTO_CLIP_FLOOR_MSG_PER_MIN=0.3
+# AUTO_CLIP_COOLDOWN_MIN=15
+# AUTO_CLIP_TITLE_PREFIX=人氣高峰
+
 # ─── TikTok ──────────────────────────────────────────
 TIKTOK_NAME=你的TikTok 用戶名
 

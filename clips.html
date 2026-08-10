@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="utf-8">
+    <title>剪輯歷史</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-900 text-gray-100 min-h-screen p-6">
+
+<div class="max-w-5xl mx-auto space-y-8">
+
+    <div class="flex items-center justify-between">
+      <h1 class="text-3xl font-bold">🎬 剪輯歷史</h1>
+      <nav class="flex gap-2 flex-wrap text-sm">
+        <a href="/" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">🏠 主控台</a>
+        <a href="/logViewer" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📋 日誌檔案</a>
+        <a href="/keyword" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📊 關鍵字</a>
+        <a href="/sponsor" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📢 贊助廣告</a>
+        <a href="/config" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">⚙️ 設定</a>
+      </nav>
+    </div>
+
+    <!-- 標題列 -->
+    <div class="bg-gray-800 rounded-2xl shadow-lg p-6">
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="text-xl font-semibold text-purple-400">📜 已建立的剪輯 <span id="count" class="text-sm text-gray-400"></span></h2>
+            <div class="flex gap-2">
+                <button id="refreshBtn" class="px-3 py-1.5 text-sm bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition">🔄 重新整理</button>
+                <button id="clearBtn" class="px-3 py-1.5 text-sm bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition">🗑️ 清空歷史</button>
+            </div>
+        </div>
+        <p class="text-xs text-gray-500 mb-4">
+            Twitch 的 embed 只接受 <code class="bg-gray-700 px-1 rounded">localhost</code>、<code class="bg-gray-700 px-1 rounded">127.0.0.1</code> 或**真實網域**當
+            <code class="bg-gray-700 px-1 rounded">parent</code>，私人 IP（如 192.168.x.x）會被拒絕。
+            複製的 iframe 已自動帶入 <code class="bg-gray-700 px-1 rounded" id="hostnameLabel"></code>（私人 IP 會改用 localhost）；
+            若要嵌到其他網站，需把 parent 改成該網站的網域。
+        </p>
+        <ul id="clipList" class="space-y-3"></ul>
+        <div id="empty" class="hidden text-center text-gray-500 py-8">尚無剪輯紀錄</div>
+    </div>
+
+</div>
+
+<!-- 預覽 Modal -->
+<div id="previewModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 p-4">
+    <div class="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-3xl">
+            <div class="flex items-center justify-between px-4 py-2 border-b border-gray-700">
+                <h3 class="text-lg font-bold text-gray-100 truncate" id="previewTitle">剪輯預覽</h3>
+                <button id="previewClose" class="text-gray-400 hover:text-white text-2xl px-2 leading-none">×</button>
+            </div>
+            <div class="p-4">
+                <div class="relative w-full" style="padding-top:56.25%">
+                    <iframe id="previewFrame" class="absolute inset-0 w-full h-full rounded-lg" frameborder="0"
+                        scrolling="no" allow="autoplay; fullscreen; picture-in-picture"></iframe>
+                </div>
+                <div class="flex gap-2 mt-3 flex-wrap items-center">
+                    <a id="previewOpen" target="_blank" rel="noopener"
+                        class="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-lg">↗ 在 Twitch 開啟</a>
+                    <button id="previewEmbedBtn" class="px-3 py-1.5 text-sm bg-teal-600/80 hover:bg-teal-500 text-white rounded-lg">複製 Embed 網址</button>
+                    <span class="text-xs text-gray-400" id="previewParentInfo"></span>
+                </div>
+            </div>
+    </div>
+</div>
+
+<script>
+const clipListEl = document.getElementById('clipList');
+const emptyEl = document.getElementById('empty');
+const countEl = document.getElementById('count');
+
+function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+}
+
+function fmtTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return iso;
+    return d.toLocaleString('zh-TW');
+}
+
+function sourceBadge(src) {
+    if (src === 'auto') return '<span class="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/40">自動</span>';
+    return '<span class="text-xs px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40">手動</span>';
+}
+
+// 無標題時從剪輯 slug 擷取自動生成名稱（第一個 - 前的部分）
+function clipName(c) {
+    if (c.title) return c.title;
+    const slug = String(c.id || '').split('-')[0];
+    return slug && slug !== String(c.id) ? slug : '';
+}
+
+function render(clips) {
+    clipListEl.innerHTML = '';
+    countEl.textContent = clips.length ? `(${clips.length} 筆)` : '';
+    emptyEl.classList.toggle('hidden', clips.length > 0);
+
+    clips.forEach((c, i) => {
+        const li = document.createElement('li');
+        li.className = 'bg-gray-700/50 rounded-lg px-4 py-3 flex flex-wrap items-center gap-3';
+        const name = clipName(c);
+        li.innerHTML = `
+            <div class="flex-1 min-w-[200px]">
+                <div class="font-semibold text-purple-300 truncate">${esc(name) || '<span class="text-gray-400">(未命名)</span>'}</div>
+                <div class="text-xs text-gray-400 truncate">
+                    ${esc(fmtTime(c.createdAt))} &nbsp;·&nbsp;
+                    <a href="${esc(c.url)}" target="_blank" rel="noopener" class="text-blue-400 hover:underline">${esc(c.url)}</a>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 ml-auto">
+                ${sourceBadge(c.source)}
+                <button class="preview-btn px-2 py-1 text-xs bg-cyan-600/80 hover:bg-cyan-500 text-white rounded" data-id="${esc(c.id)}">▶ 預覽</button>
+                <button class="copy-btn px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 text-white rounded" data-copy="${esc(c.url)}">複製連結</button>
+                <button class="embed-btn px-2 py-1 text-xs bg-teal-600/80 hover:bg-teal-500 text-white rounded" data-id="${esc(c.id)}">複製 Embed</button>
+                <button class="embed-iframe-btn px-2 py-1 text-xs bg-emerald-600/80 hover:bg-emerald-500 text-white rounded" data-id="${esc(c.id)}">複製 iframe</button>
+                <button class="del-btn px-2 py-1 text-xs bg-red-600/80 hover:bg-red-500 text-white rounded" data-id="${esc(c.id)}" title="刪除此筆紀錄">刪除</button>
+            </div>
+        `;
+        clipListEl.appendChild(li);
+    });
+}
+
+async function load() {
+    try {
+        const res = await fetch('/clips/data');
+        const result = await res.json();
+        if (result.success) render(result.clips || []);
+    } catch (err) {
+        clipListEl.innerHTML = `<li class="text-red-400">載入失敗: ${esc(err.message)}</li>`;
+    }
+}
+
+function fallbackCopy(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    document.body.appendChild(textarea);
+    textarea.select();
+    try { document.execCommand('copy'); } catch (err) { console.error('複製失敗:', err); }
+    document.body.removeChild(textarea);
+}
+
+async function copyText(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch (err) {
+        fallbackCopy(text);
+        return false;
+    }
+}
+
+async function copyWithFeedback(btn, text, okText) {
+    const orig = btn.textContent;
+    await copyText(text);
+    btn.textContent = okText;
+    setTimeout(() => (btn.textContent = orig), 1000);
+}
+
+// Twitch 只接受 localhost / loopback / 真實網域當 parent，私人 IP（192.168.x、10.x、172.16-31.x）會被拒絕
+function isPrivateIp(host) {
+    return /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host);
+}
+
+// 目前頁面主機是否為「Twitch 接受」的 host（localhost / loopback / 真實網域）
+function hostIsEmbeddable() {
+    const h = (location.hostname || '').toLowerCase();
+    return !h || h === 'localhost' || h === '127.0.0.1' || h === '::1' || !isPrivateIp(h);
+}
+
+// 要填入 iframe 的 parent 清單：真實網域 + localhost（去重）；私人 IP 一律只用 localhost
+function getEmbedParents() {
+    const h = (location.hostname || '').toLowerCase();
+    const set = new Set();
+    if (h && !isPrivateIp(h) && h !== 'localhost' && h !== '127.0.0.1' && h !== '::1') set.add(h);
+    set.add('localhost');
+    return [...set];
+}
+
+// 產生 embed iframe
+function makeIframeCode(id) {
+    const query = getEmbedParents().map(p => `parent=${encodeURIComponent(p)}`).join('&');
+    return `<iframe src="https://clips.twitch.tv/embed?clip=${encodeURIComponent(id)}&${query}" height="378" width="620" frameborder="0" scrolling="no" allowfullscreen="true"></iframe>`;
+}
+
+// 事件委派：複製按鈕
+document.addEventListener('click', async (e) => {
+    const urlBtn = e.target.closest('.copy-btn');
+    if (urlBtn) { copyWithFeedback(urlBtn, urlBtn.dataset.copy, '✅ 已複製'); return; }
+
+    const embedBtn = e.target.closest('.embed-btn');
+    if (embedBtn) {
+        const parents = getEmbedParents();
+        const query = parents.map(p => `parent=${encodeURIComponent(p)}`).join('&');
+        copyWithFeedback(embedBtn, `https://clips.twitch.tv/embed?clip=${embedBtn.dataset.id}&${query}`, '✅ 已複製');
+        return;
+    }
+
+    const iframeBtn = e.target.closest('.embed-iframe-btn');
+    if (iframeBtn) {
+        const code = makeIframeCode(iframeBtn.dataset.id);
+        copyWithFeedback(iframeBtn, code, '✅ 已複製');
+        return;
+    }
+
+    const previewBtn = e.target.closest('.preview-btn');
+    if (previewBtn) {
+        const id = previewBtn.dataset.id;
+        const host = (location.hostname || '').toLowerCase();
+        const embeddable = hostIsEmbeddable();
+        const parent = embeddable && !isPrivateIp(host) ? host : 'localhost';
+        const frame = document.getElementById('previewFrame');
+        frame.src = `https://clips.twitch.tv/embed?clip=${encodeURIComponent(id)}&parent=${parent}&autoplay=true`;
+        document.getElementById('previewTitle').textContent = id;
+        document.getElementById('previewOpen').href = `https://clips.twitch.tv/${encodeURIComponent(id)}`;
+        document.getElementById('previewEmbedBtn').dataset.embed = `https://clips.twitch.tv/embed?clip=${encodeURIComponent(id)}&parent=${parent}`;
+        document.getElementById('previewParentInfo').textContent = !embeddable
+            ? `⚠️ 目前以 ${host} 開啟，Twitch 不接受私人 IP 當 parent，預覽可能無法顯示。請改用 http://localhost:3332 開啟本頁。`
+            : `parent=${parent}（需與本頁網域一致）`;
+        document.getElementById('previewModal').classList.remove('hidden');
+        return;
+    }
+
+    const delBtn = e.target.closest('.del-btn');
+    if (delBtn) {
+        const id = delBtn.dataset.id;
+        if (!confirm(`確定要刪除這筆剪輯紀錄嗎？\n${id}`)) return;
+        delBtn.disabled = true;
+        delBtn.textContent = '刪除中...';
+        try {
+            const res = await fetch('/clips/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            });
+            const result = await res.json();
+            if (result.success) {
+                if (result.clips) render(result.clips);
+                else load();
+                delBtn.textContent = '✅ 已刪除';
+            } else {
+                delBtn.textContent = '❌ 失敗';
+                alert('刪除失敗: ' + (result.error || '未知錯誤'));
+                delBtn.disabled = false;
+            }
+        } catch (err) {
+            delBtn.textContent = '❌ 失敗';
+            alert('刪除失敗: ' + err.message);
+            delBtn.disabled = false;
+        }
+        setTimeout(() => {
+            delBtn.disabled = false;
+            delBtn.textContent = '刪除';
+        }, 1500);
+    }
+});
+
+// 清空歷史
+document.getElementById('clearBtn').addEventListener('click', async () => {
+    if (!confirm('確定要清空所有剪輯歷史嗎？此操作無法復原。')) return;
+
+    const btn = document.getElementById('clearBtn');
+    btn.disabled = true;
+    btn.textContent = '清空中...';
+
+    try {
+        const res = await fetch('/clips/clear', { method: 'POST' });
+        const result = await res.json();
+        if (result.success) {
+            render([]);
+            btn.textContent = '✅ 已清空';
+        } else {
+            btn.textContent = '❌ 失敗';
+            alert('清空失敗: ' + (result.error || '未知錯誤'));
+        }
+    } catch (err) {
+        btn.textContent = '❌ 失敗';
+        alert('清空失敗: ' + err.message);
+    }
+
+    setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = '🗑️ 清空歷史';
+    }, 1500);
+});
+
+// 重新整理
+document.getElementById('refreshBtn').addEventListener('click', load);
+
+// 預覽 Modal 關閉
+const previewModal = document.getElementById('previewModal');
+const previewFrame = document.getElementById('previewFrame');
+function closePreview() {
+    previewModal.classList.add('hidden');
+    previewFrame.src = '';
+}
+document.getElementById('previewClose').addEventListener('click', closePreview);
+previewModal.addEventListener('click', (e) => {
+    if (e.target === previewModal) closePreview();
+});
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !previewModal.classList.contains('hidden')) closePreview();
+});
+document.getElementById('previewEmbedBtn').addEventListener('click', async (e) => {
+    await copyText(e.currentTarget.dataset.embed || '');
+    e.currentTarget.textContent = '✅ 已複製';
+    setTimeout(() => (e.currentTarget.textContent = '複製 Embed 網址'), 1000);
+});
+
+load();
+setInterval(load, 5000); // 每 5 秒自動更新
+
+document.getElementById('hostnameLabel').textContent = getEmbedParents().join('、') || 'localhost';
+</script>
+
+</body>
+</html>

@@ -819,6 +819,83 @@ const server = http.createServer((req, res) => {
         }
     }
 
+    // ── 剪輯歷史頁面 ──
+    else if (req.url === '/clips') {
+        const filePath = path.join(__dirname, 'clips.html');
+        fs.readFile(filePath, 'utf8', (err, data) => {
+            if (err) {
+                res.writeHead(500, { 'Content-Type': 'text/plain' });
+                res.end('Error loading clips.html');
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(data);
+        });
+    }
+
+    // 讀取剪輯歷史
+    else if (req.url === '/clips/data') {
+        const clipFile = path.join(__dirname, 'clip_history.json');
+        try {
+            let clips = [];
+            if (fs.existsSync(clipFile)) {
+                const raw = fs.readFileSync(clipFile, 'utf-8');
+                const data = JSON.parse(raw);
+                clips = Array.isArray(data) ? data : (data.clips || []);
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ success: true, clips }));
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+        }
+    }
+
+    // 清空剪輯歷史
+    else if (req.url === '/clips/clear' && req.method === 'POST') {
+        try {
+            fs.writeFileSync(path.join(__dirname, 'clip_history.json'), '[]', 'utf-8');
+            pushLog('🗑️ 已清空剪輯歷史');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true }));
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+        }
+    }
+
+    // 刪除單筆剪輯歷史
+    else if (req.url === '/clips/delete' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => { body += chunk.toString(); });
+        req.on('end', () => {
+            try {
+                const { id } = JSON.parse(body || '{}');
+                if (!id) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: '缺少 clip id' }));
+                    return;
+                }
+                const clipFile = path.join(__dirname, 'clip_history.json');
+                let clips = [];
+                if (fs.existsSync(clipFile)) {
+                    const raw = fs.readFileSync(clipFile, 'utf-8');
+                    const data = JSON.parse(raw);
+                    clips = Array.isArray(data) ? data : (data.clips || []);
+                }
+                const before = clips.length;
+                clips = clips.filter(c => c.id !== id);
+                fs.writeFileSync(clipFile, JSON.stringify(clips, null, 2), 'utf-8');
+                pushLog(`🗑️ 已刪除單筆剪輯歷史: ${id} (剩 ${clips.length}/${before} 筆)`);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, removed: before - clips.length, clips }));
+            } catch (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message }));
+            }
+        });
+    }
+
     // 登入 API
     else if (req.url === '/login' && req.method === 'POST') {
         let body = '';
@@ -885,7 +962,17 @@ const server = http.createServer((req, res) => {
             .replace('${BING_TRANSLATE_API_KEY}', process.env.BING_TRANSLATE_API_KEY || '')
             .replace('${KICK_CLIENT_ID}', process.env.KICK_CLIENT_ID || '')
             .replace('${KICK_CLIENT_SECRET}', process.env.KICK_CLIENT_SECRET || '')
-            .replace('${KICK_USER_NAME}', process.env.KICK_USER_NAME || '');
+            .replace('${KICK_USER_NAME}', process.env.KICK_USER_NAME || '')
+            .replace('${AUTO_CLIP_ENABLED}', process.env.AUTO_CLIP_ENABLED || '0')
+            .replace('${AUTO_CLIP_W_VIEWERS}', process.env.AUTO_CLIP_W_VIEWERS || '0.5')
+            .replace('${AUTO_CLIP_W_MSG}', process.env.AUTO_CLIP_W_MSG || '0.5')
+            .replace('${AUTO_CLIP_SCORE_THRESHOLD}', process.env.AUTO_CLIP_SCORE_THRESHOLD || '1.8')
+            .replace('${AUTO_CLIP_BASELINE_WINDOW_MIN}', process.env.AUTO_CLIP_BASELINE_WINDOW_MIN || '30')
+            .replace('${AUTO_CLIP_RATE_WINDOW_MIN}', process.env.AUTO_CLIP_RATE_WINDOW_MIN || '5')
+            .replace('${AUTO_CLIP_FLOOR_VIEWERS}', process.env.AUTO_CLIP_FLOOR_VIEWERS || '2')
+            .replace('${AUTO_CLIP_FLOOR_MSG_PER_MIN}', process.env.AUTO_CLIP_FLOOR_MSG_PER_MIN || '0.3')
+            .replace('${AUTO_CLIP_COOLDOWN_MIN}', process.env.AUTO_CLIP_COOLDOWN_MIN || '15')
+            .replace('${AUTO_CLIP_TITLE_PREFIX}', process.env.AUTO_CLIP_TITLE_PREFIX || '');
 
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end(filledHtml);
@@ -906,6 +993,16 @@ const server = http.createServer((req, res) => {
             const newKickClientId = params.get('KICK_CLIENT_ID') || '';
             const newKickClientSecret = params.get('KICK_CLIENT_SECRET') || '';
             const newKickUserName = params.get('KICK_USER_NAME') || '';
+            const newAutoClipEnabled = params.get('AUTO_CLIP_ENABLED') || '0';
+            const newAutoClipWViewers = params.get('AUTO_CLIP_W_VIEWERS') || '0.5';
+            const newAutoClipWMsg = params.get('AUTO_CLIP_W_MSG') || '0.5';
+            const newAutoClipScoreThreshold = params.get('AUTO_CLIP_SCORE_THRESHOLD') || '1.8';
+            const newAutoClipBaselineWindowMin = params.get('AUTO_CLIP_BASELINE_WINDOW_MIN') || '30';
+            const newAutoClipRateWindowMin = params.get('AUTO_CLIP_RATE_WINDOW_MIN') || '5';
+            const newAutoClipFloorViewers = params.get('AUTO_CLIP_FLOOR_VIEWERS') || '2';
+            const newAutoClipFloorMsgPerMin = params.get('AUTO_CLIP_FLOOR_MSG_PER_MIN') || '0.3';
+            const newAutoClipCooldownMin = params.get('AUTO_CLIP_COOLDOWN_MIN') || '15';
+            const newAutoClipTitlePrefix = params.get('AUTO_CLIP_TITLE_PREFIX') || '';
 
             // 更新 process.env
             process.env.BARK_API = newBark;
@@ -914,6 +1011,16 @@ const server = http.createServer((req, res) => {
             process.env.KICK_CLIENT_ID = newKickClientId;
             process.env.KICK_CLIENT_SECRET = newKickClientSecret;
             process.env.KICK_USER_NAME = newKickUserName;
+            process.env.AUTO_CLIP_ENABLED = newAutoClipEnabled;
+            process.env.AUTO_CLIP_W_VIEWERS = newAutoClipWViewers;
+            process.env.AUTO_CLIP_W_MSG = newAutoClipWMsg;
+            process.env.AUTO_CLIP_SCORE_THRESHOLD = newAutoClipScoreThreshold;
+            process.env.AUTO_CLIP_BASELINE_WINDOW_MIN = newAutoClipBaselineWindowMin;
+            process.env.AUTO_CLIP_RATE_WINDOW_MIN = newAutoClipRateWindowMin;
+            process.env.AUTO_CLIP_FLOOR_VIEWERS = newAutoClipFloorViewers;
+            process.env.AUTO_CLIP_FLOOR_MSG_PER_MIN = newAutoClipFloorMsgPerMin;
+            process.env.AUTO_CLIP_COOLDOWN_MIN = newAutoClipCooldownMin;
+            process.env.AUTO_CLIP_TITLE_PREFIX = newAutoClipTitlePrefix;
 
             // 更新 .env 檔案
             const envPath = path.resolve('.env');
@@ -939,6 +1046,16 @@ const server = http.createServer((req, res) => {
             updateEnv('KICK_CLIENT_ID', newKickClientId);
             updateEnv('KICK_CLIENT_SECRET', newKickClientSecret);
             updateEnv('KICK_USER_NAME', newKickUserName);
+            updateEnv('AUTO_CLIP_ENABLED', newAutoClipEnabled);
+            updateEnv('AUTO_CLIP_W_VIEWERS', newAutoClipWViewers);
+            updateEnv('AUTO_CLIP_W_MSG', newAutoClipWMsg);
+            updateEnv('AUTO_CLIP_SCORE_THRESHOLD', newAutoClipScoreThreshold);
+            updateEnv('AUTO_CLIP_BASELINE_WINDOW_MIN', newAutoClipBaselineWindowMin);
+            updateEnv('AUTO_CLIP_RATE_WINDOW_MIN', newAutoClipRateWindowMin);
+            updateEnv('AUTO_CLIP_FLOOR_VIEWERS', newAutoClipFloorViewers);
+            updateEnv('AUTO_CLIP_FLOOR_MSG_PER_MIN', newAutoClipFloorMsgPerMin);
+            updateEnv('AUTO_CLIP_COOLDOWN_MIN', newAutoClipCooldownMin);
+            updateEnv('AUTO_CLIP_TITLE_PREFIX', newAutoClipTitlePrefix);
 
             fs.writeFileSync(envPath, envContent, 'utf-8');
 

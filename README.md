@@ -421,6 +421,63 @@ G#clip 這波操作太秀了
 
 > 剪輯內容是**指令發送時間點往前的一段直播畫面**（Twitch 剪輯機制），成功後由 Twitch 非同步處理，通常幾秒內即可在頻道的 Clips 頁面看到。
 
+### 剪輯歷史頁面 `/clips`
+
+每次成功建立剪輯（`G#clip` 指令或自動剪輯）都會記錄到 `clip_history.json`（保留最近 200 筆）。開啟 `http://localhost:3332/clips`（主控台導覽列的「🎬 剪輯」）可查看：
+
+- 歷史剪輯清單：標題、建立時間、來源（手動/自動）、剪輯連結
+  - **標題自動帶入**：未指定標題的剪輯會透過 Twitch API 查詢實際標題（Twitch 自動生成的名稱）；若 API 查不到則從剪輯 slug 擷取名稱，不會顯示「未命名」
+- **▶ 預覽**：在頁面上直接以嵌入播放器觀看剪輯（自動播放，Esc 或點遮罩關閉）
+- **複製連結**：複製 `https://clips.twitch.tv/<id>`
+- **複製 Embed**：複製 `https://clips.twitch.tv/embed?clip=<id>`
+- **複製 iframe**：複製可貼到網站的 `<iframe>` 程式碼（`parent` 已自動帶入目前頁面的主機名）
+- **刪除單筆**：每筆紀錄右側有「刪除」按鈕，可個別移除
+- **清空歷史**：一鍵清空 `clip_history.json`
+- 每 5 秒自動更新清單
+
+> **關於 Embed 的 `parent` 參數**：Twitch 只接受 `localhost`、`127.0.0.1` 或**真實網域**當 parent，**私人 IP（如 192.168.x.x、10.x）無論加不加 port 都會被拒絕**。`/clips` 頁面會自動判斷：目前主機是私人 IP 時改用 `localhost` 並顯示提示。因此：
+> - 在本機請用 `http://localhost:3332/clips` 開啟，預覽與複製的 iframe 皆可直接使用
+> - 透過私人 IP（`192.168.0.102:3332`）開啟時預覽無法播放（Twitch 限制），頁面會顯示改用 localhost 的提示
+> - 若要嵌到**其他網站**，需手動把 `parent` 改成該網站的網域，否則 Twitch 會顯示「clips.twitch.tv 拒絕連線」
+
+> 標題查詢透過 Twitch 公開的 Clip 資料 API（不需額外 scope）；查詢失敗時會退回首段 slug 名稱，不影響剪輯建立。
+
+## 自動剪輯 (AutoClip)
+
+需同時滿足 `isTwitch=1` 與 `.env` 的 `AUTO_CLIP_ENABLED=1` 才啟用。系統每 30 秒評估一次，當**觀眾數**與**聊天訊息速率**相對**頻道自己的近期平均**出現高峰時，自動呼叫 `G#clip` 相同機制建立剪輯。
+
+### 觸發公式
+
+```
+score = W_VIEWERS × (觀眾數 / max(基準觀眾, FLOOR_VIEWERS))
+      + W_MSG    × (訊息速率 / max(基準訊息速率, FLOOR_MSG_PER_MIN))
+
+score ≥ SCORE_THRESHOLD 即觸發（上升緣 + cooldown 防連發）
+```
+
+- **基準（adaptive baseline）**：取最近 `BASELINE_WINDOW_MIN` 分鐘內每個 poll 樣本（觀眾數、每分鐘訊息數）的**中位數**。基準是頻道自己的常態，因此低人氣頻道（5 人）跳到 12 人與高人氣頻道相對漲幅一樣會被偵測。
+- **即時速率**：最近 `RATE_WINDOW_MIN` 分鐘的平均每分鐘訊息數。
+- **Floor**：觀眾少於 `FLOOR_VIEWERS`（預設 2）一律不觸發，防止空台誤發。
+- **冷卻**：觸發後 `COOLDOWN_MIN` 分鐘內不重複觸發。
+
+### 環境變數（皆可在 `/config` 頁面設定）
+
+| 變數 | 預設 | 說明 |
+|------|------|------|
+| `AUTO_CLIP_ENABLED` | `0` | `1` 啟用（需 `isTwitch=1`） |
+| `AUTO_CLIP_W_VIEWERS` | `0.5` | 觀眾項權重 |
+| `AUTO_CLIP_W_MSG` | `0.5` | 訊息項權重 |
+| `AUTO_CLIP_SCORE_THRESHOLD` | `1.8` | 觸發門檻（常態約 1.0） |
+| `AUTO_CLIP_BASELINE_WINDOW_MIN` | `30` | 基準統計窗口（分鐘） |
+| `AUTO_CLIP_RATE_WINDOW_MIN` | `5` | 即時速率窗口（分鐘） |
+| `AUTO_CLIP_WINDOW_MIN` | `30` | 訊息時間戳保存窗口（分鐘） |
+| `AUTO_CLIP_FLOOR_VIEWERS` | `2` | 最低觀眾數（少於此不觸發） |
+| `AUTO_CLIP_FLOOR_MSG_PER_MIN` | `0.3` | 最低訊息速率 |
+| `AUTO_CLIP_COOLDOWN_MIN` | `15` | 觸發冷卻（分鐘） |
+| `AUTO_CLIP_TITLE_PREFIX` | 空 | 剪輯標題前綴，留空使用直播標題 |
+
+每次評估都會在 console 印出完整狀態：`觀眾 / 基準觀眾 / 訊息速率 / 基準速率 / 分數`，方便調校門檻。
+
 ## 啟動服務
 
 ## 服務器預設運行在 Port 3332，提供 HTTP 控制介面

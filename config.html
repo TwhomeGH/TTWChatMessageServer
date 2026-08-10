@@ -113,6 +113,149 @@
         </div>
 
         <hr class="my-6 border-gray-300" />
+        <h3 class="text-xl font-bold text-gray-800 mb-4">Twitch 自動剪輯 (AutoClip)</h3>
+        <p class="text-sm text-gray-500 mb-4">
+          以頻道自己的近期平均為基準，當觀眾數與聊天訊息速率相對平常出現高峰時自動建立剪輯。
+          score = W_觀眾·(觀眾/基準) + W_訊息·(訊息速率/基準)，超過門檻即觸發。
+        </p>
+
+        <div>
+          <label for="AUTO_CLIP_ENABLED" class="block text-gray-700 mb-2"
+            >AUTO_CLIP_ENABLED (需同時啟用 Twitch 聊天室才生效):</label
+          >
+          <select
+            name="AUTO_CLIP_ENABLED"
+            id="AUTO_CLIP_ENABLED"
+            data-value="${AUTO_CLIP_ENABLED}"
+            class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="0">停用</option>
+            <option value="1">啟用</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mt-4">
+          <div>
+            <label for="AUTO_CLIP_W_VIEWERS" class="block text-gray-700 mb-2"
+              >W_VIEWERS 觀眾權重:</label
+            >
+            <input
+              type="number"
+              step="0.1"
+              name="AUTO_CLIP_W_VIEWERS"
+              id="AUTO_CLIP_W_VIEWERS"
+              value="${AUTO_CLIP_W_VIEWERS}"
+              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label for="AUTO_CLIP_W_MSG" class="block text-gray-700 mb-2"
+              >W_MSG 訊息權重:</label
+            >
+            <input
+              type="number"
+              step="0.1"
+              name="AUTO_CLIP_W_MSG"
+              id="AUTO_CLIP_W_MSG"
+              value="${AUTO_CLIP_W_MSG}"
+              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label for="AUTO_CLIP_SCORE_THRESHOLD" class="block text-gray-700 mb-2"
+              >SCORE_THRESHOLD 觸發門檻:</label
+            >
+            <input
+              type="number"
+              step="0.1"
+              name="AUTO_CLIP_SCORE_THRESHOLD"
+              id="AUTO_CLIP_SCORE_THRESHOLD"
+              value="${AUTO_CLIP_SCORE_THRESHOLD}"
+              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label for="AUTO_CLIP_COOLDOWN_MIN" class="block text-gray-700 mb-2"
+              >COOLDOWN_MIN 冷卻(分鐘):</label
+            >
+            <input
+              type="number"
+              min="1"
+              name="AUTO_CLIP_COOLDOWN_MIN"
+              id="AUTO_CLIP_COOLDOWN_MIN"
+              value="${AUTO_CLIP_COOLDOWN_MIN}"
+              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label for="AUTO_CLIP_BASELINE_WINDOW_MIN" class="block text-gray-700 mb-2"
+              >BASELINE_WINDOW_MIN 基準統計窗口(分鐘):</label
+            >
+            <input
+              type="number"
+              min="5"
+              name="AUTO_CLIP_BASELINE_WINDOW_MIN"
+              id="AUTO_CLIP_BASELINE_WINDOW_MIN"
+              value="${AUTO_CLIP_BASELINE_WINDOW_MIN}"
+              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label for="AUTO_CLIP_RATE_WINDOW_MIN" class="block text-gray-700 mb-2"
+              >RATE_WINDOW_MIN 即時速率窗口(分鐘):</label
+            >
+            <input
+              type="number"
+              min="1"
+              name="AUTO_CLIP_RATE_WINDOW_MIN"
+              id="AUTO_CLIP_RATE_WINDOW_MIN"
+              value="${AUTO_CLIP_RATE_WINDOW_MIN}"
+              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label for="AUTO_CLIP_FLOOR_VIEWERS" class="block text-gray-700 mb-2"
+              >FLOOR_VIEWERS 最低觀眾(少於此不觸發):</label
+            >
+            <input
+              type="number"
+              min="1"
+              name="AUTO_CLIP_FLOOR_VIEWERS"
+              id="AUTO_CLIP_FLOOR_VIEWERS"
+              value="${AUTO_CLIP_FLOOR_VIEWERS}"
+              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label for="AUTO_CLIP_FLOOR_MSG_PER_MIN" class="block text-gray-700 mb-2"
+              >FLOOR_MSG_PER_MIN 最低訊息速率:</label
+            >
+            <input
+              type="number"
+              step="0.1"
+              name="AUTO_CLIP_FLOOR_MSG_PER_MIN"
+              id="AUTO_CLIP_FLOOR_MSG_PER_MIN"
+              value="${AUTO_CLIP_FLOOR_MSG_PER_MIN}"
+              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <label for="AUTO_CLIP_TITLE_PREFIX" class="block text-gray-700 mb-2"
+            >AUTO_CLIP_TITLE_PREFIX (剪輯標題前綴，留空則使用直播標題):</label
+          >
+          <input
+            type="text"
+            name="AUTO_CLIP_TITLE_PREFIX"
+            id="AUTO_CLIP_TITLE_PREFIX"
+            value="${AUTO_CLIP_TITLE_PREFIX}"
+            placeholder="例如：人氣高峰"
+            class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <hr class="my-6 border-gray-300" />
         <h3 class="text-xl font-bold text-gray-800 mb-4">平台 OAuth 重新授權</h3>
 
         <div class="mt-4">
@@ -160,6 +303,11 @@
             document.getElementById('safetyOverlay').classList.add('hidden');
             document.getElementById('configContent').classList.remove('hidden');
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const sel = document.getElementById('AUTO_CLIP_ENABLED');
+            if (sel) sel.value = sel.dataset.value || '0';
+        });
 
         async function logout() {
             try {

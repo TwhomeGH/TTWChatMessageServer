@@ -28,6 +28,7 @@ import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFil
 import { replaceEmojis, loadEmojiMap, getEmojiMap } from "./EmojiMap.js"
 import { KickWebSocket } from 'kick-wss';
 import console from 'console';
+import { AutoClipManager } from "./AutoClip.js"
 
 import { fork } from 'child_process'
 
@@ -2226,6 +2227,28 @@ async function getUserIcon(id) {
 
 connectSocket();
 
+// ─── Twitch 自動剪輯 (AutoClip) ───
+let autoClip = null;
+if (isTwitch && process.env.AUTO_CLIP_ENABLED === '1') {
+    autoClip = new AutoClipManager({
+        onCreateClip: (title) => craeteTwitchClip(title, "https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/Neuro2.png?raw=true", 'auto'),
+        windowMin: parseInt(process.env.AUTO_CLIP_WINDOW_MIN) || 30,
+        baselineWindowMin: parseInt(process.env.AUTO_CLIP_BASELINE_WINDOW_MIN) || 30,
+        rateWindowMin: parseInt(process.env.AUTO_CLIP_RATE_WINDOW_MIN) || 5,
+        wViewers: parseFloat(process.env.AUTO_CLIP_W_VIEWERS) || 0.5,
+        wMsg: parseFloat(process.env.AUTO_CLIP_W_MSG) || 0.5,
+        scoreThreshold: parseFloat(process.env.AUTO_CLIP_SCORE_THRESHOLD) || 1.8,
+        floorViewers: parseInt(process.env.AUTO_CLIP_FLOOR_VIEWERS) || 2,
+        floorMsgPerMin: parseFloat(process.env.AUTO_CLIP_FLOOR_MSG_PER_MIN) || 0.3,
+        cooldownMin: parseInt(process.env.AUTO_CLIP_COOLDOWN_MIN) || 15,
+        titlePrefix: process.env.AUTO_CLIP_TITLE_PREFIX || '',
+    });
+    console.log('🎬 自動剪輯已啟用 (AutoClipManager)，每 30 秒評估一次');
+    setInterval(() => {
+        try { autoClip.evaluate(); } catch (err) { console.error('❌ [AutoClip] 評估異常:', err); }
+    }, 30000);
+}
+
 // Twitch 觀眾數定時更新
 function twitchViewCache() {
     apiClient.streams.getStreamByUserId(tuser).then(stream => {
@@ -2235,6 +2258,7 @@ function twitchViewCache() {
             console.log(`📊 Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`);
             writeLog("Default", `Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`, "Twitch View");
             updateCombinedViewerCount();
+            autoClip?.updateViewers(TwitchViewerCount);
         }
     }).catch(err => {
         console.error("⚠️ Twitch 觀眾數取得失敗:", err.message);
@@ -2315,6 +2339,114 @@ listener.onChannelCheer(tuser, tuser, async (event) => {
 
     
 });
+
+
+// ─── 剪輯歷史 (clip_history.json) ───
+const CLIP_HISTORY_FILE = path.join(__dirname, 'clip_history.json');
+
+function loadClipHistory() {
+    try {
+        if (existsSync(CLIP_HISTORY_FILE)) {
+            const raw = readFileSync(CLIP_HISTORY_FILE, 'utf-8');
+            const data = JSON.parse(raw);
+            if (Array.isArray(data)) return data;
+            if (data && Array.isArray(data.clips)) return data.clips;
+        }
+    } catch (err) {
+        console.error('⚠️ 讀取 clip_history.json 失敗:', err.message);
+    }
+    return [];
+}
+
+function saveClipHistory(clips) {
+    try {
+        writeFileSync(CLIP_HISTORY_FILE, JSON.stringify(clips, null, 2), 'utf-8');
+    } catch (err) {
+        console.error('⚠️ 儲存 clip_history.json 失敗:', err.message);
+    }
+}
+
+function recordClipHistory({ id, url, title = null, source = 'manual' }) {
+    const clips = loadClipHistory();
+    clips.unshift({
+        id,
+        url,
+        title: title || '',
+        source,
+        createdAt: new Date().toISOString()
+    });
+    saveClipHistory(clips.slice(0, 200)); // 保留最近 200 筆
+}
+
+/**
+ * 解析剪輯的實際標題。
+ * - 有指定 title 直接用
+ * - 沒指定時透過 API 查詢（Twitch 會給自動生成的名稱），失敗則從網址 slug 擷取名稱
+ * @param {string} clipId - 剪輯 ID / slug
+ * @param {string|null} title - 呼叫時給定的標題
+ */
+async function resolveClipTitle(clipId, title) {
+    if (title) return title;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+        try {
+            const clip = await apiClient.clips.getClipById(clipId);
+            if (clip && clip.title) {
+                console.log(`🏷️ 剪輯實際標題: ${clip.title}`);
+                return clip.title;
+            }
+        } catch (err) {
+            console.log(`⚠️ [剪輯] 取得標題重試 ${attempt}/5: ${err.message}`);
+        }
+        await new Promise(r => setTimeout(r, 2000));
+    }
+    const slugName = String(clipId).split('-')[0];
+    return slugName && slugName !== String(clipId) ? slugName : '';
+}
+
+/**
+ * @description 建立 Twitch 剪輯，並在成功或失敗時發送通知
+ * @param {string|null} title - 剪輯標題，若為 null 則不指定標題使用當前直播標題
+ * @param {string} icon - 用戶圖示 URL，用於通知
+ * @param {string} source - 來源 ('manual'=G#clip 指令 / 'auto'=自動剪輯)
+ */
+function craeteTwitchClip(title = null,icon="https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/Neuro2.png?raw=true", source = 'manual'){
+
+
+    apiClient.clips.createClip({
+            channel:tuser,
+            duration:60,
+            createAfterDelay:true,
+            ...(title ? { title } : {})
+
+        }).then( async (clipId)=>{
+            const clipURL = `https://clips.twitch.tv/${clipId}`
+            const finalTitle = await resolveClipTitle(clipId, title);
+            const displayText = finalTitle ? `🎬 剪輯已建立「${finalTitle}」：${clipURL}` : `🎬 剪輯已建立：${clipURL}`
+
+            console.log("剪輯資訊", clipURL)
+
+            recordClipHistory({ id: clipId, url: clipURL, title: finalTitle, source });
+            console.log(`📜 剪輯歷史已記錄 (來源: ${source})`);
+
+            writeLog("Default",`[剪輯建立] ${displayText}`)
+            sendBarkNotification("剪輯建立", displayText, icon)
+            sendSocketMessage("剪輯建立", displayText, icon, '')
+
+            
+        }).catch(err => {
+
+            const errMsg = `剪輯建立失敗: ${err.message} (status=${err.response?.status || 'N/A'})`
+
+            console.error(`❌ [G#clip] ${errMsg}`)
+
+            writeLog("Default", `[${errMsg}]`, "Error")
+            sendSocketMessage("剪輯建立", `❌ ${errMsg}`, icon, '')
+            sendBarkNotification("剪輯建立失敗", errMsg, icon)
+
+        })
+
+
+}
 
 listener.onChannelChatMessage(tuser, tuser, async (event) => {
     const icon = await getUserIcon(event.chatterId);
@@ -2539,25 +2671,7 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
         const title = res.length > 0 ? res.join(" ") : null
         
-        apiClient.clips.createClip({
-            channel:tuser,
-            duration:60,
-            createAfterDelay:true,
-            ...(title ? { title } : {})
-        }).then( (clipId)=>{
-            const clipURL = `https://clips.twitch.tv/${clipId}`
-            const displayText = title ? `🎬 剪輯已建立「${title}」：${clipURL}` : `🎬 剪輯已建立：${clipURL}`
-
-            console.log("剪輯資訊", clipURL)
-            writeLog("Default",`[剪輯建立] ${displayText}`)
-            sendBarkNotification("剪輯建立", displayText, icon)
-            sendSocketMessage("剪輯建立", displayText, icon, '')
-        }).catch(err => {
-            const errMsg = `剪輯建立失敗: ${err.message} (status=${err.response?.status || 'N/A'})`
-            console.error(`❌ [G#clip] ${errMsg}`)
-            writeLog("Default", `[${errMsg}]`, "Error")
-            sendSocketMessage("剪輯建立", `❌ ${errMsg}`, icon, '')
-        })
+        craeteTwitchClip(title, icon);
 
         return; // 指令已處理，不再當一般訊息轉發
         
@@ -2588,6 +2702,7 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
     }
 
     recordMessageStat(tMsg);
+    autoClip?.onChatMessage(tMsg);
 
     sendBarkNotification(tUser, tMsg, icon);
 

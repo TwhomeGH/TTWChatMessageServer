@@ -17,3 +17,7 @@ OtherTool/live_engine/logs/live_engine.log
 youtube_cache.json
 OtherTool/live_engine/cache/*
 sponsor_ads.json
+.playwright-mcp/*
+clip_history.json
+
+OtherTool/live_engine/config/overlay_settings.json
