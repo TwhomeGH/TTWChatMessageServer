@@ -584,6 +584,13 @@ process.stdin.on('data', async (chunk) => {
                 // 先存原始值供去重比對
                 const origUser = json.user;
                 const origMsg = json.message;
+
+                // 對稱去重：若已由 WS 直連路徑處理過，跳過（避免 /chat 與直連路徑重複計入統計）
+                if (isDuplicate((origUser || '').trim(), (origMsg || '').trim())) {
+                    console.log('🚫 跨路徑重複(來自/chat，直連已處理):', origUser, origMsg);
+                    return;
+                }
+
                 json.message = replaceEmojis(json.message);
 
                 const fr = processFilter({ user: json.user, message: json.message });
@@ -595,6 +602,8 @@ process.stdin.on('data', async (chunk) => {
                 if (fr.modified && fr.message) json.message = fr.message;
 
                 recordMessageStat(json.message);
+
+                autoClip?.onChatMessage(json.message);
 
                 if (json.userNum !== CacheUserNum) {
                     TikTokViewerCount = json.userNum

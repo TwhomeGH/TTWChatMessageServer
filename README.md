@@ -457,6 +457,7 @@ score ≥ SCORE_THRESHOLD 即觸發（上升緣 + cooldown 防連發）
 
 - **基準（adaptive baseline）**：取最近 `BASELINE_WINDOW_MIN` 分鐘內每個 poll 樣本（觀眾數、每分鐘訊息數）的**中位數**。基準是頻道自己的常態，因此低人氣頻道（5 人）跳到 12 人與高人氣頻道相對漲幅一樣會被偵測。
 - **多平台總合**：觀眾數 = TikTok + Twitch + Kick + Odysee + Youtube 的人數總合；訊息速率 = 各平台聊天訊息（通過過濾器）累計。同時開多平台直播時，任一平台的人氣或聊天熱絡都會被計入。
+- **包含 `/chat` 接口**：外部 userscript 送進 `/chat` 的訊息也會計入 AutoClip 統計（與 WS 直連路徑做對稱去重，不會重複計算）。
 - **即時速率**：最近 `RATE_WINDOW_MIN` 分鐘的平均每分鐘訊息數。
 - **Floor**：觀眾少於 `FLOOR_VIEWERS`（預設 2）一律不觸發，防止空台誤發。
 - **冷卻**：觸發後 `COOLDOWN_MIN` 分鐘內不重複觸發。
