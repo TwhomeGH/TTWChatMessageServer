@@ -129,6 +129,13 @@ export class AutoClipManager {
     }
 
     /**
+     * 清空歷史（由 Server 的清空指令觸發）
+     */
+    clearHistory() {
+        this.history = [];
+    }
+
+    /**
      * 取得目前設定（供圖表頁顯示門檻線與狀態）
      */
     getConfig() {

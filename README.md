@@ -488,7 +488,7 @@ score ≥ SCORE_THRESHOLD 即觸發（上升緣 + cooldown 防連發）
   - 訊息速率 vs 基準訊息速率
   - 觸發分數 vs 門檻線（**紅點 = 實際觸發剪輯的時刻**）
 - **設定資訊**：顯示目前權重、最低門檻、冷卻等參數
-- 評估歷史每 30 秒寫入 `autoclip_stats.json`（保留最近 2000 筆），可一鍵清空
+- 評估歷史**執行時存在記憶體**（TikTok.js 每 30 秒透過 IPC 推送到 Server.js），僅在 TikTok.js 結束離線時才寫入 `autoclip_stats.json`（保留最近 2000 筆），可一鍵清空
 
 ## 啟動服務
 

@@ -553,6 +553,13 @@ process.stdin.on('data', async (chunk) => {
             return;
         }
 
+        // 🔴 純文字指令：清空自動剪輯分析歷史（由 Server.js 的 /autoclip/clear 觸發）
+        if (msg === 'AUTOCLIP_CLEAR') {
+            autoClip?.clearHistory();
+            console.log('🗑️ 已清空自動剪輯分析歷史 (由 Server 要求)');
+            return;
+        }
+
         // 🔴 Kick 啟動指令
         if (msg === 'KICK_START') {
             if (!isKick) {
@@ -2247,20 +2254,25 @@ if (isTwitch && process.env.AUTO_CLIP_ENABLED === '1') {
     setInterval(() => {
         try {
             autoClip.evaluate();
-            writeAutoClipStats();
+            pushAutoClipStats();
         } catch (err) { console.error('❌ [AutoClip] 評估異常:', err); }
     }, 30000);
 }
 
-// 將 AutoClip 評估歷史寫入 autoclip_stats.json（供分析圖表頁讀取）
-const AUTO_CLIP_STATS_FILE = path.join(__dirname, 'autoclip_stats.json');
-function writeAutoClipStats() {
+// 自動剪輯統計：執行中只透過 stdout 推送到 Server.js（存在記憶體），
+// 由 Server.js 在 TikTok.js 結束時才寫入 autoclip_stats.json
+const autoClipSession = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+function pushAutoClipStats() {
     if (!autoClip) return;
     try {
-        const payload = { config: autoClip.getConfig(), stats: autoClip.getHistory() };
-        writeFileSync(AUTO_CLIP_STATS_FILE, JSON.stringify(payload), 'utf-8');
+        process.stdout.write(JSON.stringify({
+            type: 'AUTOCLIP_STATS',
+            session: autoClipSession,
+            data: { config: autoClip.getConfig(), stats: autoClip.getHistory() }
+        }) + '\n');
     } catch (err) {
-        console.error('⚠️ 儲存 autoclip_stats.json 失敗:', err.message);
+        console.error('⚠️ 推播自動剪輯統計失敗:', err.message);
     }
 }
 

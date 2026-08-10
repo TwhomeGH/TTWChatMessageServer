@@ -105,6 +105,9 @@ const sseClients = new Set();
 
 var cacheKeywordDataTop = []
 var cacheKeywordDataAll = []
+// 自動剪輯分析歷史：執行時存記憶體（由 TikTok.js 透過 stdout 推播），僅在 TikTok.js 結束時寫入磁碟
+var cacheAutoClipStats = { config: {}, stats: [] }
+var stdoutBuffer = ''
 
 function recordMessageStat(message) {
     if (!message) return;
@@ -379,34 +382,45 @@ const server = http.createServer((req, res) => {
 
         tiktokProcess = spawn('node', args);
 
+        stdoutBuffer = ''; // 新進程開始，重置緩衝
+
         tiktokProcess.stdout.on('data', (data) => {
-            data
-                .toString()
-                .split('\n')
-                .forEach(line => line && pushLog(`[OUT] ${line}`));
+            stdoutBuffer += data.toString();
 
+            const lines = stdoutBuffer.split('\n');
+            stdoutBuffer = lines.pop(); // 留下未完成的半行
 
-            var line = data.toString().trim();
+            for (const raw of lines) {
+                const line = raw.trim();
+                if (!line) continue;
 
-            if (line.startsWith('{') && line.endsWith('}')) {
-                // 可能是 JSON
-                line = line.replace(/^[^\{]*/, '').replace(/[^\}]*$/, ''); // 嘗試提取 JSON 部分
+                pushLog(`[OUT] ${line}`);
 
-                const json = JSON.parse(line);
+                if (!line.startsWith('{') || !line.endsWith('}')) continue;
 
-                var PType = json.type;
+                try {
+                    const clean = line.replace(/^[^\{]*/, '').replace(/[^\}]*$/, ''); // 嘗試提取 JSON 部分
+                    const json = JSON.parse(clean);
 
-                if (PType == "top10") {
-                    cacheKeywordDataTop = json.data
-                } else if (PType == "all") {
-                    cacheKeywordDataAll = json.data
-                    if (messageFilter) messageFilter.mergeStats(json.data);
+                    var PType = json.type;
+
+                    if (PType == "top10") {
+                        cacheKeywordDataTop = json.data;
+                    } else if (PType == "all") {
+                        cacheKeywordDataAll = json.data;
+                        if (messageFilter) messageFilter.mergeStats(json.data);
+                    } else if (PType == "AUTOCLIP_STATS") {
+                        cacheAutoClipStats = {
+                            config: json.data?.config || {},
+                            stats: (Array.isArray(json.data?.stats) ? json.data.stats : []).slice(-2000),
+                        };
+                    }
+
+                    pushLog('📈 TikTok.js 回傳解析後:', json);
+                } catch (err) {
+                    pushLog('[OUT] JSON 解析失敗:', err.message);
                 }
-
-                pushLog('📈 TikTok.js 回傳解析後:', json)
-
             }
-
         });
 
         tiktokProcess.stderr.on('data', (data) => {
@@ -419,6 +433,14 @@ const server = http.createServer((req, res) => {
         tiktokProcess.on('exit', (code, signal) => {
             pushLog(`[SYSTEM] Exit code=${code} signal=${signal}`);
             tiktokProcess = null;
+
+            // 離線（TikTok.js 結束）時才把自動剪輯分析歷史寫入磁碟
+            try {
+                fs.writeFileSync(path.join(__dirname, 'autoclip_stats.json'), JSON.stringify(cacheAutoClipStats), 'utf-8');
+                pushLog(`💾 已將自動剪輯分析歷史寫入 autoclip_stats.json (${cacheAutoClipStats.stats.length} 筆)`);
+            } catch (err) {
+                pushLog('⚠️ 寫入 autoclip_stats.json 失敗:', err.message);
+            }
         });
 
 
@@ -910,35 +932,37 @@ const server = http.createServer((req, res) => {
         });
     }
 
-    // 讀取自動剪輯評估歷史
+    // 讀取自動剪輯評估歷史（執行時取自記憶體，避免每次讀磁碟）
     else if (req.url === '/autoclip/data') {
-        const statsFile = path.join(__dirname, 'autoclip_stats.json');
-        try {
-            let stats = [];
-            let config = {};
-            if (fs.existsSync(statsFile)) {
-                const raw = fs.readFileSync(statsFile, 'utf-8');
-                const data = JSON.parse(raw);
-                if (Array.isArray(data)) {
-                    stats = data;
-                } else {
-                    stats = data.stats || [];
-                    config = data.config || {};
+        // 若記憶體還是空的（Server 剛啟動 / TikTok.js 未執行），從磁碟載入最後一次離線快照
+        if (cacheAutoClipStats.stats.length === 0) {
+            try {
+                const statsFile = path.join(__dirname, 'autoclip_stats.json');
+                if (fs.existsSync(statsFile)) {
+                    const data = JSON.parse(fs.readFileSync(statsFile, 'utf-8'));
+                    if (Array.isArray(data)) {
+                        cacheAutoClipStats = { config: {}, stats: data };
+                    } else {
+                        cacheAutoClipStats = { config: data.config || {}, stats: data.stats || [] };
+                    }
                 }
+            } catch (err) {
+                // 檔案不存在或損壞就維持空
             }
-            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-            res.end(JSON.stringify({ success: true, stats, config }));
-        } catch (err) {
-            res.writeHead(500, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: err.message }));
         }
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: true, stats: cacheAutoClipStats.stats, config: cacheAutoClipStats.config }));
     }
 
     // 清空自動剪輯分析歷史
     else if (req.url === '/autoclip/clear' && req.method === 'POST') {
         try {
-            fs.writeFileSync(path.join(__dirname, 'autoclip_stats.json'), '[]', 'utf-8');
-            pushLog('🗑️ 已清空自動剪輯分析歷史');
+            cacheAutoClipStats = { config: {}, stats: [] };
+            fs.writeFileSync(path.join(__dirname, 'autoclip_stats.json'), JSON.stringify(cacheAutoClipStats), 'utf-8');
+            if (tiktokProcess && !tiktokProcess.killed) {
+                tiktokProcess.stdin.write('AUTOCLIP_CLEAR\n');
+            }
+            pushLog('🗑️ 已清空自動剪輯分析歷史 (記憶體 + autoclip_stats.json' + (tiktokProcess ? ' + TikTok.js' : '') + ')');
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: true }));
         } catch (err) {
