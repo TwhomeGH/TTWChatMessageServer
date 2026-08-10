@@ -394,9 +394,11 @@ const server = http.createServer((req, res) => {
                 const line = raw.trim();
                 if (!line) continue;
 
-                pushLog(`[OUT] ${line}`);
-
-                if (!line.startsWith('{') || !line.endsWith('}')) continue;
+                // 非 JSON 行：直接顯示
+                if (!line.startsWith('{') || !line.endsWith('}')) {
+                    pushLog(`[OUT] ${line}`);
+                    continue;
+                }
 
                 try {
                     const clean = line.replace(/^[^\{]*/, '').replace(/[^\}]*$/, ''); // 嘗試提取 JSON 部分
@@ -404,19 +406,24 @@ const server = http.createServer((req, res) => {
 
                     var PType = json.type;
 
-                    if (PType == "top10") {
-                        cacheKeywordDataTop = json.data;
-                    } else if (PType == "all") {
-                        cacheKeywordDataAll = json.data;
-                        if (messageFilter) messageFilter.mergeStats(json.data);
-                    } else if (PType == "AUTOCLIP_STATS") {
+                    if (PType == "AUTOCLIP_STATS") {
                         cacheAutoClipStats = {
                             config: json.data?.config || {},
                             stats: (Array.isArray(json.data?.stats) ? json.data.stats : []).slice(-2000),
                         };
+                        // 巨大 JSON 不印原始內容，只印摘要，避免洗版
+                        const last = cacheAutoClipStats.stats[cacheAutoClipStats.stats.length - 1];
+                        pushLog(`📈 [AutoClip] 統計更新 (${cacheAutoClipStats.stats.length} 筆, 門檻=${cacheAutoClipStats.config.scoreThreshold}, 最近: 觀眾=${last?.viewers} 基準=${last?.baseViewers} 訊息=${last?.msgRate}/min 分數=${last?.score})`);
+                    } else {
+                        if (PType == "top10") {
+                            cacheKeywordDataTop = json.data;
+                        } else if (PType == "all") {
+                            cacheKeywordDataAll = json.data;
+                            if (messageFilter) messageFilter.mergeStats(json.data);
+                        }
+                        pushLog(`[OUT] ${line}`);
+                        pushLog('📈 TikTok.js 回傳解析後:', json);
                     }
-
-                    pushLog('📈 TikTok.js 回傳解析後:', json);
                 } catch (err) {
                     pushLog('[OUT] JSON 解析失敗:', err.message);
                 }

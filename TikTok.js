@@ -46,7 +46,6 @@ function writeLog(filename="TikTokRun.log", message,type="Other") {
   
   var FileN = filename
   if (filename.toLowerCase().startsWith("default")) {
-    console.log("使用預設",FileN)
     FileN = "TikTokRun.log"
   }
 
