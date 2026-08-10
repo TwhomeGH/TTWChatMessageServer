@@ -2245,8 +2245,23 @@ if (isTwitch && process.env.AUTO_CLIP_ENABLED === '1') {
     });
     console.log('🎬 自動剪輯已啟用 (AutoClipManager)，每 30 秒評估一次');
     setInterval(() => {
-        try { autoClip.evaluate(); } catch (err) { console.error('❌ [AutoClip] 評估異常:', err); }
+        try {
+            autoClip.evaluate();
+            writeAutoClipStats();
+        } catch (err) { console.error('❌ [AutoClip] 評估異常:', err); }
     }, 30000);
+}
+
+// 將 AutoClip 評估歷史寫入 autoclip_stats.json（供分析圖表頁讀取）
+const AUTO_CLIP_STATS_FILE = path.join(__dirname, 'autoclip_stats.json');
+function writeAutoClipStats() {
+    if (!autoClip) return;
+    try {
+        const payload = { config: autoClip.getConfig(), stats: autoClip.getHistory() };
+        writeFileSync(AUTO_CLIP_STATS_FILE, JSON.stringify(payload), 'utf-8');
+    } catch (err) {
+        console.error('⚠️ 儲存 autoclip_stats.json 失敗:', err.message);
+    }
 }
 
 // Twitch 觀眾數定時更新

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="utf-8">
+    <title>自動剪輯分析</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body class="bg-gray-900 text-gray-100 min-h-screen p-6">
+
+<div class="max-w-6xl mx-auto space-y-6">
+
+    <div class="flex items-center justify-between">
+      <h1 class="text-3xl font-bold">📈 自動剪輯分析</h1>
+      <nav class="flex gap-2 flex-wrap text-sm">
+        <a href="/" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">🏠 主控台</a>
+        <a href="/clips" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">🎬 剪輯</a>
+        <a href="/keyword" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📊 關鍵字</a>
+        <a href="/config" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">⚙️ 設定</a>
+      </nav>
+    </div>
+
+    <!-- 目前狀態卡 -->
+    <div id="statusCards" class="grid grid-cols-2 md:grid-cols-5 gap-3"></div>
+
+    <!-- 圖表 -->
+    <div class="grid md:grid-cols-2 gap-6">
+        <div class="bg-gray-800 rounded-2xl shadow-lg p-5">
+            <h2 class="text-lg font-semibold text-blue-400 mb-3">👥 觀眾數 vs 基準</h2>
+            <div class="h-72"><canvas id="viewerChart"></canvas></div>
+        </div>
+        <div class="bg-gray-800 rounded-2xl shadow-lg p-5">
+            <h2 class="text-lg font-semibold text-cyan-400 mb-3">💬 訊息速率 vs 基準 (/min)</h2>
+            <div class="h-72"><canvas id="msgChart"></canvas></div>
+        </div>
+        <div class="bg-gray-800 rounded-2xl shadow-lg p-5 md:col-span-2">
+            <h2 class="text-lg font-semibold text-purple-400 mb-3">🎯 觸發分數 vs 門檻（紅色點 = 已觸發剪輯）</h2>
+            <div class="h-72"><canvas id="scoreChart"></canvas></div>
+        </div>
+    </div>
+
+    <!-- 說明與設定 -->
+    <div class="bg-gray-800 rounded-2xl shadow-lg p-5 flex flex-wrap items-start justify-between gap-3">
+        <div class="text-sm text-gray-400 space-y-1">
+            <p>💡 分數公式：<code class="bg-gray-700 px-1 rounded">score = W_觀眾×max(觀眾/基準, 1) + W_訊息×max(訊息/基準, 1)</code></p>
+            <p id="configInfo"></p>
+            <p>基準 = 最近 <span id="cfgBaseline"></span> 分鐘內樣本的中位數；「基準樣本不足」表示尚未收集到足夠資料。</p>
+        </div>
+        <div class="flex gap-2">
+            <button id="refreshBtn" class="px-3 py-1.5 text-sm bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition">🔄 重新整理</button>
+            <button id="clearBtn" class="px-3 py-1.5 text-sm bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition">🗑️ 清空歷史</button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+let viewerChart, msgChart, scoreChart;
+let cfg = {};
+
+const chartColors = {
+    viewers: 'rgb(96,165,250)',
+    viewersBase: 'rgba(96,165,250,0.35)',
+    msg: 'rgb(34,211,238)',
+    msgBase: 'rgba(34,211,238,0.35)',
+    score: 'rgb(192,132,252)',
+    threshold: 'rgba(248,113,113,0.7)',
+};
+
+function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+}
+
+function fmtTime(iso) {
+    const d = new Date(iso);
+    return isNaN(d) ? '' : d.toLocaleTimeString('zh-TW', { hour12: false });
+}
+
+function buildCharts() {
+    const common = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: { legend: { labels: { color: '#cbd5e1' } } },
+        scales: {
+            x: { ticks: { color: '#94a3b8', maxTicksLimit: 12 }, grid: { color: 'rgba(148,163,184,0.1)' } },
+            y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.1)' } },
+        },
+    };
+    viewerChart = new Chart(document.getElementById('viewerChart'), {
+        type: 'line',
+        data: { labels: [], datasets: [
+            { label: '觀眾數', data: [], borderColor: chartColors.viewers, backgroundColor: chartColors.viewers, borderWidth: 2, tension: 0.3, pointRadius: 0 },
+            { label: '基準觀眾', data: [], borderColor: chartColors.viewersBase, backgroundColor: chartColors.viewersBase, borderWidth: 1.5, borderDash: [5,5], tension: 0.3, pointRadius: 0 },
+        ]},
+        options: { ...common, plugins: { legend: { labels: { color: '#cbd5e1' } } } },
+    });
+    msgChart = new Chart(document.getElementById('msgChart'), {
+        type: 'line',
+        data: { labels: [], datasets: [
+            { label: '訊息/min', data: [], borderColor: chartColors.msg, backgroundColor: chartColors.msg, borderWidth: 2, tension: 0.3, pointRadius: 0 },
+            { label: '基準訊息', data: [], borderColor: chartColors.msgBase, backgroundColor: chartColors.msgBase, borderWidth: 1.5, borderDash: [5,5], tension: 0.3, pointRadius: 0 },
+        ]},
+        options: { ...common, plugins: { legend: { labels: { color: '#cbd5e1' } } } },
+    });
+    scoreChart = new Chart(document.getElementById('scoreChart'), {
+        type: 'line',
+        data: { labels: [], datasets: [
+            {
+                label: '分數', data: [], borderColor: chartColors.score, backgroundColor: chartColors.score,
+                borderWidth: 2, tension: 0.3, pointRadius: 2,
+                pointBackgroundColor: [], pointRadius: 2, pointHoverRadius: 5,
+            },
+            { label: '門檻', data: [], borderColor: chartColors.threshold, backgroundColor: chartColors.threshold, borderWidth: 1.5, borderDash: [6,4], pointRadius: 0 },
+        ]},
+        options: { ...common, plugins: { legend: { labels: { color: '#cbd5e1' } } } },
+    });
+}
+
+function updateCharts(stats) {
+    const labels = stats.map(s => fmtTime(s.t));
+    const th = cfg.scoreThreshold ?? 1.8;
+
+    viewerChart.data.labels = labels;
+    viewerChart.data.datasets[0].data = stats.map(s => s.viewers);
+    viewerChart.data.datasets[1].data = stats.map(s => s.baseViewers ?? 0);
+    viewerChart.update('none');
+
+    msgChart.data.labels = labels;
+    msgChart.data.datasets[0].data = stats.map(s => s.msgRate ?? 0);
+    msgChart.data.datasets[1].data = stats.map(s => s.baseMsgRate ?? 0);
+    msgChart.update('none');
+
+    scoreChart.data.labels = labels;
+    scoreChart.data.datasets[0].data = stats.map(s => s.score ?? 0);
+    scoreChart.data.datasets[0].pointBackgroundColor = stats.map(s => s.triggered ? '#ef4444' : chartColors.score);
+    scoreChart.data.datasets[0].pointRadius = stats.map(s => s.triggered ? 6 : 1.5);
+    scoreChart.data.datasets[1].data = stats.map(() => th);
+    scoreChart.update('none');
+}
+
+function renderCards(stats) {
+    const last = stats[stats.length - 1];
+    const container = document.getElementById('statusCards');
+    if (!last) {
+        container.innerHTML = '<div class="col-span-full text-center text-gray-500 py-4">尚無評估資料（自動剪輯啟用後每 30 秒產生一筆）</div>';
+        return;
+    }
+    const clips = stats.filter(s => s.triggered).length;
+    const cards = [
+        { label: '目前觀眾', value: last.viewers, sub: `基準 ${last.baseViewers ?? 0}` },
+        { label: '訊息速率', value: `${last.msgRate ?? 0}/min`, sub: `基準 ${last.baseMsgRate ?? 0}` },
+        { label: '觸發分數', value: last.score ?? 0, sub: `門檻 ${cfg.scoreThreshold ?? 1.8}`, hot: (last.score ?? 0) >= (cfg.scoreThreshold ?? 1.8) },
+        { label: '已觸發剪輯', value: clips, sub: `${stats.length} 個樣本` },
+        { label: '目前狀態', value: '', sub: esc(last.reason || '') },
+    ];
+    container.innerHTML = cards.map(c => `
+        <div class="bg-gray-800 rounded-2xl shadow-lg p-4">
+            <div class="text-xs text-gray-400 mb-1">${c.label}</div>
+            <div class="text-2xl font-bold ${c.hot ? 'text-red-400' : 'text-gray-100'}">${esc(c.value ?? '')}</div>
+            <div class="text-xs text-gray-500 mt-1 truncate" title="${c.sub}">${c.sub || '&nbsp;'}</div>
+        </div>
+    `).join('');
+}
+
+function renderConfig() {
+    document.getElementById('configInfo').innerHTML =
+        `W_觀眾=${cfg.wViewers ?? 0.5}　W_訊息=${cfg.wMsg ?? 0.5}　最低觀眾=${cfg.floorViewers ?? 2}　最低訊息=${cfg.floorMsgPerMin ?? 0.3}　冷卻=${cfg.cooldownMin ?? 15} 分`;
+    document.getElementById('cfgBaseline').textContent = cfg.baselineWindowMin ?? 30;
+}
+
+async function load() {
+    try {
+        const res = await fetch('/autoclip/data');
+        const result = await res.json();
+        if (!result.success) throw new Error(result.error || 'unknown');
+        const stats = result.stats || [];
+        cfg = result.config || {};
+        renderConfig();
+        renderCards(stats);
+        if (!viewerChart) buildCharts();
+        updateCharts(stats);
+    } catch (err) {
+        document.getElementById('statusCards').innerHTML =
+            `<div class="col-span-full text-red-400">載入失敗: ${esc(err.message)}</div>`;
+    }
+}
+
+document.getElementById('refreshBtn').addEventListener('click', load);
+
+document.getElementById('clearBtn').addEventListener('click', async () => {
+    if (!confirm('確定要清空自動剪輯分析歷史嗎？')) return;
+    const btn = document.getElementById('clearBtn');
+    btn.disabled = true;
+    btn.textContent = '清空中...';
+    try {
+        const res = await fetch('/autoclip/clear', { method: 'POST' });
+        const result = await res.json();
+        if (result.success) {
+            btn.textContent = '✅ 已清空';
+            load();
+        } else {
+            btn.textContent = '❌ 失敗';
+            alert('清空失敗: ' + (result.error || '未知錯誤'));
+        }
+    } catch (err) {
+        btn.textContent = '❌ 失敗';
+        alert('清空失敗: ' + err.message);
+    }
+    setTimeout(() => { btn.disabled = false; btn.textContent = '🗑️ 清空歷史'; }, 1500);
+});
+
+buildCharts();
+load();
+setInterval(load, 5000); // 每 5 秒更新
+</script>
+
+</body>
+</html>

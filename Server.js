@@ -896,6 +896,57 @@ const server = http.createServer((req, res) => {
         });
     }
 
+    // ── 自動剪輯分析頁面 ──
+    else if (req.url === '/autoclip') {
+        const filePath = path.join(__dirname, 'autoclip.html');
+        fs.readFile(filePath, 'utf8', (err, data) => {
+            if (err) {
+                res.writeHead(500, { 'Content-Type': 'text/plain' });
+                res.end('Error loading autoclip.html');
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(data);
+        });
+    }
+
+    // 讀取自動剪輯評估歷史
+    else if (req.url === '/autoclip/data') {
+        const statsFile = path.join(__dirname, 'autoclip_stats.json');
+        try {
+            let stats = [];
+            let config = {};
+            if (fs.existsSync(statsFile)) {
+                const raw = fs.readFileSync(statsFile, 'utf-8');
+                const data = JSON.parse(raw);
+                if (Array.isArray(data)) {
+                    stats = data;
+                } else {
+                    stats = data.stats || [];
+                    config = data.config || {};
+                }
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ success: true, stats, config }));
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+        }
+    }
+
+    // 清空自動剪輯分析歷史
+    else if (req.url === '/autoclip/clear' && req.method === 'POST') {
+        try {
+            fs.writeFileSync(path.join(__dirname, 'autoclip_stats.json'), '[]', 'utf-8');
+            pushLog('🗑️ 已清空自動剪輯分析歷史');
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true }));
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+        }
+    }
+
     // 登入 API
     else if (req.url === '/login' && req.method === 'POST') {
         let body = '';

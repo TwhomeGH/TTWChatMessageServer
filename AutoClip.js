@@ -55,6 +55,8 @@ export class AutoClipManager {
         this.triggered = false;
         this.totalMessages = 0;
         this.totalClips = 0;
+        this.history = [];
+        this.historyLimit = 2000;
     }
 
     onChatMessage(now = Date.now()) {
@@ -120,6 +122,30 @@ export class AutoClipManager {
     }
 
     /**
+     * 取得歷史評估點（供圖表分析頁面使用）
+     */
+    getHistory() {
+        return this.history;
+    }
+
+    /**
+     * 取得目前設定（供圖表頁顯示門檻線與狀態）
+     */
+    getConfig() {
+        return {
+            windowMin: this.windowMs / MINUTE,
+            baselineWindowMin: this.baselineMs / MINUTE,
+            rateWindowMin: this.rateMs / MINUTE,
+            wViewers: this.wViewers,
+            wMsg: this.wMsg,
+            scoreThreshold: this.scoreThreshold,
+            floorViewers: this.floorViewers,
+            floorMsgPerMin: this.floorMsgPerMin,
+            cooldownMin: this.cooldownMs / MINUTE,
+        };
+    }
+
+    /**
      * 定期評估是否觸發自動剪輯（建議每 30 秒與人數 poll 對齊呼叫）
      * @returns {{ triggered: boolean, reason: string, stats: object }}
      */
@@ -127,6 +153,7 @@ export class AutoClipManager {
         this._pruneMsgs(now);
         const { baseViewers, baseMsgRate, sampleCount } = this._baselines(now);
         const rate = this.currentMsgRate(now);
+        const score = this._score(baseViewers, baseMsgRate, now);
 
         let triggered = false;
         let reason = '';
@@ -139,7 +166,6 @@ export class AutoClipManager {
             const left = Math.ceil((this.lastClipAt + this.cooldownMs - now) / MINUTE);
             reason = `冷卻中，剩 ${left} 分`;
         } else {
-            const score = this._score(baseViewers, baseMsgRate, now);
             const over = score >= this.scoreThreshold;
             if (over && !this.triggered) {
                 triggered = true;
@@ -150,7 +176,24 @@ export class AutoClipManager {
             }
         }
 
-        this.log(`🎬 [AutoClip] 觀眾=${this.currentViewers}(基準${baseViewers.toFixed(1)}) 訊息=${rate.toFixed(2)}/min(基準${baseMsgRate.toFixed(2)}) 樣本=${sampleCount} 分數=${this.getStats(now).score} → ${reason}`);
+        const stats = this.getStats(now);
+        this.log(`🎬 [AutoClip] 觀眾=${stats.viewers} | 基準=${stats.baseViewers} | 訊息=${stats.msgRate}/min | 基準訊息=${stats.baseMsgRate} | 分數=${stats.score}/${this.scoreThreshold} | 樣本=${sampleCount} → ${reason}`);
+
+        // 記錄歷史點（供圖表頁）
+        this.history.push({
+            t: new Date(now).toISOString(),
+            viewers: this.currentViewers,
+            baseViewers: stats.baseViewers,
+            msgRate: stats.msgRate,
+            baseMsgRate: stats.baseMsgRate,
+            score: stats.score,
+            sampleCount,
+            triggered,
+            reason,
+        });
+        if (this.history.length > this.historyLimit) {
+            this.history.splice(0, this.history.length - this.historyLimit);
+        }
 
         if (triggered) {
             this.triggered = true;
@@ -168,6 +211,6 @@ export class AutoClipManager {
             }
         }
 
-        return { triggered, reason, stats: this.getStats(now) };
+        return { triggered, reason, stats };
     }
 }
