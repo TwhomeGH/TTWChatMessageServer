@@ -1343,6 +1343,8 @@ if (isTK) {
         sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
         // 連線成功後恢復贊助廣告定時器
         resumeAdTimers();
+
+        setInterval(viewCache, 30000); // 每30秒更新一次用戶數量   
         // fetchAndSyncGifts(); // eulerstream 需付費，禮物名稱由收到事件時即時翻譯
         
     }).catch(err => {
@@ -1376,8 +1378,7 @@ if (isTK) {
 
     });
 
-    setInterval(viewCache, 10000); // 每10秒更新一次用戶數量   
-
+    clearInterval(viewCache);
 
 }
 
