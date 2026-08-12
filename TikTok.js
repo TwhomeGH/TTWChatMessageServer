@@ -1393,29 +1393,29 @@ connection.on(ControlEvent.DISCONNECTED, (e) => {
 
     if (isEnd) return;
 
-    setTimeout(() => {
-        if (TkRetryCount >= TkRetryMaxCount) {
-            console.log("已達 TikTok 最大重連次數，停止重連");
-            sendSocketMessage("系統", "TikTok 重連已達上限，請重新啟動", "", "", false,CacheUserNum,CacheUserList);
-            return;
-        }
+    // setTimeout(() => {
+    //     if (TkRetryCount >= TkRetryMaxCount) {
+    //         console.log("已達 TikTok 最大重連次數，停止重連");
+    //         sendSocketMessage("系統", "TikTok 重連已達上限，請重新啟動", "", "", false,CacheUserNum,CacheUserList);
+    //         return;
+    //     }
 
-        TkRetryCount += 1;
-        console.log(`TikTok 重新連線嘗試 (${TkRetryCount}/${TkRetryMaxCount})...`);
-        sendSocketMessage("系統", `TikTok 重新連線嘗試 (${TkRetryCount}/${TkRetryMaxCount})...`, "", "", false,CacheUserNum,CacheUserList);
+    //     TkRetryCount += 1;
+    //     console.log(`TikTok 重新連線嘗試 (${TkRetryCount}/${TkRetryMaxCount})...`);
+    //     sendSocketMessage("系統", `TikTok 重新連線嘗試 (${TkRetryCount}/${TkRetryMaxCount})...`, "", "", false,CacheUserNum,CacheUserList);
 
-        connection.connect().then(state => {
-            console.log(`重新連線成功，roomId ${state.roomId}`);
-            TkRetryCount = 0;
-            RoomID = state.roomId;
-            setInterval(viewCache, 10000);
-            sendSocketMessage("系統", "TikTok 重新連線成功", "", "", false,CacheUserNum,CacheUserList);
-        }).catch(err => {
-            console.error("重新連線失敗:", err.message);
-            sendSocketMessage("系統", `TikTok 重新連線失敗: ${err.message}`, "", "", false,CacheUserNum,CacheUserList);
-        });
+    //     connection.connect().then(state => {
+    //         console.log(`重新連線成功，roomId ${state.roomId}`);
+    //         TkRetryCount = 0;
+    //         RoomID = state.roomId;
+    //         setInterval(viewCache, 10000);
+    //         sendSocketMessage("系統", "TikTok 重新連線成功", "", "", false,CacheUserNum,CacheUserList);
+    //     }).catch(err => {
+    //         console.error("重新連線失敗:", err.message);
+    //         sendSocketMessage("系統", `TikTok 重新連線失敗: ${err.message}`, "", "", false,CacheUserNum,CacheUserList);
+    //     });
 
-    }, 15000);
+    // }, 15000);
 });
 
 connection.on(ControlEvent.ERROR, (err) => {
