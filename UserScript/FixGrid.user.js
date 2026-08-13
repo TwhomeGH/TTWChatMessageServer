@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Full Video Site Fix + Dark Mode + Override
 // @namespace    http://tampermonkey.net/
-// @version      4.6
+// @version      4.7
 // @description  修正 video-grid + 播放器頁面排版，資訊面板、推薦影片美化，圖片比例修正，深色模式切換並記住偏好，覆蓋 refreshLiveChatUnread
 // @match        *://*/*
 // @grant        GM_addStyle
@@ -270,7 +270,7 @@
         )
       )) {
         injectCSS();
-        overrideRefresh();
+        
       }
     }
   });
