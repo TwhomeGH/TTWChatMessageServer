@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Full Video Site Fix + Dark Mode + Override
 // @namespace    http://tampermonkey.net/
-// @version      4.5
+// @version      4.6
 // @description  修正 video-grid + 播放器頁面排版，資訊面板、推薦影片美化，圖片比例修正，深色模式切換並記住偏好，覆蓋 refreshLiveChatUnread
 // @match        *://*/*
 // @grant        GM_addStyle
@@ -242,16 +242,21 @@
   });
   document.body.appendChild(toggleButton);
 
-  // 覆蓋 refreshLiveChatUnread 為空函數
-  const overrideRefresh = () => {
-    if (typeof window.refreshLiveChatUnread === "function") {
-      window.refreshLiveChatUnread = async function () {
-        return; // 空函數，不做任何事
-      };
-      console.log("[Userscript] refreshLiveChatUnread 已覆蓋為空函數");
-    }
-  };
-  overrideRefresh();
+
+
+  const originalFetch = window.fetch;
+    window.fetch = async function(...args) {
+        if (typeof args[0] === "string" && args[0].includes("/api/live-chat/messages")) {
+            console.log("[Userscript] 攔截到 live-chat API，已阻止");
+            return new Response(JSON.stringify({ ok: true, messages: [] }), {
+                status: 200,
+                headers: { "Content-Type": "application/json" }
+            });
+        }
+        return originalFetch.apply(this, args);
+    };
+
+
 
   // 監聽 DOM 變化，確保動態載入也能套用 CSS 與函數覆蓋
   const observer = new MutationObserver((mutations) => {
