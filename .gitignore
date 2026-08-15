@@ -19,6 +19,6 @@ OtherTool/live_engine/cache/*
 sponsor_ads.json
 .playwright-mcp/*
 clip_history.json
-
+CHAT_NO_CONTENT_*.json
 OtherTool/live_engine/config/overlay_settings.json
 autoclip_stats.json
