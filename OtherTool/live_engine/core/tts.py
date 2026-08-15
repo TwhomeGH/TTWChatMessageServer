@@ -1,7 +1,6 @@
 import asyncio
-import tempfile
+import io
 import threading
-import os
 from enum import IntEnum
 from typing import Optional
 import pygame
@@ -52,7 +51,6 @@ class TTSService:
         self.pitch: float = 0.0
         self.volume: float = 0.0
 
-        self._temp_dir = tempfile.gettempdir()
         pygame.mixer.init()
 
     def update_default(self):
@@ -171,24 +169,21 @@ class TTSService:
 
         rate_str = f"{self.rate:+.0f}%" if self.rate != 0 else "+0%"
         volume_str = f"{self.volume:+.0f}%" if self.volume != 0 else "+0%"
+        pitch_str = f"{self.pitch:+d}Hz" if self.pitch != 0 else "+0Hz"
 
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False, dir=self._temp_dir) as f:
-            temp_path = f.name
+        communicate = edge_tts.Communicate(text, voice, rate=rate_str, volume=volume_str, pitch=pitch_str)
 
-        try:
-            communicate = edge_tts.Communicate(text, voice, rate=rate_str, volume=volume_str)
-            await communicate.save(temp_path)
+        buffer = io.BytesIO()
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                buffer.write(chunk["data"])
+        buffer.seek(0)
 
-            pygame.mixer.music.load(temp_path)
-            pygame.mixer.music.play()
+        pygame.mixer.music.load(buffer)
+        pygame.mixer.music.play()
 
-            while pygame.mixer.music.get_busy():
-                await asyncio.sleep(0.1)
-        finally:
-            try:
-                os.unlink(temp_path)
-            except Exception:
-                pass
+        while pygame.mixer.music.get_busy():
+            await asyncio.sleep(0.1)
 
     def speak_preview(self):
         self._speak_async("這是一段系統朗讀測試。")

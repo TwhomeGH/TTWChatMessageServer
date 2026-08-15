@@ -3,3 +3,4 @@ PyOpenGL
 edge-tts
 aiohttp
 pytest
+pygame
