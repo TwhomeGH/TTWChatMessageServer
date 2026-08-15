@@ -1626,8 +1626,11 @@ connection.on(WebcastEvent.CHAT, data => {
     logRawEvent('CHAT', data);
 
     if (!data.content) {
+        writeFileSync(`./logs/TikTok/CHAT_NO_CONTENT_${Date.now()}.json`, JSON.stringify(data, null, 2), 'utf-8');
+        console.log('⚠️ CHAT 事件缺少 content，已寫入 logs/TikTok/CHAT_NO_CONTENT_*.json');
+        
         if (data.emotes && data.emotes.length > 0) {
-            data.content = `[表情] ${data.emotes[0]?.emoteId || ''}`;
+            data.content = `[表情] ${data.emotes[0]?.emote || ''}`;
         } else {
             return;
         }
