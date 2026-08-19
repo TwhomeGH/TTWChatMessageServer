@@ -492,6 +492,49 @@ score ≥ SCORE_THRESHOLD 即觸發（上升緣 + cooldown 防連發）
 - **設定資訊**：顯示目前權重、最低門檻、冷卻等參數
 - 評估歷史**執行時存在記憶體**（TikTok.js 每 30 秒透過 IPC 推送到 Server.js），僅在 TikTok.js 結束離線時才寫入 `autoclip_stats.json`（保留最近 2000 筆），可一鍵清空
 
+## 推流端診斷頁 `/pushdiag`
+
+> 需搭配自己的 **SRS / Oryx** 串流伺服器使用。此頁面直接以瀏覽器連到 SRS 的 HTTP-FLV 播放埠（如 `http://192.168.0.102:882`），解析即時 FLV tag 檢查推流端（OBS 等）送出的資料是否正常，是排查「推流端問題」的分析工具。
+
+開啟 `http://localhost:3332/pushdiag`（主控台導覽列「🔧 推流診斷」），填入 SRS 主機與 stream key 後按「▶ 開始分析」。
+
+### 功能一覽
+
+- **連線狀態卡**：HTTP 狀態、content-type、已收位元組、即時位元率（kbps）、封包計數
+- **即時預覽**：用 mpegts.js 直接播放該 FLV 串流，邊看畫面邊對照數據
+  - 可勾選「分析時自動播放」；「📊 疊加資訊」開關可在影片左上角顯示 HUD（fps / 解析度 / 位元率 / GOP / 封包數 / 影音偏移），偏移過大自動轉紅
+- **健康診斷旗標**：自動判別
+  - ✅ 影音齊全 / ❌ 只有音訊或只有影片
+  - GOP（關鍵影格間隔）分析：最大間隔 >5s 黃燈、>10s 紅燈（正常 OBS 預設 2s，過長代表觀看端無法加入直播）
+  - 位元率偏低（<100 kbps）或過高（>20 Mbps）警告
+  - 影音時間戳偏移 >3s 警告
+- **元資料卡**：解析 onMetaData（若有送）；OBS 通常不送，頁面會提示改以 SPS 為準
+- **影片資訊卡**：從 SPS 解出 H.264 Profile / Level / 解析度 / VUI FPS，以及**量測 FPS**（由實際封包時間差計算）、**GOP 最大/平均間隔**（含 <200ms 假標記過濾）
+- **音訊資訊卡**：從 AudioSpecificConfig 解出 AAC AOT（LC/HE）、取樣率、頻道
+- **圖表**（Chart.js，即時更新）
+  - 影片 vs 音訊位元率（kbps，每秒聚合，最近 60 秒）
+  - 影片封包大小（紅色點 = 關鍵影格，可看出 GOP 結構）
+  - 影音時間戳偏移（audio - video, ms）
+- **封包檢查器**：即時 tag 列表（序號 / 型別 / 大小 / 幀型別 / timestamp / 間距），每列有 `🔎` 檢視原始資料
+- **影片 / 音訊塊明細**：最近 50 個區塊，含幀型別、NALU、解析度、AAC 型別、取樣率等
+
+### 原文檢視（🔎）
+
+點封包列的 `🔎` 開啟彈窗，三種檢視分頁：
+
+- **十六進位**：完整 hex dump（16 bytes/列 + ASCII）
+- **UTF-8 文字**：將可讀字串解出（含中文/emoji 多字元，overlong/surrogate 驗證）
+- **🔍 解析**：直接把 tag 結構解成人話 — 影片（幀型別 / codec / NALU 列表 / SPS 解析度 Profile Level）、音訊（格式 / 取樣率 / AAC 型別 / ASC 解析）、onMetaData（key=value）
+
+> [!NOTE]
+> 原始資料僅保留**最近 300 個封包（合計 ~4MB）**，太舊的列點 `🔎` 會顯示「已過期」。
+
+### 技術說明
+
+- FLV tag 即為 RTMP 媒體封包（type 8=audio / 9=video / 18=script），瀏覽器直接 `fetch` SRS 的 HTTP-FLV 端點解析，**不需伺服器端轉發**（SRS 需允許 CORS，Oryx 預設 `*`）
+- 解析用 50ms 時間預算 + 4Hz 批次 DOM 渲染，避免封包解析拖慢 UI
+- 需 SRS 啟用 HTTP-FLV 播放（如 Oryx 的 `:882/live/<key>.flv`）
+
 ## 啟動服務
 
 ## 服務器預設運行在 Port 3332，提供 HTTP 控制介面

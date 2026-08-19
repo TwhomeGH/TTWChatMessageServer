@@ -939,6 +939,20 @@ const server = http.createServer((req, res) => {
         });
     }
 
+    // ── SRS 推流診斷頁面 ──
+    else if (req.url === '/pushdiag') {
+        const filePath = path.join(__dirname, 'pushdiag.html');
+        fs.readFile(filePath, 'utf8', (err, data) => {
+            if (err) {
+                res.writeHead(500, { 'Content-Type': 'text/plain' });
+                res.end('Error loading pushdiag.html');
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(data);
+        });
+    }
+
     // 讀取自動剪輯評估歷史（執行時取自記憶體，避免每次讀磁碟）
     else if (req.url === '/autoclip/data') {
         // 若記憶體還是空的（Server 剛啟動 / TikTok.js 未執行），從磁碟載入最後一次離線快照
