@@ -49,10 +49,15 @@
           </div>
           <div class="flex-1 min-w-40">
             <label class="block text-xs text-gray-400 mb-1">串流名稱 (stream key)</label>
-            <input id="streamInput" type="text" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" value="livestream">
+            <div class="relative">
+              <input id="streamInput" type="password" autocomplete="off" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 pr-9 text-sm focus:outline-none focus:border-blue-500" value="livestream">
+              <button id="streamEye" type="button" title="顯示/隱藏 stream key" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition">
+                <i class="fa-solid fa-eye"></i>
+              </button>
+            </div>
           </div>
         </div>
-        <p class="text-xs text-gray-500 mt-2">目標：<code id="flvUrl" class="bg-gray-900 px-1.5 py-0.5 rounded">http://192.168.0.102:882/live/livestream.flv</code></p>
+        <p class="text-xs text-gray-500 mt-2">目標：<code id="flvUrl" class="bg-gray-900 px-1.5 py-0.5 rounded cursor-pointer hover:bg-gray-700 transition" title="點擊顯示/隱藏 stream key"><i class="fa-solid fa-eye-slash mr-1"></i>http://192.168.0.102:882/live/livestream.flv</code></p>
       </div>
     </div>
 
@@ -1454,10 +1459,55 @@ document.getElementById('connToggle').addEventListener('click', () => {
     chevron.style.transform = '';
   }
 });
-function updateConnSummary() {
+// ── stream key 保護：遮罩 + 點擊顯示 ──
+let streamRevealed = false;
+
+// 遮罩 stream key：只顯示前後，中間以 * 取代
+function maskStreamKey(key) {
+  if (!key) return '';
+  if (key.length <= 2) return '*'.repeat(key.length);
+  const head = Math.min(2, key.length);
+  const tail = Math.min(2, key.length - head);
+  return key.slice(0, head) + '*'.repeat(Math.max(0, key.length - head - tail)) + key.slice(key.length - tail);
+}
+
+function getStreamKey() {
+  return document.getElementById('streamInput').value.trim();
+}
+
+function getFlvUrl() {
   const host = document.getElementById('hostInput').value.trim().replace(/\/+$/, '');
-  const stream = document.getElementById('streamInput').value.trim();
-  document.getElementById('connSummary').textContent = `${host}/live/${stream}.flv`;
+  return `${host}/live/${getStreamKey()}.flv`;
+}
+
+function renderStreamVisibility() {
+  const stream = getStreamKey();
+  const masked = maskStreamKey(stream);
+  // streamInput：password / text 切換
+  document.getElementById('streamInput').type = streamRevealed ? 'text' : 'password';
+  document.getElementById('streamEye').innerHTML = streamRevealed
+    ? '<i class="fa-solid fa-eye-slash"></i>' : '<i class="fa-solid fa-eye"></i>';
+  // connSummary：顯示遮罩 key（收合條）
+  const host = document.getElementById('hostInput').value.trim().replace(/\/+$/, '');
+  document.getElementById('connSummary').textContent =
+    streamRevealed ? `${host}/live/${stream}.flv` : `${host}/live/${masked}.flv`;
+  // flvUrl code：遮罩 + 眼睛 icon
+  const flvEl = document.getElementById('flvUrl');
+  flvEl.innerHTML = streamRevealed
+    ? `<i class="fa-solid fa-eye mr-1"></i>${getFlvUrl()}`
+    : `<i class="fa-solid fa-eye-slash mr-1"></i>${host}/live/${masked}.flv`;
+}
+
+function toggleStreamReveal() {
+  streamRevealed = !streamRevealed;
+  renderStreamVisibility();
+}
+
+document.getElementById('streamEye').addEventListener('click', toggleStreamReveal);
+document.getElementById('flvUrl').addEventListener('click', toggleStreamReveal);
+
+function updateConnSummary() {
+  renderStreamVisibility();
 }
 updateConnSummary();
 // HUD 疊加資訊開關
@@ -1473,10 +1523,7 @@ document.getElementById('hudEnabled').addEventListener('change', function () {
 document.getElementById('hostInput').addEventListener('input', updateFlvUrlPreview);
 document.getElementById('streamInput').addEventListener('input', updateFlvUrlPreview);
 function updateFlvUrlPreview() {
-  const host = document.getElementById('hostInput').value.trim().replace(/\/+$/, '');
-  const stream = document.getElementById('streamInput').value.trim();
-  document.getElementById('flvUrl').textContent = `${host}/live/${stream}.flv`;
-  updateConnSummary();
+  renderStreamVisibility();
 }
 
 // 定期更新（4Hz，批次渲染 DOM + 圖表，避免解析迴圈被拖慢）
