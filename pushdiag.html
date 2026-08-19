@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>SRS 推流診斷</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.js"></script>
@@ -11,115 +12,134 @@
 
 <body class="bg-gray-900 text-gray-100 min-h-screen p-3 sm:p-6">
 
-<div class="max-w-6xl mx-auto space-y-4 sm:space-y-6">
+<div class="max-w-[1600px] mx-auto space-y-4 sm:space-y-6">
 
     <!-- 標題與導覽 -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-      <h1 class="text-2xl sm:text-3xl font-bold">🔧 SRS 推流診斷</h1>
+      <h1 class="text-2xl sm:text-3xl font-bold"><i class="fa-solid fa-screwdriver-wrench text-gray-300"></i> SRS 推流診斷</h1>
       <nav class="flex gap-2 flex-wrap text-sm">
-        <a href="/" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">🏠 主控台</a>
-        <a href="/clips" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">🎬 剪輯</a>
-        <a href="/autoclip" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📈 剪輯分析</a>
-        <a href="/keyword" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📊 關鍵字</a>
-        <a href="/config" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">⚙️ 設定</a>
+        <a href="/" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition"><i class="fa-solid fa-house mr-1"></i>主控台</a>
+        <a href="/clips" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition"><i class="fa-solid fa-clapperboard mr-1"></i>剪輯</a>
+        <a href="/autoclip" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition"><i class="fa-solid fa-chart-line mr-1"></i>剪輯分析</a>
+        <a href="/keyword" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition"><i class="fa-solid fa-chart-column mr-1"></i>關鍵字</a>
+        <a href="/config" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition"><i class="fa-solid fa-gear mr-1"></i>設定</a>
       </nav>
     </div>
 
-    <!-- 連線設定 -->
-    <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5">
-      <div class="flex flex-col sm:flex-row sm:items-end gap-3 flex-wrap">
-        <div class="flex-1 min-w-40">
-          <label class="block text-xs text-gray-400 mb-1">SRS HTTP 主機 (FLV 播放埠)</label>
-          <input id="hostInput" type="text" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" value="http://192.168.0.102:882">
+    <!-- 連線設定（可收合，開始/停止按鈕常駐外層） -->
+    <div class="bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
+      <div class="flex items-center justify-between gap-3 px-4 sm:px-5 py-3">
+        <button id="connToggle" class="flex items-center gap-2 text-sm font-semibold text-gray-300 hover:text-white transition group">
+          <span id="connChevron" class="inline-block transition-transform duration-200 text-gray-500 group-hover:text-gray-300">▾</span>
+          <i class="fa-solid fa-plug text-sky-400"></i> 連線設定
+        </button>
+        <div class="flex items-center gap-3">
+          <span id="connSummary" class="text-xs text-gray-500 font-mono truncate hidden sm:inline"></span>
+          <div class="flex gap-2 shrink-0">
+            <button id="startBtn" class="px-4 py-2 text-sm bg-green-600 hover:bg-green-500 text-white rounded-lg transition"><i class="fa-solid fa-play mr-1"></i>開始分析</button>
+            <button id="stopBtn" class="px-4 py-2 text-sm bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition hidden"><i class="fa-solid fa-stop mr-1"></i>停止</button>
+          </div>
         </div>
-        <div class="flex-1 min-w-40">
-          <label class="block text-xs text-gray-400 mb-1">串流名稱 (stream key)</label>
-          <input id="streamInput" type="text" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" value="livestream">
+      </div>
+      <div id="connBody" class="border-t border-gray-700/60 px-4 sm:px-5 py-4">
+        <div class="flex flex-col sm:flex-row sm:items-end gap-3 flex-wrap">
+          <div class="flex-1 min-w-40">
+            <label class="block text-xs text-gray-400 mb-1">SRS HTTP 主機 (FLV 播放埠)</label>
+            <input id="hostInput" type="text" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" value="http://192.168.0.102:882">
+          </div>
+          <div class="flex-1 min-w-40">
+            <label class="block text-xs text-gray-400 mb-1">串流名稱 (stream key)</label>
+            <input id="streamInput" type="text" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" value="livestream">
+          </div>
         </div>
-        <div class="flex gap-2">
-          <button id="startBtn" class="px-4 py-2 text-sm bg-green-600 hover:bg-green-500 text-white rounded-lg transition">▶ 開始分析</button>
-          <button id="stopBtn" class="px-4 py-2 text-sm bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition hidden">⏹ 停止</button>
-        </div>
-      </div>
-      <p class="text-xs text-gray-500 mt-2">目標：<code id="flvUrl" class="bg-gray-900 px-1.5 py-0.5 rounded">http://192.168.0.102:882/live/livestream.flv</code></p>
-    </div>
-
-    <!-- 連線狀態卡 -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="connCards">
-      <div class="bg-gray-800 rounded-2xl shadow-lg p-3 sm:p-4">
-        <div class="text-xs text-gray-400 mb-1">連線狀態</div>
-        <div id="connStatus" class="text-lg font-bold text-gray-500">未連線</div>
-        <div id="connDetail" class="text-xs text-gray-500 mt-1 truncate">&nbsp;</div>
-      </div>
-      <div class="bg-gray-800 rounded-2xl shadow-lg p-3 sm:p-4">
-        <div class="text-xs text-gray-400 mb-1">已收位元組</div>
-        <div id="statBytes" class="text-lg font-bold text-gray-100">0</div>
-        <div class="text-xs text-gray-500 mt-1" id="statBytesSub">&nbsp;</div>
-      </div>
-      <div class="bg-gray-800 rounded-2xl shadow-lg p-3 sm:p-4">
-        <div class="text-xs text-gray-400 mb-1">即時位元率</div>
-        <div id="statBitrate" class="text-lg font-bold text-gray-100">0</div>
-        <div class="text-xs text-gray-500 mt-1" id="statBitrateSub">&nbsp;</div>
-      </div>
-      <div class="bg-gray-800 rounded-2xl shadow-lg p-3 sm:p-4">
-        <div class="text-xs text-gray-400 mb-1">封包計數</div>
-        <div id="statTags" class="text-lg font-bold text-gray-100">0</div>
-        <div class="text-xs text-gray-500 mt-1" id="statTagsSub">&nbsp;</div>
+        <p class="text-xs text-gray-500 mt-2">目標：<code id="flvUrl" class="bg-gray-900 px-1.5 py-0.5 rounded">http://192.168.0.102:882/live/livestream.flv</code></p>
       </div>
     </div>
 
-    <!-- 即時預覽 -->
-    <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5">
-      <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <h2 class="text-lg font-semibold text-red-400">📺 即時預覽</h2>
-        <div class="flex items-center gap-3 text-xs text-gray-400 flex-wrap">
-          <label class="flex items-center gap-1.5 cursor-pointer">
-            <input id="previewEnabled" type="checkbox" checked class="accent-red-500">
-            分析時自動播放
-          </label>
-          <label class="flex items-center gap-1.5 cursor-pointer">
-            <input id="hudEnabled" type="checkbox" checked class="accent-red-500">
-            📊 疊加資訊
-          </label>
-          <span id="previewStatus" class="text-gray-500">未啟動</span>
-        </div>
-      </div>
-      <div class="relative bg-black rounded-xl overflow-hidden" style="aspect-ratio: 16/9">
-        <video id="previewVideo" class="w-full h-full" controls playsinline></video>
-        <div id="previewOverlay" class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm bg-black/60">
-          ▶ 點擊「開始分析」後播放
-        </div>
-        <!-- HUD 疊加資訊 -->
-        <div id="previewHud" class="absolute top-2 left-2 rounded-lg bg-black/70 px-3 py-2 text-[11px] font-mono text-gray-200 pointer-events-none space-y-0.5 hidden">
-          <div class="text-red-400 font-bold mb-0.5">📺 LIVE</div>
-          <div><span class="text-gray-500">fps</span> <span id="hudFps" class="text-blue-300">—</span></div>
-          <div><span class="text-gray-500">res</span> <span id="hudRes" class="text-sky-300">—</span></div>
-          <div><span class="text-gray-500">bitrate</span> <span id="hudBitrate" class="text-purple-300">—</span></div>
-          <div><span class="text-gray-500">GOP</span> <span id="hudGop" class="text-emerald-300">—</span></div>
-          <div><span class="text-gray-500">pkts</span> <span id="hudPkts" class="text-gray-300">—</span></div>
-          <div><span class="text-gray-500">sync</span> <span id="hudSync" class="text-amber-300">—</span></div>
-        </div>
-      </div>
-    </div>
+    <!-- 狀態 + 預覽 + 健康（xl 以上並排：預覽 2/3 左，狀態卡+健康 1/3 右） -->
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
 
-    <!-- 健康旗標 -->
-    <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5">
-      <h2 class="text-lg font-semibold text-emerald-400 mb-3">🩺 健康診斷</h2>
-      <div id="healthFlags" class="flex flex-wrap gap-2 text-xs text-gray-500">尚未開始分析</div>
+      <!-- 即時預覽（xl 佔 2/3） -->
+      <div class="xl:col-span-2">
+        <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5">
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <h2 class="text-lg font-semibold text-red-400"><i class="fa-solid fa-tv mr-1.5"></i>即時預覽</h2>
+            <div class="flex items-center gap-3 text-xs text-gray-400 flex-wrap">
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input id="previewEnabled" type="checkbox" checked class="accent-red-500">
+                分析時自動播放
+              </label>
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input id="hudEnabled" type="checkbox" checked class="accent-red-500">
+                <i class="fa-solid fa-layer-group mr-1"></i>疊加資訊
+              </label>
+              <span id="previewStatus" class="text-gray-500">未啟動</span>
+            </div>
+          </div>
+          <div class="relative bg-black rounded-xl overflow-hidden" style="aspect-ratio: 16/9">
+            <video id="previewVideo" class="w-full h-full" controls playsinline></video>
+            <div id="previewOverlay" class="absolute inset-0 flex items-center justify-center text-gray-500 text-sm bg-black/60">
+              <i class="fa-solid fa-circle-play text-gray-500 mr-1"></i>點擊「開始分析」後播放
+            </div>
+            <!-- HUD 疊加資訊 -->
+            <div id="previewHud" class="absolute top-2 left-2 rounded-lg bg-black/70 px-3 py-2 text-[11px] font-mono text-gray-200 pointer-events-none space-y-0.5 hidden">
+              <div class="text-red-400 font-bold mb-0.5"><i class="fa-solid fa-tower-broadcast mr-1"></i>LIVE</div>
+              <div><span class="text-gray-500">fps</span> <span id="hudFps" class="text-blue-300">—</span></div>
+              <div><span class="text-gray-500">res</span> <span id="hudRes" class="text-sky-300">—</span></div>
+              <div><span class="text-gray-500">bitrate</span> <span id="hudBitrate" class="text-purple-300">—</span></div>
+              <div><span class="text-gray-500">GOP</span> <span id="hudGop" class="text-emerald-300">—</span></div>
+              <div><span class="text-gray-500">pkts</span> <span id="hudPkts" class="text-gray-300">—</span></div>
+              <div><span class="text-gray-500">sync</span> <span id="hudSync" class="text-amber-300">—</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右欄 1/3：連線狀態卡 + 健康診斷 -->
+      <div class="space-y-4 sm:space-y-6">
+        <div class="grid grid-cols-2 gap-3" id="connCards">
+          <div class="bg-gray-800 rounded-2xl shadow-lg p-3 sm:p-4">
+            <div class="text-xs text-gray-400 mb-1">連線狀態</div>
+            <div id="connStatus" class="text-lg font-bold text-gray-500">未連線</div>
+            <div id="connDetail" class="text-xs text-gray-500 mt-1 truncate">&nbsp;</div>
+          </div>
+          <div class="bg-gray-800 rounded-2xl shadow-lg p-3 sm:p-4">
+            <div class="text-xs text-gray-400 mb-1">已收位元組</div>
+            <div id="statBytes" class="text-lg font-bold text-gray-100">0</div>
+            <div class="text-xs text-gray-500 mt-1" id="statBytesSub">&nbsp;</div>
+          </div>
+          <div class="bg-gray-800 rounded-2xl shadow-lg p-3 sm:p-4">
+            <div class="text-xs text-gray-400 mb-1">即時位元率</div>
+            <div id="statBitrate" class="text-lg font-bold text-gray-100">0</div>
+            <div class="text-xs text-gray-500 mt-1" id="statBitrateSub">&nbsp;</div>
+          </div>
+          <div class="bg-gray-800 rounded-2xl shadow-lg p-3 sm:p-4">
+            <div class="text-xs text-gray-400 mb-1">封包計數</div>
+            <div id="statTags" class="text-lg font-bold text-gray-100">0</div>
+            <div class="text-xs text-gray-500 mt-1" id="statTagsSub">&nbsp;</div>
+          </div>
+        </div>
+
+        <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5">
+          <h2 class="text-lg font-semibold text-emerald-400 mb-3"><i class="fa-solid fa-stethoscope mr-1.5"></i>健康診斷</h2>
+          <div id="healthFlags" class="flex flex-wrap gap-2 text-xs text-gray-500">尚未開始分析</div>
+        </div>
+      </div>
+
     </div>
 
     <!-- 元資料 / 影片 / 音訊 -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
       <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5">
-        <h2 class="text-lg font-semibold text-sky-400 mb-3">📄 元資料 (onMetaData)</h2>
+        <h2 class="text-lg font-semibold text-sky-400 mb-3"><i class="fa-solid fa-file-lines mr-1.5"></i>元資料 (onMetaData)</h2>
         <div id="metaInfo" class="text-sm text-gray-300 space-y-1">尚未擷取</div>
       </div>
       <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5">
-        <h2 class="text-lg font-semibold text-blue-400 mb-3">🎥 影片資訊</h2>
+        <h2 class="text-lg font-semibold text-blue-400 mb-3"><i class="fa-solid fa-video mr-1.5"></i>影片資訊</h2>
         <div id="videoInfo" class="text-sm text-gray-300 space-y-1">尚未擷取</div>
       </div>
       <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5">
-        <h2 class="text-lg font-semibold text-cyan-400 mb-3">🎵 音訊資訊</h2>
+        <h2 class="text-lg font-semibold text-cyan-400 mb-3"><i class="fa-solid fa-music mr-1.5"></i>音訊資訊</h2>
         <div id="audioInfo" class="text-sm text-gray-300 space-y-1">尚未擷取</div>
       </div>
     </div>
@@ -127,15 +147,15 @@
     <!-- 圖表 -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
       <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5">
-        <h2 class="text-lg font-semibold text-purple-400 mb-3">📈 位元率 (kbps) / 秒</h2>
+        <h2 class="text-lg font-semibold text-purple-400 mb-3"><i class="fa-solid fa-chart-line mr-1.5"></i>位元率 (kbps) / 秒</h2>
         <div class="h-52 sm:h-64"><canvas id="bitrateChart"></canvas></div>
       </div>
       <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5">
-        <h2 class="text-lg font-semibold text-orange-400 mb-3">📦 影片封包大小（紅色 = 關鍵影格）</h2>
+        <h2 class="text-lg font-semibold text-orange-400 mb-3"><i class="fa-solid fa-box mr-1.5"></i>影片封包大小（紅色 = 關鍵影格）</h2>
         <div class="h-52 sm:h-64"><canvas id="packetChart"></canvas></div>
       </div>
       <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5 md:col-span-2">
-        <h2 class="text-lg font-semibold text-emerald-400 mb-3">⏱ 影音時間戳偏移 (audio - video, ms)</h2>
+        <h2 class="text-lg font-semibold text-emerald-400 mb-3"><i class="fa-solid fa-stopwatch mr-1.5"></i>影音時間戳偏移 (audio - video, ms)</h2>
         <div class="h-40 sm:h-52"><canvas id="syncChart"></canvas></div>
       </div>
     </div>
@@ -143,10 +163,10 @@
     <!-- 封包檢查器 -->
     <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5">
       <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <h2 class="text-lg font-semibold text-slate-300">🔍 封包檢查器 <span class="text-xs font-normal text-gray-500">（點 🔎 檢視原始位元組）</span></h2>
+        <h2 class="text-lg font-semibold text-slate-300"><i class="fa-solid fa-magnifying-glass mr-1.5"></i>封包檢查器 <span class="text-xs font-normal text-gray-500">（點 <i class="fa-solid fa-magnifying-glass"></i> 檢視原始位元組）</span></h2>
         <div class="flex gap-2">
-          <button id="pauseBtn" class="px-3 py-1.5 text-xs bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition">⏸ 暫停列表</button>
-          <button id="clearPktsBtn" class="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition">🗑 清空</button>
+          <button id="pauseBtn" class="px-3 py-1.5 text-xs bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition"><i class="fa-solid fa-pause mr-1"></i>暫停列表</button>
+          <button id="clearPktsBtn" class="px-3 py-1.5 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition"><i class="fa-solid fa-trash mr-1"></i>清空</button>
         </div>
       </div>
       <div class="overflow-x-auto max-h-80 overflow-y-auto rounded-lg bg-gray-900">
@@ -170,7 +190,7 @@
 
     <!-- 影片塊明細 -->
     <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5">
-      <h2 class="text-lg font-semibold text-blue-300 mb-3">🎥 影片塊明細（最近 50 個）</h2>
+      <h2 class="text-lg font-semibold text-blue-300 mb-3"><i class="fa-solid fa-film mr-1.5"></i>影片塊明細（最近 50 個）</h2>
       <div class="overflow-x-auto max-h-64 overflow-y-auto rounded-lg bg-gray-900">
         <table class="w-full text-xs font-mono">
           <thead class="sticky top-0 bg-gray-800 text-gray-400">
@@ -191,7 +211,7 @@
 
     <!-- 音訊塊明細 -->
     <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5">
-      <h2 class="text-lg font-semibold text-cyan-300 mb-3">🎵 音訊塊明細（最近 50 個）</h2>
+      <h2 class="text-lg font-semibold text-cyan-300 mb-3"><i class="fa-solid fa-headphones mr-1.5"></i>音訊塊明細（最近 50 個）</h2>
       <div class="overflow-x-auto max-h-64 overflow-y-auto rounded-lg bg-gray-900">
         <table class="w-full text-xs font-mono">
           <thead class="sticky top-0 bg-gray-800 text-gray-400">
@@ -219,7 +239,7 @@
             <div class="flex rounded-lg overflow-hidden border border-gray-600">
               <button id="rawTabHex" class="px-3 py-1 text-xs bg-gray-700 text-white transition">十六進位</button>
               <button id="rawTabText" class="px-3 py-1 text-xs bg-gray-800 text-gray-300 hover:bg-gray-700 transition">UTF-8 文字</button>
-              <button id="rawTabParsed" class="px-3 py-1 text-xs bg-gray-800 text-gray-300 hover:bg-gray-700 transition">🔍 解析</button>
+              <button id="rawTabParsed" class="px-3 py-1 text-xs bg-gray-800 text-gray-300 hover:bg-gray-700 transition"><i class="fa-solid fa-shield-halved mr-1"></i>解析</button>
             </div>
             <button id="rawModalClose" class="px-3 py-1 text-sm bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition">✕ 關閉</button>
           </div>
@@ -746,7 +766,7 @@ function updateBitrateBuckets() {
   document.getElementById('statBitrate').textContent = `${kbps.toFixed(0)} kbps`;
   document.getElementById('statBitrateSub').textContent = `即時 ${state.videoTags + state.audioTags} pkts`;
   document.getElementById('statTags').textContent = fmtNum(state.videoTags);
-  document.getElementById('statTagsSub').textContent = `🎥 ${fmtNum(state.videoTags)} / 🎵 ${fmtNum(state.audioTags)}`;
+  document.getElementById('statTagsSub').innerHTML = `<i class="fa-solid fa-video"></i> ${fmtNum(state.videoTags)} / <i class="fa-solid fa-music"></i> ${fmtNum(state.audioTags)}`;
 
   // 資訊卡
   renderMetaCard();
@@ -772,7 +792,7 @@ function flushPacketRows() {
     <td class="px-2 py-0.5">${row.ts}</td>
     <td class="px-2 py-0.5 ${row.delta !== null && Math.abs(row.delta) > 2000 ? 'text-yellow-400' : ''}">${row.delta !== null ? row.delta : ''}</td>
     <td class="px-2 py-0.5 text-gray-400">${esc(row.detail)}</td>
-    <td class="px-2 py-0.5"><button data-seq="${row.seq}" class="viewBtn text-xs text-sky-400 hover:text-sky-300 bg-gray-800 px-1.5 py-0.5 rounded">🔎</button></td>`;
+    <td class="px-2 py-0.5"><button data-seq="${row.seq}" class="viewBtn text-xs text-sky-400 hover:text-sky-300 bg-gray-800 px-1.5 py-0.5 rounded"><i class="fa-solid fa-magnifying-glass"></i></button></td>`;
     frag.appendChild(tr);
   }
   tbody.appendChild(frag);
@@ -879,7 +899,7 @@ function parseTagStructure(seq, data) {
   const type = rm ? rm.typeName : '?';
   const box = (title, rows) => `
     <div class="bg-gray-900 rounded-lg p-3 mb-2">
-      <div class="text-xs font-semibold text-gray-400 mb-1">${esc(title)}</div>
+      <div class="text-xs font-semibold text-gray-400 mb-1">${title}</div>
       <div class="space-y-0.5 text-sm">${rows.join('')}</div>
     </div>`;
   const row = (k, v, cls) => `
@@ -944,7 +964,7 @@ function parseTagStructure(seq, data) {
         rows.push(row('NAL 統計', Object.entries(counts).map(([k, v]) => `${k}×${v}`).join(' ')));
       }
     }
-    return box('🎥 影片 Tag 解析', rows);
+    return box('<i class="fa-solid fa-video"></i> 影片 Tag 解析', rows);
   }
 
   if (type === 'AUDIO') {
@@ -974,7 +994,7 @@ function parseTagStructure(seq, data) {
         rows.push(row('推估取樣數', `~${Math.round((data.length - 2) / 2)} samples/ch (AAC LC @44.1k 約 1024)`));
       }
     }
-    return box('🎵 音訊 Tag 解析', rows);
+    return box('<i class="fa-solid fa-music"></i> 音訊 Tag 解析', rows);
   }
 
   if (type === 'SCRIPT') {
@@ -982,9 +1002,9 @@ function parseTagStructure(seq, data) {
     const keys = Object.keys(meta);
     if (keys.length) {
       const rows = keys.map(k => row(k, typeof meta[k] === 'object' ? JSON.stringify(meta[k]) : String(meta[k])));
-      return box('📄 onMetaData 解析', rows);
+      return box('<i class="fa-solid fa-file-lines"></i> onMetaData 解析', rows);
     }
-    return box('📄 SCRIPT Tag', [row('內容', '無法解析為 AMF0 metadata，請看 UTF-8 / Hex 分頁')]);
+    return box('<i class="fa-solid fa-file-lines"></i> SCRIPT Tag', [row('內容', '無法解析為 AMF0 metadata，請看 UTF-8 / Hex 分頁')]);
   }
 
   return box(`Tag 型別 ${type}`, [row('內容', '無結構化解析，請看 Hex / UTF-8 分頁')]);
@@ -1046,7 +1066,7 @@ function renderMetaCard() {
   if (!m) {
     const hasMedia = state.videoTags > 0 || state.audioTags > 0;
     el.innerHTML = hasMedia
-      ? '<div class="text-yellow-300">⚠ 推流未提供 onMetaData（OBS 常不發送，解析度請以 SPS 為準）</div>'
+      ? '<div class="text-yellow-300"><i class="fa-solid fa-triangle-exclamation mr-1"></i>推流未提供 onMetaData（OBS 常不發送，解析度請以 SPS 為準）</div>'
       : '<div class="text-gray-500">尚未擷取</div>';
     return;
   }
@@ -1158,45 +1178,45 @@ function renderHealth() {
   const hasVideo = state.videoTags > 0;
   const hasAudio = state.audioTags > 0;
 
-  if (!hasVideo && !hasAudio) flags.push(badge('⚠ 尚未收到任何媒體封包', 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'));
-  else if (hasVideo && !hasAudio) flags.push(badge('❌ 只有影片沒有音訊', 'bg-red-500/20 text-red-300 border-red-500/40'));
-  else if (hasAudio && !hasVideo) flags.push(badge('❌ 只有音訊沒有影片', 'bg-red-500/20 text-red-300 border-red-500/40'));
-  else flags.push(badge('✅ 影音齊全', 'bg-green-500/20 text-green-300 border-green-500/40'));
+  if (!hasVideo && !hasAudio) flags.push(badge('fa-triangle-exclamation', '尚未收到任何媒體封包', 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'));
+  else if (hasVideo && !hasAudio) flags.push(badge('fa-circle-xmark', '只有影片沒有音訊', 'bg-red-500/20 text-red-300 border-red-500/40'));
+  else if (hasAudio && !hasVideo) flags.push(badge('fa-circle-xmark', '只有音訊沒有影片', 'bg-red-500/20 text-red-300 border-red-500/40'));
+  else flags.push(badge('fa-circle-check', '影音齊全', 'bg-green-500/20 text-green-300 border-green-500/40'));
 
   // 關鍵影格間隔（GOP）分析
   if (state.sps || state.videoTags > 0) {
     if (state.keyframes === 0 && elapsed > 10) {
-      flags.push(badge('❌ 10 秒內無關鍵影格（可能無法開始播放）', 'bg-red-500/20 text-red-300 border-red-500/40'));
+      flags.push(badge('fa-circle-xmark', '10 秒內無關鍵影格（可能無法開始播放）', 'bg-red-500/20 text-red-300 border-red-500/40'));
     } else if (state.keyGaps.length) {
       const gopMax = Math.max(...state.keyGaps);
       if (gopMax > 10000) {
-        flags.push(badge(`❌ 關鍵影格間隔過長：最大 ${(gopMax / 1000).toFixed(1)}s（正常應 ≤2s）`, 'bg-red-500/20 text-red-300 border-red-500/40'));
+        flags.push(badge('fa-circle-xmark', `關鍵影格間隔過長：最大 ${(gopMax / 1000).toFixed(1)}s（正常應 ≤2s）`, 'bg-red-500/20 text-red-300 border-red-500/40'));
       } else if (gopMax > 5000) {
-        flags.push(badge(`⚠ 關鍵影格間隔偏長：最大 ${(gopMax / 1000).toFixed(1)}s（正常應 ≤2s）`, 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'));
+        flags.push(badge('fa-triangle-exclamation', `關鍵影格間隔偏長：最大 ${(gopMax / 1000).toFixed(1)}s（正常應 ≤2s）`, 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'));
       } else if (gopMax > 0) {
-        flags.push(badge(`✅ GOP 正常（最大 ${(gopMax / 1000).toFixed(1)}s）`, 'bg-green-500/20 text-green-300 border-green-500/40'));
+        flags.push(badge('fa-circle-check', `GOP 正常（最大 ${(gopMax / 1000).toFixed(1)}s）`, 'bg-green-500/20 text-green-300 border-green-500/40'));
       }
     }
   }
 
   // 即時位元率
   const kbps = state.bytes * 8 / 1024 / Math.max(elapsed, 0.001);
-  if (kbps > 0 && kbps < 100 && elapsed > 10) flags.push(badge(`⚠ 位元率偏低 (${kbps.toFixed(1)} kbps)`, 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'));
-  if (kbps > 20000) flags.push(badge(`⚠ 位元率過高 (${(kbps/1000).toFixed(1)} Mbps)`, 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'));
+  if (kbps > 0 && kbps < 100 && elapsed > 10) flags.push(badge('fa-triangle-exclamation', `位元率偏低 (${kbps.toFixed(1)} kbps)`, 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'));
+  if (kbps > 20000) flags.push(badge('fa-triangle-exclamation', `位元率過高 (${(kbps/1000).toFixed(1)} Mbps)`, 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'));
 
   // timestamp 連續性（看最後 30 個樣本的間距）
   const deltas = [];
   // 從封包表格難以回推，改用影音 ts 檢查
   if (state.videoLastTs !== null && state.audioLastTs !== null) {
     const diff = Math.abs(state.videoLastTs - state.audioLastTs);
-    if (diff > 3000) flags.push(badge(`⚠ 影音時間戳偏移 ${diff}ms`, 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'));
+    if (diff > 3000) flags.push(badge('fa-triangle-exclamation', `影音時間戳偏移 ${diff}ms`, 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'));
   }
 
   el.innerHTML = flags.length ? flags.join(' ') : '<span class="text-gray-500">正常</span>';
 }
 
-function badge(text, cls) {
-  return `<span class="px-2.5 py-1 rounded-full border ${cls}">${esc(text)}</span>`;
+function badge(icon, text, cls) {
+  return `<span class="px-2.5 py-1 rounded-full border ${cls}"><i class="fa-solid ${icon} mr-1"></i>${esc(text)}</span>`;
 }
 
 // ── 串流讀取迴圈 ──
@@ -1222,7 +1242,7 @@ function updatePreviewHud() {
   document.getElementById('hudRes').textContent = s ? `${s.width}×${s.height}` : '—';
   document.getElementById('hudBitrate').textContent = kbps > 0 ? `${Math.round(kbps)} kbps` : '—';
   document.getElementById('hudGop').textContent = gopMax;
-  document.getElementById('hudPkts').textContent = `${state.videoTags}🎥/${state.audioTags}🎵`;
+  document.getElementById('hudPkts').innerHTML = `${state.videoTags} <i class="fa-solid fa-video"></i>/${state.audioTags} <i class="fa-solid fa-music"></i>`;
   document.getElementById('hudSync').textContent = sync;
   const hudSyncEl = document.getElementById('hudSync');
   const off = Math.abs(state.audioLastTs - state.videoLastTs);
@@ -1232,12 +1252,13 @@ function updatePreviewHud() {
 function startPreview(url) {
   const video = document.getElementById('previewVideo');
   const status = document.getElementById('previewStatus');
+  const st = (icon, text, cls) => { status.innerHTML = `<i class="fa-solid ${icon} mr-1"></i>${text}`; status.className = cls || 'text-gray-500'; };
   if (typeof mpegts === 'undefined') {
-    status.textContent = '⚠ mpegts.js 載入失敗';
+    st('fa-triangle-exclamation', 'mpegts.js 載入失敗', 'text-red-400');
     return;
   }
   if (typeof mpegts.isSupported !== 'function' || !mpegts.isSupported()) {
-    status.textContent = '⚠ 瀏覽器不支援 MSE';
+    st('fa-triangle-exclamation', '瀏覽器不支援 MSE', 'text-red-400');
     return;
   }
   try {
@@ -1254,9 +1275,9 @@ function startPreview(url) {
     mpegtsPlayer.load();
     mpegtsPlayer.play();
     document.getElementById('previewOverlay').classList.add('hidden');
-    status.textContent = '播放中…';
+    st('fa-circle-play', '播放中…', 'text-emerald-400');
   } catch (err) {
-    status.textContent = '⚠ ' + err.message;
+    st('fa-triangle-exclamation', esc(err.message), 'text-red-400');
   }
 }
 
@@ -1277,7 +1298,8 @@ function stopPreview() {
   for (const id of ['hudFps', 'hudRes', 'hudBitrate', 'hudGop', 'hudPkts', 'hudSync']) {
     document.getElementById(id).textContent = '—';
   }
-  status.textContent = '已停止';
+  status.innerHTML = '<i class="fa-solid fa-circle-stop mr-1"></i>已停止';
+  status.className = 'text-gray-500';
 }
 
 async function startAnalysis() {
@@ -1313,7 +1335,7 @@ async function startAnalysis() {
       stopAnalysis();
       return;
     }
-    document.getElementById('connStatus').textContent = '已連線 ✅';
+    document.getElementById('connStatus').innerHTML = '<i class="fa-solid fa-circle-check"></i> 已連線';
     document.getElementById('connStatus').className = 'text-lg font-bold text-green-400';
     document.getElementById('connDetail').textContent = res.headers.get('content-type') || '';
 
@@ -1411,11 +1433,33 @@ document.getElementById('startBtn').addEventListener('click', startAnalysis);
 document.getElementById('stopBtn').addEventListener('click', stopAnalysis);
 document.getElementById('pauseBtn').addEventListener('click', function () {
   state.paused = !state.paused;
-  this.textContent = state.paused ? '▶ 繼續列表' : '⏸ 暫停列表';
+  this.innerHTML = state.paused
+    ? '<i class="fa-solid fa-play mr-1"></i>繼續列表'
+    : '<i class="fa-solid fa-pause mr-1"></i>暫停列表';
 });
 document.getElementById('clearPktsBtn').addEventListener('click', () => {
   document.getElementById('pktTable').innerHTML = '';
 });
+// 連線設定收合
+let connCollapsed = false;
+document.getElementById('connToggle').addEventListener('click', () => {
+  connCollapsed = !connCollapsed;
+  const body = document.getElementById('connBody');
+  const chevron = document.getElementById('connChevron');
+  if (connCollapsed) {
+    body.classList.add('hidden');
+    chevron.style.transform = 'rotate(-90deg)';
+  } else {
+    body.classList.remove('hidden');
+    chevron.style.transform = '';
+  }
+});
+function updateConnSummary() {
+  const host = document.getElementById('hostInput').value.trim().replace(/\/+$/, '');
+  const stream = document.getElementById('streamInput').value.trim();
+  document.getElementById('connSummary').textContent = `${host}/live/${stream}.flv`;
+}
+updateConnSummary();
 // HUD 疊加資訊開關
 document.getElementById('hudEnabled').addEventListener('change', function () {
   const hud = document.getElementById('previewHud');
@@ -1432,6 +1476,7 @@ function updateFlvUrlPreview() {
   const host = document.getElementById('hostInput').value.trim().replace(/\/+$/, '');
   const stream = document.getElementById('streamInput').value.trim();
   document.getElementById('flvUrl').textContent = `${host}/live/${stream}.flv`;
+  updateConnSummary();
 }
 
 // 定期更新（4Hz，批次渲染 DOM + 圖表，避免解析迴圈被拖慢）
