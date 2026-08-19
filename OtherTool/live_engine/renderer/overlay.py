@@ -2,7 +2,7 @@ import ctypes
 
 from PyQt6 import QtGui
 from PyQt6.QtOpenGLWidgets import QOpenGLWidget
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFontMetrics, QFont
 
 from OpenGL.GL import *
@@ -50,24 +50,15 @@ from core.hotkey import GlobalHotkey
 from gui.overlay_settings import load_overlay_config, save_overlay_config
 
 
-def _open_settings():
-    log("Global hotkey triggered: opening TTS settings GUI")
-    try:
-        proc = subprocess.Popen(
-            [sys.executable, "-m", "gui.tts_settings_window"],
-            cwd=os.path.join(base_dir, "..")
-        )
-        log("TTS settings GUI launched, PID:", proc.pid)
-    except Exception as e:
-        log_error("Failed to launch TTS settings GUI:", e)
-
-
 class Overlay(QOpenGLWidget):
 
-    def __init__(self):
+    hotkey_triggered = pyqtSignal()
+
+    def __init__(self, on_open_tts=None):
         super().__init__()
         self._inline_font_size = self.INLINE_FONT_SIZE
         self.setObjectName("Overlay")
+        self._on_open_tts = on_open_tts
 
         fmt = QtGui.QSurfaceFormat()
         fmt.setAlphaBufferSize(8)
@@ -106,7 +97,23 @@ class Overlay(QOpenGLWidget):
         self._setup_global_hotkey()
 
     def _setup_global_hotkey(self):
-        self._hotkey = GlobalHotkey(on_trigger=_open_settings)
+        self._hotkey = GlobalHotkey(on_trigger=self.hotkey_triggered.emit)
+        self.hotkey_triggered.connect(self._open_tts_settings)
+
+    def _open_tts_settings(self):
+        if self._on_open_tts is not None:
+            log("Global hotkey triggered: opening in-process TTS settings")
+            self._on_open_tts()
+            return
+        log("Global hotkey triggered: launching TTS settings subprocess")
+        try:
+            proc = subprocess.Popen(
+                [sys.executable, "-m", "gui.tts_settings_window"],
+                cwd=os.path.join(base_dir, "..")
+            )
+            log("TTS settings GUI launched, PID:", proc.pid)
+        except Exception as e:
+            log_error("Failed to launch TTS settings GUI:", e)
 
     def _load_position_and_size(self):
         cfg = load_overlay_config()

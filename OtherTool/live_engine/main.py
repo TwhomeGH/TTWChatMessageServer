@@ -21,9 +21,6 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
 
-    w = Overlay()
-    w.show()
-
     _tray_wins = {"settings": None, "filter": None, "overlay": None}
 
     def _open_settings():
@@ -31,6 +28,9 @@ if __name__ == "__main__":
             _tray_wins["settings"] = TTSSettingsWindow()
         _tray_wins["settings"].show()
         _tray_wins["settings"].raise_()
+
+    w = Overlay(on_open_tts=_open_settings)
+    w.show()
 
     def _open_filter():
         if _tray_wins["filter"] is None:

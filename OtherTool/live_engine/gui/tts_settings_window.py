@@ -25,8 +25,12 @@ class TTSSettingsWindow(QWidget):
         self._setup_auto_save()
 
     def closeEvent(self, event):
-        self.hide()
-        event.ignore()
+        if getattr(self, "_standalone", False):
+            event.accept()
+            QApplication.instance().quit()
+        else:
+            self.hide()
+            event.ignore()
 
     def _build_ui(self):
         tabs = QTabWidget(self)
@@ -246,6 +250,7 @@ def launch_gui():
     log("TTSSettingsWindow: creating QApplication")
     app = QApplication(sys.argv)
     w = TTSSettingsWindow()
+    w._standalone = True
     log("TTSSettingsWindow: showing window")
     w.show()
     log("TTSSettingsWindow: entering event loop")
