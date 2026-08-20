@@ -613,7 +613,9 @@ function handleTag(type, ts, data) {
         avcInfo = 'AVC seq header (SPS)';
         row.detail = 'SPS/PPS';
       } else if (avcPacketType === 1) {
-        naluType = data[5] & 0x1f;
+        const nalLenSize = state.naluLenSize || 4;
+        const nalOff = 5 + nalLenSize; // 5 = 幀型別+codec(1) + avcPacketType(1) + cts(3)；之後才是 NAL 長度欄位
+        naluType = data.length > nalOff ? data[nalOff] & 0x1f : null;
         const nalNames = { 1: '非IDR', 5: 'IDR', 6: 'SEI', 7: 'SPS', 8: 'PPS' };
         avcInfo = `AVC NALU=${naluType}(${nalNames[naluType] ?? '其他'}) cts=${cts}`;
         row.detail = avcInfo;
@@ -670,6 +672,7 @@ function handleTag(type, ts, data) {
     const rateNames = [5500, 11025, 22050, 44100];
     const rate = soundFormat === 10 ? null : rateNames[soundRateIdx];
     row.typeName = 'AUDIO';
+    row.frame = '—';
 
     let aacTypeName = '—', aot = null, srate = rate, ch = channels;
     if (soundFormat === 10 && data.length >= 2) {
