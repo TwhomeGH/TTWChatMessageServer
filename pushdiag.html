@@ -672,7 +672,7 @@ function handleTag(type, ts, data) {
     const rateNames = [5500, 11025, 22050, 44100];
     const rate = soundFormat === 10 ? null : rateNames[soundRateIdx];
     row.typeName = 'AUDIO';
-    row.frame = '—';
+    row.frame = ({ 0: 'LPCM', 2: 'MP3', 10: 'AAC', 14: 'MP3 8kHz', 15: 'AAC' })[soundFormat] ?? `FMT${soundFormat}`;
 
     let aacTypeName = '—', aot = null, srate = rate, ch = channels;
     if (soundFormat === 10 && data.length >= 2) {
