@@ -1113,20 +1113,20 @@ function renderVideoCard() {
     ${gopRows}`;
 }
 
-// FPS 量測：以最近 2 秒內的影片封包 wall-clock 時間差計算
+// FPS 量測：以最近 2 秒的 FLV 呈現時間戳（而非牆鐘抵達時間）內的影片封包數計算。
+// 用 FLV ts 才是編碼端真正的輸出幀率；wall-clock 會受 HTTP 傳輸/緩衝突發影響而高估。
 function measureFps() {
   const h = state.videoTsHistory;
   if (h.length < 2) return null;
-  const now = performance.now();
-  const cutoff = now - 2000;
-  let first = null, last = null, count = 0;
+  const last = h[h.length - 1].ts;
+  const cutoff = last - 2000;
+  let first = null, count = 0;
   for (let i = h.length - 1; i >= 0; i--) {
-    if (h[i].wall < cutoff) break;
-    if (last === null) last = h[i].wall;
-    first = h[i].wall;
+    if (h[i].ts < cutoff) break;
+    first = h[i].ts; // 從最新往舊走，最後停在 window 內最舊的 ts
     count++;
   }
-  if (count < 2 || first === null || last === null || last - first < 200) return null;
+  if (count < 2 || first === null || last - first < 200) return null;
   return count / ((last - first) / 1000);
 }
 
