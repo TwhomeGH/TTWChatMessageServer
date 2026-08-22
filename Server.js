@@ -443,7 +443,7 @@ const server = http.createServer((req, res) => {
 
             // 離線（TikTok.js 結束）時才把自動剪輯分析歷史寫入磁碟
             try {
-                fs.writeFileSync(path.join(__dirname, 'autoclip_stats.json'), JSON.stringify(cacheAutoClipStats), 'utf-8');
+                fs.writeFileSync(path.join(__dirname, 'autoclip_stats.json'), JSON.stringify(cacheAutoClipStats,"",5), 'utf-8');
                 pushLog(`💾 已將自動剪輯分析歷史寫入 autoclip_stats.json (${cacheAutoClipStats.stats.length} 筆)`);
             } catch (err) {
                 pushLog('⚠️ 寫入 autoclip_stats.json 失敗:', err.message);
