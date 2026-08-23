@@ -1470,7 +1470,15 @@ async function startAnalysis() {
         merged.set(value, state.buffer.length);
         state.buffer = merged;
       }
-      parseTags();
+      // 單一壞封包不該中止整個分析：parseTags 內部錯誤僅記錄並繼續
+      try { parseTags(); } catch (e) { console.warn('parseTags error:', e); }
+      // 緩衝過大（解析跟不上或壞標頭）時直接丟棄重同步，避免記憶體無限成長
+      if (state.buffer.length > 16 * 1024 * 1024) {
+        console.warn('buffer overflow, dropping to resync');
+        state.buffer = state.buffer.slice(-1 << 16);
+        state.bufOff = 0;
+        state.headerOk = false;
+      }
     }
     if (state.running) {
       document.getElementById('connStatus').textContent = '串流結束';
