@@ -547,6 +547,7 @@ score ≥ SCORE_THRESHOLD 即觸發（上升緣 + cooldown 防連發）
 - FLV tag 即為 RTMP 媒體封包（type 8=audio / 9=video / 18=script），瀏覽器直接 `fetch` SRS 的 HTTP-FLV 端點解析，**不需伺服器端轉發**（SRS 需允許 CORS，Oryx 預設 `*`）
 - 即時預覽透過 **mpegts.js**（flv.js 維護版）播放 HTTP-FLV，與分析共用同一串流 URL
 - 解析用 50ms 時間預算 + 4Hz 批次 DOM 渲染，避免封包解析拖慢 UI
+- **長時間運行防凍結**：mpegts.js 預覽以 `enableStashBuffer: false` 直接送 SourceBuffer（避免緩衝/記憶體隨時間累積）；內建**停滯守衛**每 250ms 檢查影片 currentTime，若資料持續流入但畫面連續 5 秒未推進即自動重建播放器；每秒聚合桶只保留最近 10 分鐘避免無上限成長
 - 圖示庫：`font-awesome@6.7.2`（cdnjs CDN）
 - 需 SRS 啟用 HTTP-FLV 播放（如 Oryx 的 `:882/live/<key>.flv`）
 

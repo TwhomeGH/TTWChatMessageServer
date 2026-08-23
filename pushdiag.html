@@ -756,6 +756,10 @@ function updateBitrateBuckets() {
   const now = performance.now();
   const elapsedSec = (now - state.startTime) / 1000;
   const cur = Math.floor(elapsedSec);
+  // 清理過舊的每秒聚合桶（只保留 10 分鐘），避免長時間分析記憶體無上限成長
+  for (const s of state.perSec.keys()) {
+    if (s < cur - 600) state.perSec.delete(s);
+  }
   bitrateChart.data.labels = [];
   bitrateChart.data.datasets[0].data = [];
   bitrateChart.data.datasets[1].data = [];
@@ -1341,6 +1345,26 @@ function updatePreviewHud() {
   hudSyncEl.className = off > 3000 ? 'text-red-400' : 'text-amber-300';
 }
 
+// 預覽停滯守衛：若資料持續流入（videoTags 有在長）但影片 currentTime 連續 5 秒沒推進，
+// 代表 mpegts.js 播放器已卡死，自動重建播放器恢復（使用者自行暫停時不介入）
+function checkPreviewStall() {
+  if (!mpegtsPlayer || !state.previewUrl) return;
+  const video = document.getElementById('previewVideo');
+  if (video.paused || isNaN(video.currentTime)) { state._stallCount = 0; state._lastVct = null; return; }
+  const ct = video.currentTime;
+  if (state._lastVct !== null && Math.abs(ct - state._lastVct) < 0.02) {
+    state._stallCount++;
+    if (state._stallCount >= 20) {
+      state._stallCount = 0;
+      state._lastVct = null;
+      startPreview(state.previewUrl);
+    }
+  } else {
+    state._stallCount = 0;
+  }
+  state._lastVct = ct;
+}
+
 function startPreview(url) {
   const video = document.getElementById('previewVideo');
   const status = document.getElementById('previewStatus');
@@ -1360,7 +1384,8 @@ function startPreview(url) {
       isLive: true,
       url,
     }, {
-      enableStashBuffer: true,
+      // enableStashBuffer:false 直接送 SourceBuffer，降低緩衝延遲與長播記憶體/時間戳校正累積
+      enableStashBuffer: false,
       autoCleanupSourceBuffer: true,
     });
     mpegtsPlayer.attachMediaElement(video);
@@ -1411,6 +1436,7 @@ async function startAnalysis() {
 
   // 若勾選自動播放，啟動即時預覽
   if (document.getElementById('previewEnabled').checked) {
+    state.previewUrl = url;
     startPreview(url);
   }
 
@@ -1496,6 +1522,10 @@ function resetState() {
   state.audioBlocks = [];
   state.videoBlocks = [];
   state.videoTsHistory = [];
+  state.fpsSamples = [];
+  state.offsetSamples = [];
+  state._lastVct = null;
+  state._stallCount = 0;
   state.pendingRows = [];
   state.rawCache = new Map();
   state.rawMeta = new Map();
@@ -1621,6 +1651,7 @@ setInterval(() => {
     renderVideoBlocks();
     updateBitrateBuckets();
     updatePreviewHud();
+    checkPreviewStall();
   }
 }, 250);
 
