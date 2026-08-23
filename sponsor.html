@@ -187,7 +187,8 @@ function render() {
         html += `<h3 class="text-lg font-semibold">👤 ${escapeHtml(user.displayName)}</h3>`;
         html += `<span class="text-sm text-gray-400">ID: ${uid}</span>`;
         html += `</div>`;
-        for (const ad of user.ads) {
+        for (let idx = 0; idx < user.ads.length; idx++) {
+            const ad = user.ads[idx];
             const status = ad.approved === null ? 'pending' : (ad.approved ? 'approved' : 'rejected');
             const statusText = status === 'approved' ? '已通過' : (status === 'pending' ? '待審核' : '已拒絕');
             html += `<div class="border border-gray-700 rounded-xl p-4 mb-3 ${ad.intervalMinutes > 0 && !ad.enabled ? 'opacity-60' : ''}">`;
@@ -252,7 +253,39 @@ function render() {
             if (ad.intervalMinutes > 0) {
                 html += `<button onclick="toggleAd('${ad.id}', ${!ad.enabled})" class="bg-gray-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-gray-500 transition">${ad.enabled ? '⏸️ 停用' : '▶️ 啟用'}</button>`;
             }
+            html += `<button onclick="toggleEditAd(this)" class="edit-btn bg-sky-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-sky-500 transition">✏️ 編輯</button>`;
             html += `<button onclick="deleteAd('${ad.id}')" class="bg-red-800 text-red-200 text-xs px-3 py-1.5 rounded-lg hover:bg-red-700 transition">🗑️ 刪除</button>`;
+            html += `</div>`;
+            html += `</div>`;
+            html += `<div class="edit-form border-t border-gray-700 pt-3 mt-3 hidden">`;
+            html += `<div class="grid grid-cols-1 md:grid-cols-2 gap-3">`;
+            html += `<div class="md:col-span-2">`;
+            html += `<label class="block text-xs text-gray-400 mb-1">廣告訊息 *</label>`;
+            html += `<textarea class="ef-message w-full bg-gray-900 text-gray-200 rounded-lg px-3 py-2 text-sm border border-gray-600 focus:border-blue-500 outline-none" rows="2">${escapeHtml(ad.message || '')}</textarea>`;
+            html += `</div>`;
+            html += `<div>`;
+            html += `<label class="block text-xs text-gray-400 mb-1">圖示 URL</label>`;
+            html += `<input class="ef-icon w-full bg-gray-900 text-gray-200 rounded-lg px-3 py-2 text-sm border border-gray-600 focus:border-blue-500 outline-none" value="${escapeHtml(ad.iconURL || '')}" placeholder="https://example.com/icon.png">`;
+            html += `</div>`;
+            html += `<div>`;
+            html += `<label class="block text-xs text-gray-400 mb-1">自訂顯示名稱</label>`;
+            html += `<input class="ef-overlay w-full bg-gray-900 text-gray-200 rounded-lg px-3 py-2 text-sm border border-gray-600 focus:border-blue-500 outline-none" value="${escapeHtml(ad.overlayUser || '')}" placeholder="疊加層顯示的名稱">`;
+            html += `</div>`;
+            html += `<div class="flex items-center gap-6">`;
+            html += `<label class="flex items-center gap-2 cursor-pointer">`;
+            html += `<input type="checkbox" class="ef-tts accent-blue-500" ${ad.useTTS ? 'checked' : ''}>`;
+            html += `<span class="text-sm">啟用 TTS</span>`;
+            html += `</label>`;
+            html += `<div>`;
+            html += `<label class="block text-xs text-gray-400 mb-1">間隔（分鐘）</label>`;
+            html += `<input type="number" min="0" class="ef-interval w-24 bg-gray-900 text-gray-200 rounded-lg px-3 py-2 text-sm border border-gray-600 focus:border-blue-500 outline-none" value="${ad.intervalMinutes || 0}">`;
+            html += `</div>`;
+            html += `</div>`;
+            html += `</div>`;
+            html += `<div class="mt-3 flex items-center gap-2">`;
+            html += `<button onclick="saveEditAd('${ad.id}', this)" class="bg-blue-600 text-white text-xs px-4 py-1.5 rounded-lg hover:bg-blue-700 transition">💾 儲存</button>`;
+            html += `<button onclick="cancelEditAd(this)" class="bg-gray-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-gray-500 transition">取消</button>`;
+            html += `<span class="edit-status text-sm hidden"></span>`;
             html += `</div>`;
             html += `</div>`;
             html += `</div>`;
@@ -396,6 +429,72 @@ async function deleteAd(adId) {
         await loadAds();
     } catch (err) {
         showToast(`操作失敗: ${err.message}`, 'error');
+    }
+}
+
+function toggleEditAd(btn) {
+    const card = btn.closest('.border');
+    if (!card) return;
+    const form = card.querySelector('.edit-form');
+    if (!form) return;
+    const isHidden = form.classList.toggle('hidden');
+    btn.textContent = isHidden ? '✏️ 編輯' : '✖️ 關閉';
+}
+
+function cancelEditAd(btn) {
+    const card = btn.closest('.border');
+    if (!card) return;
+    const form = card.querySelector('.edit-form');
+    if (form) form.classList.add('hidden');
+    const editBtn = card.querySelector('.edit-btn');
+    if (editBtn) editBtn.textContent = '✏️ 編輯';
+}
+
+async function saveEditAd(adId, btn) {
+    // 由 adId 反查所屬使用者與廣告索引
+    const users = currentData.users || {};
+    let userId = null, targetId = -1;
+    for (const uid of Object.keys(users)) {
+        const idx = (users[uid].ads || []).findIndex(a => a.id === adId);
+        if (idx !== -1) { userId = uid; targetId = idx; break; }
+    }
+    if (!userId || targetId < 0) { showToast('找不到該廣告', 'error'); return; }
+
+    const card = btn.closest('.border');
+    const user = users[userId];
+    const message = card.querySelector('.ef-message').value.trim();
+    if (!message) { showToast('廣告訊息不可為空', 'warning'); return; }
+
+    const payload = {
+        userId,
+        displayName: user.displayName || userId,
+        overlayUser: card.querySelector('.ef-overlay').value.trim() || null,
+        message,
+        iconURL: card.querySelector('.ef-icon').value.trim() || null,
+        useTTS: card.querySelector('.ef-tts').checked,
+        intervalMinutes: parseInt(card.querySelector('.ef-interval').value) || 0,
+        targetId
+    };
+    const statusEl = card.querySelector('.edit-status');
+    btn.disabled = true;
+    statusEl.className = 'text-sm text-gray-400';
+    statusEl.textContent = '儲存中...';
+    statusEl.classList.remove('hidden');
+    try {
+        const res = await fetch('/api/sponsor-ads/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(await res.text());
+        statusEl.className = 'text-sm text-green-400';
+        statusEl.textContent = serverRunning ? '✅ 已儲存' : '✅ 已儲存（未發送：TikTok.js 未運行）';
+        if (!serverRunning) showToast('⚠️ 廣告已儲存，但 TikTok.js 未運行，啟動後才會發送', 'warning');
+        await loadAds();
+    } catch (err) {
+        statusEl.className = 'text-sm text-red-400';
+        statusEl.textContent = `❌ 儲存失敗: ${err.message}`;
+        btn.disabled = false;
     }
 }
 

@@ -1495,10 +1495,55 @@ const server = http.createServer((req, res) => {
                     res.end(JSON.stringify({ error: '缺少必要欄位 userId 或 message' }));
                     return;
                 }
-                sendToTikTok({ type: 'SPONSOR_CREATE', ...data });
-                pushLog(`📢 手動建立贊助廣告: ${data.overlayUser || data.userId} - ${data.message}`);
+                // 直接在 Server 端寫入 JSON（與 settings/approve/toggle/delete 一致），
+                // 讓新增/編輯即使 TikTok.js 未運行也能持久化
+                const SPONSOR_FILE = path.join(__dirname, 'sponsor_ads.json');
+                let db = fs.existsSync(SPONSOR_FILE)
+                    ? JSON.parse(fs.readFileSync(SPONSOR_FILE, 'utf-8'))
+                    : { settings: { reviewMode: 'none' }, users: {} };
+                if (!db.settings) db.settings = { reviewMode: 'none' };
+                if (!db.users) db.users = {};
+                const userId = data.userId;
+                if (!db.users[userId]) {
+                    db.users[userId] = { userId, displayName: data.displayName || userId, ads: [] };
+                } else if (data.displayName) {
+                    db.users[userId].displayName = data.displayName;
+                }
+                const user = db.users[userId];
+                const now = new Date().toISOString();
+                let adId;
+                // 指定 targetId 且存在 → 原地更新（web 編輯）；否則新增（上限 5）
+                if (typeof data.targetId === 'number' && data.targetId >= 0 && data.targetId < user.ads.length) {
+                    const ad = user.ads[data.targetId];
+                    ad.message = data.message;
+                    ad.iconURL = data.iconURL || null;
+                    ad.useTTS = !!data.useTTS;
+                    ad.overlayUser = data.overlayUser || data.displayName || userId;
+                    ad.intervalMinutes = data.intervalMinutes || 0;
+                    ad.enabled = true;
+                    ad.updatedAt = now;
+                    ad.lastSentAt = now;
+                    adId = ad.id;
+                } else {
+                    if (user.ads.length >= 5) {
+                        res.writeHead(400, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: '該使用者已達 5 則廣告上限' }));
+                        return;
+                    }
+                    adId = `ad_${userId}_${Date.now()}`;
+                    user.ads.push({
+                        id: adId, message: data.message, iconURL: data.iconURL || null, useTTS: !!data.useTTS,
+                        overlayUser: data.overlayUser || data.displayName || userId,
+                        intervalMinutes: data.intervalMinutes || 0,
+                        approved: true, enabled: true,
+                        createdAt: now, updatedAt: now, lastSentAt: now
+                    });
+                }
+                fs.writeFileSync(SPONSOR_FILE, JSON.stringify(db, null, 2));
+                sendToTikTok({ type: 'SPONSOR_CREATE', alreadyPersisted: true, adId, ...data });
+                pushLog(`📢 手動建立/更新贊助廣告: ${data.overlayUser || data.userId} - ${data.message}`);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: true }));
+                res.end(JSON.stringify({ success: true, adId }));
             } catch (err) {
                 res.writeHead(400, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: err.message }));

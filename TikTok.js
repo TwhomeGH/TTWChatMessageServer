@@ -716,9 +716,28 @@ process.stdin.on('data', async (chunk) => {
             }
 
             if (json.type === 'SPONSOR_CREATE') {
-                const { userId, displayName, message, iconURL, useTTS, overlayUser, intervalMinutes, targetId } = json;
+                const { userId, displayName, message, iconURL, useTTS, overlayUser, intervalMinutes, targetId, alreadyPersisted, adId: persistedAdId } = json;
                 if (!userId || !message) {
                     console.warn('⚠️ SPONSOR_CREATE 缺少必要欄位');
+                    return;
+                }
+                // Server.js 已直接寫入 JSON → 重新載入後僅套用執行期效果（立即發送 + 定時器），避免重複建立
+                if (alreadyPersisted) {
+                    loadSponsorAds();
+                    const sponsor = sponsorAds.users[userId];
+                    const ad = sponsor && sponsor.ads.find(a => a.id === persistedAdId);
+                    if (!ad) {
+                        console.warn(`⚠️ SPONSOR_CREATE 找不到已持久化廣告: ${persistedAdId}`);
+                        return;
+                    }
+                    sendAdOverylayMessage(ad.overlayUser, ad.message, ad.iconURL || '', ad.useTTS);
+                    if (ad.intervalMinutes >= 15) {
+                        scheduleAdTimer(ad.id, userId, ad.intervalMinutes, {
+                            overlayUser: ad.overlayUser, text: ad.message, iconURL: ad.iconURL || '', useTTS: ad.useTTS
+                        });
+                    }
+                    console.log(`✅ 已套用贊助廣告執行期效果 (Server 持久化): ${ad.overlayUser} - ${ad.message}`);
+                    process.stdout.write(JSON.stringify({ type: 'SPONSOR_CREATED', adId: ad.id }) + '\n');
                     return;
                 }
                 const sponsor = getOrCreateSponsor(userId, displayName || userId);
