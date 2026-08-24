@@ -59,7 +59,9 @@ export class AutoClipManager {
         this.historyLimit = 2000;
     }
 
-    onChatMessage(now = Date.now()) {
+    // 注意：呼叫端一律傳訊息文字，第一參數僅作為占位（可能未來做內容過濾），
+    // 時間戳一律用 Date.now()，避免把字串當時間戳塞進 msgTimes 導致速率恆為 0
+    onChatMessage(_msg, now = Date.now()) {
         this.msgTimes.push(now);
         this.totalMessages++;
         this._pruneMsgs(now);
