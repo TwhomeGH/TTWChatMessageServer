@@ -151,6 +151,13 @@ const SOCKET_RETRY_BASE = 15000;  // 基礎重連間隔 15 秒
 const pendingQueue = [];
 const MAX_PENDING = 50;
 
+// TikTok 直播間斷線自動重連（有限次數 + 指數退避）
+let tkReconnectTimer = null;   // 重連計時器
+let viewCacheInterval = null;  // viewer 更新 interval handle（斷線時確實清除，避免重連後疊加）
+let streamEnded = false;       // 直播真正結束（使用者主動結束 / 平台封鎖）→ 不再重連
+const TK_RETRY_MAX = 5;        // 最大重連次數（避免無限重試）
+const TK_RETRY_BASE = 15000;   // 重連基礎間隔 15 秒（指數退避 15s→30s→60s→120s→240s）
+
 function flushPendingQueue() {
     if (pendingQueue.length === 0) return;
     if (!client || client.destroyed) return;
@@ -449,6 +456,9 @@ async function handleExit() {
     clearInterval(twitchViewCache)
 
     isEnd=true
+
+    if (tkReconnectTimer) { clearTimeout(tkReconnectTimer); tkReconnectTimer = null; }
+    if (viewCacheInterval) { clearInterval(viewCacheInterval); viewCacheInterval = null; }
 
     sendBarkNotification("系統通知", "TTW Chat Message Server 已關閉", "");
     
@@ -1335,6 +1345,51 @@ function viewCache() {
     })
 }
 
+// TikTok 連線成功後的共同初始化（初次連線與重連共用）
+function onTikTokConnected(state) {
+    TkRetryCount = 0;
+    if (tkReconnectTimer) { clearTimeout(tkReconnectTimer); tkReconnectTimer = null; }
+    RoomID = state.roomId;
+    let DisplayTitle = connection.state.roomInfo.data.title || "未知直播間";
+    TikTokViewerCount = connection.state.roomInfo.data.user_count || 0;
+    CacheUserNum = (isTK && isTwitch) ? TikTokViewerCount + TwitchViewerCount : TikTokViewerCount;
+    sendBarkNotification("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "");
+    sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false, CacheUserNum, CacheUserList);
+    resumeAdTimers();
+    if (!viewCacheInterval) {
+        viewCacheInterval = setInterval(viewCache, 30000);
+    }
+}
+
+// TikTok 斷線/連線失敗自動重連：指數退避 + 有限次數，次數用盡則優雅退出
+function scheduleTikTokReconnect() {
+    if (isEnd || streamEnded) return;
+    if (tkReconnectTimer) return; // 已有排程，避免重複
+    if (TkRetryCount >= TkRetryMaxCount) {
+        console.error(`❌ TikTok 已達最大重連次數 (${TkRetryMaxCount})，停止重連並退出`);
+        sendSocketMessage("系統", "TikTok 重連已達上限，程式停止，請手動重新啟動", "", "", false, CacheUserNum, CacheUserList);
+        sendBarkNotification("TikTok 重連失敗", "已達最大重連次數，程式停止", "");
+        handleExit();
+        return;
+    }
+    TkRetryCount += 1;
+    const delay = Math.min(TK_RETRY_BASE * Math.pow(2, TkRetryCount - 1), 300000);
+    console.log(`🔁 TikTok 斷線，${Math.round(delay / 1000)} 秒後嘗試重新連線 (${TkRetryCount}/${TkRetryMaxCount})...`);
+    sendSocketMessage("系統", `TikTok 斷線，${Math.round(delay / 1000)} 秒後嘗試重新連線 (${TkRetryCount}/${TkRetryMaxCount})`, "", "", false, CacheUserNum, CacheUserList);
+    tkReconnectTimer = setTimeout(() => {
+        tkReconnectTimer = null;
+        connection.connect().then(state => {
+            console.info(`✅ TikTok 重新連線成功，roomId ${state.roomId}`);
+            onTikTokConnected(state);
+        }).catch(err => {
+            const errDetail = err.exception || err;
+            console.error(`❌ TikTok 重連失敗: ${errDetail.message || errDetail} (${TkRetryCount}/${TkRetryMaxCount})`);
+            sendSocketMessage("系統", `TikTok 重連失敗: ${String(errDetail.message || errDetail).substring(0, 80)}`, "", "", false, CacheUserNum, CacheUserList);
+            scheduleTikTokReconnect(); // 遞迴進入下一次退避
+        });
+    }, delay);
+}
+
 
 
 
@@ -1351,19 +1406,7 @@ if (isTK) {
     // Connect to the chat (await can be used as well)
     connection.connect().then(state => {
         console.info(`Connected to roomId ${state.roomId}`);
-
-        RoomID = state.roomId
-
-        let DisplayTitle = connection.state.roomInfo.data.title || "未知直播間";
-        TikTokViewerCount = connection.state.roomInfo.data.user_count || 0;
-        CacheUserNum = (isTK && isTwitch) ? TikTokViewerCount + TwitchViewerCount : TikTokViewerCount;
-        
-        sendBarkNotification("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "");
-        sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false,CacheUserNum,CacheUserList);
-        // 連線成功後恢復贊助廣告定時器
-        resumeAdTimers();
-
-        setInterval(viewCache, 30000); // 每30秒更新一次用戶數量   
+        onTikTokConnected(state);
         // fetchAndSyncGifts(); // eulerstream 需付費，禮物名稱由收到事件時即時翻譯
         
     }).catch(err => {
@@ -1378,26 +1421,9 @@ if (isTK) {
         sendBarkNotification("TikTok 直播間連線失敗", (errDetail.message || "").substring(0, 100));
         sendSocketMessage("系統", `TikTok 直播間連線失敗: ${err.message}`, "", "", false, CacheUserNum, CacheUserList);
 
-        // 暫時停用重連機制，改為直接退出程式，避免無限重試
-        // if (TkRetryCount < TkRetryMaxCount) {
-        //     TkRetryCount += 1;
-        //     //console.log(`${TkRetryCount} 秒後嘗試重新連線 (${TkRetryCount}/${TkRetryMaxCount})...`);
-        //     // setTimeout(() => {
-        //     //     connection.connect().then(state => {
-        //     //         console.log(`重新連線成功，roomId ${state.roomId}`);
-        //     //         TkRetryCount = 0;
-        //     //         RoomID = state.roomId;
-        //     //     }).catch(err => {
-        //     //         console.error("重新連線失敗:", err.message);
-        //     //     });
-        //     // }, 15000);
-
-
-        // }
-
+        // 初次連線失敗也進入有限次數自動重連（指數退避，用盡後退出）
+        scheduleTikTokReconnect();
     });
-
-    clearInterval(viewCache);
 
 }
 
@@ -1408,33 +1434,16 @@ connection.on(ControlEvent.DISCONNECTED, (e) => {
     sendBarkNotification("TikTok 直播間已斷線", `已從 ${tiktokName} 的直播間斷線`, "");
     sendSocketMessage("系統", `TikTok 直播間已斷線，已從 ${tiktokName} 的直播間斷線`, "", "", false,CacheUserNum,CacheUserList);
 
-    clearInterval(viewCache);
+    if (viewCacheInterval) { clearInterval(viewCacheInterval); viewCacheInterval = null; }
 
     if (isEnd) return;
 
-    // setTimeout(() => {
-    //     if (TkRetryCount >= TkRetryMaxCount) {
-    //         console.log("已達 TikTok 最大重連次數，停止重連");
-    //         sendSocketMessage("系統", "TikTok 重連已達上限，請重新啟動", "", "", false,CacheUserNum,CacheUserList);
-    //         return;
-    //     }
-
-    //     TkRetryCount += 1;
-    //     console.log(`TikTok 重新連線嘗試 (${TkRetryCount}/${TkRetryMaxCount})...`);
-    //     sendSocketMessage("系統", `TikTok 重新連線嘗試 (${TkRetryCount}/${TkRetryMaxCount})...`, "", "", false,CacheUserNum,CacheUserList);
-
-    //     connection.connect().then(state => {
-    //         console.log(`重新連線成功，roomId ${state.roomId}`);
-    //         TkRetryCount = 0;
-    //         RoomID = state.roomId;
-    //         setInterval(viewCache, 10000);
-    //         sendSocketMessage("系統", "TikTok 重新連線成功", "", "", false,CacheUserNum,CacheUserList);
-    //     }).catch(err => {
-    //         console.error("重新連線失敗:", err.message);
-    //         sendSocketMessage("系統", `TikTok 重新連線失敗: ${err.message}`, "", "", false,CacheUserNum,CacheUserList);
-    //     });
-
-    // }, 15000);
+    // 直播真正結束（使用者結束 / 平台封鎖）→ 不重連；否則有限次數自動重連
+    if (streamEnded) {
+        console.log('⏹️ 直播已結束，不進行重連');
+        return;
+    }
+    scheduleTikTokReconnect();
 });
 
 connection.on(ControlEvent.ERROR, (err) => {
@@ -2040,18 +2049,21 @@ console.log(JSON.stringify({ action },"",4))
     if (action === ControlAction.CONTROL_ACTION_STREAM_ENDED) {
         writeLog("Default", "直播結束，用戶主動結束或推流斷線", "Stream Status")
         console.log('Stream ended by user');
-        sendBarkNotification(data.user.nickname, mess,IMG);
-        sendSocketMessage(data.user.nickname, mess,IMG,"",false);
+        sendBarkNotification(tiktokName, mess, IMG);
+        sendSocketMessage(tiktokName, mess, IMG, "", false);
 
     }
     if (action === ControlAction.CONTROL_ACTION_STREAM_SUSPENDED) {
         console.log('Stream ended by platform moderator (ban)');
-        sendBarkNotification(data.user.nickname, mess,IMG);
-        sendSocketMessage(data.user.nickname, mess,IMG,"",false);
+        sendBarkNotification(tiktokName, mess, IMG);
+        sendSocketMessage(tiktokName, mess, IMG, "", false);
 
         writeLog("Default", "直播被強行終止了 :(", "Stream Status")
 
     }
+    // 直播真正結束：取消排程中的重連，不再自動重試
+    streamEnded = true;
+    if (tkReconnectTimer) { clearTimeout(tkReconnectTimer); tkReconnectTimer = null; }
 });
 
 
