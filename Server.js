@@ -1068,6 +1068,9 @@ const server = http.createServer((req, res) => {
             .replace('${AUTO_CLIP_FLOOR_VIEWERS}', process.env.AUTO_CLIP_FLOOR_VIEWERS || '2')
             .replace('${AUTO_CLIP_FLOOR_MSG_PER_MIN}', process.env.AUTO_CLIP_FLOOR_MSG_PER_MIN || '0.3')
             .replace('${AUTO_CLIP_COOLDOWN_MIN}', process.env.AUTO_CLIP_COOLDOWN_MIN || '15')
+            .replace('${AUTO_CLIP_SUSTAIN_MIN}', process.env.AUTO_CLIP_SUSTAIN_MIN || '1.5')
+            .replace('${AUTO_CLIP_INSTANT_MULTIPLIER}', process.env.AUTO_CLIP_INSTANT_MULTIPLIER || '2')
+            .replace('${AUTO_CLIP_DEDUP_SEC}', process.env.AUTO_CLIP_DEDUP_SEC || '10')
             .replace('${AUTO_CLIP_TITLE_PREFIX}', process.env.AUTO_CLIP_TITLE_PREFIX || '');
 
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -1098,6 +1101,9 @@ const server = http.createServer((req, res) => {
             const newAutoClipFloorViewers = params.get('AUTO_CLIP_FLOOR_VIEWERS') || '2';
             const newAutoClipFloorMsgPerMin = params.get('AUTO_CLIP_FLOOR_MSG_PER_MIN') || '0.3';
             const newAutoClipCooldownMin = params.get('AUTO_CLIP_COOLDOWN_MIN') || '15';
+            const newAutoClipSustainMin = params.get('AUTO_CLIP_SUSTAIN_MIN') || '1.5';
+            const newAutoClipInstantMultiplier = params.get('AUTO_CLIP_INSTANT_MULTIPLIER') || '2';
+            const newAutoClipDedupSec = params.get('AUTO_CLIP_DEDUP_SEC') || '10';
             const newAutoClipTitlePrefix = params.get('AUTO_CLIP_TITLE_PREFIX') || '';
 
             // 更新 process.env
@@ -1116,6 +1122,9 @@ const server = http.createServer((req, res) => {
             process.env.AUTO_CLIP_FLOOR_VIEWERS = newAutoClipFloorViewers;
             process.env.AUTO_CLIP_FLOOR_MSG_PER_MIN = newAutoClipFloorMsgPerMin;
             process.env.AUTO_CLIP_COOLDOWN_MIN = newAutoClipCooldownMin;
+            process.env.AUTO_CLIP_SUSTAIN_MIN = newAutoClipSustainMin;
+            process.env.AUTO_CLIP_INSTANT_MULTIPLIER = newAutoClipInstantMultiplier;
+            process.env.AUTO_CLIP_DEDUP_SEC = newAutoClipDedupSec;
             process.env.AUTO_CLIP_TITLE_PREFIX = newAutoClipTitlePrefix;
 
             // 更新 .env 檔案
@@ -1151,6 +1160,9 @@ const server = http.createServer((req, res) => {
             updateEnv('AUTO_CLIP_FLOOR_VIEWERS', newAutoClipFloorViewers);
             updateEnv('AUTO_CLIP_FLOOR_MSG_PER_MIN', newAutoClipFloorMsgPerMin);
             updateEnv('AUTO_CLIP_COOLDOWN_MIN', newAutoClipCooldownMin);
+            updateEnv('AUTO_CLIP_SUSTAIN_MIN', newAutoClipSustainMin);
+            updateEnv('AUTO_CLIP_INSTANT_MULTIPLIER', newAutoClipInstantMultiplier);
+            updateEnv('AUTO_CLIP_DEDUP_SEC', newAutoClipDedupSec);
             updateEnv('AUTO_CLIP_TITLE_PREFIX', newAutoClipTitlePrefix);
 
             fs.writeFileSync(envPath, envContent, 'utf-8');

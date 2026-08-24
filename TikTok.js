@@ -2299,6 +2299,9 @@ if (isTwitch && process.env.AUTO_CLIP_ENABLED === '1') {
         floorViewers: parseInt(process.env.AUTO_CLIP_FLOOR_VIEWERS) || 2,
         floorMsgPerMin: parseFloat(process.env.AUTO_CLIP_FLOOR_MSG_PER_MIN) || 0.3,
         cooldownMin: parseInt(process.env.AUTO_CLIP_COOLDOWN_MIN) || 15,
+        sustainMin: parseFloat(process.env.AUTO_CLIP_SUSTAIN_MIN) || 1.5,
+        instantMultiplier: parseFloat(process.env.AUTO_CLIP_INSTANT_MULTIPLIER) || 2,
+        dedupSec: parseInt(process.env.AUTO_CLIP_DEDUP_SEC) || 10,
         titlePrefix: process.env.AUTO_CLIP_TITLE_PREFIX || '',
     });
     console.log('🎬 自動剪輯已啟用 (AutoClipManager)，每 30 秒評估一次');

@@ -460,12 +460,15 @@ G#clip 這波操作太秀了
 score = W_VIEWERS × (觀眾數 / max(基準觀眾, FLOOR_VIEWERS))
       + W_MSG    × (訊息速率 / max(基準訊息速率, FLOOR_MSG_PER_MIN))
 
-score ≥ SCORE_THRESHOLD 即觸發（上升緣 + cooldown 防連發）
+觸發條件（需同時滿足其一，且不受冷卻限制）：
+  ① 分數 ≥ SCORE_THRESHOLD 且持續維持達 SUSTAIN_MIN 分鐘（防單次邊際突破誤觸發）
+  ② 分數 ≥ SCORE_THRESHOLD × INSTANT_MULTIPLIER（明顯高峰，立即觸發不需等待）
 ```
 
 - **基準（adaptive baseline）**：取最近 `BASELINE_WINDOW_MIN` 分鐘內每個 poll 樣本（觀眾數、每分鐘訊息數）的**中位數**。基準是頻道自己的常態，因此低人氣頻道（5 人）跳到 12 人與高人氣頻道相對漲幅一樣會被偵測。
 - **多平台總合**：觀眾數 = TikTok + Twitch + Kick + Odysee + Youtube 的人數總合；訊息速率 = 各平台聊天訊息（通過過濾器）累計。同時開多平台直播時，任一平台的人氣或聊天熱絡都會被計入。
 - **包含 `/chat` 接口**：外部 userscript 送進 `/chat` 的訊息也會計入 AutoClip 統計（與 WS 直連路徑做對稱去重，不會重複計算）。
+- **訊息去重（防誤判）**：相同訊息文字在 `DEDUP_SEC`（預設 10）秒內重複出現只計一次。避免程式斷線重連重發同一批訊息、或單人快速洗頻灌高速率而誤觸發。
 - **即時速率**：最近 `RATE_WINDOW_MIN` 分鐘的平均每分鐘訊息數。
 - **Floor**：觀眾少於 `FLOOR_VIEWERS`（預設 2）一律不觸發，防止空台誤發。
 - **冷卻**：觸發後 `COOLDOWN_MIN` 分鐘內不重複觸發。
@@ -484,6 +487,9 @@ score ≥ SCORE_THRESHOLD 即觸發（上升緣 + cooldown 防連發）
 | `AUTO_CLIP_FLOOR_VIEWERS` | `2` | 最低觀眾數（少於此不觸發） |
 | `AUTO_CLIP_FLOOR_MSG_PER_MIN` | `0.3` | 最低訊息速率 |
 | `AUTO_CLIP_COOLDOWN_MIN` | `15` | 觸發冷卻（分鐘） |
+| `AUTO_CLIP_SUSTAIN_MIN` | `1.5` | 分數達門檻後需持續維持此時間（分鐘）才觸發 |
+| `AUTO_CLIP_INSTANT_MULTIPLIER` | `2` | 分數達 門檻×此值 立即觸發（不需持續等待） |
+| `AUTO_CLIP_DEDUP_SEC` | `10` | 相同訊息在 N 秒內重複只計一次（防斷線重發 / 洗頻） |
 | `AUTO_CLIP_TITLE_PREFIX` | 空 | 剪輯標題前綴，留空使用直播標題 |
 
 每次評估都會在 console 印出完整狀態：`觀眾 / 基準觀眾 / 訊息速率 / 基準速率 / 分數`，方便調校門檻。

@@ -32,6 +32,9 @@ export class AutoClipManager {
         floorViewers = 2,
         floorMsgPerMin = 0.3,
         cooldownMin = 15,
+        sustainMin = 1.5,
+        instantMultiplier = 2,
+        dedupSec = 10,
         titlePrefix = '',
         log = console.log,
     } = {}) {
@@ -45,6 +48,13 @@ export class AutoClipManager {
         this.floorViewers = floorViewers;
         this.floorMsgPerMin = floorMsgPerMin;
         this.cooldownMs = cooldownMin * MINUTE;
+        this.sustainMin = sustainMin;
+        this.sustainMs = sustainMin * MINUTE;
+        this.instantMultiplier = instantMultiplier;
+        this.instantThreshold = scoreThreshold * instantMultiplier;
+        this.dedupSec = dedupSec;
+        this.dedupMs = dedupSec * 1000;
+        this.lastMsgAt = new Map();   // 訊息文字 → 最後出現時間（去重用）
         this.titlePrefix = titlePrefix || '';
         this.log = log;
 
@@ -53,15 +63,31 @@ export class AutoClipManager {
         this.currentViewers = 0;
         this.lastClipAt = 0;
         this.triggered = false;
+        this.aboveSince = null;   // 分數首次升上門檻的時間戳（持續計時用）
         this.totalMessages = 0;
         this.totalClips = 0;
         this.history = [];
         this.historyLimit = 2000;
     }
 
-    // 注意：呼叫端一律傳訊息文字，第一參數僅作為占位（可能未來做內容過濾），
-    // 時間戳一律用 Date.now()，避免把字串當時間戳塞進 msgTimes 導致速率恆為 0
+    // 呼叫端一律傳訊息文字；時間戳一律用 Date.now()（避免把字串當時間戳塞進 msgTimes）。
+    // 去重：短時間內重複出現的相同訊息（程式斷線重連重發同一批 / 單人快速洗頻）
+    // 不計入速率與總數，避免訊息速率被灌高而誤觸發剪輯
     onChatMessage(_msg, now = Date.now()) {
+        if (typeof _msg === 'string') {
+            const key = _msg.trim();
+            if (key) {
+                const last = this.lastMsgAt.get(key);
+                if (last !== undefined && now - last < this.dedupMs) return; // 視為重複，跳過
+                this.lastMsgAt.set(key, now);
+                // 偶爾清理已超出去重窗口的舊 key，避免 Map 無限成長
+                if (this.lastMsgAt.size > 200) {
+                    for (const [k, t] of this.lastMsgAt) {
+                        if (now - t > this.dedupMs) this.lastMsgAt.delete(k);
+                    }
+                }
+            }
+        }
         this.msgTimes.push(now);
         this.totalMessages++;
         this._pruneMsgs(now);
@@ -151,6 +177,9 @@ export class AutoClipManager {
             floorViewers: this.floorViewers,
             floorMsgPerMin: this.floorMsgPerMin,
             cooldownMin: this.cooldownMs / MINUTE,
+            sustainMin: this.sustainMin,
+            instantMultiplier: this.instantMultiplier,
+            dedupSec: this.dedupSec,
         };
     }
 
@@ -176,12 +205,29 @@ export class AutoClipManager {
             reason = `冷卻中，剩 ${left} 分`;
         } else {
             const over = score >= this.scoreThreshold;
-            if (over && !this.triggered) {
-                triggered = true;
-                reason = `分數 ${score.toFixed(2)} 達門檻 ${this.scoreThreshold}`;
-            } else {
+            const instant = score >= this.instantThreshold;
+            if (!over) {
+                // 分數回落 → 重置持續計時與上升緣
+                this.aboveSince = null;
                 this.triggered = false;
-                reason = over ? '持續達標，等待分數回落' : `分數 ${score.toFixed(2)} < ${this.scoreThreshold}`;
+                reason = `分數 ${score.toFixed(2)} < ${this.scoreThreshold}`;
+            } else if (this.triggered) {
+                // 已觸發且分數仍維持在門檻上 → 等回落才可能再次觸發（避免連發）
+                reason = '已觸發，等待分數回落';
+            } else if (instant) {
+                // 遠超門檻的明顯高峰 → 立即觸發，不需等待持續時間
+                triggered = true;
+                reason = `分數 ${score.toFixed(2)} ≥ 即時門檻 ${this.instantThreshold.toFixed(2)}，立即觸發`;
+            } else {
+                // 普通達標：需持續維持在門檻上一段時間才算可靠觸發
+                if (this.aboveSince === null) this.aboveSince = now;
+                const sustainedMs = now - this.aboveSince;
+                if (sustainedMs >= this.sustainMs) {
+                    triggered = true;
+                    reason = `分數持續 ${(sustainedMs / MINUTE).toFixed(1)} 分維持 ≥ ${this.scoreThreshold}，觸發`;
+                } else {
+                    reason = `持續達標 ${Math.round(sustainedMs / 1000)}s / 需 ${this.sustainMin} 分 (${score.toFixed(2)} ≥ ${this.scoreThreshold})`;
+                }
             }
         }
 

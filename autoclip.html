@@ -170,7 +170,7 @@ function renderCards(stats) {
 
 function renderConfig() {
     document.getElementById('configInfo').innerHTML =
-        `W_觀眾=${cfg.wViewers ?? 0.5}　W_訊息=${cfg.wMsg ?? 0.5}　最低觀眾=${cfg.floorViewers ?? 2}　最低訊息=${cfg.floorMsgPerMin ?? 0.3}　冷卻=${cfg.cooldownMin ?? 15} 分`;
+        `W_觀眾=${cfg.wViewers ?? 0.5}　W_訊息=${cfg.wMsg ?? 0.5}　最低觀眾=${cfg.floorViewers ?? 2}　最低訊息=${cfg.floorMsgPerMin ?? 0.3}　冷卻=${cfg.cooldownMin ?? 15}分　持續=${cfg.sustainMin ?? 1.5}分　即時=門檻×${cfg.instantMultiplier ?? 2}　去重=${cfg.dedupSec ?? 10}s`;
     document.getElementById('cfgBaseline').textContent = cfg.baselineWindowMin ?? 30;
 }
 
