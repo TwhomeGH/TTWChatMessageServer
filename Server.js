@@ -280,6 +280,20 @@ function isValidToken(token) {
     return true;
 }
 
+/**
+ * 安全遮罩函式
+ * 會自動截斷最後 N 個字並替換成指定字串
+ * @param {string} key - 要保護的字串或金鑰
+ * @param {number} maskLen - 要遮罩的長度 (預設 5)
+ * @param {string} maskStr - 遮罩替代字串 (預設 "*****")
+ * @returns {string} - 遮罩後的字串
+ */
+function maskKey(key, maskLen = 5, maskStr = "*****") {
+    if (typeof key !== "string") return "";
+    if (key.length <= maskLen) return maskStr;
+    return key.slice(0, key.length - maskLen) + maskStr;
+}
+
 function parseCookies(req) {
     const cookies = req.headers.cookie || '';
     const result = {};
@@ -1167,9 +1181,8 @@ const server = http.createServer((req, res) => {
 
             fs.writeFileSync(envPath, envContent, 'utf-8');
 
-            let FixBARK = newBark.substring(0,newBark.length-5) + "00000"
             
-            pushLog(`[SYSTEM] Updated .env: BARK_API=${FixBARK}, SOCKET_API=${newSocket}, BING_TRANSLATE_API_KEY=${newBingKey ? '***' : ''}`);
+            pushLog(`[SYSTEM] Updated .env: SOCKET_API=${newSocket} , BARK_API=${maskKey(newBark)} , BING_TRANSLATE_API_KEY=${maskKey(newBingKey)}`);
 
 
 
