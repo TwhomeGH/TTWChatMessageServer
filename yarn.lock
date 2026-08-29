@@ -1749,11 +1749,6 @@ devtools-protocol@*, devtools-protocol@0.0.1608973:
   resolved "https://registry.npmjs.org/devtools-protocol/-/devtools-protocol-0.0.1608973.tgz"
   integrity sha512-Tpm17fxYzt+J7VrGdc1k8YdRqS3YV7se/M6KeemEqvUbq/n7At1rWVuXMxQgpWkdwSdIEKYbU//Bve+Shm4YNQ==
 
-dotenv@^17.2.3:
-  version "17.4.2"
-  resolved "https://registry.npmjs.org/dotenv/-/dotenv-17.4.2.tgz"
-  integrity sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==
-
 dunder-proto@^1.0.1:
   version "1.0.1"
   resolved "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz"

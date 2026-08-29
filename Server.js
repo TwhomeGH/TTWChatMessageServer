@@ -5,7 +5,6 @@ const { URL } = require('url')
 const fs = require('fs');
 const path = require('path');
 
-const { config } = require('dotenv');
 const { time } = require('console');
 
 // PKCE helpers for Kick OAuth
@@ -94,7 +93,7 @@ var TEST_LOG = [
 
 writeLog("Default",TEST_LOG.join("\n"))
 
-config(); // 讀取 .env
+process.loadEnvFile(".env"); // 讀取 .env
 
 let tiktokProcess = null;
 

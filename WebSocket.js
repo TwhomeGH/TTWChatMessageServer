@@ -4,9 +4,9 @@
 // import { createServer } from 'http';
 // import { Socket } from 'net';
 
-// import { config } from 'dotenv';
+// 原生 Node20+
+// process.loadEnvFile('.env');
 
-// config(); // 讀取 .env 檔案
 
 // var isEnd=false
 

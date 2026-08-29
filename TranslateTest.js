@@ -1,6 +1,5 @@
 import axios from 'axios';
 
-import { config } from 'dotenv';
 import { franc,francAll} from 'franc';
 
 import {iso6393, iso6393To1, iso6393To2B, iso6393To2T} from 'iso-639-3'
@@ -8,7 +7,8 @@ import {iso6393, iso6393To1, iso6393To2B, iso6393To2T} from 'iso-639-3'
 import langs from "langs";
 
 
-config()
+// 原生Node20+ Env
+process.loadEnvFile(".env")
 
 function parseBool(val, defaultValue = false) {
     if (!val) return defaultValue;

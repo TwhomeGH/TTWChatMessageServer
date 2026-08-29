@@ -4,9 +4,6 @@ import { EventSubWsListener } from '@twurple/eventsub-ws';
 import { promises as fs, readFileSync, existsSync, writeFileSync } from 'fs';
 import axios from 'axios';
 
-
-import { config } from 'dotenv';
-
 import net from 'net';
 
 
@@ -65,7 +62,7 @@ function writeLog(filename="TikTokRun.log", message,type="Other") {
 //     console.log("測試翻譯",RES)
 // })
 
-config(); // 讀取 .env
+process.loadEnvFile(".env"); // 讀取 .env
 
 
 const isDebugChild = process.env.DEBUG_CHILD === 'true';
