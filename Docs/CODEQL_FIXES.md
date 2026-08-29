@@ -50,7 +50,21 @@ flvEl.appendChild(document.createTextNode(/* url 文字 */));
 兩個大範圍，會連帶刪除大量**不是 emoji** 的字元（如箭頭 →、磅符號 £、勾 ✓）。
 Rule ID：`py/overly-large-range`。
 
-**修復**：收窄為精確的 emoji 碼點清單（天氣、花色、交通、常用表情等）。
+**修復**：收窄為精確的 emoji 碼點清單。因為 CodeQL 會把 astral 平面 `\U...`
+範圍（surrogate pair）誤判為與 U+FFFD 重疊，改為**資料驅動**建構字元類別，
+原始碼不再寫出 astral 正則字面值：
+
+```python
+_EMOJI_RANGES = [
+    (0x1F600, 0x1F64F, "表情圖示 Emoticons"),
+    (0x1F300, 0x1F5FF, "其他符號與象形圖示"),
+    # ... 精確碼點範圍
+]
+
+def _build_emoji_pattern() -> str:
+    return "[" + "".join(f"{chr(lo)}-{chr(hi)}" for lo, hi, _ in _EMOJI_RANGES) + "]"
+```
+
 驗證結果：
 
 | 輸入 | 輸出 |
@@ -58,6 +72,7 @@ Rule ID：`py/overly-large-range`。
 | `hi 😀` | `hi` |
 | `test☀more` | `testmore` |
 | `a❤b` | `ab` |
+| `🧠 test` | `test` |
 | `→ arrow` | `→ arrow`（保留）|
 | `price £ 5` | `price £ 5`（保留）|
 | `✓ check` | `✓ check`（保留）|
