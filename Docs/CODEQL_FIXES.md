@@ -152,7 +152,7 @@ CodeQL 偵測到對 CSPRNG 輸出做 `% mod` 會產生偏斜。Rule ID：`js/bia
 ├── codeql/
 │   └── config.yml                ← paths-ignore 排除 webmssdk / xgnarly
 └── workflows/
-    └── codeql.yml                ← advanced workflow（官方樣例，JS + Python + Go）
+    └── codeql.yml                ← advanced workflow（官方樣例，JS + Python）
 ```
 
 `config.yml` 的排除規則：
