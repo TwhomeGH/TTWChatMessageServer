@@ -19,5 +19,8 @@
     "tiktok-live-connector": "^2.4.0",
     "tiktok-signature": "^4.3.6",
     "update": "^0.7.4"
+  },
+  "allowScripts": {
+    "puppeteer@24.43.1": true
   }
 }
