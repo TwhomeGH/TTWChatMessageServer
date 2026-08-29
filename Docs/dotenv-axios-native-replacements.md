@@ -33,7 +33,7 @@ process.loadEnvFile(".env"); // 讀取 .env
 
 - `Server.js` → `process.loadEnvFile(".env")`
 - `TikTok.js` → `process.loadEnvFile(".env")`
-- `TranslateTest.js` → `process.loadEnvFile(".env")`
+- `TranslateTest.js` → `if (existsSync(".env")) process.loadEnvFile(".env")`
 - `WebSocket.js` → 原本就整段註解，改註解為原生寫法
 
 ### 差異注意事項（重要）
@@ -57,6 +57,10 @@ process.loadEnvFile(".env"); // 讀取 .env
    const { existsSync } = require('fs');
    if (existsSync(".env")) process.loadEnvFile(".env");
    ```
+
+   **本專案的取捨**：`Server.js` 與 `TikTok.js` 是主程式，沒有 `.env` 根本無法運作，
+   刻意保留拋錯行為（fail-fast，立即暴露問題）。只有 `TranslateTest.js` 是測試腳本、
+   參數多有預設值、可無 `.env` 執行，故加了 `existsSync` 守衛。
 
 2. **不會覆蓋已存在的環境變數**
 

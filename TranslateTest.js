@@ -1,5 +1,6 @@
 import axios from 'axios';
 
+import { existsSync } from 'fs';
 import { franc,francAll} from 'franc';
 
 import {iso6393, iso6393To1, iso6393To2B, iso6393To2T} from 'iso-639-3'
@@ -7,8 +8,8 @@ import {iso6393, iso6393To1, iso6393To2B, iso6393To2T} from 'iso-639-3'
 import langs from "langs";
 
 
-// 原生Node20+ Env
-process.loadEnvFile(".env")
+// 原生Node20+ Env (測試腳本可無 .env 執行)
+if (existsSync(".env")) process.loadEnvFile(".env")
 
 function parseBool(val, defaultValue = false) {
     if (!val) return defaultValue;
