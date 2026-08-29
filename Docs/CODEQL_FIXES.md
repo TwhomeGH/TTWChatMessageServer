@@ -158,6 +158,50 @@ CodeQL 偵測到對 CSPRNG 輸出做 `% mod` 會產生偏斜。Rule ID：`js/bia
 
 ---
 
+## 依賴漏洞（Dependabot / npm audit）
+
+### 移除未使用的 `update` 套件
+
+CodeQL 回報多個 npm 依賴漏洞（set-value、defaults-deep、parse-git-config、
+braces、micromatch、expand-object、yargs-parser），嚴重度 Critical ~ Moderate，
+來源全是 `update@0.7.4` 的傳遞依賴樹。
+
+**根因**：`update` 是 package.json 的直接依賴，但程式碼中**從未被 require**——
+grep `require('update')` 無任何命中（搜到的都是 `updateEnv`、`updateURL` 等
+自定義函數名稱）。整棵漏洞樹是無用依賴。
+
+**修復**：`npm uninstall update` 一次移除，7 個漏洞套件全部消失：
+
+| 套件 | 嚴重度 | 漏洞 |
+|------|--------|------|
+| set-value | Critical / High | Prototype Pollution |
+| defaults-deep | Critical | Prototype Pollution |
+| parse-git-config | High | Prototype Pollution |
+| braces | High | Uncontrolled resource consumption |
+| micromatch | Moderate | ReDoS |
+| expand-object | Moderate | Prototype Pollution |
+| yargs-parser | Moderate | Prototype Pollution |
+
+**驗證**：`npm audit` 確認僅剩 extract-zip；核心依賴（axios、tiktok-live-connector、
+kick-wss、protobufjs、franc、@twurple/api、puppeteer-extra-plugin-stealth）全部正常載入。
+
+### extract-zip（無法修復，僅剩此項）
+
+`extract-zip` unvalidated symlink path traversal（CVE-2026-56876，High），
+由 `@puppeteer/browsers`（puppeteer 依賴）帶入，經 tiktok-signature 使用。
+
+**為什麼不能修**：
+- GHSA 標示 **Patched versions: None** — 最新版 2.0.1 仍受影響，無升級路徑。
+- puppeteer 是簽名核心，不能移除。
+- 實際風險極低：extract-zip 僅在 puppeteer 解壓**自己下載的官方瀏覽器**
+  時使用，不處理使用者提供的 zip。
+
+**處理**：在 GitHub 上對這幾個 Dependabot alert 按 dismiss（標記為可接受風險 /
+無修復版本）。不要跑 `npm audit fix --force`，它會強制降級 tiktok-signature
+至 3.0.0（破壞性變更）。
+
+---
+
 ## Workflow 層排除（.github/）
 
 新增 advanced CodeQL workflow 並在 config 排除無法修改的檔案：
