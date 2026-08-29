@@ -161,6 +161,10 @@ Socket port **9322**，每行一個 JSON：
 {"user":"觀眾名","message":"哈囉","img":"頭像網址","giftImg":"禮物網址","type":"StreamMessage","isMain":true,"userNum":0,"userList":[]}
 ```
 
+> **Socket 綁定位址**：預設綁定 `127.0.0.1`（僅本機）。需要讓其他裝置連入時，可透過環境變數
+> `SOCKET_HOST=0.0.0.0`（所有介面）或指定特定 IP，例如 `SOCKET_HOST=192.168.1.50`；
+> 埠號可用 `SOCKET_PORT` 覆寫（預設 9322）。
+
 | 欄位 | 說明 |
 |------|------|
 | `user` | 用戶名稱 |

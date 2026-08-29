@@ -1,0 +1,8 @@
+name: "CodeQL configuration"
+
+# 排除第三方 vendored SDK 與逆向演算法檔案：
+# - webmssdk_*.js   為 TikTok 內建 SDK（Math.random 生成 deviceId/sessionId），改動會破壞簽名相容
+# - xgnarly.mjs     為 X-Gnarly 演算法（checksum 插入位置），須與 TikTok 位元組相容，不可改
+paths-ignore:
+  - '**/webmssdk*.js'
+  - '**/xgnarly.mjs'

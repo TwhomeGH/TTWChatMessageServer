@@ -206,8 +206,9 @@ export function encode(
   const xLen = cipher.length;
   const mod = xLen + 1;
   let sum = 0;
-  for (const b of keyBytes) sum = (sum + b) % mod;
-  for (const b of cipher) sum = (sum + b) % mod;
+  // codeql[js/biased-cryptographic-random] — checksum 決定金鑰插入位置，非安全隨機值；演算法須與 TikTok 位元組相容，不可改
+  for (const b of keyBytes) sum = (sum + b) % mod; // codeql[js/biased-cryptographic-random]
+  for (const b of cipher) sum = (sum + b) % mod; // codeql[js/biased-cryptographic-random]
   const insertPos = sum;
 
   const out = new Uint8Array(1 + xLen + 48);

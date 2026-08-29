@@ -1617,10 +1617,15 @@ function renderStreamVisibility() {
   document.getElementById('connSummary').textContent =
     streamRevealed ? `${host}/live/${stream}.flv` : `${host}/live/${masked}.flv`;
   // flvUrl code：遮罩 + 眼睛 icon
+  // 不用 innerHTML 拼字串，避免 streamKey/host 被當成 HTML 執行（XSS）
   const flvEl = document.getElementById('flvUrl');
-  flvEl.innerHTML = streamRevealed
-    ? `<i class="fa-solid fa-eye mr-1"></i>${getFlvUrl()}`
-    : `<i class="fa-solid fa-eye-slash mr-1"></i>${host}/live/${masked}.flv`;
+  const icon = document.createElement('i');
+  icon.className = streamRevealed ? 'fa-solid fa-eye mr-1' : 'fa-solid fa-eye-slash mr-1';
+  flvEl.textContent = '';
+  flvEl.appendChild(icon);
+  flvEl.appendChild(document.createTextNode(
+    streamRevealed ? getFlvUrl() : `${host}/live/${masked}.flv`
+  ));
 }
 
 function toggleStreamReveal() {

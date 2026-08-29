@@ -5,7 +5,7 @@
  * 使用方式：node Docs/zip-patches.mjs
  */
 
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { existsSync, rmSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
@@ -28,10 +28,22 @@ for (const pkg of packages) {
   if (existsSync(zipPath)) rmSync(zipPath);
 
   try {
-    execSync(
-      `powershell -Command "Compress-Archive -Path '${srcDir}\\*' -DestinationPath '${zipPath}' -Force"`,
-      { stdio: 'pipe' }
+    // 路徑透過環境變數傳給 PowerShell，避免路徑字串被 shell 當成指令執行
+    const result = spawnSync(
+      'powershell',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        'Compress-Archive -Path "$env:PATCH_SRC\\*" -DestinationPath "$env:PATCH_DEST" -Force',
+      ],
+      {
+        stdio: 'pipe',
+        env: { ...process.env, PATCH_SRC: srcDir, PATCH_DEST: zipPath },
+      }
     );
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error(result.stderr?.toString() || `exit ${result.status}`);
     console.log(`✅ ${pkg}_patched_v2.zip`);
   } catch (e) {
     console.error(`❌ ${pkg}: ${e.message}`);

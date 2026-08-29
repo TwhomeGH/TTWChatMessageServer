@@ -1,3 +1,4 @@
+import os
 import socket, threading, json
 from queue import Queue
 
@@ -7,8 +8,10 @@ _active = 0
 _lock = threading.Lock()
 
 def start_socket():
+    host = os.environ.get("SOCKET_HOST", "127.0.0.1")
+    port = int(os.environ.get("SOCKET_PORT", "9322"))
     s = socket.socket()
-    s.bind(("0.0.0.0", 9322))
+    s.bind((host, port))
     s.listen()
 
     while True:

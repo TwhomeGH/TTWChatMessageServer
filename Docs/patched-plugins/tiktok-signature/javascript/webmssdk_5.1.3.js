@@ -3908,6 +3908,7 @@
                 },
                 Dr = function (n, t) {
                   void 0 === n && (n = "");
+                  // codeql[js/insecure-randomness] — 第三方 vendored SDK：userId/deviceId 非安全機密，僅用於設備指紋，不得修改
                   var r = { userId: T(), deviceId: T() };
                   if (t <= 0) return r;
                   var i = Mr(n);
@@ -4274,6 +4275,7 @@
                     userId: r.userId,
                     deviceId: r.deviceId,
                     storageExpires: t,
+                    // codeql[js/insecure-randomness] — 第三方 vendored SDK：sessionId 用 Math.random 生成，不得修改
                     sessionId: br(),
                     domain: Xt,
                     pluginBundle: {

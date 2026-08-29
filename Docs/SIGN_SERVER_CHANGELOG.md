@@ -7,6 +7,7 @@
 | 本文件 | 開發者/維護者 | 套件結構、修改流程、架構演進、CDP 設計說明 |
 | `TEST_FILES_REFERENCE.md` | 測試者/除錯 | 開發測試腳本的用途與使用方式 |
 | `dotenv-axios-native-replacements.md` | 所有人 | dotenv→`process.loadEnvFile`、axios→原生 `fetch` 的遷移狀態與差異說明 |
+| `CODEQL_FIXES.md` | 開發者/維護者 | CodeQL 告警清單、修復方式、誤報/無法修項目的標記排除 |
 | `apply-patches.mjs` | 所有人 | 一鍵同步修補到 node_modules |
 | `zip-patches.mjs` | 維護者 | 從原始檔重新打包 ZIP |
 
