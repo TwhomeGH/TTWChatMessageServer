@@ -256,6 +256,13 @@ addFilterRules([
         match: /\s{2,}/g,
         replacement: ' ',
     },
+    {
+        name: 'msg:補幣廣告改梗',
+        field: 'message',
+        action: 'replace',
+        match: /補幣中，?按我頭像(?:\s|&#x20;)?/g,
+        replacement: '哈基中，關注主播不迷路',
+    },
 
     // ── 範例：replace / delete（預設關閉，使用者可按需啟用）──
     {
