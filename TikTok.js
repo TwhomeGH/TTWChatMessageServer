@@ -1118,6 +1118,7 @@ function clearAllAdTimers() {
 
 // 啟動時恢復有效廣告的定時器
 function resumeAdTimers() {
+    clearAllAdTimers();
     let count = 0;
     const now = Date.now();
     for (const uid of Object.keys(sponsorAds.users)) {
@@ -1134,6 +1135,7 @@ function resumeAdTimers() {
             } else {
                 delayMs = ad.intervalMinutes * 60 * 1000;
             }
+            clearAdTimer(ad.id);
             adTimers[ad.id] = setTimeout(() => {
                 try {
                     console.log(`⏰ 贊助廣告定時觸發(恢復): ${ad.overlayUser} - ${ad.message}`);
