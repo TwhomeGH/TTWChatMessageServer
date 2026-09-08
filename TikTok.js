@@ -722,6 +722,38 @@ process.stdin.on('data', async (chunk) => {
                 return;
             }
 
+            if (json.type === 'SPONSOR_TRIGGER' && json.adId) {
+                loadSponsorAds();
+                for (const uid of Object.keys(sponsorAds.users)) {
+                    const ad = sponsorAds.users[uid].ads.find(a => a.id === json.adId);
+                    if (ad) {
+                        if (ad.approved === false) {
+                            console.warn(`⚠️ 贊助廣告已被拒絕，略過手動發送: ${json.adId}`);
+                            return;
+                        }
+                        const now = json.sentAt || new Date().toISOString();
+                        sendAdOverylayMessage(ad.overlayUser, ad.message, ad.iconURL || '', ad.useTTS);
+                        sendBarkNotification(`📢 手動發送贊助廣告 (${ad.overlayUser})`, ad.message, ad.iconURL || '', SPONSOR_MANAGE_URL);
+                        ad.lastSentAt = now;
+                        ad.updatedAt = now;
+                        saveSponsorAds();
+                        if (ad.enabled && ad.intervalMinutes >= 15) {
+                            scheduleAdTimer(ad.id, uid, ad.intervalMinutes, {
+                                overlayUser: ad.overlayUser,
+                                text: ad.message,
+                                iconURL: ad.iconURL || '',
+                                useTTS: ad.useTTS
+                            });
+                        }
+                        console.log(`📢 已手動發送贊助廣告: ${ad.overlayUser} - ${ad.message}`);
+                        process.stdout.write(JSON.stringify({ type: 'SPONSOR_TRIGGERED', adId: ad.id, sentAt: now }) + '\n');
+                        return;
+                    }
+                }
+                console.warn(`⚠️ 未找到贊助廣告: ${json.adId}`);
+                return;
+            }
+
             if (json.type === 'SPONSOR_CREATE') {
                 const { userId, displayName, message, iconURL, useTTS, overlayUser, intervalMinutes, targetId, alreadyPersisted, adId: persistedAdId } = json;
                 if (!userId || !message) {

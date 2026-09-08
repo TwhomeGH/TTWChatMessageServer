@@ -1508,6 +1508,57 @@ const server = http.createServer((req, res) => {
         return;
     }
 
+    else if (req.url === '/api/sponsor-ads/trigger' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const { adId } = JSON.parse(body);
+                if (!adId) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: '缺少必要欄位 adId' }));
+                    return;
+                }
+                const SPONSOR_FILE = path.join(__dirname, 'sponsor_ads.json');
+                let data = fs.existsSync(SPONSOR_FILE)
+                    ? JSON.parse(fs.readFileSync(SPONSOR_FILE, 'utf-8'))
+                    : { settings: { reviewMode: 'none' }, users: {} };
+                let foundAd = null;
+                let foundUserId = null;
+                for (const uid of Object.keys(data.users || {})) {
+                    const ad = (data.users[uid].ads || []).find(a => a.id === adId);
+                    if (ad) {
+                        foundAd = ad;
+                        foundUserId = uid;
+                        break;
+                    }
+                }
+                if (!foundAd) {
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: '找不到該贊助廣告' }));
+                    return;
+                }
+                if (foundAd.approved === false) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: '此廣告已被拒絕，請先編輯或審核通過後再發送' }));
+                    return;
+                }
+                const now = new Date().toISOString();
+                foundAd.lastSentAt = now;
+                foundAd.updatedAt = now;
+                fs.writeFileSync(SPONSOR_FILE, JSON.stringify(data, null, 2));
+                sendToTikTok({ type: 'SPONSOR_TRIGGER', adId, userId: foundUserId, sentAt: now });
+                pushLog(`📢 手動觸發贊助廣告: ${foundAd.overlayUser || foundUserId} - ${foundAd.message}`);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, adId, sentAt: now }));
+            } catch (err) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message }));
+            }
+        });
+        return;
+    }
+
     else if (req.url === '/api/sponsor-ads/create' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => body += chunk);

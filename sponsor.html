@@ -253,6 +253,7 @@ function render() {
             if (ad.intervalMinutes > 0) {
                 html += `<button onclick="toggleAd('${ad.id}', ${!ad.enabled})" class="bg-gray-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-gray-500 transition">${ad.enabled ? '⏸️ 停用' : '▶️ 啟用'}</button>`;
             }
+            html += `<button onclick="triggerAd('${ad.id}', this)" class="bg-amber-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-amber-500 transition disabled:opacity-50">📤 發送</button>`;
             html += `<button onclick="toggleEditAd(this)" class="edit-btn bg-sky-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-sky-500 transition">✏️ 編輯</button>`;
             html += `<button onclick="deleteAd('${ad.id}')" class="bg-red-800 text-red-200 text-xs px-3 py-1.5 rounded-lg hover:bg-red-700 transition">🗑️ 刪除</button>`;
             html += `</div>`;
@@ -414,6 +415,34 @@ async function toggleAd(adId, enabled) {
         await loadAds();
     } catch (err) {
         showToast(`操作失敗: ${err.message}`, 'error');
+    }
+}
+
+async function triggerAd(adId, btn) {
+    if (!serverRunning) {
+        showToast('⚠️ 主服務器未運行，無法發送廣告，請先啟動 TikTok.js', 'error');
+        return;
+    }
+    const oldText = btn ? btn.textContent : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '發送中...';
+    }
+    try {
+        const res = await fetch('/api/sponsor-ads/trigger', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adId })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        showToast('✅ 廣告已手動發送', 'success');
+        await loadAds();
+    } catch (err) {
+        showToast(`發送失敗: ${err.message}`, 'error');
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = oldText || '📤 發送';
+        }
     }
 }
 
