@@ -1,5 +1,8 @@
 /**
- * 自動產生修補套件 ZIP
+ * 自動產生修補套件 ZIP（已棄用）
+ *
+ * ⚠️ 此為舊的整檔複製流程，已改由 Docs/patches/ + Docs/apply-patches.mjs 取代。
+ *    保留僅供歷史參考，請勿再使用。詳見 Docs/PATCHES.md。
  *
  * 從 Docs/patched-plugins/ 目錄打包成 Docs/*_patched_v2.zip
  * 使用方式：node Docs/zip-patches.mjs

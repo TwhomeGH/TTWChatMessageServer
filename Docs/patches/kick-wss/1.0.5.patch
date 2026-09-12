@@ -1,0 +1,111 @@
+diff --git a/README.md b/README.md
+index 36d1016..592bace 100644
+--- a/README.md
++++ b/README.md
+@@ -444,4 +444,36 @@ MIT License - see LICENSE file for details.
+ 
+ ---
+ 
++## 🛠️ Patch Notes (TTWChatMessageServer)
++
++此版本為 `kick-wss` 的修改版，用於 [TTWChatMessageServer] 專案。
++
++### 修改內容
++
++1. **`dist/MessageParser.js` — `parseChatMessage`**
++   - `sender` 物件改為 `...data.sender` 展開，保留 Pusher 原始資料中的所有欄位
++   - 使 `profile_picture`、`profile_pic` 等非標準欄位不會被濾掉
++
++2. **`dist/types.d.ts` — `KickUser` 介面**
++   - 新增 `[key: string]: unknown` 索引簽章，允許未知的額外欄位
++
++### 安裝方式
++
++將 `Docs/kick-wss_patched.zip` 解壓後，取代 `node_modules/kick-wss/` 內容：
++
++```bash
++Copy-Item -Path "Docs/kick-wss/*" -Destination "node_modules/kick-wss/" -Recurse -Force
++```
++
++### 未來計劃：抽離為獨立套件
++
++預計在後續版本中將此 patch 抽離為獨立的 npm 套件（例如 `@ttw/kick-wss`），主要方向：
++
++- 將 Pusher 資料解析邏輯封裝為可擴充的 plugin 架構
++- 內建 Kick OAuth token 管理（自動 refresh）
++- 支援 `api.kick.com/public/v1` 的 REST API 呼叫（取得頭像等）
++- 可獨立於 `TTWChatMessageServer` 專案外使用
++
++---
++
+ **Kick WebSocket Lite** - The simplest way to connect to Kick.com chats.
+diff --git a/dist/MessageParser.js b/dist/MessageParser.js
+index 581c2aa..4a5fe9e 100644
+--- a/dist/MessageParser.js
++++ b/dist/MessageParser.js
+@@ -33,7 +33,7 @@ export class MessageParser {
+                 return null;
+             }
+             // Normalizar evento: soporta ambos formatos (con y sin namespace)
+-            const normalizedEvent = LEGACY_EVENT_MAPPING[message.event] || message.event;
++            const normalizedEvent = message.event;
+             // Guardar el formato original para retrocompatibilidad
+             const originalEvent = message.event;
+             const isLegacyFormat = message.event !== normalizedEvent;
+@@ -140,6 +140,7 @@ export class MessageParser {
+             type: "message",
+             created_at: data.created_at,
+             sender: {
++                ...data.sender,
+                 id: data.sender.id,
+                 username: data.sender.username,
+                 slug: data.sender.slug,
+diff --git a/dist/WebSocketManager.js b/dist/WebSocketManager.js
+index dba990a..f8ae4ba 100644
+--- a/dist/WebSocketManager.js
++++ b/dist/WebSocketManager.js
+@@ -21,7 +21,8 @@ export class WebSocketManager extends EventEmitter {
+         super();
+         this.ws = null;
+         this.channelName = "";
+-        this.channelId = 0;
++        this.channelId = options.channelId || 0;
++        this._channelIdExplicit = options.channelId != null && options.channelId > 0;
+         this.connectionState = "disconnected";
+         this.reconnectTimer = null;
+         this.isManualDisconnect = false;
+@@ -103,9 +104,11 @@ export class WebSocketManager extends EventEmitter {
+         this.setConnectionState("connecting");
+         this.log(`Connecting to channel: ${this.channelName}`);
+         try {
+-            // Obtener información del canal
+-            const channelInfo = await this.getChannelInfo(this.channelName);
+-            this.channelId = channelInfo.chatroom.id;
++            // Obtener información del canal (si no se proporcionó channelId)
++            if (!this._channelIdExplicit) {
++                const channelInfo = await this.getChannelInfo(this.channelName);
++                this.channelId = channelInfo.chatroom.id;
++            }
+             // Construir URL del WebSocket
+             const wsUrl = this.buildWebSocketUrl();
+             // Crear conexión WebSocket
+diff --git a/dist/types.d.ts b/dist/types.d.ts
+index 3643c8b..3f9b690 100644
+--- a/dist/types.d.ts
++++ b/dist/types.d.ts
+@@ -60,6 +60,7 @@ export interface KickUser {
+         color: string;
+         badges: string[];
+     };
++    [key: string]: unknown;
+ }
+ export interface KickChannel {
+     id: number;
+@@ -231,6 +232,7 @@ export interface RawChatMessageData {
+             color?: string;
+             badges?: string[];
+         };
++        profile_picture?: string;
+     };
+     chatroom?: {
+         id: number;

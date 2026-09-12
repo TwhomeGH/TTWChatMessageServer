@@ -1,0 +1,27 @@
+diff --git a/dist/lib-YL2P_UWg.js b/dist/lib-YL2P_UWg.js
+index aa8a143..67ad6de 100644
+--- a/dist/lib-YL2P_UWg.js
++++ b/dist/lib-YL2P_UWg.js
+@@ -385,6 +385,11 @@ var WebcastWebSocketClient = class extends WebSocket {
+ 		this.pingInterval = null;
+ 		this.on("message", this.onMessage.bind(this));
+ 		this.on("close", this.onDisconnect.bind(this));
++		this.on("unexpected-response", (req, res) => {
++			let body = "";
++			res.on("data", (c) => body += c);
++			res.on("end", () => console.error("[WS Debug] HTTP " + res.statusCode + ": " + body.substring(0, 2000)));
++		});
+ 	}
+ 	get open() {
+ 		return this.readyState === WebSocket.OPEN;
+@@ -902,7 +907,9 @@ const fetchSignedWebSocketFromEulerRoute = createRoute("fetchSignedWebSocketFrom
+ 	if (authenticateWs && !xCookieHeader) throw new AuthenticatedWebSocketConnectionError(`authenticate_websocket is true, but no session cookies found.`);
+ 	let response;
+ 	try {
+-		response = await apiClient.rooms.fetchWebcastURL(roomId, LIBRARY_IDENTITY, void 0, cursor, webClient.clientHeaders["User-Agent"], true, country, useMobile ? WebcastFetchPlatform.Mobile : WebcastFetchPlatform.Web, void 0, authenticateWs ? xCookieHeader : void 0, void 0, void 0, {
++		const sessionId = session?.cookie?.value?.sessionId;
++	const ttTargetIdc = session?.cookie?.value?.ttTargetIdc;
++	response = await apiClient.rooms.fetchWebcastURL(roomId, LIBRARY_IDENTITY, void 0, cursor, webClient.clientHeaders["User-Agent"], true, country, useMobile ? WebcastFetchPlatform.Mobile : WebcastFetchPlatform.Web, void 0, authenticateWs ? xCookieHeader : void 0, sessionId, ttTargetIdc, {
+ 			...options,
+ 			responseType: "arraybuffer"
+ 		});

@@ -5,95 +5,63 @@
 | 文件 | 適合誰 | 內容 |
 |------|--------|------|
 | 本文件 | 開發者/維護者 | 套件結構、修改流程、架構演進、CDP 設計說明 |
+| `PATCHES.md` | 所有人 | 最小差異 patch 系統（patch 清單、套用/還原/產生方式） |
 | `TEST_FILES_REFERENCE.md` | 測試者/除錯 | 開發測試腳本的用途與使用方式 |
 | `dotenv-axios-native-replacements.md` | 所有人 | dotenv→`process.loadEnvFile`、axios→原生 `fetch` 的遷移狀態與差異說明 |
 | `CODEQL_FIXES.md` | 開發者/維護者 | CodeQL 告警清單、修復方式、誤報/無法修項目的標記排除 |
-| `apply-patches.mjs` | 所有人 | 一鍵同步修補到 node_modules |
-| `zip-patches.mjs` | 維護者 | 從原始檔重新打包 ZIP |
+| `apply-patches.mjs` | 所有人 | 依版本套用最小差異 patch 到 node_modules |
+| `make-patches.mjs` | 維護者 | 從 node_modules 重新產生 patch |
 
 ## 修補套件目錄結構
 
 ```
 Docs/
-├── patched-plugins/           ← 原始檔（直接編輯）
-│   ├── tiktok-signature/
-│   │   ├── server.mjs         ← 簽名伺服器（繞過 Euler）
-│   │   ├── xgnarly.mjs        ← X-Gnarly 演算法
-│   │   ├── javascript/
-│   │   │   ├── webmssdk_5.1.3.js
-│   │   │   ├── webmssdk_2.0.0.485.js
-│   │   │   └── webmssdk_1.0.0.368.js
-│   │   └── package.json
-│   ├── tiktok-live-connector/
-│   │   ├── dist/
-│   │   │   ├── lib-YL2P_UWg.js ← 主程式（繞過 Euler Stream）
-│   │   │   ├── index.js
-│   │   │   └── ...
-│   │   └── package.json
-│   └── kick-wss/               ← Kick WebSocket 函式庫
-├── tiktok-signature_patched_v2.zip    ← 自動產生的 ZIP
-├── tiktok-live-connector_patched_v2.zip
-├── kick-wss_patched_v2.zip
-├── apply-patches.mjs          ← 套用修補到 node_modules
-├── zip-patches.mjs            ← 從 patched-plugins/ 重新打包 ZIP
-└── SIGN_SERVER_CHANGELOG.md
+├── patches/                    ← 最小差異 patch（依版本命名）
+│   ├── tiktok-live-connector/2.4.0.patch
+│   └── kick-wss/1.0.5.patch
+├── apply-patches.mjs           ← 套用 / 檢查 / 還原
+├── make-patches.mjs            ← 重新產生 patch
+├── patched-plugins/            ← [已棄用] 舊整檔複製來源（保留供歷史參考）
+├── *_patched_v2.zip            ← [已棄用] 舊打包產物
+└── zip-patches.mjs             ← [已棄用] 舊打包流程
 ```
 
 ## 使用流程
 
-**編輯插件 → 同步 node_modules → 測試**
+**編輯 node_modules → 產生 patch → 套用/驗證**
 
 ```bash
-# 1. 編輯 patched-plugins/ 內的檔案（直接改）
-# 2. 套用到 node_modules
-node Docs/apply-patches.mjs
-# 3. 重新打包 ZIP（選用）
-node Docs/zip-patches.mjs
+# 1. 編輯 node_modules/<套件>/ 內的檔案
+# 2. 產生最小差異 patch
+node Docs/make-patches.mjs
+# 3. 驗證
+node Docs/apply-patches.mjs --check
 ```
 
 ## 套用修補
 
-### 方式一：自動腳本（推薦）
-
 ```bash
-node Docs/apply-patches.mjs
+node Docs/apply-patches.mjs            # 套用（已套用則略過）
+node Docs/apply-patches.mjs --check    # 只檢查
+node Docs/apply-patches.mjs --revert   # 還原為原廠
 ```
 
-### 方式二：手動複製特定檔案
-
-```bash
-# tiktok-live-connector
-copy Docs\patched-plugins\tiktok-live-connector\dist\lib-YL2P_UWg.js node_modules\tiktok-live-connector\dist\
-
-# 單一檔案
-copy Docs\patched-plugins\tiktok-signature\server.mjs node_modules\tiktok-signature\
-```
-
-### 方式三：解壓縮完整套件
-
-```bash
-# 先備份原始套件
-move node_modules\tiktok-signature node_modules\tiktok-signature.bak
-move node_modules\tiktok-live-connector node_modules\tiktok-live-connector.bak
-
-# 解壓修補版
-powershell "Expand-Archive -Path Docs\tiktok-signature_patched_v2.zip -DestinationPath node_modules\tiktok-signature -Force"
-powershell "Expand-Archive -Path Docs\tiktok-live-connector_patched_v2.zip -DestinationPath node_modules\tiktok-live-connector -Force"
-```
+詳細說明與目前 patch 清單見 [`PATCHES.md`](./PATCHES.md)。
 
 ## 還原原始版本
 
 ```bash
+node Docs/apply-patches.mjs --revert
+# 或直接重裝
 npm install tiktok-live-connector@latest
-npm install tiktok-signature@latest
 ```
 
 ## 修改指引
 
-1. 編輯 `Docs/patched-plugins/` 內的原始檔案
-2. 執行 `node Docs/apply-patches.mjs` 同步到 `node_modules/`
-3. 執行 `node Docs/zip-patches.mjs` 重新打包 ZIP（選用）
-4. 重新啟動應用程式測試
+1. 安裝對應版本：`npm install <套件>@<版本>`
+2. 編輯 `node_modules/<套件>/` 內的檔案
+3. `node Docs/make-patches.mjs` 產生/更新 patch
+4. `node Docs/apply-patches.mjs --check` 驗證，再重新啟動應用程式測試
 
 ## 架構演進
 

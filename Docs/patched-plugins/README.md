@@ -1,4 +1,9 @@
-# Patched Plugins 說明
+# Patched Plugins 說明（已棄用）
+
+> ⚠️ **本目錄已棄用，僅保留供歷史參考。**
+> 修補已改為「最小差異 patch」機制，見 [`../PATCHES.md`](../PATCHES.md)。
+> 請改用 `node Docs/apply-patches.mjs`（套用）、`--check`（檢查）、`--revert`（還原），
+> 以及 `node Docs/make-patches.mjs`（重新產生 patch）。不要再手動複製本目錄的整檔。
 
 本目錄存放第三方套件的修改版本（patch），用於支援 custom sign server。
 
