@@ -1,4 +1,4 @@
-import { initDirectSigner, directSign, closeDirectSigner } from './SignServer/direct-signer.mjs';
+import { initDirectSigner, directSign, closeDirectSigner } from '../SignServer/direct-signer.mjs';
 
 try {
     const ready = await initDirectSigner();

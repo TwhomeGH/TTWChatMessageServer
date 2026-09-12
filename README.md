@@ -843,6 +843,14 @@ http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickU
 
 - [主服務器的其他功能說明 Service.md](./Service.md)
 
+### 開發測試腳本
+
+開發過程中的測試與分析腳本統一放在 `Test/` 目錄，完整清單與說明見 [Docs/TEST_FILES_REFERENCE.md](./Docs/TEST_FILES_REFERENCE.md)。
+
+```bash
+node Test/xxx.mjs
+```
+
 ### 1. 查看服務狀態
 
 - 一次性狀態查詢

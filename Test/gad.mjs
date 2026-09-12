@@ -1,5 +1,5 @@
 // 模擬 G#Ad 完整解析流程（TikTok.js handleGAd 的 token 過濾 + B 自動偵測 + A 保留 + C 存已解析值）
-// 用法：node _test_gad.mjs
+// 用法：node Test/gad.mjs
 
 const IMG_URL_RE = /^https?:\/\/\S+\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?[\w=&.,-]*)?$/i;
 

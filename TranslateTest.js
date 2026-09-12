@@ -154,18 +154,31 @@ async function translateByBing(Chat, sourceLang) {
     return resp?.data?.[0]?.translations?.[0]?.text?.trim() || null;
 }
 
+const URL_REGEX = /https?:\/\/[^\s]+/g;
+// 原生 emoji（含 ZWJ 組合、膚色修飾、旗幟、variation selector、keycap）
+const EMOJI_REGEX = /[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\u200D\uFE0F\u20E3]/gu;
+
+/**
+ * 取出真正需要翻譯的文字：移除 URL（表情對應 token 會被 replaceEmojis 轉成網址）與原生 emoji。
+ * 回傳空字串代表純表情/純網址，不需翻譯。
+ */
+export function extractTranslatableText(Chat) {
+    return String(Chat ?? '').replace(URL_REGEX, '').replace(EMOJI_REGEX, '').trim();
+}
+
 async function translateByApi(Chat) {
-    // 移除 emoji URL 避免干擾語言偵測與翻譯
-    const cleanChat = Chat.replace(/https?:\/\/[^\s]+/g, '').trim();
-    if (!cleanChat) {
+    // 移除 URL（表情對應 token 會被 replaceEmojis 轉成網址）與原生 emoji，避免干擾語言偵測與翻譯
+    const cleanChat = String(Chat ?? '').replace(URL_REGEX, '').trim();
+    const translatableText = extractTranslatableText(Chat);
+    if (!translatableText) {
         console.log(`純 emoji/URL，跳過翻譯: ${Chat}`)
         return Chat
     }
 
-    let CheckLang = isChinese(cleanChat)
+    let CheckLang = isChinese(translatableText)
 
     const langMinLength = CheckLang.lang === 'ja' ? 2 : TRANSLATE_MIN_LENGTH;
-    if (cleanChat.length < langMinLength) {
+    if (translatableText.length < langMinLength) {
         console.log(`太短了取消翻譯 < ${langMinLength}`)
         return Chat
     }
@@ -215,5 +228,6 @@ export default {
     isChinese,
     TranslateText,
     translateByApi,
-    detectLanguage
+    detectLanguage,
+    extractTranslatableText
 }
