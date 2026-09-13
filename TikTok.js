@@ -4,7 +4,7 @@ import { EventSubWsListener } from '@twurple/eventsub-ws';
 import { promises as fs, readFileSync, existsSync, writeFileSync } from 'fs';
 import axios from 'axios';
 
-import net from 'net';
+import { SocketTransport } from './SocketTransport.mjs';
 
 
 
@@ -136,17 +136,7 @@ const youtubePollIntervalS = parseInt(process.env.YOUTUBE_POLL_INTERVAL_S) || 30
 
 // --- 4. Socket 客戶端 ---
 
-let client = null;
-let reconnectTimer = null;
-var isFirstSocketConnect = true;
-let socketRetryCount = 0;
-let socketRetryInterval = 15000; // 起始 15 秒
-const SOCKET_RETRY_THRESHOLD = 10; // 連續 10 次失敗後開始調大
-const SOCKET_RETRY_STEP = 5000;   // 每次增加 5 秒
-const SOCKET_RETRY_MAX = 300000;  // 最長 5 分鐘
-const SOCKET_RETRY_BASE = 15000;  // 基礎重連間隔 15 秒
-const pendingQueue = [];
-const MAX_PENDING = 50;
+let isFirstSocketConnect = true;
 
 // TikTok 直播間斷線自動重連（有限次數 + 指數退避）
 let tkReconnectTimer = null;   // 重連計時器
@@ -155,29 +145,18 @@ let streamEnded = false;       // 直播真正結束（使用者主動結束 / �
 const TK_RETRY_MAX = 5;        // 最大重連次數（避免無限重試）
 const TK_RETRY_BASE = 15000;   // 重連基礎間隔 15 秒（指數退避 15s→30s→60s→120s→240s）
 
-function flushPendingQueue() {
-    if (pendingQueue.length === 0) return;
-    if (!client || client.destroyed) return;
-    const batch = pendingQueue.splice(0);
-    let idx = 0;
-    const sendNext = () => {
-        if (idx >= batch.length || !client || client.destroyed) return;
-        try {
-            client.write(JSON.stringify(batch[idx]) + '\n');
-        } catch (err) {
-            console.error('⚠️ 補發佇列訊息失敗:', err.message);
+const socketUrl = new URL((isSocket && process.env.SOCKET_API) || 'tcp://localhost:9322');
+const socketTransport = new SocketTransport({
+    host: socketUrl.hostname.replace(/^\[|\]$/g, ''),
+    port: Number(socketUrl.port || 9322),
+    enabled: isSocket,
+    onConnect: () => {
+        if (isFirstSocketConnect) {
+            sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false, CacheUserNum, CacheUserList);
+            isFirstSocketConnect = false;
         }
-        idx++;
-        setTimeout(sendNext, 300);
-    };
-    console.log(`📤[TK] 開始低頻補發 ${batch.length} 筆暫存訊息 (300ms/筆)`);
-    sendNext();
-}
-
-
-
-const PORT = process.env.SOCKET_API?.split(':')[2] || 9322; // 你的 socket server 端口
-const HOST = process.env.SOCKET_API?.split(':')[1]?.replace('//', '') || 'localhost'; // 你的 socket server 地址
+    }
+});
 
 const Bark = process.env.BARK_API;
 
@@ -459,30 +438,13 @@ async function handleExit() {
 
     sendBarkNotification("系統通知", "TTW Chat Message Server 已關閉", "");
     
-    if (client && !client.destroyed) {
-        // 先嘗試送最後一條訊息
-        await new Promise((resolve) => {
-            client.write(JSON.stringify({
-                type: 'StreamMessage',
-                user: "系統",
-                message: "TTW Chat Message Server 已關閉",
-                img: "",
-                giftImg: "",
-                isMain: false
-            }) + '\n', () => {
-                // 等到 write callback 確認送出後再關閉
-                client.end(() => {
-                    resolve();
-                });
-            });
-        });
-    }
+    await socketTransport.close({
+        type: 'StreamMessage', user: '系統', message: 'TTW Chat Message Server 已關閉',
+        img: '', giftImg: '', isMain: false
+    });
 
     clearAllAdTimers();
     saveSponsorAds();
-    // 關閉時重置 Socket 重連狀態，下次啟動從 15s 開始
-    socketRetryCount = 0;
-    socketRetryInterval = SOCKET_RETRY_BASE;
 
     await saveSentMessages();
 
@@ -956,7 +918,7 @@ async function sendBarkNotification(title = "Twitch", comment, icon, url) {
 
 
 function sendToTCP(payload, dedupUser, dedupMessage) {
-    if (!client || client.destroyed) return;
+    if (!isSocket) return;
 
     const checkUser = dedupUser ?? payload.user;
     const checkMsg = dedupMessage ?? payload.message;
@@ -982,7 +944,7 @@ function sendToTCP(payload, dedupUser, dedupMessage) {
 
             payload_bak["message"] = CHAT_RES
 
-            client.write(JSON.stringify(payload_bak) + '\n');
+            socketTransport.send(payload_bak);
         })
 
 
@@ -1047,18 +1009,7 @@ function sendAdOverylayMessage(user,text,iconURL,useTTS){
     const payload = { type: 'AdOverlay', user, text, iconURL, useTTS };
     
     console.log('📤 發送 AdOverlay 訊息:', payload);
-    if (!client || client.destroyed) {
-        pendingQueue.push(payload);
-        return;
-    }
-    
-    try {
-        client.write(JSON.stringify(payload) + '\n');
-    } catch (err) {
-        console.error('⚠️ 發送 AdOverlay 訊息失敗:', err.message);
-        pendingQueue.push(payload);
-    }
-    
+    socketTransport.send(payload);
 }
 
 // ---- 贊助廣告持久化 ----
@@ -1197,16 +1148,7 @@ function resumeAdTimers() {
  */
 function sendAudienceUpdate() {
     const payload = { type: 'audience', userNum: CacheUserNum, userList: CacheUserList };
-    if (!client || client.destroyed) {
-        pendingQueue.push(payload);
-        return;
-    }
-    try {
-        client.write(JSON.stringify(payload) + '\n');
-    } catch (err) {
-        console.error('⚠️ 發送 Audience 訊息失敗:', err.message);
-        pendingQueue.push(payload);
-    }
+    socketTransport.send(payload);
 }
 
 function updateCombinedViewerCount() {
@@ -1259,94 +1201,14 @@ function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,use
         userList
     };
 
-    if (!client || client.destroyed) {
-        if (pendingQueue.length < MAX_PENDING) {
-            pendingQueue.push(payload);
-        }
-        return;
-    }
-    
-    try {
-        console.log('📤[TK] 發送 Socket 訊息:', payload);
-        client.write(JSON.stringify(payload) + '\n');
-    } catch (err) {
-        console.error('⚠️ 發送 Socket 訊息失敗:', err.message);
-        if (pendingQueue.length < MAX_PENDING) {
-            pendingQueue.push(payload);
-        }
-    }
+    socketTransport.send(payload);
 }
 
 var TkRetryCount = 0
 let TkRetryMaxCount = 5
 
 function connectSocket() {
-    if (!isSocket) { return }
-    if (client && !client.destroyed) return; // 已經連線中
-
-    client = new net.Socket();
-    
-    client.connect(PORT, HOST, () => {
-        console.log('✅ TCP Socket connected');
-        if (reconnectTimer) {
-            clearTimeout(reconnectTimer);
-            reconnectTimer = null;
-        }
-        // 連線成功 → 清空重連計數與間隔
-        socketRetryCount = 0;
-        socketRetryInterval = SOCKET_RETRY_BASE;
-        flushPendingQueue();
-        if (isFirstSocketConnect) {
-            sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false,CacheUserNum,CacheUserList);
-            isFirstSocketConnect = false;
-        }
-    });
-
-    var buffer = '';
-
-    client.on('data', (data) => {
-        buffer += data.toString();
-
-        // 按照換行符號切割
-        let parts = buffer.split('\n');
-        buffer = parts.pop(); // 最後可能是不完整的，留著下次再拼
-
-        for (const part of parts) {
-            try {
-                const json = JSON.parse(part.trim());
-                console.log('收到服務器訊息:', json);
-
-                if (json.type === 'keepalive') {
-                    client.write(JSON.stringify({ type: 'heartbeat' }) + '\n');
-                    console.log('💓 收到 keepalive，已回覆 heartbeat ' + new Date().toLocaleString());
-                }
-
-                buffer = ''; // 清空 buffer，避免重複解析
-            } catch (e) {
-                console.log('解析失敗:', part);
-            }
-        }
-    });
-
-    client.on('close', () => {
-        if (isEnd){
-            console.log("程式已結束，停止重連");
-            return; 
-        }
-
-        socketRetryCount++;
-        if (socketRetryCount > SOCKET_RETRY_THRESHOLD) {
-            socketRetryInterval = Math.min(socketRetryInterval + SOCKET_RETRY_STEP, SOCKET_RETRY_MAX);
-        }
-        console.log(`⚠️ TCP Socket closed，${socketRetryCount} 次斷線，${Math.round(socketRetryInterval/1000)} 秒後重連`);
-        reconnectTimer = setTimeout(connectSocket, socketRetryInterval);
-        
-    });
-
-    client.on('error', (err) => {
-        console.error('⚠️ TCP Socket error:', err.message);
-        client?.destroy();
-    });
+    socketTransport.connect();
 }
 
 

@@ -1,5 +1,5 @@
 import os
-from network.socket_server import message_queue
+from network.socket_server import drain_messages
 from core.scene import ChatNode
 from core.ad_overlay import AdOverlayNode
 from core.tts import tts_service
@@ -148,8 +148,7 @@ class Engine:
 
     def update(self):
         self._sync_tts_settings()
-        while not message_queue.empty():
-            data = message_queue.get()
+        for data in drain_messages():
 
             if data.get("type") == "SystemEvent":
                 event = data.get("event", "")
