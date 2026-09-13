@@ -5,6 +5,7 @@ import { promises as fs, readFileSync, existsSync, writeFileSync } from 'fs';
 import axios from 'axios';
 
 import { SocketTransport } from './SocketTransport.mjs';
+import { TikTokChatGuard } from './TikTokChatGuard.mjs';
 
 
 
@@ -137,6 +138,9 @@ const youtubePollIntervalS = parseInt(process.env.YOUTUBE_POLL_INTERVAL_S) || 30
 // --- 4. Socket 客戶端 ---
 
 let isFirstSocketConnect = true;
+const tikTokChatGuard = new TikTokChatGuard();
+let lastTikTokReplayLog = 0;
+let tikTokReplayDropped = 0;
 
 // TikTok 直播間斷線自動重連（有限次數 + 指數退避）
 let tkReconnectTimer = null;   // 重連計時器
@@ -1271,6 +1275,8 @@ function scheduleTikTokReconnect() {
     sendSocketMessage("系統", `TikTok 斷線，${Math.round(delay / 1000)} 秒後嘗試重新連線 (${TkRetryCount}/${TkRetryMaxCount})`, "", "", false, CacheUserNum, CacheUserList);
     tkReconnectTimer = setTimeout(() => {
         tkReconnectTimer = null;
+        if (isEnd || streamEnded) return;
+        tikTokChatGuard.beginReconnect();
         connection.connect().then(state => {
             console.info(`✅ TikTok 重新連線成功，roomId ${state.roomId}`);
             onTikTokConnected(state);
@@ -1544,6 +1550,17 @@ connection.on(WebcastEvent.FOLLOW,data =>{
 
 
 connection.on(WebcastEvent.CHAT, data => {
+    if (isTK) {
+        const result = tikTokChatGuard.check(data);
+        if (!result.accepted) {
+            tikTokReplayDropped++;
+            if (Date.now() - lastTikTokReplayLog >= 10000) {
+                lastTikTokReplayLog = Date.now();
+                console.log(`[TikTok] 忽略重播聊天: ${result.reason}，累計 ${tikTokReplayDropped} 筆`);
+            }
+            return;
+        }
+    }
     logRawEvent('CHAT', data);
 
     if (!data.content) {
