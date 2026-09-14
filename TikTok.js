@@ -1,3 +1,4 @@
+import { normalizeSource } from './MessageSource.mjs';
 import { ApiClient } from '@twurple/api';
 import { RefreshingAuthProvider } from '@twurple/auth';
 import { EventSubWsListener } from '@twurple/eventsub-ws';
@@ -5,7 +6,7 @@ import { promises as fs, readFileSync, existsSync, writeFileSync } from 'fs';
 import axios from 'axios';
 
 import { SocketTransport } from './SocketTransport.mjs';
-import { TikTokChatGuard } from './TikTokChatGuard.mjs';
+import { TikTokChatGuard, chatMetadata } from './TikTokChatGuard.mjs';
 
 
 
@@ -26,7 +27,7 @@ import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFil
 import { replaceEmojis, loadEmojiMap, getEmojiMap } from "./EmojiMap.js"
 import { KickWebSocket } from 'kick-wss';
 import console from 'console';
-import { AutoClipManager } from "./AutoClip.js"
+import { AutoClipManager } from './AutoClip.js'
 
 import { fork } from 'child_process'
 
@@ -138,6 +139,24 @@ const youtubePollIntervalS = parseInt(process.env.YOUTUBE_POLL_INTERVAL_S) || 30
 // --- 4. Socket 客戶端 ---
 
 let isFirstSocketConnect = true;
+let autoClip = null;
+function applyRelayAudience(data) {
+    const source = normalizeSource(data, 'userscript');
+    if (!source.heatEligible || data.audienceKind === 'top-fans' || !Number.isFinite(data.userNum) || data.userNum < 0) return;
+    autoClip?.updatePlatformViewers(source.platform, data.userNum);
+    if (source.platform === 'TikTok') TikTokViewerCount = data.userNum;
+    else if (source.platform === 'Twitch') TwitchViewerCount = data.userNum;
+    else if (source.platform === 'Youtube') YoutubeViewerCount = data.userNum;
+    else if (source.platform === 'Odysee') OdyseeViewerCount = data.userNum;
+    updateCombinedViewerCount();
+}
+function recordChatHeat(message, metadata) {
+    metadata = { ...metadata, ...normalizeSource(metadata) };
+    autoClip?.observeTransport(metadata);
+    const event = recordMessageStat(message, metadata);
+    if (event) autoClip?.onChatMessage(event);
+    return event;
+}
 const tikTokChatGuard = new TikTokChatGuard();
 let lastTikTokReplayLog = 0;
 let tikTokReplayDropped = 0;
@@ -546,22 +565,12 @@ process.stdin.on('data', async (chunk) => {
             const json = JSON.parse(msg);
 
 
-            if (json.type === 'audience') {
-                CacheUserNum = json.userNum ?? CacheUserNum;
-                if (json.userList) CacheUserList = json.userList;
-                return;
-            }
+            if (json.type === 'audience') { applyRelayAudience(json); return; }
 
             if (json.type === 'StreamMessage') {
                 // 先存原始值供去重比對
                 const origUser = json.user;
                 const origMsg = json.message;
-
-                // 對稱去重：若已由 WS 直連路徑處理過，跳過（避免 /chat 與直連路徑重複計入統計）
-                if (isDuplicate((origUser || '').trim(), (origMsg || '').trim())) {
-                    console.log('🚫 跨路徑重複(來自/chat，直連已處理):', origUser, origMsg);
-                    return;
-                }
 
                 json.message = replaceEmojis(json.message);
 
@@ -573,19 +582,9 @@ process.stdin.on('data', async (chunk) => {
                 if (fr.modified && fr.user) json.user = fr.user;
                 if (fr.modified && fr.message) json.message = fr.message;
 
-                recordMessageStat(json.message);
+                if (!recordChatHeat(json.message, { ...normalizeSource(json, 'userscript'), id: json.msgId || json.id, sentAt: json.sentAt || json.createTime, userId: json.userId, user: origUser, receivedAt: json.receivedAt || Date.now() })) return;
 
-                autoClip?.onChatMessage(json.message);
-
-                if (json.userNum !== CacheUserNum) {
-                    TikTokViewerCount = json.userNum
-
-                    updateCombinedViewerCount()
-
-                }
-                if (json.userList) {
-                    CacheUserList = json.userList;
-                }
+                applyRelayAudience(json);
 
                 sendSocketMessage(json.user, json.message, json.img || '', json.giftImg || '', true, CacheUserNum, CacheUserList, origUser, origMsg);
 
@@ -1005,7 +1004,6 @@ var TikTokViewerCount = 0
 var TwitchViewerCount = 0
 var OdyseeViewerCount = 0
 var YoutubeViewerCount = 0
-var lastAutoClipSampleAt = 0 // AutoClip 觀眾採樣限流用
 
 
 function sendAdOverylayMessage(user,text,iconURL,useTTS){
@@ -1163,11 +1161,6 @@ function updateCombinedViewerCount() {
     if (isYoutube) combined += YoutubeViewerCount || 0
     CacheUserNum = combined
     sendAudienceUpdate()
-    // AutoClip：餵入「全平台總合」觀眾數（限流，避免過度採樣）
-    if (autoClip && Date.now() - lastAutoClipSampleAt >= 5000) {
-        lastAutoClipSampleAt = Date.now();
-        autoClip.updateViewers(combined);
-    }
 }
 
 /**
@@ -1234,6 +1227,7 @@ function viewCache() {
         }
 
         writeViewCount += 1
+        autoClip?.updatePlatformViewers('TikTok', Number(Viewer));
         TikTokViewerCount = Viewer
         updateCombinedViewerCount();
 
@@ -1467,6 +1461,7 @@ connection.on(WebcastEvent.ROOM_USER, data => {
 
     CacheUserList = ranksList.map(item => item.user.nickname);
     CacheUserNum = viewerCount;
+    autoClip?.updatePlatformViewers('TikTok', Number(viewerCount));
     sendAudienceUpdate();
 
 });
@@ -1577,15 +1572,6 @@ connection.on(WebcastEvent.CHAT, data => {
     const uniqueKey = `chat_${data.user.nickname}_${data.content}`;
     if (alreadySent(uniqueKey)) return;
 
-    // 跨路徑去重：檢查是否已被 userscript 路徑送出（檢查 syncBuffer）
-    const isCrossPathDuplicate = isDuplicate(data.user.nickname.trim(), data.content.trim());
-
-    if (isCrossPathDuplicate) {
-        console.log('🚫 跨路徑重複(來自userscript):', data.user.nickname, data.content);
-        writeLog("Default", `跨路徑重複訊息被過濾(來自userscript): ${data.user.nickname} : ${data.content}`, "CrossPathDuplicate")
-        return;
-    }
-
     const fr = processFilter({ user: data.user.nickname, message: data.content });
     if (fr.blocked) {
         console.log('🚫 過濾器阻擋:', data.user.nickname, data.content, `(規則: ${fr.reason})`);
@@ -1612,9 +1598,7 @@ connection.on(WebcastEvent.CHAT, data => {
     // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
     comment = replaceEmojis(comment);
 
-    recordMessageStat(comment);
-
-    autoClip?.onChatMessage(comment);
+    if (!recordChatHeat(comment, { platform: 'TikTok', ...{ id: chatMetadata(data).id, sentAt: chatMetadata(data).time }, userId: data.user?.id, user: data.user?.nickname })) return;
 
     sendBarkNotification(nickname, comment,iconn);
 
@@ -1632,7 +1616,7 @@ connection.on(WebcastEvent.CHAT, data => {
 
             sendSocketMessage(nickname, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList, data.user.nickname, data.content);
 
-            recordMessageStat(RESCHAT);
+            // 翻譯屬於同一則留言，不重複統計。
 
             addToSyncBuffer(data.user.nickname.trim(), data.content.trim());
         
@@ -2196,31 +2180,36 @@ async function getUserIcon(id) {
 connectSocket();
 
 // ─── Twitch 自動剪輯 (AutoClip) ───
-let autoClip = null;
+
+listener.onUserSocketDisconnect(() => autoClip?.reset());
 if (isTwitch && process.env.AUTO_CLIP_ENABLED === '1') {
     autoClip = new AutoClipManager({
-        onCreateClip: (title) => craeteTwitchClip(title, "https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/Neuro2.png?raw=true", 'auto'),
-        windowMin: parseInt(process.env.AUTO_CLIP_WINDOW_MIN) || 30,
+        onCreateClip: (title, context) => craeteTwitchClip(title, '', 'auto', context),
+        shadow: process.env.AUTO_CLIP_MODE !== 'live',
+        delayOffsetsMs: (() => {
+            try {
+                const offsets = JSON.parse(process.env.AUTO_CLIP_PLATFORM_DELAY_MS || '{}');
+                return offsets && typeof offsets === 'object' && !Array.isArray(offsets) ? offsets : {};
+            } catch { console.warn('[AutoClip] 平台延遲設定無效，使用 0ms'); return {}; }
+        })(),
         baselineWindowMin: parseInt(process.env.AUTO_CLIP_BASELINE_WINDOW_MIN) || 30,
-        rateWindowMin: parseInt(process.env.AUTO_CLIP_RATE_WINDOW_MIN) || 5,
-        wViewers: parseFloat(process.env.AUTO_CLIP_W_VIEWERS) || 0.5,
-        wMsg: parseFloat(process.env.AUTO_CLIP_W_MSG) || 0.5,
+        rateWindowMin: parseFloat(process.env.AUTO_CLIP_RATE_WINDOW_MIN) || 0.5,
+        wViewers: Number(process.env.AUTO_CLIP_W_VIEWERS ?? 0.2),
+        wMsg: Number(process.env.AUTO_CLIP_W_MSG ?? 0.8),
         scoreThreshold: parseFloat(process.env.AUTO_CLIP_SCORE_THRESHOLD) || 1.8,
         floorViewers: parseInt(process.env.AUTO_CLIP_FLOOR_VIEWERS) || 2,
-        floorMsgPerMin: parseFloat(process.env.AUTO_CLIP_FLOOR_MSG_PER_MIN) || 0.3,
+        floorMsgPerMin: parseFloat(process.env.AUTO_CLIP_FLOOR_MSG_PER_MIN) || 2,
         cooldownMin: parseInt(process.env.AUTO_CLIP_COOLDOWN_MIN) || 15,
-        sustainMin: parseFloat(process.env.AUTO_CLIP_SUSTAIN_MIN) || 1.5,
-        instantMultiplier: parseFloat(process.env.AUTO_CLIP_INSTANT_MULTIPLIER) || 2,
-        dedupSec: parseInt(process.env.AUTO_CLIP_DEDUP_SEC) || 10,
+        sustainMin: parseFloat(process.env.AUTO_CLIP_SUSTAIN_MIN) || 0.167,
         titlePrefix: process.env.AUTO_CLIP_TITLE_PREFIX || '',
     });
-    console.log('🎬 自動剪輯已啟用 (AutoClipManager)，每 30 秒評估一次');
+    console.log('🎬 自動剪輯已啟用 (AutoClipManager)，每 5 秒評估一次');
     setInterval(() => {
         try {
             autoClip.evaluate();
             pushAutoClipStats();
         } catch (err) { console.error('❌ [AutoClip] 評估異常:', err); }
-    }, 30000);
+    }, 5000);
 }
 
 // 自動剪輯統計：執行中只透過 stdout 推送到 Server.js（存在記憶體），
@@ -2245,11 +2234,12 @@ function twitchViewCache() {
     apiClient.streams.getStreamByUserId(tuser).then(stream => {
         if (stream) {
             TwitchViewerCount = stream.viewers;
+            autoClip?.updateViewers(stream.viewers);
             let DA = new Date()
             console.log(`📊 Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`);
             writeLog("Default", `Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`, "Twitch View");
             updateCombinedViewerCount();
-        }
+        } else { autoClip?.reset(); }
     }).catch(err => {
         console.error("⚠️ Twitch 觀眾數取得失敗:", err.message);
     });
@@ -2264,6 +2254,7 @@ if (isTwitch) {
 
 // 錯誤處理
 listener.on("error", (err) => {
+    autoClip?.reset();
     console.error('⚠️ Twitch EventSub Listener error:', err);
 
     writeLog("Default", `Twitch EventSub Listener error: ${err.message || err}`, "Error")
@@ -2289,6 +2280,7 @@ listener.onStreamOnline(tuser, async (event) => {
 });
 
 listener.onStreamOffline(tuser, async (event) => {
+    autoClip?.reset();
     const message = `直播結束啦！標題：${event.broadcasterName}`;  
 
     console.log(message);
@@ -2356,13 +2348,14 @@ function saveClipHistory(clips) {
     }
 }
 
-function recordClipHistory({ id, url, title = null, source = 'manual' }) {
+function recordClipHistory({ id, url, title = null, source = 'manual', timing = null }) {
     const clips = loadClipHistory();
     clips.unshift({
         id,
         url,
         title: title || '',
         source,
+        timing,
         createdAt: new Date().toISOString()
     });
     saveClipHistory(clips.slice(0, 200)); // 保留最近 200 筆
@@ -2399,28 +2392,51 @@ async function resolveClipTitle(clipId, title) {
  * @param {string} icon - 用戶圖示 URL，用於通知
  * @param {string} source - 來源 ('manual'=G#clip 指令 / 'auto'=自動剪輯)
  */
-function craeteTwitchClip(title = null,icon="https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/Neuro2.png?raw=true", source = 'manual'){
+function craeteTwitchClip(title = null,icon="https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/Neuro2.png?raw=true", source = 'manual', context = null){
 
 
-    apiClient.clips.createClip({
+    return apiClient.clips.createClip({
             channel:tuser,
             duration:60,
-            createAfterDelay:true,
+            createAfterDelay: source !== 'auto',
             ...(title ? { title } : {})
 
         }).then( async (clipId)=>{
+            let confirmedClip = null;
+            if (source === 'auto') {
+                // A creation response is only a request acknowledgement; verify availability.
+                for (let attempt = 0; attempt < 5; attempt++) {
+                    confirmedClip = await apiClient.clips.getClipById(clipId);
+                    if (confirmedClip) break;
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+                if (!confirmedClip) throw new Error(`剪輯 ${clipId} 尚未確認可用，請人工核對；不自動重送`);
+            }
             const clipURL = `https://clips.twitch.tv/${clipId}`
             const finalTitle = await resolveClipTitle(clipId, title);
             const displayText = finalTitle ? `🎬 剪輯已建立「${finalTitle}」：${clipURL}` : `🎬 剪輯已建立：${clipURL}`
 
             console.log("剪輯資訊", clipURL)
 
-            recordClipHistory({ id: clipId, url: clipURL, title: finalTitle, source });
+            let timing = { peakAt: context?.peakAt ?? null, verified: false };
+            if (context) {
+                try {
+                    const clip = confirmedClip;
+                    const [stream, video] = await Promise.all([apiClient.streams.getStreamByUserId(tuser), clip?.videoId ? apiClient.videos.getVideoById(clip.videoId) : null]);
+                    if (clip && stream && video?.streamId === stream.id && clip.vodOffset !== null) {
+                        const startAt = stream.startDate.getTime() + clip.vodOffset * 1000;
+                        const endAt = startAt + clip.duration * 1000;
+                        timing = { ...timing, startAt, endAt, verified: true, coversPeak: context.peakAt >= startAt && context.peakAt <= endAt };
+                    }
+                } catch (err) { console.log('[AutoClip] 時間核對暫不可用:', err.message); }
+            }
+            recordClipHistory({ id: clipId, url: clipURL, title: finalTitle, source, timing });
             console.log(`📜 剪輯歷史已記錄 (來源: ${source})`);
 
             writeLog("Default",`[剪輯建立] ${displayText}`)
             sendBarkNotification("剪輯建立", displayText, icon)
             sendSocketMessage("剪輯建立", displayText, icon, '')
+            return { id: clipId, url: clipURL, timing };
 
             
         }).catch(err => {
@@ -2432,6 +2448,7 @@ function craeteTwitchClip(title = null,icon="https://github.com/TwhomeGH/TTWChat
             writeLog("Default", `[${errMsg}]`, "Error")
             sendSocketMessage("剪輯建立", `❌ ${errMsg}`, icon, '')
             sendBarkNotification("剪輯建立失敗", errMsg, icon)
+            if (source === 'auto') throw err;
 
         })
 
@@ -2439,6 +2456,7 @@ function craeteTwitchClip(title = null,icon="https://github.com/TwhomeGH/TTWChat
 }
 
 listener.onChannelChatMessage(tuser, tuser, async (event) => {
+    const receivedAt = Date.now();
     const icon = await getUserIcon(event.chatterId);
     
     
@@ -2691,8 +2709,8 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
         return;
     }
 
-    recordMessageStat(tMsg);
-    autoClip?.onChatMessage(tMsg);
+    if (!recordChatHeat(tMsg, { platform: 'Twitch', id: event.messageId, userId: event.chatterId, user: event.chatterDisplayName, receivedAt })) return;
+
 
     sendBarkNotification(tUser, tMsg, icon);
 
@@ -2911,9 +2929,7 @@ async function startKickChat() {
             return;
         }
 
-        recordMessageStat(tMsg);
-
-        autoClip?.onChatMessage(tMsg);
+        if (!recordChatHeat(tMsg, { platform: 'Kick', id: data.id, userId: data.sender?.id, user: userName, sentAt: data.created_at })) return;
 
         console.info(`📢 發送 Bark 通知: ${tUser} - ${tMsg}`);
         sendBarkNotification(tUser, tMsg, avatar);
@@ -3086,9 +3102,7 @@ function connectOdyseeChat(claimId, channelName) {
                     return
                 }
 
-                recordMessageStat(tMsg)
-
-                autoClip?.onChatMessage(tMsg)
+                if (!recordChatHeat(tMsg, { platform: 'Odysee', user: userName })) return;
 
                 sendBarkNotification(tUser, tMsg, avatar)
 
@@ -3105,6 +3119,7 @@ function connectOdyseeChat(claimId, channelName) {
                 })
             } else if (msg.type === 'viewers') {
                 OdyseeViewerCount = msg.data?.connected || msg.data?.viewerCount || msg.data?.count || 0
+                autoClip?.updatePlatformViewers('Odysee', Number(OdyseeViewerCount));
                 updateCombinedViewerCount()
             }
         } catch (err) {
@@ -3340,6 +3355,7 @@ function connectYoutubeChat(liveChatId, videoId, channelName) {
             const cv = res.data?.items?.[0]?.liveStreamingDetails?.concurrentViewers
             if (cv) {
                 YoutubeViewerCount = parseInt(cv) || 0
+                autoClip?.updatePlatformViewers('Youtube', YoutubeViewerCount);
                 updateCombinedViewerCount()
             }
         } catch (_) { /* ignore poll errors */ }
@@ -3390,8 +3406,7 @@ function connectYoutubeChat(liveChatId, videoId, channelName) {
                                 continue
                             }
 
-                            recordMessageStat(tMsg)
-                            autoClip?.onChatMessage(tMsg)
+                            if (!recordChatHeat(tMsg, { platform: 'Youtube', id: item.id, userId: item.authorDetails?.channelId, user: userName, sentAt: item.snippet.publishedAt })) continue;
                             sendBarkNotification(tUser, tMsg, avatar)
 
                             // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
@@ -3557,6 +3572,7 @@ if (isYoutube) {
         }
 
         YoutubeViewerCount = liveInfo.concurrentViewers
+        autoClip?.updatePlatformViewers('Youtube', Number(YoutubeViewerCount));
         updateCombinedViewerCount()
         console.log(`📺 Youtube 直播中，觀眾數: ${liveInfo.concurrentViewers}`)
 

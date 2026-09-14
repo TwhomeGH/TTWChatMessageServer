@@ -474,59 +474,13 @@ G#clip 這波操作太秀了
 
 ## 自動剪輯 (AutoClip)
 
-需同時滿足 `isTwitch=1` 與 `.env` 的 `AUTO_CLIP_ENABLED=1` 才啟用。系統每 30 秒評估一次，當**觀眾數**與**聊天訊息速率**相對**頻道自己的近期平均**出現高峰時，自動呼叫 `G#clip` 相同機制建立剪輯。
+所有平台的有效留言都能提供觸發熱度，Twitch 是實際剪輯畫面的來源。API 與 Userscript 是接收管道，同平台不拆成兩份分數；未知來源仍參與統計，只有明確標記 `isTest: true` 的合成測試資料不參與熱度。
 
-### 觸發公式
+各平台分別計算聊天與觀眾基準，採通過最低留言量及發言人數門檻的平台最高分，不直接相加。預設使用 30 秒窗口、每 5 秒評估、持續約 10 秒，並有暖機、時間有效性、洗頻及冷卻限制。圖表可選取觸發點查看當時保存的留言證據；舊紀錄缺少明細時會明確標示。
 
-```
-score = W_VIEWERS × (觀眾數 / max(基準觀眾, FLOOR_VIEWERS))
-      + W_MSG    × (訊息速率 / max(基準訊息速率, FLOOR_MSG_PER_MIN))
+`AUTO_CLIP_ENABLED=1` 才啟用，且需啟用 Twitch。`AUTO_CLIP_MODE` 預設為 `shadow`，只記錄觸發；改成 `live` 才會提出正式剪輯請求。Config 儲存後需重啟聊天子程序生效。
 
-觸發條件（需同時滿足其一，且不受冷卻限制）：
-  ① 分數 ≥ SCORE_THRESHOLD 且持續維持達 SUSTAIN_MIN 分鐘（防單次邊際突破誤觸發）
-  ② 分數 ≥ SCORE_THRESHOLD × INSTANT_MULTIPLIER（明顯高峰，立即觸發不需等待）
-```
-
-- **基準（adaptive baseline）**：取最近 `BASELINE_WINDOW_MIN` 分鐘內每個 poll 樣本（觀眾數、每分鐘訊息數）的**中位數**。基準是頻道自己的常態，因此低人氣頻道（5 人）跳到 12 人與高人氣頻道相對漲幅一樣會被偵測。
-- **多平台總合**：觀眾數 = TikTok + Twitch + Kick + Odysee + Youtube 的人數總合；訊息速率 = 各平台聊天訊息（通過過濾器）累計。同時開多平台直播時，任一平台的人氣或聊天熱絡都會被計入。
-- **包含 `/chat` 接口**：外部 userscript 送進 `/chat` 的訊息也會計入 AutoClip 統計（與 WS 直連路徑做對稱去重，不會重複計算）。
-- **訊息去重（防誤判）**：相同訊息文字在 `DEDUP_SEC`（預設 10）秒內重複出現只計一次。避免程式斷線重連重發同一批訊息、或單人快速洗頻灌高速率而誤觸發。
-- **即時速率**：最近 `RATE_WINDOW_MIN` 分鐘的平均每分鐘訊息數。
-- **Floor**：觀眾少於 `FLOOR_VIEWERS`（預設 2）一律不觸發，防止空台誤發。
-- **冷卻**：觸發後 `COOLDOWN_MIN` 分鐘內不重複觸發。
-
-### 環境變數（皆可在 `/config` 頁面設定）
-
-| 變數 | 預設 | 說明 |
-|------|------|------|
-| `AUTO_CLIP_ENABLED` | `0` | `1` 啟用（需 `isTwitch=1`） |
-| `AUTO_CLIP_W_VIEWERS` | `0.5` | 觀眾項權重 |
-| `AUTO_CLIP_W_MSG` | `0.5` | 訊息項權重 |
-| `AUTO_CLIP_SCORE_THRESHOLD` | `1.8` | 觸發門檻（常態約 1.0） |
-| `AUTO_CLIP_BASELINE_WINDOW_MIN` | `30` | 基準統計窗口（分鐘） |
-| `AUTO_CLIP_RATE_WINDOW_MIN` | `5` | 即時速率窗口（分鐘） |
-| `AUTO_CLIP_WINDOW_MIN` | `30` | 訊息時間戳保存窗口（分鐘） |
-| `AUTO_CLIP_FLOOR_VIEWERS` | `2` | 最低觀眾數（少於此不觸發） |
-| `AUTO_CLIP_FLOOR_MSG_PER_MIN` | `0.3` | 最低訊息速率 |
-| `AUTO_CLIP_COOLDOWN_MIN` | `15` | 觸發冷卻（分鐘） |
-| `AUTO_CLIP_SUSTAIN_MIN` | `1.5` | 分數達門檻後需持續維持此時間（分鐘）才觸發 |
-| `AUTO_CLIP_INSTANT_MULTIPLIER` | `2` | 分數達 門檻×此值 立即觸發（不需持續等待） |
-| `AUTO_CLIP_DEDUP_SEC` | `10` | 相同訊息在 N 秒內重複只計一次（防斷線重發 / 洗頻） |
-| `AUTO_CLIP_TITLE_PREFIX` | 空 | 剪輯標題前綴，留空使用直播標題 |
-
-每次評估都會在 console 印出完整狀態：`觀眾 / 基準觀眾 / 訊息速率 / 基準速率 / 分數`，方便調校門檻。
-
-### 自動剪輯分析頁面 `/autoclip`
-
-開啟 `http://localhost:3332/autoclip`（主控台導覽列「📈 剪輯分析」）可視覺化查看自動剪輯的判斷過程，方便調校門檻：
-
-- **狀態卡**：目前觀眾、訊息速率、觸發分數（對照門檻）、已觸發剪輯數、目前狀態原因
-- **圖表**（Chart.js，每 5 秒自動更新）：
-  - 觀眾數 vs 基準觀眾（時間序列）
-  - 訊息速率 vs 基準訊息速率
-  - 觸發分數 vs 門檻線（**紅點 = 實際觸發剪輯的時刻**）
-- **設定資訊**：顯示目前權重、最低門檻、冷卻等參數
-- 評估歷史**執行時存在記憶體**（TikTok.js 每 30 秒透過 IPC 推送到 Server.js），僅在 TikTok.js 結束離線時才寫入 `autoclip_stats.json`（保留最近 2000 筆），可一鍵清空
+完整判斷、時間校準、歷史紀錄與驗證方式見 [留言統計與自動剪輯說明](Docs/KEYWORD_AUTOCLIP_V2.md)。轉接欄位見 [/chat 參數文件](Docs/CHAT_API.md)。
 
 ## 推流端診斷頁 `/pushdiag`
 
@@ -1087,98 +1041,19 @@ processFilter({ user, message })
 
 ---
 
-## 補釘服務器 WebSocket.js
+## Userscript 轉接入口
 
-**補釘服務器** 是專門用來接收 **UserScript** 所轉發的直播頁面訊息。
+瀏覽器腳本透過 `POST http://localhost:3332/chat` 傳送 JSON，由 `Server.js` 交給聊天子程序處理，再送至 Socket 顯示與自動剪輯統計。使用現有主服務即可；舊的 `WebSocket.js` 已退役。
 
-當你透過 **Restream / Streamlabs** 等工具推流到 TikTok 時
+- [/chat 入口與完整參數](Docs/CHAT_API.md)：聊天／觀眾 payload、必要欄位、時間、去重、測試標記、回應及 Userscript 發送範例。
+- [Userscript 平台與管道](Docs/USERSCRIPT_SOURCES.md)：平台歸類、未知來源及腳本版本。
+- [Socket 傳輸說明](Docs/SOCKET_TRANSPORT.md)：佇列、背壓與重新連線。
 
-在對應的管理後台中會出現一個 **TikTok Live Monitor** 入口 之類的。
+`platform` 表示原始平台，`transport` 表示接收管道；此入口固定為 `userscript`。無法辨識平台仍可提供熱度，請使用 `Unknown`。只有合成測試資料才設定 `isTest: true`。
 
-點擊後會開啟官方的直播監聽頁面，
-最終頁面實際運行於：
+DOM 腳本能取得的訊息、原始 ID 與發送時間取決於平台頁面；缺少資料應保留空值，不要偽造。原始 WebSocket relay 是另一條流程，不等同於 `/chat` 的聊天 JSON。
 
-> [https://livecenter.tiktok.com/](https://livecenter.tiktok.com/)
-
-在這個頁面中，你可以查看：
-
-- 觀眾數
-- 直播時長
-- 禮物資訊
-- 聊天室訊息（最重要）
-
-## 運作原理
-
-### UserScript 腳本運行於 livecenter.tiktok.com 頁面中
-
-1. 直接監聽 DOM 內聊天室訊息的新增
-2. 即時抓取頁面上實際渲染出的聊天內容
-3. 將訊息轉送至補釘服務器（WebSocket.js）
-4. 再由補釘服務器分發給你的本地應用或推流系統
-
-### 為什麼這樣做？
-
-這種方式從根本上解決了：
-
-第三方 TikTok Live API / Library 可能漏訊息的問題
-
-#### 因為
-
-- 你抓的是「官方頁面實際顯示的內容」
-- 只要頁面能看到，腳本就一定能抓到
-- 不依賴非官方 WebSocket 協議
-- 不會因為封包解析錯誤而漏訊
-
-#### 簡單說
-
-這是「基於官方直播頁面實際渲染結果」的資料來源
-準確度最高，幾乎不會遺漏。
-
-## 架構流程圖（邏輯層）
-
-```txt
-TikTok Live 推流
-        ↓
-livecenter.tiktok.com（官方頁面）
-        ↓
-UserScript 監聽 DOM 變化
-        ↓
-WebSocket.js 補釘服務器
-        ↓
-你的本地應用 / PiP 聊天室 / 直播系統
-```
-
-## 延伸說明
-
-目前 **UserScript** 僅處理聊天室訊息（**Chat Messages**）
-
-以下事件尚未納入處理範圍：
-
-- 送禮事件（Gift）
-- 使用者加入直播間（Join）
-- 其他系統事件
-
-### 目前架構定位
-
-現階段，UserScript 的角色是：
-
-作為輔助訊息來源（Fallback / Patch Layer）
-
-主要用來彌補第三方 TikTok Live API
-在實際使用中 偶爾出現聊天室訊息遺漏 的問題。
-
-運作方式為：
-
-- 第三方 TikTok Live API → 作為主要資料來源
-- UserScript（監聽官方頁面 DOM） → 作為補強與校正來源
-
-### 未來規劃
-
-後續可考慮：
-
-- 將送禮、加入等事件一併納入監聽
-- 逐步完整遷移至「頁面監聽方案」
-- 最終降低甚至完全移除對第三方 TikTok Live API 的依賴
+更新後請重新安裝／更新瀏覽器中的腳本，並重新啟動伺服器與聊天子程序。
 
 ## 其他指引
 

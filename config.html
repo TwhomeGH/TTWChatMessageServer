@@ -116,7 +116,7 @@
         <h3 class="text-xl font-bold text-gray-800 mb-4">Twitch 自動剪輯 (AutoClip)</h3>
         <p class="text-sm text-gray-500 mb-4">
           以頻道自己的近期平均為基準，當觀眾數與聊天訊息速率相對平常出現高峰時自動建立剪輯。
-          score = W_觀眾·(觀眾/基準) + W_訊息·(訊息速率/基準)，超過門檻即觸發。
+          以短期聊天突增為主，觀眾倍率最多採計 2 倍；需通過發言人數、留言量與持續時間檢查。舊設定會保留，建議窗口設為 0.5 分鐘、持續時間 0.167 分鐘。
         </p>
 
         <div>
@@ -134,7 +134,7 @@
           </select>
         </div>
 
-        <div class="grid grid-cols-2 gap-4 mt-4">
+        <div class="mt-4"><label for="AUTO_CLIP_MODE">剪輯模式（預設只記錄觸發時機）</label><select name="AUTO_CLIP_MODE" id="AUTO_CLIP_MODE" data-value="${AUTO_CLIP_MODE}" class="w-full border rounded-lg p-3"><option value="shadow">影子模式：不建立剪輯</option><option value="live">正式模式：建立剪輯</option></select><p>熱度採用所有平台，Twitch 作為剪輯入口。各平台獨立基準，取合格平台最高分；每平台至少 3 位發言人、6 筆有效留言，暖機 3 分鐘。</p></div><div class="grid grid-cols-2 gap-4 mt-4">
           <div>
             <label for="AUTO_CLIP_W_VIEWERS" class="block text-gray-700 mb-2"
               >W_VIEWERS 觀眾權重:</label
@@ -206,7 +206,8 @@
             >
             <input
               type="number"
-              min="1"
+              min="0.0834"
+              step="any"
               name="AUTO_CLIP_RATE_WINDOW_MIN"
               id="AUTO_CLIP_RATE_WINDOW_MIN"
               value="${AUTO_CLIP_RATE_WINDOW_MIN}"
@@ -245,42 +246,16 @@
             >
             <input
               type="number"
-              step="0.5"
-              min="0"
+              step="any"
+              min="0.01"
               name="AUTO_CLIP_SUSTAIN_MIN"
               id="AUTO_CLIP_SUSTAIN_MIN"
               value="${AUTO_CLIP_SUSTAIN_MIN}"
               class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div>
-            <label for="AUTO_CLIP_INSTANT_MULTIPLIER" class="block text-gray-700 mb-2"
-              >INSTANT_MULTIPLIER 即時觸發倍率(分數達 門檻×此值 立即觸發，不需持續等待):</label
-            >
-            <input
-              type="number"
-              step="0.5"
-              min="1"
-              name="AUTO_CLIP_INSTANT_MULTIPLIER"
-              id="AUTO_CLIP_INSTANT_MULTIPLIER"
-              value="${AUTO_CLIP_INSTANT_MULTIPLIER}"
-              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label for="AUTO_CLIP_DEDUP_SEC" class="block text-gray-700 mb-2"
-              >DEDUP_SEC 訊息去重秒數(相同訊息在 N 秒內重複出現只算一次，防斷線重發/洗頻):</label
-            >
-            <input
-              type="number"
-              step="1"
-              min="0"
-              name="AUTO_CLIP_DEDUP_SEC"
-              id="AUTO_CLIP_DEDUP_SEC"
-              value="${AUTO_CLIP_DEDUP_SEC}"
-              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+
+
         </div>
 
         <div class="mt-4">
@@ -347,6 +322,8 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+            const mode = document.getElementById('AUTO_CLIP_MODE');
+            mode.value = mode.dataset.value;
             const sel = document.getElementById('AUTO_CLIP_ENABLED');
             if (sel) sel.value = sel.dataset.value || '0';
         });

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat → Socket Bridge
 // @namespace    pip-chat-bridge
-// @version      1.9
+// @version      1.10
 // @description  Listen TikTok live chat and forward to socket server
 // @author       Nuclear0709
 // @match        https://livecenter.tiktok.com/*
@@ -24,7 +24,7 @@
     const HTTP_PORT = 3332;
 
     // 已處理過的訊息集合
-    const processedMessages = new Set();
+    const processedMessages = new WeakSet();
 
     var FailCount = 0;
     const MaxFail = 5;
@@ -38,7 +38,7 @@
     }, 30000);
 
 function sendAudienceUpdate(userNum, userList) {
-    const payload = { type: 'audience', userNum, userList };
+    const payload = { type: 'audience', platform: 'TikTok', transport: 'userscript', audienceKind: 'top-fans', userNum, userList };
     const sendURL = `http://${HTTP_HOST}:${HTTP_PORT}/chat`;
     GM_xmlhttpRequest({
         method: "POST", url: sendURL, data: JSON.stringify(payload),
@@ -47,9 +47,10 @@ function sendAudienceUpdate(userNum, userList) {
     });
 }
 
-function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 0, userList = []) {
+function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 0, userList = [], metadata = {}) {
 
     const payload = {
+        ...metadata, platform: 'TikTok', transport: 'userscript', observedAt: Date.now(), audienceKind: 'top-fans',
         type: 'StreamMessage',
         user,
         message,
@@ -111,15 +112,14 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 
 
         if (!username || !message) return;
 
-        // 使用 user+message 作為去重鍵值，避免不同使用者相同內容被誤殺
-        const uniqueKey = `${username}:${message}`;
-        if (processedMessages.has(uniqueKey)) return;
-        processedMessages.add(uniqueKey);
+        // 同一 DOM 節點只處理一次，新節點的相同留言仍可傳送。
+        if (processedMessages.has(element)) return;
+        processedMessages.add(element);
 
         console.log("📩 新訊息:", username, message);
 
         console.log(`已送出 ${username} ${message} ${avatarUrl} 人數:${users.length} ${users}`)
-        sendSocketMessage(username, message, avatarUrl, null, true, users.length, users);
+        sendSocketMessage(username, message, avatarUrl, null, true, users.length, users, { msgId: element.getAttribute('data-msg-id') || element.getAttribute('data-message-id') || null, sentAt: element.querySelector('time[datetime]')?.getAttribute('datetime') || null });
         sendAudienceUpdate(users.length, users);
     }
 

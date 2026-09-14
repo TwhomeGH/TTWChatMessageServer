@@ -1,75 +1,25 @@
+import { normalizeSource } from './MessageSource.mjs';
 import { promises as fs } from 'fs';
-
-const messageStats = new Map();
-
+import { MessageStats, mergeStatEntries } from './MessageStats.mjs';
+export { mergeStatEntries };
+const stats = new MessageStats();
 const STATS_FILE = './message_stats.json';
-
-export function recordMessageStat(message) {
-    if (!message) return;
-    const count = messageStats.get(message) || 0;
-    messageStats.set(message, count + 1);
-}
-
-export function getTopMessages(limit = 10) {
-    return [...messageStats.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, limit)
-        .map(([message, count]) => ({ message, count }));
-}
-
-export function getAllMessageStatsSorted() {
-    return [...messageStats.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([message, count]) => ({ message, count }));
-}
-
-export function getMessageStats() {
-    return messageStats;
-}
-
-/**
- * 將外部快照以 max 合併進統計 map（只增不減，不會覆蓋較高計數）
- * 用於：Server.js 收到 TikTok.js 子進程的 all 快照時合併
- * @param {Array<{message: string, count: number}>} entries
- */
-export function mergeStats(entries) {
-    if (!Array.isArray(entries)) return;
-    for (const { message, count } of entries) {
-        if (!message || typeof count !== 'number') continue;
-        const current = messageStats.get(message) || 0;
-        if (count > current) {
-            messageStats.set(message, count);
-        }
-    }
-}
-
+export function recordMessageStat(message, metadata = {}) { return stats.record(message, metadata); }
+export function getTopMessages(limit = 10) { return stats.all().slice(0, limit); }
+export function getAllMessageStatsSorted() { return stats.all(); }
+export function getMessageStats() { return new Map(stats.all().map(r => [r.message, r.count])); }
+export function mergeStats(entries) { if (Array.isArray(entries)) stats.merge(entries); }
 export async function saveStatsToFile(filePath = STATS_FILE) {
-    const data = getAllMessageStatsSorted();
-    await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
+    await fs.writeFile(filePath, JSON.stringify(stats.all(), null, 2), 'utf-8');
 }
-
 export async function loadStatsFromFile(filePath = STATS_FILE) {
     try {
-        const raw = await fs.readFile(filePath, 'utf-8');
-        const data = JSON.parse(raw);
-        if (Array.isArray(data)) {
-            messageStats.clear();
-            for (const { message, count } of data) {
-                if (message && typeof count === 'number') {
-                    messageStats.set(message, count);
-                }
-            }
-        }
-    } catch (err) {
-        if (err.code !== 'ENOENT') {
-            console.error('❌ 讀取 message_stats.json 失敗:', err);
-        }
-    }
+        const entries = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+        if (Array.isArray(entries)) { stats.clear(); stats.merge(entries); }
+    } catch (err) { if (err.code !== 'ENOENT') console.error('讀取統計失敗:', err); }
 }
-
-export function clearStats() {
-    messageStats.clear();
-}
+export function clearStats() { stats.clear(); }
+await loadStatsFromFile();
 
 // ===== 過濾規則系統 =====
 
@@ -289,6 +239,8 @@ addFilterRules([
 ]);
 
 export default {
+    normalizeSource,
+    mergeStatEntries,
     recordMessageStat,
     getTopMessages,
     getAllMessageStatsSorted,

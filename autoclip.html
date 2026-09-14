@@ -23,7 +23,7 @@
     </div>
 
     <!-- 目前狀態卡 -->
-    <div id="statusCards" class="grid grid-cols-2 lg:grid-cols-5 gap-3"></div>
+    <div id="statusCards" class="grid grid-cols-2 lg:grid-cols-3 gap-3"></div>
 
     <!-- 圖表 -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
@@ -36,16 +36,19 @@
             <div class="h-52 sm:h-72"><canvas id="msgChart"></canvas></div>
         </div>
         <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5 md:col-span-2">
-            <h2 class="text-lg font-semibold text-purple-400 mb-3">🎯 觸發分數 vs 門檻（紅色點 = 已觸發剪輯）</h2>
-            <div class="h-52 sm:h-72"><canvas id="scoreChart"></canvas></div>
+            <h2 class="text-lg font-semibold text-purple-400 mb-3">🎯 觸發分數 vs 門檻</h2>
+            <p class="text-xs text-gray-400 mb-2">橘點：影子觸發（未剪輯） · 紅點：正式請求 · 綠點：已成功 · 灰點：失敗。點選標記查看當時留言。</p>
+            <div class="h-52 sm:h-72"><canvas id="scoreChart" aria-label="觸發分數與留言摘要"></canvas></div>
+            <label class="block text-sm mt-4" for="triggerSelect">查看觸發事件</label><select id="triggerSelect" class="bg-gray-700 rounded p-2 w-full mt-2"><option value="">尚無觸發事件</option></select>
+            <div id="triggerDetail" class="mt-3 text-sm" aria-live="polite">選擇圖上的觸發點或上方事件，查看留言與原因。</div>
         </div>
     </div>
 
     <!-- 說明與設定 -->
     <div class="bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5 flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-between gap-3">
         <div class="text-sm text-gray-400 space-y-1">
-            <p>💡 分數公式：<code class="bg-gray-700 px-1 rounded">score = W_觀眾×max(觀眾/基準, 1) + W_訊息×max(訊息/基準, 1)</code></p>
-            <p>👥 觀眾與 💬 訊息皆為<b class="text-gray-300">全平台總合</b>（TikTok + Twitch + Kick + Odysee + Youtube 的聊天與人數）。</p>
+            <p>💡 分數公式：<code class="bg-gray-700 px-1 rounded">總分 = 各合格平台分數的最大值；平台分數 = W_觀眾×min(倍率,2) + W_訊息×min(倍率,10)</code></p>
+            <p>👥 熱度採用 <b class="text-gray-300">所有平台</b>，剪輯畫面來源為 Twitch；Userscript 是接收管道；未知來源也參與判斷。每人每個窗口最多計入 3 筆。留言清單是熱度判斷依據，不代表已確認畫面內容精彩。</p>
             <p id="configInfo"></p>
             <p>基準 = 最近 <span id="cfgBaseline"></span> 分鐘內樣本的中位數；「基準樣本不足」表示尚未收集到足夠資料。</p>
         </div>
@@ -60,6 +63,7 @@
 <script>
 let viewerChart, msgChart, scoreChart;
 let cfg = {};
+let graphRows = [], selectedTrigger = null;
 
 const chartColors = {
     viewers: 'rgb(96,165,250)',
@@ -70,6 +74,8 @@ const chartColors = {
     threshold: 'rgba(248,113,113,0.7)',
 };
 
+function sourceLabel(platform) { return platform === 'Unknown' || platform === 'Userscript' ? '未知來源' : platform; }
+function transportLabel(value) { return value === 'userscript' ? 'Userscript' : value === 'api' ? 'API／直連' : '未記錄'; }
 function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -80,6 +86,64 @@ function fmtTime(iso) {
     const d = new Date(iso);
     return isNaN(d) ? '' : d.toLocaleTimeString('zh-TW', { hour12: false });
 }
+
+function triggerColor(row) {
+    return row.status==='shadow'?'#fbbf24':row.status==='success'?'#4ade80':row.status==='failed'?'#94a3b8':'#f87171';
+}
+function selectTrigger(row) { selectedTrigger=row?.t??null; renderTriggerDetail(); }
+function triggerHistoryInfo(row) {
+    const validCount = value => Number.isInteger(value) && value >= 0;
+    const count = [row.evidence?.total, row.windowMsgs].find(validCount);
+    const users = [row.evidence?.uniqueUsers, row.uniqueUsers].find(validCount);
+    const hasDetails = Array.isArray(row.evidence?.messages);
+    const countText = count === undefined ? '留言數未知' : count+' 則';
+    return {
+        label: countText+(hasDetails ? '' : '（舊紀錄，無留言明細）'),
+        summary: countText+(users === undefined ? '' : ' / '+users+' 人'),
+        hasDetails,
+        explanation: hasDetails ? '點選查看當時留言' :
+            '此筆歷史紀錄未保存當時的留言明細，無法補回；'+
+            (count === undefined ? '留言數量也未記錄，不能視為 0 則。' : '僅保留 '+count+' 則的統計數量。')
+    };
+}
+function renderTriggerDetail() {
+    const select=document.getElementById('triggerSelect'), detail=document.getElementById('triggerDetail');
+    const candidates=graphRows.filter(r=>r.triggered);
+    if (!candidates.some(r=>r.t===selectedTrigger)) selectedTrigger=candidates.at(-1)?.t??null;
+    select.replaceChildren();
+    for(const row of [...candidates].reverse()) { const option=document.createElement('option');option.value=row.t;option.textContent=fmtTime(row.t)+' · '+(row.mode==='shadow'?'影子':'正式')+' · '+triggerHistoryInfo(row).label;select.append(option); }
+    if(!candidates.length){const option=document.createElement('option');option.textContent='尚無觸發事件';option.value='';select.append(option);}
+    select.value=selectedTrigger||'';
+    const row=candidates.find(r=>r.t===selectedTrigger);detail.replaceChildren();
+    if(!row){detail.textContent='尚無觸發紀錄；符合條件後可在此查看留言。';return;}
+    const heading=document.createElement('p');heading.className='font-semibold text-purple-200';heading.textContent=fmtTime(row.t)+' · '+row.reason;detail.append(heading);
+    const ev=row.evidence;
+    const historyInfo=triggerHistoryInfo(row);
+    if(!historyInfo.hasDetails){const p=document.createElement('p');p.textContent=historyInfo.explanation;detail.append(p);return;}
+    const summary=document.createElement('p');summary.className='text-gray-400 my-2';
+    summary.textContent='統計窗口 '+fmtTime(ev.windowStart)+'–'+fmtTime(ev.windowEnd)+' · '+ev.total+' 則 / '+ev.uniqueUsers+' 位 · 最少 '+ev.minMessages+' 則 / '+ev.minUsers+' 位 · 分數 '+Number(row.score).toFixed(2)+' / 門檻 '+ev.threshold+' · 每人最多計入 '+ev.maxPerUser+' 則'+(ev.truncated?' · 僅保留最後 200 則':'');detail.append(summary);
+    const contribution=document.createElement('div');contribution.className='my-3 space-y-1 text-gray-300';
+    for(const p of ev.platforms||[]){const line=document.createElement('p');line.textContent=sourceLabel(p.platform)+' · '+((p.transports||[]).map(transportLabel).join('＋')||'管道未記錄')+' · '+p.windowMsgs+' 則 / '+p.uniqueUsers+' 位 · '+Number(p.msgRate).toFixed(1)+'/min，基準 '+Number(p.baseMsgRate).toFixed(1)+' · 平台分數 '+Number(p.score).toFixed(2)+' · '+(p.platform===ev.sourcePlatform?'觸發來源，採計 '+Number(p.contribution).toFixed(2):p.eligible?'合格，未高於來源平台':'未達最低反應門檻');contribution.append(line);}detail.append(contribution);
+    const list=document.createElement('div');list.className='max-h-72 overflow-y-auto space-y-2';
+    for(const m of ev.messages||[]){const item=document.createElement('div');item.className='bg-gray-900 rounded-lg p-3';const meta=document.createElement('p');meta.className='text-xs text-gray-400';meta.textContent=fmtTime(m.t)+' · '+m.name+' · '+sourceLabel(m.platform)+' / '+transportLabel(m.transport)+' · '+(m.timeSource==='platform'?'平台時間':'接收時間')+(m.originalTime&&m.originalTime!==m.t?'（校準前 '+fmtTime(m.originalTime)+'）':'');const content=document.createElement('p');content.className='whitespace-pre-wrap break-words mt-1';content.textContent=m.message;item.append(meta,content);list.append(item);}detail.append(list);
+}
+const triggerLabels={id:'triggerLabels',afterDatasetsDraw(chart){
+    const ctx=chart.ctx, area=chart.chartArea, meta=chart.getDatasetMeta(0);const occupied=[];
+    const indices=graphRows.map((r,i)=>r.triggered?i:-1).filter(i=>i>=0).slice(-8);
+    ctx.save();ctx.font='11px sans-serif';
+    for(const i of indices){const row=graphRows[i],point=meta.data[i];if(!point)continue;
+        const info=triggerHistoryInfo(row);
+        const preview=row.evidence?.messages?.[0]?.message||(info.hasDetails?'點選查看原因':'舊紀錄，無留言明細');
+        const text=info.summary+' · '+preview.slice(0,12);
+        const width=Math.min(ctx.measureText(text).width+14,area.right-area.left);
+        const x=Math.max(area.left,Math.min(point.x-width/2,area.right-width));
+        let y=Math.max(area.top+2,Math.min(point.y-30,area.bottom-24));
+        if(occupied.some(b=>x<b.x+b.width&&x+width>b.x&&Math.abs(y-b.y)<24))y=Math.min(area.bottom-24,y+48);
+        if(occupied.some(b=>x<b.x+b.width&&x+width>b.x&&Math.abs(y-b.y)<24))continue;
+        occupied.push({x,y,width});ctx.fillStyle='#172235';ctx.fillRect(x,y,width,22);ctx.strokeStyle=triggerColor(row);ctx.strokeRect(x,y,width,22);ctx.fillStyle='#e2e8f0';ctx.fillText(text,x+7,y+15,width-14);
+    }ctx.restore();
+}};
+document.getElementById('triggerSelect').onchange=e=>{selectedTrigger=e.target.value;renderTriggerDetail();};
 
 function buildCharts() {
     const common = {
@@ -118,11 +182,22 @@ function buildCharts() {
             },
             { label: '門檻', data: [], borderColor: chartColors.threshold, backgroundColor: chartColors.threshold, borderWidth: 1.5, borderDash: [6,4], pointRadius: 0 },
         ]},
-        options: { ...common, plugins: { legend: { labels: { color: '#cbd5e1' } } } },
+        plugins:[triggerLabels],
+        options: { ...common, onClick: (event, elements) => {
+            const point=elements.find(e=>e.datasetIndex===0&&graphRows[e.index]?.triggered);
+            if(point)selectTrigger(graphRows[point.index]);
+        }, plugins: { legend: { labels: { color: '#cbd5e1' } }, tooltip: { callbacks: { afterBody: items => {
+            const row=graphRows[items[0]?.dataIndex];
+            if(!row?.triggered)return [];
+            const info=triggerHistoryInfo(row);
+            return [row.reason,info.label,...(info.hasDetails?row.evidence.messages:[]).slice(0,3).map(m=>m.name+': '+m.message.slice(0,40)),info.explanation];
+        } } } } },
     });
 }
 
 function updateCharts(stats) {
+    graphRows = stats;
+    renderTriggerDetail();
     const labels = stats.map(s => fmtTime(s.t));
     const th = cfg.scoreThreshold ?? 1.8;
 
@@ -138,7 +213,7 @@ function updateCharts(stats) {
 
     scoreChart.data.labels = labels;
     scoreChart.data.datasets[0].data = stats.map(s => s.score ?? 0);
-    scoreChart.data.datasets[0].pointBackgroundColor = stats.map(s => s.triggered ? '#ef4444' : chartColors.score);
+    scoreChart.data.datasets[0].pointBackgroundColor = stats.map(s => s.triggered ? triggerColor(s) : chartColors.score);
     scoreChart.data.datasets[0].pointRadius = stats.map(s => s.triggered ? 6 : 1.5);
     scoreChart.data.datasets[1].data = stats.map(() => th);
     scoreChart.update('none');
@@ -148,7 +223,7 @@ function renderCards(stats) {
     const last = stats[stats.length - 1];
     const container = document.getElementById('statusCards');
     if (!last) {
-        container.innerHTML = '<div class="col-span-full text-center text-gray-500 py-4">尚無評估資料（自動剪輯啟用後每 30 秒產生一筆）</div>';
+        container.innerHTML = '<div class="col-span-full text-center text-gray-500 py-4">尚無評估資料（自動剪輯啟用後每 5 秒產生一筆）</div>';
         return;
     }
     const clips = stats.filter(s => s.triggered).length;
@@ -156,7 +231,8 @@ function renderCards(stats) {
         { label: '目前觀眾', value: last.viewers, sub: `基準 ${last.baseViewers ?? 0}` },
         { label: '訊息速率', value: `${last.msgRate ?? 0}/min`, sub: `基準 ${last.baseMsgRate ?? 0}` },
         { label: '觸發分數', value: last.score ?? 0, sub: `門檻 ${cfg.scoreThreshold ?? 1.8}`, hot: (last.score ?? 0) >= (cfg.scoreThreshold ?? 1.8) },
-        { label: '已觸發剪輯', value: clips, sub: `${stats.length} 個樣本` },
+        { label: '影子觸發', value: last.shadowTriggers ?? 0, sub: '未建立剪輯' },
+        { label: '成功 / 失敗 / 建立中', value: `${last.totalClips ?? 0} / ${last.failedClips ?? 0} / ${last.pending ? 1 : 0}`, sub: `${last.totalTriggers ?? clips} 次觸發` },
         { label: '目前狀態', value: '', sub: esc(last.reason || '') },
     ];
     container.innerHTML = cards.map(c => `
@@ -169,8 +245,8 @@ function renderCards(stats) {
 }
 
 function renderConfig() {
-    document.getElementById('configInfo').innerHTML =
-        `W_觀眾=${cfg.wViewers ?? 0.5}　W_訊息=${cfg.wMsg ?? 0.5}　最低觀眾=${cfg.floorViewers ?? 2}　最低訊息=${cfg.floorMsgPerMin ?? 0.3}　冷卻=${cfg.cooldownMin ?? 15}分　持續=${cfg.sustainMin ?? 1.5}分　即時=門檻×${cfg.instantMultiplier ?? 2}　去重=${cfg.dedupSec ?? 10}s`;
+    document.getElementById('configInfo').textContent =
+        '模式：'+(cfg.mode==='live'?'正式剪輯':'影子模式（不剪輯）')+' · 熱度：全平台 · 剪輯：Twitch'+' · 窗口 '+(cfg.rateWindowMin??0.5)+' 分 · 最少 '+(cfg.minUsers??3)+' 位發言人 / '+(cfg.minMessages??6)+' 筆 · 確認 '+Math.round((cfg.sustainMin??0.167)*60)+' 秒';
     document.getElementById('cfgBaseline').textContent = cfg.baselineWindowMin ?? 30;
 }
 
@@ -183,6 +259,17 @@ async function load() {
         cfg = result.config || {};
         renderConfig();
         renderCards(stats);
+        let timing = document.getElementById('timingRecords');
+        if (!timing) { timing = document.createElement('section'); timing.id='timingRecords'; timing.className='bg-gray-800 rounded-2xl p-4 my-4'; document.getElementById('configInfo').parentElement.after(timing); }
+        timing.replaceChildren();
+        const heading=document.createElement('h2');heading.textContent='最近觸發時間與結果';timing.append(heading);
+        for (const row of stats.filter(s=>s.triggered).slice(-20).reverse()) {
+            const p=document.createElement('p');p.className='text-sm text-gray-300 my-2';
+            const format=t=>t?new Date(t).toLocaleTimeString('zh-TW',{hour12:false}):'—';
+            const coverage=row.clip?.timing?.verified?(row.clip.timing.coversPeak?'涵蓋熱度峰值':'未涵蓋熱度峰值'):'尚未核對片段時間';
+            p.textContent='開始 '+format(row.heatStartedAt)+' · 峰值 '+format(row.peakAt)+' · 觸發 '+format(row.triggeredAt)+' · 請求 '+format(row.requestedAt)+' · 完成 '+format(row.completedAt)+' · '+({shadow:'影子紀錄',pending:'建立中',success:'成功',failed:'失敗'}[row.status]||row.status||'歷史紀錄')+' · '+coverage+(row.error?' · '+row.error:'');
+            timing.append(p);
+        }
         if (!viewerChart) buildCharts();
         updateCharts(stats);
     } catch (err) {

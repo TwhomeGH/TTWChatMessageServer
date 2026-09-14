@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Socket Test Button
 // @namespace    pip-chat-test
-// @version      1.4
+// @version      1.5
 // @description  Manual test button for local socket bridge (SPA safe)
 // @match        https://livecenter.tiktok.com/*
 // @match        https://*.bing.com/*
@@ -22,7 +22,7 @@
 
     function sendTestMessage() {
         const payload = {
-            type: 'StreamMessage',
+            type: 'StreamMessage', platform: 'Unknown', transport: 'userscript', isTest: true,
             user: '測試使用者',
             message: '這是一條測試訊息 ' + new Date().toLocaleTimeString(),
             img: "https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/Neuro2.png?raw=true",

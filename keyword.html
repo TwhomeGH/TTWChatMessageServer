@@ -1,192 +1,41 @@
-<!-- Tailwind CSS排版改進 -->
-
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <title>Keyword Stats</title>
-
-    <!-- Tailwind CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-
-<body class="bg-gray-900 text-gray-100 min-h-screen p-6">
-
-<div class="max-w-5xl mx-auto space-y-8">
-
-    <div class="flex items-center justify-between">
-      <h1 class="text-3xl font-bold">📊 Keyword Stats</h1>
-      <nav class="flex gap-2 flex-wrap text-sm">
-        <a href="/" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">🏠 主控台</a>
-        <a href="/logViewer" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📋 日誌檔案</a>
-        <a href="/config" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">⚙️ 設定</a>
-        <a href="/sponsor" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📢 贊助廣告</a>
-        <a href="/clips" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">🎬 剪輯</a>
-        <a href="/autoclip" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📈 剪輯分析</a>
-      </nav>
-    </div>
-
-    <!-- Top 10 -->
-    <div class="bg-gray-800 rounded-2xl shadow-lg p-6">
-        <div class="flex items-center justify-between mb-4">
-            <h2 class="text-xl font-semibold text-red-400">🔥 Top 10 關鍵字</h2>
-            <button id="clearBtn" class="px-3 py-1.5 text-sm bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition">
-                🗑️ 清空統計
-            </button>
-        </div>
-        <ul id="top10" class="space-y-2"></ul>
-    </div>
-
-    <!-- All keywords -->
-    <div class="bg-gray-800 rounded-2xl shadow-lg p-6">
-        <h2 class="text-xl font-semibold text-blue-400 mb-4">全部關鍵字</h2>
-        <ul id="all" class="space-y-1 max-h-[400px] overflow-y-auto pr-2"></ul>
-    </div>
-
-</div>
-
-<script>
-const top10El = document.getElementById('top10');
-const allEl = document.getElementById('all');
-
-const evt = new EventSource('/status/keyword');
-
-evt.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-    console.log('Received Data Raw message:', event);
-    console.log('Received message:', msg);
-    
-    if (msg.type === 'top10') {
-        top10El.innerHTML = '';
-        msg.data.forEach((item, index) => {
-            const li = document.createElement('li');
-            li.className =
-                "flex justify-between items-center bg-gray-700/60 rounded-lg px-4 py-2 text-red-300 font-semibold";
-
-            li.innerHTML = `
-                <span class="truncate">${index + 1}. ${item.message}</span>
-                <div class="flex items-center gap-2 ml-4">
-                    <span class="text-red-400">${item.count}</span>
-                    <button
-                        class="copy-btn px-2 py-1 text-xs bg-red-500/80 hover:bg-red-500 text-white rounded"
-                        data-text="${item.message}"
-                    >
-                        複製
-                    </button>
-                </div>
-            `;
-
-            top10El.appendChild(li);
-        });
-    }
-
-    if (msg.type === 'all') {
-        allEl.innerHTML = '';
-        msg.data.forEach(item => {
-            const li = document.createElement('li');
-            li.className =
-                "flex justify-between items-center bg-gray-700/40 rounded-md px-3 py-1 text-sm";
-
-           li.innerHTML = `
-                <span class="truncate">${item.message}</span>
-                <div class="flex items-center gap-2 ml-4">
-                    <span class="text-gray-300">${item.count}</span>
-                    <button
-                        class="copy-btn px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 text-white rounded"
-                        data-text="${item.message}"
-                    >
-                        複製
-                    </button>
-                </div>
-            `;
-
-            allEl.appendChild(li);
-        });
-    }
-};
-
-
-function copyText(text) {
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
-  } else {
-    fallbackCopy(text);
-  }
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>留言關鍵字統計</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,"Microsoft JhengHei",sans-serif;background:#0d1524;color:#e7edf7}*{box-sizing:border-box}body{margin:0;padding:32px}main{max-width:1240px;margin:auto}header,.toolbar,.section-title,nav,.pager{display:flex;align-items:center;gap:12px;flex-wrap:wrap}header,.section-title{justify-content:space-between}h1{font-size:28px;margin:0 0 8px}h2{font-size:19px;margin:0}p,.muted{color:#93a4bc;font-size:13px}a{color:#a8c9ff;text-decoration:none}nav{font-size:13px;margin:18px 0 24px}section{background:#151f31;border:1px solid #26334a;border-radius:16px;padding:22px;margin:18px 0}button,input,select{font:inherit;border:1px solid #344663;border-radius:8px;padding:9px 12px;background:#202e45;color:#e7edf7}button{cursor:pointer}button:disabled{opacity:.4;cursor:default}button:hover{background:#304462}input{min-width:220px;flex:1}.danger{color:#ffb4b4}.badge{border-radius:20px;padding:5px 12px;background:#20334e;font-size:12px}.toolbar{margin:18px 0}.scroll{overflow:auto;max-height:530px}table{border-collapse:collapse;width:100%;font-size:14px}th{text-align:left;background:#1b2940;color:#9fb3d2;font-size:12px;position:sticky;top:0;white-space:nowrap}td,th{padding:12px;border-bottom:1px solid #26334a}td:first-child{min-width:230px;max-width:440px;white-space:pre-wrap;overflow-wrap:anywhere}td:not(:first-child){white-space:nowrap}.time{font-variant-numeric:tabular-nums;font-size:12px}.top{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-top:16px}.top-item{padding:12px;background:#1b2940;border-radius:10px;overflow-wrap:anywhere;min-width:0}.top-item strong{color:#7fc7ff;float:right}.pager{justify-content:flex-end;margin-top:15px}.empty{text-align:center;color:#93a4bc;padding:25px}@media(max-width:600px){body{padding:14px}section{padding:14px}h1{font-size:23px}input{min-width:100%;width:100%}}
+</style></head><body><main>
+<header><div><h1>留言關鍵字統計</h1><p>以完整留言彙整次數，查看出現時間與最近紀錄</p></div><span id="connection" class="badge" role="status">連線中</span></header>
+<nav><a href="/">主控台</a><a href="/config">設定</a><a href="/autoclip">剪輯分析</a><a href="/clips">剪輯紀錄</a><a href="/logViewer">日誌</a></nav>
+<section><div class="section-title"><h2>熱門 Top 10</h2><button id="clearBtn" class="danger">清空統計</button></div><div id="top10" class="top"></div></section>
+<section><div class="section-title"><h2>全部關鍵字</h2><span id="summary" class="muted"></span></div>
+<div class="toolbar"><input id="search" aria-label="搜尋留言" placeholder="搜尋留言內容"><select id="sort" aria-label="排序"><option value="count">次數最多</option><option value="lastSeen">最近出現</option><option value="firstSeen">最早出現</option></select></div>
+<p>時間以 Asia/Taipei 顯示；優先使用平台發送時間，缺少時採接收時間。舊資料未保存時間會顯示未知。</p>
+<div class="scroll"><table><thead><tr><th>訊息內容</th><th>次數</th><th>首次出現</th><th>最後出現</th><th>平台</th><th>接收管道</th><th>操作</th></tr></thead><tbody id="all"></tbody></table></div>
+<div class="pager"><button id="prev">上一頁</button><span id="page"></span><button id="next">下一頁</button></div></section>
+<section><div class="section-title"><h2>最近訊息紀錄</h2><span class="muted">每種留言保留最近 5 筆，此處最多顯示 200 筆</span></div><div class="scroll"><table><thead><tr><th>訊息內容</th><th>發送／接收時間</th><th>時間來源</th><th>使用者</th><th>平台</th><th>接收管道</th></tr></thead><tbody id="recent"></tbody></table></div></section>
+</main><script>
+let rows=[],page=1,source=null;const size=25;
+const sourceLabel=p=>p==='Unknown'||p==='Userscript'?'未知來源':p;
+const transportLabel=t=>t==='userscript'?'Userscript':t==='api'?'API／直連':'未記錄';
+const el=id=>document.getElementById(id);
+function time(v){return v==null?'未知':new Date(v).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false});}
+function cell(tr,text,cls){const td=document.createElement('td');td.textContent=text; if(cls)td.className=cls;tr.append(td);return td;}
+function empty(body,span){const tr=document.createElement('tr');const td=cell(tr,'尚無資料','empty');td.colSpan=span;body.append(tr);}
+function render(){
+ const query=el('search').value.trim().toLowerCase(),sort=el('sort').value;
+ const filtered=rows.filter(r=>r.message.toLowerCase().includes(query)).sort((a,b)=>sort==='firstSeen'?(a.firstSeen??Infinity)-(b.firstSeen??Infinity):(b[sort]??0)-(a[sort]??0));
+ const pages=Math.max(1,Math.ceil(filtered.length/size));page=Math.min(page,pages);
+ el('summary').textContent=filtered.length+' 種留言 · '+rows.reduce((n,r)=>n+r.count,0)+' 次累計';
+ const body=el('all');body.replaceChildren();
+ for(const r of filtered.slice((page-1)*size,page*size)){const tr=document.createElement('tr');cell(tr,r.message);cell(tr,r.count);cell(tr,time(r.firstSeen),'time');cell(tr,time(r.lastSeen),'time');cell(tr,(r.platforms||[]).map(sourceLabel).join(' / ')||'未知來源');cell(tr,(r.transports||[]).map(transportLabel).join('＋')||'未記錄');const button=document.createElement('button');button.textContent='複製';button.onclick=async()=>{try{await navigator.clipboard.writeText(r.message);button.textContent='已複製';}catch{button.textContent='複製失敗';}};cell(tr,'').append(button);body.append(tr);}
+ if(!filtered.length)empty(body,7);
+ el('page').textContent=page+' / '+pages;el('prev').disabled=page<=1;el('next').disabled=page>=pages;
+ el('top10').replaceChildren();for(const [i,r] of [...rows].sort((a,b)=>b.count-a.count).slice(0,10).entries()){const item=document.createElement('div');item.className='top-item';const count=document.createElement('strong');count.textContent=r.count;const text=document.createElement('div');text.textContent=(i+1)+'. '+r.message;const date=document.createElement('p');date.textContent='最近 '+time(r.lastSeen);item.append(count,text,date);el('top10').append(item);}
+ const recent=el('recent');recent.replaceChildren();const events=filtered.flatMap(r=>(r.recent||[]).map(e=>({...e,message:r.message}))).sort((a,b)=>b.receivedAt-a.receivedAt).slice(0,200);
+ for(const e of events){const tr=document.createElement('tr');cell(tr,e.message);cell(tr,time(e.sentAt??e.receivedAt),'time');cell(tr,e.sentAt==null?'接收時間':'平台時間');cell(tr,e.user||'未知');cell(tr,sourceLabel(e.platform)||'未知來源');cell(tr,transportLabel(e.transport)+(e.isTest?'（測試）':''));recent.append(tr);}if(!events.length)empty(recent,6);
 }
-
-function fallbackCopy(text) {
-    const textarea = document.createElement("textarea");
-    textarea.value = text;
-    document.body.appendChild(textarea);
-    textarea.select();
-   
-    try {
-        document.execCommand("copy");
-        console.log("已複製 (fallback)");
-    } catch (err) {
-        console.error("複製失敗:", err);
-    }
-    document.body.removeChild(textarea);
-
-}
-// 頁面隱藏時關閉 SSE，避免返回上一頁後連線殘留
-document.addEventListener('visibilitychange', () => {
-    if (document.hidden) evt.close();
-});
-window.addEventListener('beforeunload', () => evt.close());
-
-// 清空統計
-document.getElementById('clearBtn').addEventListener('click', async () => {
-    if (!confirm('確定要清空所有關鍵字統計嗎？此操作無法復原。')) return;
-
-    const btn = document.getElementById('clearBtn');
-    btn.disabled = true;
-    btn.textContent = '清空中...';
-
-    try {
-        const res = await fetch('/keyword/clear', { method: 'POST' });
-        const result = await res.json();
-        if (result.success) {
-            top10El.innerHTML = '<li class="text-gray-500">已清空</li>';
-            allEl.innerHTML = '<li class="text-gray-500">已清空</li>';
-            btn.textContent = '✅ 已清空';
-        } else {
-            btn.textContent = '❌ 失敗';
-            alert('清空失敗: ' + (result.error || '未知錯誤'));
-        }
-    } catch (err) {
-        btn.textContent = '❌ 失敗';
-        alert('清空失敗: ' + err.message);
-    }
-
-    setTimeout(() => {
-        btn.disabled = false;
-        btn.textContent = '🗑️ 清空統計';
-    }, 1500);
-});
-
-
-document.addEventListener("click", async (e) => {
-    if (e.target.classList.contains("copy-btn")) {
-        const text = e.target.dataset.text;
-
-        try {
-            await navigator.clipboard.writeText(text);
-            e.target.textContent = "已複製";
-            setTimeout(() => (e.target.textContent = "複製"), 1000);
-        } catch (err) {
-            e.target.textContent = "失敗 Fallback";
-            console.warn("Clipboard API failed, using fallback:", err);
-            
-            setTimeout(() => (e.target.textContent = "複製"), 1000);
-            fallbackCopy(text); 
-
-        }
-    }
-});
-
-
-</script>
-
-</body>
-</html>
+function connect(){if(source||document.hidden)return;source=new EventSource('/status/keyword');source.onopen=()=>el('connection').textContent='即時更新中';source.onerror=()=>el('connection').textContent='連線中斷，重試中';source.onmessage=event=>{try{const msg=JSON.parse(event.data);if(msg.type==='all'&&Array.isArray(msg.data)){rows=msg.data;render();}}catch{el('connection').textContent='資料格式錯誤';}};}
+function close(){source?.close();source=null;}
+el('search').oninput=el('sort').onchange=()=>{page=1;render();};el('prev').onclick=()=>{page--;render();};el('next').onclick=()=>{page++;render();};
+el('clearBtn').onclick=async()=>{if(!confirm('確定清空留言統計與最近紀錄？'))return;el('clearBtn').disabled=true;try{const r=await fetch('/keyword/clear',{method:'POST'});const data=await r.json();if(!data.success)throw new Error(data.error||'清空失敗');rows=[];page=1;render();}catch(e){alert(e.message);}finally{el('clearBtn').disabled=false;}};
+document.addEventListener('visibilitychange',()=>{if(document.hidden){close();el('connection').textContent='暫停更新';}else connect();});window.addEventListener('pagehide',close);window.addEventListener('pageshow',connect);render();connect();
+</script></body></html>

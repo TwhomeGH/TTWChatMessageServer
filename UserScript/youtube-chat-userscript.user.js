@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Chat to TTW Server
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  直接從 YouTube Studio 直播聊天室 DOM 抓訊息送到 TTW 伺服器（不耗 API quota）
 // @author       TTW
 // @match        https://studio.youtube.com/live_chat*
@@ -24,6 +24,7 @@
 
     const SERVER_URL = 'http://localhost:3332/chat'
     const sentIds = new Set()
+    const sentNodes = new WeakSet()
     let debug = true
 
     function log(...args) {
@@ -43,12 +44,14 @@
         const avatar = imgEl ? imgEl.src : ''
 
         // 去重 ID（每則訊息只送一次）
-        const uid = el.getAttribute('id') || `${user}:${message}:${Date.now()}`
+        const uid = el.getAttribute('id') || null
+        if (sentNodes.has(el)) return null
+        sentNodes.add(el)
         if (sentIds.has(uid)) return null
-        sentIds.add(uid)
-        if (sentIds.size > 10000) sentIds.clear()
+        if (uid) sentIds.add(uid)
+        if (sentIds.size > 10000) sentIds.delete(sentIds.values().next().value)
 
-        return { user, message, img: avatar }
+        return { type: 'StreamMessage', platform: 'Youtube', transport: 'userscript', msgId: uid, sentAt: el.querySelector('time[datetime]')?.getAttribute('datetime') || null, observedAt: Date.now(), user, message, img: avatar }
     }
 
     function send(data) {

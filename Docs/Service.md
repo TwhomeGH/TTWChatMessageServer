@@ -1,5 +1,9 @@
 # Web服務端 的其他新功能
 
+## Userscript 聊天轉接
+
+`POST /chat` 的聊天與觀眾資料契約已獨立整理至 [/chat 入口與參數文件](CHAT_API.md)。平台分類及腳本版本見 [Userscript 平台與管道](USERSCRIPT_SOURCES.md)。
+
 
 ### **可視化網頁 進行日誌文件查看**
 

@@ -108,9 +108,9 @@ var cacheKeywordDataAll = []
 var cacheAutoClipStats = { config: {}, stats: [] }
 var stdoutBuffer = ''
 
-function recordMessageStat(message) {
+function recordMessageStat(message, metadata = {}) {
     if (!message) return;
-    if (messageFilter) messageFilter.recordMessageStat(message);
+    if (messageFilter) messageFilter.recordMessageStat(message, metadata);
 }
 
 function getTopMessages(limit = 10) {
@@ -130,28 +130,9 @@ function processFilter({ user, message } = {}) {
 }
 
 function mergeWithFileStats(snapshot) {
-    const map = new Map();
-    try {
-        const raw = fs.readFileSync('./message_stats.json', 'utf-8');
-        const arr = JSON.parse(raw);
-        if (Array.isArray(arr)) {
-            for (const { message, count } of arr) {
-                if (message && typeof count === 'number') {
-                    map.set(message, Math.max(map.get(message) || 0, count));
-                }
-            }
-        }
-    } catch (err) {
-        // 檔案不存在或解析失敗 → 以目前快照為準
-    }
-    for (const { message, count } of snapshot) {
-        if (message && typeof count === 'number') {
-            map.set(message, Math.max(map.get(message) || 0, count));
-        }
-    }
-    return [...map.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([message, count]) => ({ message, count }));
+    let previous = [];
+    try { previous = JSON.parse(fs.readFileSync('./message_stats.json', 'utf-8')); } catch {}
+    return messageFilter ? messageFilter.mergeStatEntries(Array.isArray(previous) ? previous : [], snapshot) : snapshot;
 }
 
 function SaveCacheKeywordDataAll() {
@@ -393,6 +374,8 @@ const server = http.createServer((req, res) => {
         if (isYoutube) args.push('--youtube')
         if (isBoth) args.push('--both')
 
+        // Persist the parent baseline so a new child continues the same counts.
+        SaveCacheKeywordDataAll();
         tiktokProcess = spawn('node', args);
 
         stdoutBuffer = ''; // 新進程開始，重置緩衝
@@ -548,7 +531,8 @@ const server = http.createServer((req, res) => {
 
                 pushLog('Chat入口📩 收到訊息:', body);
 
-                const data = JSON.parse(body);
+                const raw = JSON.parse(body);
+                const data = { ...raw, ...(messageFilter?.normalizeSource(raw, 'userscript') || { platform: 'Unknown', transport: 'userscript', isTest: raw.isTest === true, heatEligible: raw.isTest !== true }), receivedAt: Date.now() };
 
                 const { user, message } = data;
 
@@ -573,7 +557,9 @@ const server = http.createServer((req, res) => {
 
                 sendToTikTok(payload);
 
-                recordMessageStat(fr.modified ? fr.message : message);
+                if (!tiktokProcess) recordMessageStat(fr.modified ? fr.message : message, {
+                    ...data, id: data.msgId || data.id, sentAt: data.sentAt || data.createTime, user
+                });
 
                 pushLog('📩 發送訊息:', fr.modified ? fr.user : user, fr.modified ? fr.message : message);
 
@@ -749,30 +735,9 @@ const server = http.createServer((req, res) => {
 
 
         function sendKeywordDataCacheAll() {
-
-            if (!tiktokProcess) {
-
-                cacheKeywordDataAll = getAllMessageStatsSorted();
-                if (cacheKeywordDataAll.length > 0) {
-                    res.write(`data: ${JSON.stringify({
-                        type: 'all',
-                        data: cacheKeywordDataAll
-                    })}\n\n`);
-                }
-
-
-            } else {
-
-                tiktokProcess.stdin.write('GETALL\n');
-
-                if (cacheKeywordDataAll.length > 0) {
-                    res.write(`data: ${JSON.stringify({
-                        type: 'all',
-                        data: cacheKeywordDataAll
-                    })}\n\n`);
-                }
-
-            }
+            if (!tiktokProcess) cacheKeywordDataAll = getAllMessageStatsSorted();
+            else if (!tiktokProcess.killed && tiktokProcess.stdin.writable) tiktokProcess.stdin.write('GETALL\n');
+            res.write('data: ' + JSON.stringify({ type: 'all', data: cacheKeywordDataAll }) + '\n\n');
         }
 
         function sendKeywordData() {
@@ -1072,16 +1037,17 @@ const server = http.createServer((req, res) => {
             .replace('${KICK_CLIENT_ID}', process.env.KICK_CLIENT_ID || '')
             .replace('${KICK_CLIENT_SECRET}', process.env.KICK_CLIENT_SECRET || '')
             .replace('${KICK_USER_NAME}', process.env.KICK_USER_NAME || '')
+            .replace('${AUTO_CLIP_MODE}', process.env.AUTO_CLIP_MODE === 'live' ? 'live' : 'shadow')
             .replace('${AUTO_CLIP_ENABLED}', process.env.AUTO_CLIP_ENABLED || '0')
-            .replace('${AUTO_CLIP_W_VIEWERS}', process.env.AUTO_CLIP_W_VIEWERS || '0.5')
-            .replace('${AUTO_CLIP_W_MSG}', process.env.AUTO_CLIP_W_MSG || '0.5')
+            .replace('${AUTO_CLIP_W_VIEWERS}', process.env.AUTO_CLIP_W_VIEWERS || '0.2')
+            .replace('${AUTO_CLIP_W_MSG}', process.env.AUTO_CLIP_W_MSG || '0.8')
             .replace('${AUTO_CLIP_SCORE_THRESHOLD}', process.env.AUTO_CLIP_SCORE_THRESHOLD || '1.8')
             .replace('${AUTO_CLIP_BASELINE_WINDOW_MIN}', process.env.AUTO_CLIP_BASELINE_WINDOW_MIN || '30')
-            .replace('${AUTO_CLIP_RATE_WINDOW_MIN}', process.env.AUTO_CLIP_RATE_WINDOW_MIN || '5')
+            .replace('${AUTO_CLIP_RATE_WINDOW_MIN}', process.env.AUTO_CLIP_RATE_WINDOW_MIN || '0.5')
             .replace('${AUTO_CLIP_FLOOR_VIEWERS}', process.env.AUTO_CLIP_FLOOR_VIEWERS || '2')
-            .replace('${AUTO_CLIP_FLOOR_MSG_PER_MIN}', process.env.AUTO_CLIP_FLOOR_MSG_PER_MIN || '0.3')
+            .replace('${AUTO_CLIP_FLOOR_MSG_PER_MIN}', process.env.AUTO_CLIP_FLOOR_MSG_PER_MIN || '2')
             .replace('${AUTO_CLIP_COOLDOWN_MIN}', process.env.AUTO_CLIP_COOLDOWN_MIN || '15')
-            .replace('${AUTO_CLIP_SUSTAIN_MIN}', process.env.AUTO_CLIP_SUSTAIN_MIN || '1.5')
+            .replace('${AUTO_CLIP_SUSTAIN_MIN}', process.env.AUTO_CLIP_SUSTAIN_MIN || '0.167')
             .replace('${AUTO_CLIP_INSTANT_MULTIPLIER}', process.env.AUTO_CLIP_INSTANT_MULTIPLIER || '2')
             .replace('${AUTO_CLIP_DEDUP_SEC}', process.env.AUTO_CLIP_DEDUP_SEC || '10')
             .replace('${AUTO_CLIP_TITLE_PREFIX}', process.env.AUTO_CLIP_TITLE_PREFIX || '');
@@ -1105,16 +1071,17 @@ const server = http.createServer((req, res) => {
             const newKickClientId = params.get('KICK_CLIENT_ID') || '';
             const newKickClientSecret = params.get('KICK_CLIENT_SECRET') || '';
             const newKickUserName = params.get('KICK_USER_NAME') || '';
+            const newAutoClipMode = params.get('AUTO_CLIP_MODE') === 'live' ? 'live' : 'shadow';
             const newAutoClipEnabled = params.get('AUTO_CLIP_ENABLED') || '0';
-            const newAutoClipWViewers = params.get('AUTO_CLIP_W_VIEWERS') || '0.5';
-            const newAutoClipWMsg = params.get('AUTO_CLIP_W_MSG') || '0.5';
+            const newAutoClipWViewers = params.get('AUTO_CLIP_W_VIEWERS') || '0.2';
+            const newAutoClipWMsg = params.get('AUTO_CLIP_W_MSG') || '0.8';
             const newAutoClipScoreThreshold = params.get('AUTO_CLIP_SCORE_THRESHOLD') || '1.8';
             const newAutoClipBaselineWindowMin = params.get('AUTO_CLIP_BASELINE_WINDOW_MIN') || '30';
-            const newAutoClipRateWindowMin = params.get('AUTO_CLIP_RATE_WINDOW_MIN') || '5';
+            const newAutoClipRateWindowMin = params.get('AUTO_CLIP_RATE_WINDOW_MIN') || '0.5';
             const newAutoClipFloorViewers = params.get('AUTO_CLIP_FLOOR_VIEWERS') || '2';
-            const newAutoClipFloorMsgPerMin = params.get('AUTO_CLIP_FLOOR_MSG_PER_MIN') || '0.3';
+            const newAutoClipFloorMsgPerMin = params.get('AUTO_CLIP_FLOOR_MSG_PER_MIN') || '2';
             const newAutoClipCooldownMin = params.get('AUTO_CLIP_COOLDOWN_MIN') || '15';
-            const newAutoClipSustainMin = params.get('AUTO_CLIP_SUSTAIN_MIN') || '1.5';
+            const newAutoClipSustainMin = params.get('AUTO_CLIP_SUSTAIN_MIN') || '0.167';
             const newAutoClipInstantMultiplier = params.get('AUTO_CLIP_INSTANT_MULTIPLIER') || '2';
             const newAutoClipDedupSec = params.get('AUTO_CLIP_DEDUP_SEC') || '10';
             const newAutoClipTitlePrefix = params.get('AUTO_CLIP_TITLE_PREFIX') || '';
@@ -1126,6 +1093,7 @@ const server = http.createServer((req, res) => {
             process.env.KICK_CLIENT_ID = newKickClientId;
             process.env.KICK_CLIENT_SECRET = newKickClientSecret;
             process.env.KICK_USER_NAME = newKickUserName;
+            process.env.AUTO_CLIP_MODE = newAutoClipMode;
             process.env.AUTO_CLIP_ENABLED = newAutoClipEnabled;
             process.env.AUTO_CLIP_W_VIEWERS = newAutoClipWViewers;
             process.env.AUTO_CLIP_W_MSG = newAutoClipWMsg;
@@ -1164,6 +1132,7 @@ const server = http.createServer((req, res) => {
             updateEnv('KICK_CLIENT_ID', newKickClientId);
             updateEnv('KICK_CLIENT_SECRET', newKickClientSecret);
             updateEnv('KICK_USER_NAME', newKickUserName);
+            updateEnv('AUTO_CLIP_MODE', newAutoClipMode);
             updateEnv('AUTO_CLIP_ENABLED', newAutoClipEnabled);
             updateEnv('AUTO_CLIP_W_VIEWERS', newAutoClipWViewers);
             updateEnv('AUTO_CLIP_W_MSG', newAutoClipWMsg);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok WS Relay
 // @namespace    ws-bridge
-// @version      1.0
+// @version      1.1
 // @description  Intercept webcast-ws messages and relay to local Node server
 // @author       debug
 // @match        https://www.tiktok.com/*
@@ -84,6 +84,7 @@
             url: RELAY_HOST + RELAY_PATH,
             headers: { 'Content-Type': 'application/json' },
             data: JSON.stringify({
+                platform: 'TikTok', transport: 'userscript',
                 type: 'ws_message',
                 data: b64,
                 byteLength: bytes.length,
@@ -98,6 +99,7 @@
             url: RELAY_HOST + RELAY_PATH,
             headers: { 'Content-Type': 'application/json' },
             data: JSON.stringify({
+                platform: 'TikTok', transport: 'userscript',
                 type: 'ws_text',
                 data: text,
                 time: Date.now()

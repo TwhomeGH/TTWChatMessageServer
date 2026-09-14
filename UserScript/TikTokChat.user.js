@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      2.6
+// @version      2.7
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
@@ -36,7 +36,7 @@
     }, 30000);
 
     function sendAudienceUpdate() {
-        const payload = { type: 'audience', userNum: View, userList: ViewUserList };
+        const payload = { type: 'audience', platform: 'TikTok', transport: 'userscript', audienceKind: 'total', userNum: View, userList: ViewUserList };
         const sendURL = `http://${HTTP_HOST}:${HTTP_PORT}/chat`;
         GM_xmlhttpRequest({
             method: "POST", url: sendURL, data: JSON.stringify(payload),
@@ -45,8 +45,8 @@
         });
     }
 
-    function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum,userList=null) {
-        const payload = { type: 'StreamMessage', user, message, img, giftImg, isMain ,userNum,userList};
+    function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum,userList=null, metadata={}) {
+        const payload = { ...metadata, platform: 'TikTok', transport: 'userscript', observedAt: Date.now(), type: 'StreamMessage', user, message, img, giftImg, isMain ,userNum,userList};
 
         const sendURL = `http://${HTTP_HOST}:${HTTP_PORT}/chat`;
 
@@ -209,7 +209,7 @@ function hasContent(el) {
             || node.querySelector('img')?.src;
 
         if (userName && text) {
-            sendSocketMessage(userName, text, avatar, null, true, View);
+            sendSocketMessage(userName, text, avatar, null, true, View, null, { msgId: node.getAttribute('data-msg-id') || node.getAttribute('data-message-id') || null, sentAt: node.querySelector('time[datetime]')?.getAttribute('datetime') || null });
             sentMessages.add(node);
             console.log("New message sent:", { userName, text, avatar });
         }
