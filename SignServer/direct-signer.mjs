@@ -2,18 +2,30 @@
  * X-Bogus signer using TikTok's own SDK with Puppeteer.
  * Uses byted_acrawler.frontierSign() — TikTok SDK's new signing API.
  */
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { BrowserSession } from '../ScriptLib/browser/session.mjs';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SDK_DIR = path.resolve(__dirname, '../node_modules/tiktok-signature/javascript');
+const SDK_DIR = path.resolve(__dirname, './sdk');
 
-puppeteer.use(StealthPlugin());
+const session = new BrowserSession(async options => {
+    const { default: puppeteer } = await import('puppeteer-core');
+    const response = await fetch(options.browserURL + '/json/version', {
+        signal: AbortSignal.timeout(5000), redirect: 'error'
+    });
+    if (!response.ok) throw new Error('瀏覽器未就緒，請執行 主服務 /browser');
+    const endpoint = new URL((await response.json()).webSocketDebuggerUrl);
+    if (endpoint.protocol !== 'ws:' || !['127.0.0.1', 'localhost', '[::1]'].includes(endpoint.hostname)) {
+        throw new Error('瀏覽器回傳的偵錯位址不是本機');
+    }
+    const { browserURL, ...connectOptions } = options;
+    return puppeteer.connect({ ...connectOptions, browserWSEndpoint: endpoint.href });
+});
 
-const BROWSER_URL = process.env.BROWSER_DEBUG_URL || 'http://127.0.0.1:9222';
+let initializing = null;
+let retryAfter = 0;
 
 let browser = null;
 let page = null;
@@ -22,57 +34,38 @@ let livePage = null;
 let liveWsReady = false;
 let ready = false;
 
+/** 連線失敗冷卻 10 秒，避免收訊重試大量建立控制連線。 */
 export async function initDirectSigner() {
-    if (ready) return true;
+    if (ready && browser?.connected && page && !page.isClosed()) return true;
+    if (initializing) return initializing;
+    if (Date.now() < retryAfter) throw new Error('瀏覽器尚未就緒，請在 主服務 /browser 控制台登入後再試');
+    initializing = initialize().catch(async error => {
+        retryAfter = Date.now() + 10000;
+        await closeDirectSigner();
+        throw error;
+    }).finally(() => { initializing = null; });
+    return initializing;
+}
+
+/** 初始化自有簽名頁，使用持久化瀏覽器的原生環境。 */
+async function initialize() {
+    ready = false;
 
     console.log('[DirectSigner] Loading SDK (v5.1.3)...');
     const sdk513 = fs.readFileSync(path.join(SDK_DIR, 'webmssdk_5.1.3.js'), 'utf-8');
 
-    const isHeaded = process.env.PUPPETEER_HEADED === 'true' || process.env.PUPPETEER_HEADED === '1';
-    console.log('[DirectSigner] Launching ' + (isHeaded ? 'headed' : 'headless') + ' browser...');
-    browser = await puppeteer.launch({
-        headless: isHeaded ? false : 'new',
-        args: [
-            ...(process.env.DISABLE_SANDBOX === '1' ? ['--no-sandbox', '--disable-setuid-sandbox'] : []),
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--window-size=1920,1080',
-        ],
-    });
-
-    page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36');
-    await page.setViewport({ width: 1920, height: 1080 });
-
-    await page.evaluateOnNewDocument(() => {
-        Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel', configurable: true });
-    });
+    console.log('[DirectSigner] Connecting to dedicated browser (主服務 /browser)...');
+    browser = await session.connect();
+    browser.once('disconnected', () => { ready = false; liveWsReady = false; });
+    page = await session.newPage();
+    await setTikTokCookies(page);
 
     // Inject v5.1.3 SDK (provides byted_acrawler.frontierSign)
     await page.evaluateOnNewDocument((code) => { try { eval(code); } catch(e) { console.error('[SDK] v5.1.3 error:', e.message); } }, sdk513);
 
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-        const url = req.url();
-        const type = req.resourceType();
-        if (url.includes('/webmssdk/')) {
-            req.respond({ status: 200, contentType: 'application/javascript; charset=utf-8', body: sdk513 });
-            return;
-        }
-        if (url.includes('slardar') || url.includes('acrawler') || url.includes('analytics')) {
-            req.abort();
-            return;
-        }
-        if (['image', 'media', 'font', 'stylesheet'].includes(type)) {
-            req.abort();
-            return;
-        }
-        req.continue();
-    });
-
     console.log('[DirectSigner] Navigating to TikTok...');
     try {
-        await page.goto('https://www.tiktok.com/@zara', {
+        await page.goto('https://www.tiktok.com/', {
             waitUntil: 'domcontentloaded',
             timeout: 60000,
         });
@@ -100,7 +93,7 @@ export async function initDirectSigner() {
 }
 
 export async function directSign(url) {
-    if (!ready) throw new Error('Signer not initialized');
+    await initDirectSigner();
 
     const result = await page.evaluate((fetchUrl) => {
         const u = new URL(fetchUrl);
@@ -171,20 +164,21 @@ export async function signWsUrl(wsUrl) {
 }
 
 async function setTikTokCookies(page) {
+    if (process.env.DIRECT_SIGNER_IMPORT_COOKIES !== '1') return;
     const cookiesStr = process.env.TIKTOK_COOKIES;
     if (cookiesStr) {
         const cookies = cookiesStr.split(';').map(pair => {
             const [name, ...rest] = pair.trim().split('=');
             return { name: name.trim(), value: rest.join('=').trim(), domain: '.tiktok.com' };
         }).filter(c => c.name && c.value);
-        await page.setCookie(...cookies);
+        await page.browserContext().setCookie(...cookies);
         console.log(`[DirectSigner] Set ${cookies.length} cookies from TIKTOK_COOKIES`);
         return;
     }
     const sessionId = process.env.SESSION_ID;
     const targetIdc = process.env.TT_TARGET_IDC || 'alisg';
     if (sessionId) {
-        await page.setCookie(
+        await page.browserContext().setCookie(
             { name: 'sessionid', value: sessionId, domain: '.tiktok.com' },
             { name: 'sid_tt', value: sessionId, domain: '.tiktok.com' },
             { name: 'sessionid_ss', value: sessionId, domain: '.tiktok.com' },
@@ -199,28 +193,17 @@ async function setTikTokCookies(page) {
 }
 
 export async function signWebSocketForUser(username, timeoutMs = 20000) {
-    if (!browser) throw new Error('Signer not initialized');
+    await initDirectSigner();
 
     console.log(`[DirectSigner] Navigating to ${username}'s LIVE page for WS URL capture...`);
 
     if (wsPage && !wsPage.isClosed()) {
         try { await wsPage.close(); } catch (e) {}
     }
-    wsPage = await browser.newPage();
-    await wsPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0');
-    await wsPage.setViewport({ width: 1920, height: 1080 });
-    await wsPage.setExtraHTTPHeaders({ 'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8' });
-    await wsPage.evaluateOnNewDocument(() => {
-        Object.defineProperty(navigator, 'platform', { get: () => 'Win32', configurable: true });
-        Object.defineProperty(navigator, 'language', { get: () => 'zh-TW', configurable: true });
-        Object.defineProperty(navigator, 'languages', { get: () => ['zh-TW', 'zh', 'en'], configurable: true });
-    });
+    wsPage = await session.newPage();
 
     await setTikTokCookies(wsPage);
 
-    await wsPage.evaluateOnNewDocument(() => {
-        Object.defineProperty(navigator, 'platform', { get: () => 'MacIntel', configurable: true });
-    });
     const sdk513 = fs.readFileSync(path.join(SDK_DIR, 'webmssdk_5.1.3.js'), 'utf-8');
     await wsPage.evaluateOnNewDocument((code) => { try { eval(code); } catch(e) {} }, sdk513);
 
@@ -287,7 +270,7 @@ export async function signWebSocketForUser(username, timeoutMs = 20000) {
             }
         }
         if (capturedWsUrl) {
-            console.log(`[DirectSigner] WS URL: ...${capturedWsUrl.substring(capturedWsUrl.length - 120)}`);
+            console.log('[DirectSigner] WS URL captured');
             break;
         }
         await new Promise(r => setTimeout(r, 200));
@@ -307,7 +290,7 @@ export async function signWebSocketForUser(username, timeoutMs = 20000) {
 
     let cookies = {};
     try {
-        const pageCookies = await wsPage.cookies();
+        const pageCookies = await wsPage.browserContext().cookies();
         for (const c of pageCookies) {
             cookies[c.name] = c.value;
         }
@@ -316,7 +299,7 @@ export async function signWebSocketForUser(username, timeoutMs = 20000) {
     }
 
     console.log(`[DirectSigner] Captured WS URL - pushServer: ${capturedPushServer}`);
-    console.log(`[DirectSigner] Params: ${JSON.stringify(capturedRouteParams)}`);
+    // 不把簽名查詢參數或登入資料寫入日誌。
 
     try { await wsPage.close(); } catch (e) {}
 
@@ -340,10 +323,7 @@ export async function initLivePage(username, timeoutMs = 20000) {
     livePage = null;
     liveWsReady = false;
 
-    const page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0');
-    await page.setViewport({ width: 1920, height: 1080 });
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8' });
+    const page = await session.newPage();
 
     await page.evaluateOnNewDocument(() => {
         const captured = [];
@@ -470,9 +450,7 @@ export async function browserFetchSigned(params) {
         if (fetchPage && !fetchPage.isClosed()) {
             try { await fetchPage.close(); } catch(e) {}
         }
-        fetchPage = await browser.newPage();
-        await fetchPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0');
-        await fetchPage.setViewport({ width: 1920, height: 1080 });
+        fetchPage = await session.newPage();
         await setTikTokCookies(fetchPage);
         await fetchPage.goto('https://www.tiktok.com/', { waitUntil: 'networkidle0', timeout: 30000 }).catch(() => {});
         fetchPageCreated = now;
@@ -557,30 +535,22 @@ export async function closeLivePage() {
 
 export function resetFetchPage() {
     if (fetchPage && !fetchPage.isClosed()) {
-        try { fetchPage.close(); } catch(e) {}
+        void fetchPage.close().catch(() => {});
     }
     fetchPage = null;
     fetchPageCreated = 0;
     console.log('[DirectSigner] Fetch page reset');
 }
 
+/** 關閉本程序的工作分頁並斷開 CDP，保留瀏覽器及登入視窗。 */
 export async function closeDirectSigner() {
-    if (livePage && !livePage.isClosed()) {
-        try { await livePage.close(); } catch(e) {}
-    }
-    livePage = null;
-    if (fetchPage && !fetchPage.isClosed()) {
-        try { await fetchPage.close(); } catch(e) {}
-    }
-    fetchPage = null;
-    if (page && !page.isClosed()) {
-        try { await page.close(); } catch(e) {}
-    }
+    ready = false;
+    liveWsReady = false;
+    await session.disconnect();
+    browser = null;
     page = null;
     wsPage = null;
-    if (browser) {
-        try { await browser.close(); } catch(e) {}
-        browser = null;
-    }
-    ready = false;
+    livePage = null;
+    fetchPage = null;
+    fetchPageCreated = 0;
 }

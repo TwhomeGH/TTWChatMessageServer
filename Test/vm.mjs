@@ -1,7 +1,7 @@
 import fs from 'fs';
 import vm from 'vm';
 
-const c = fs.readFileSync('node_modules/tiktok-signature/javascript/webmssdk_5.1.3.js', 'utf-8');
+const c = fs.readFileSync('SignServer/sdk/webmssdk_5.1.3.js', 'utf-8');
 
 const cookieStore = {};
 const sandbox = {

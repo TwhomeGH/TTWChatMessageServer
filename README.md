@@ -1122,3 +1122,5 @@ pip install PyQt6 PyOpenGL numpy pillow requests
 
 
 模組拆分與維護責任請參閱 [模組說明](Docs/MODULES.md)。
+
+專用瀏覽器與持久化登入：執行 `npm start` 後開啟 `/browser`，詳見 [瀏覽器管理](Docs/BROWSER.md)。

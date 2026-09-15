@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TTW 專用瀏覽器</title>
+<style>body{font:16px system-ui;background:#111827;color:#e5e7eb;margin:0;padding:24px}main{max-width:900px;margin:auto}h1{font-size:26px}button{padding:10px 16px;border:0;border-radius:8px;background:#2563eb;color:white;cursor:pointer}button:disabled{opacity:.5}section{background:#1f2937;padding:20px;border-radius:12px;margin:16px 0}small,p{line-height:1.6}#pages{display:grid;gap:12px}.page{border:1px solid #4b5563;border-radius:8px;padding:12px;overflow-wrap:anywhere}.page p{margin:4px 0 12px;color:#9ca3af}#error{color:#fca5a5}#profile{overflow-wrap:anywhere}nav{display:flex;flex-wrap:wrap;gap:10px}</style></head>
+<body><main><nav><a href="/" style="color:#93c5fd">← 主控台</a><a href="/config" style="color:#93c5fd">設定</a></nav><h1>TTW 專用瀏覽器</h1><p>在獨立的 Chrome／Edge 視窗登入 TikTok。登入資料會保留，服務重啟後可繼續使用。</p>
+<section><strong id="status" role="status">正在檢查…</strong><p id="profile"></p><nav><button id="start">啟動專用瀏覽器</button><button id="show">顯示 TikTok／登入</button><button id="refresh">重新整理</button></nav><p id="error" role="alert"></p></section>
+<p>連線成功只代表瀏覽器可用，登入或驗證狀態請在實際視窗確認。可最小化至工作列；關閉視窗會中斷連線。控制台不會自動關閉瀏覽器。</p>
+<h2>目前分頁</h2><div id="pages"></div></main>
+<script>
+let busy = false;
+async function refresh() {
+    const response = await fetch('/api/browser/status');
+    if (response.status === 401) { location.href = '/browser'; return; }
+    if (!response.ok) throw Error('無法讀取瀏覽器狀態');
+    const state = await response.json();
+    document.getElementById('status').textContent = state.connected ? '瀏覽器已連線 · 請在視窗確認登入狀態' : '瀏覽器未連線';
+    document.getElementById('profile').textContent = '專用資料位置：' + state.profile;
+    document.getElementById('show').disabled = !state.connected || busy;
+    const list = document.getElementById('pages');
+    list.replaceChildren();
+    for (const page of state.pages) {
+        const card = document.createElement('div'); card.className = 'page';
+        const title = document.createElement('strong'); title.textContent = page.title || '未命名分頁';
+        const url = document.createElement('p'); url.textContent = page.url;
+        const button = document.createElement('button'); button.textContent = '顯示此分頁';
+        button.disabled = busy; button.onclick = () => act('show', page.id);
+        card.append(title, url, button); list.append(card);
+    }
+    if (!state.pages.length) list.textContent = '尚無可顯示的分頁';
+}
+async function act(action, id) {
+    if (busy) return;
+    busy = true;
+    document.querySelectorAll('button').forEach(button => button.disabled = true);
+    document.getElementById('error').textContent = '';
+    try {
+        const response = await fetch('/api/browser/' + action, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id})});
+        const result = await response.json();
+        if (!response.ok) throw Error(result.error);
+    } catch (error) { document.getElementById('error').textContent = error.message; }
+    finally {
+        busy = false;
+        document.querySelectorAll('button').forEach(button => button.disabled = false);
+        refresh().catch(showError);
+    }
+}
+function showError(error) { document.getElementById('error').textContent = error.message; }
+document.getElementById('start').onclick = () => act('start');
+document.getElementById('show').onclick = () => act('show');
+document.getElementById('refresh').onclick = () => refresh().catch(showError);
+setInterval(() => { if (!busy) refresh().catch(showError); }, 5000);
+refresh().catch(showError);
+</script></body></html>

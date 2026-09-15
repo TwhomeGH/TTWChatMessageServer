@@ -9,7 +9,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SDK_DIR = path.resolve(__dirname, '../node_modules/tiktok-signature/javascript');
+const SDK_DIR = path.resolve(__dirname, './sdk');
 
 // Browser polyfills for the SDK to run in Node.js
 function createSandbox() {

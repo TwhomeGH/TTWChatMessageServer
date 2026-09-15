@@ -1,3 +1,4 @@
+import { closeDirectSigner } from './SignServer/direct-signer.mjs';
 import { normalizeSource } from './MessageSource.mjs';
 import { ApiClient } from '@twurple/api';
 import { RefreshingAuthProvider } from '@twurple/auth';
@@ -470,6 +471,7 @@ async function handleExit() {
     saveSponsorAds();
 
     await saveSentMessages();
+    await closeDirectSigner();
 
     // 統計統一由 Server.js 管理：此處把最終快照回傳，讓 Server.js 合併進它自己的統計
     const allStats = getAllMessageStatsSorted();
@@ -822,7 +824,7 @@ console.log("TikTok 直播間名稱:", tiktokName);
 setStreamerName(tiktokName);
 
 const eulerKey = process.env.SIGN_API_KEY || process.env.SIGN_API;
-const hasDirectCreds = !!(process.env.TIKTOK_COOKIES || process.env.SESSION_ID);
+const hasDirectCreds = process.env.DIRECT_SIGNER_ENABLED === '1' || !!(process.env.TIKTOK_COOKIES || process.env.SESSION_ID);
 const useDirect = hasDirectCreds && (!eulerKey || process.env.DIRECT_SIGNER_PRIORITY === '1');
 const connOpts = {};
 
@@ -836,7 +838,7 @@ if (useDirect) {
             }
         }
     };
-    console.log('[TikTok] Using direct signer (TIKTOK_COOKIES/SESSION_ID)');
+    console.log('[TikTok] Using persistent browser signer');
 } else if (eulerKey) {
     connOpts.signApiKey = eulerKey;
     console.log('[TikTok] Using EulerStream signer (SIGN_API_KEY)');

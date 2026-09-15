@@ -238,3 +238,7 @@ paths-ignore:
 | #23 | Medium | shell 注入 | 改 spawnSync + env |
 | #29-24 | High | 誤報/不可改（演算法） | suppression + 排除 |
 | #22/#21 | High | 第三方 SDK 不可改 | suppression + 排除 |
+
+## 2026-09 瀏覽器依賴清理
+
+上述 extract-zip 無法移除的結論已過時：持久化瀏覽器改用 puppeteer-core 25.11.0，並移除 tiktok-signature 與完整 Puppeteer；目前 npm 依賴鏈不再包含 extract-zip。詳見 [瀏覽器管理](BROWSER.md)。

@@ -1,5 +1,6 @@
+// 歷史演算法診斷：讀取封存來源，不依賴已移除的 npm 套件。
 import fs from 'fs';
-const c = fs.readFileSync('node_modules/tiktok-signature/server.mjs', 'utf8');
+const c = fs.readFileSync('Docs/patched-plugins/tiktok-signature/server.mjs', 'utf8');
 const idx = c.indexOf('export function encodeXGnarly');
 if (idx >= 0) {
     // Find the function body

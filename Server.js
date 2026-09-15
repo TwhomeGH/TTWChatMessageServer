@@ -287,6 +287,7 @@ function parseCookies(req) {
 const server = http.createServer((req, res) => {
     if (require('./WebAssets.cjs').serveWebAsset(req, res)) return;
     if (require('./EmojiRoutes.cjs').serveEmoji(req, res, isValidToken(parseCookies(req).authToken))) return;
+    if (require('./BrowserRoutes.cjs').serveBrowser(req, res, isValidToken(parseCookies(req).authToken))) return;
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
 
     // =======================

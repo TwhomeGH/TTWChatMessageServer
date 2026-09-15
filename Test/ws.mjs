@@ -1,18 +1,14 @@
 // Test creating a raw WebSocket connection to webcast-ws.tiktok.com
 // with captured X-Bogus from live page navigation
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 import { appendFile } from 'fs/promises';
 
-const sdk513 = fs.readFileSync('node_modules/tiktok-signature/javascript/webmssdk_5.1.3.js', 'utf-8');
-const sdk485 = fs.readFileSync('node_modules/tiktok-signature/javascript/webmssdk_2.0.0.485.js', 'utf-8');
-const sdk368 = fs.readFileSync('node_modules/tiktok-signature/javascript/webmssdk_1.0.0.368.js', 'utf-8');
+const sdk513 = fs.readFileSync('SignServer/sdk/webmssdk_5.1.3.js', 'utf-8');
+const sdk485 = fs.readFileSync('SignServer/sdk/webmssdk_2.0.0.485.js', 'utf-8');
+const sdk368 = fs.readFileSync('SignServer/sdk/webmssdk_1.0.0.368.js', 'utf-8');
 
-const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu',
-        '--window-size=1920,1080'],
-});
+const browser = await puppeteer.connect({ browserURL: process.env.BROWSER_DEBUG_URL || 'http://127.0.0.1:9222', defaultViewport: null });
 
 const livePage = await browser.newPage();
 await livePage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36');
@@ -73,4 +69,4 @@ for (const w of capturedWsUrls) {
     console.log('  Full (first 200):', w.url.substring(0, 200) + '...');
 }
 
-await browser.close();
+await browser.disconnect();

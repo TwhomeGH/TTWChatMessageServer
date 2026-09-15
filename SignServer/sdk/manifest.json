@@ -1,0 +1,18 @@
+{
+  "source": "tiktok-signature@4.3.6",
+  "packageLicense": "MIT",
+  "files": [
+    {
+      "name": "webmssdk_1.0.0.368.js",
+      "sha256": "c7524c795ee08c1d2d4465fdfca1102bbf3bd1034fa4ae33f2a8984047b8a484"
+    },
+    {
+      "name": "webmssdk_2.0.0.485.js",
+      "sha256": "4c2fccf5a34b37474e8515412f7e30064e67864fb7f2c1c13b2e4844aa24f366"
+    },
+    {
+      "name": "webmssdk_5.1.3.js",
+      "sha256": "55923798d90ddd84a348cd38f25a34c8ea5afa9a7dda2528a3c9360bd21674d2"
+    }
+  ]
+}

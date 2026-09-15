@@ -1,13 +1,10 @@
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 
-const sdk513 = fs.readFileSync('node_modules/tiktok-signature/javascript/webmssdk_5.1.3.js', 'utf8');
-const sdk485 = fs.readFileSync('node_modules/tiktok-signature/javascript/webmssdk_2.0.0.485.js', 'utf8');
+const sdk513 = fs.readFileSync('SignServer/sdk/webmssdk_5.1.3.js', 'utf8');
+const sdk485 = fs.readFileSync('SignServer/sdk/webmssdk_2.0.0.485.js', 'utf8');
 
-const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-});
+const browser = await puppeteer.connect({ browserURL: process.env.BROWSER_DEBUG_URL || 'http://127.0.0.1:9222', defaultViewport: null });
 
 const page = await browser.newPage();
 await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36');
@@ -75,4 +72,4 @@ const sdkInfo = await page.evaluate(() => ({
 }));
 console.log('\nSDK Info:', JSON.stringify(sdkInfo, null, 2));
 
-await browser.close();
+await browser.disconnect();

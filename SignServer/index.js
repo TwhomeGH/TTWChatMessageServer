@@ -8,7 +8,6 @@ let signerPromise = null;
 export function setStreamerName(name) {}
 
 async function ensureSigner() {
-    if (signerReady) return true;
     if (signerPromise) return signerPromise;
     signerPromise = (async () => {
         try {
@@ -16,10 +15,11 @@ async function ensureSigner() {
             if (signerReady) console.log('[SignServer] Signer ready');
             return signerReady;
         } catch (e) {
+            signerReady = false;
             console.error('[SignServer] Signer init failed:', e.message);
             return false;
         }
-    })();
+    })().finally(() => { signerPromise = null; });
     return signerPromise;
 }
 
@@ -30,7 +30,7 @@ export function waitForSigner() {
 }
 
 function hasDirectSignCreds() {
-    return !!(process.env.TIKTOK_COOKIES || process.env.SESSION_ID);
+    return process.env.DIRECT_SIGNER_ENABLED === '1' || !!(process.env.TIKTOK_COOKIES || process.env.SESSION_ID);
 }
 
 function hasEulerKey() {
@@ -42,7 +42,7 @@ export async function setupCustomSignServer() {
     const eulerAvail = hasEulerKey();
 
     if (!useDirect) {
-        console.log('[SignServer] No TIKTOK_COOKIES or SESSION_ID — using EulerStream (native signer).');
+        console.log('[SignServer] Direct signer disabled — using EulerStream (native signer).');
         return;
     }
 
@@ -52,7 +52,7 @@ export async function setupCustomSignServer() {
         return;
     }
 
-    console.log('[SignServer] TIKTOK_COOKIES/SESSION_ID found — using direct signer.');
+    console.log('[SignServer] Using persistent browser signer (主服務 /browser).');
     await ensureSigner();
 
     RoomIdRouteConfig.skipFetchRoomIdFromEulerRoute = true;

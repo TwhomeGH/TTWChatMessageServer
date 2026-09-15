@@ -1,14 +1,10 @@
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-core';
 import fs from 'fs';
 
-const sdk513 = fs.readFileSync('node_modules/tiktok-signature/javascript/webmssdk_5.1.3.js', 'utf-8');
-const sdk485 = fs.readFileSync('node_modules/tiktok-signature/javascript/webmssdk_2.0.0.485.js', 'utf-8');
+const sdk513 = fs.readFileSync('SignServer/sdk/webmssdk_5.1.3.js', 'utf-8');
+const sdk485 = fs.readFileSync('SignServer/sdk/webmssdk_2.0.0.485.js', 'utf-8');
 
-const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu',
-        '--window-size=1920,1080'],
-});
+const browser = await puppeteer.connect({ browserURL: process.env.BROWSER_DEBUG_URL || 'http://127.0.0.1:9222', defaultViewport: null });
 
 const page = await browser.newPage();
 await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36');
@@ -61,4 +57,4 @@ if (after.hasU995) {
     console.log('Sign result:', JSON.stringify(signResult));
 }
 
-await browser.close();
+await browser.disconnect();
