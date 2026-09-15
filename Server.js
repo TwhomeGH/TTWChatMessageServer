@@ -4,6 +4,7 @@ const { URL } = require('url')
 
 const fs = require('fs');
 const path = require('path');
+const { isDeepStrictEqual } = require('node:util');
 
 const { time } = require('console');
 
@@ -132,15 +133,26 @@ function processFilter({ user, message } = {}) {
     return messageFilter ? messageFilter.processFilter({ user, message }) : { user, message, blocked: false, modified: false };
 }
 
-function mergeWithFileStats(snapshot) {
-    let previous = [];
-    try { previous = JSON.parse(fs.readFileSync('./message_stats.json', 'utf-8')); } catch {}
-    return messageFilter ? messageFilter.mergeStatEntries(Array.isArray(previous) ? previous : [], snapshot) : snapshot;
+function readFileStats() {
+    try {
+        const previous = JSON.parse(fs.readFileSync('./message_stats.json', 'utf-8'));
+        return Array.isArray(previous) ? previous : [];
+    } catch { return []; }
+}
+
+function mergeWithFileStats(previous, snapshot) {
+    return messageFilter ? messageFilter.mergeStatEntries(previous, snapshot) : snapshot;
 }
 
 function SaveCacheKeywordDataAll() {
-    const merged = mergeWithFileStats(getAllMessageStatsSorted());
+    const previous = readFileStats();
+    const merged = mergeWithFileStats(previous, getAllMessageStatsSorted());
     cacheKeywordDataAll = merged;
+    // 合併結果與檔案相同時不重寫，避免每次開關都產生無謂的磁碟 IO。
+    if (isDeepStrictEqual(merged, previous)) {
+        pushLog('💾 message_stats.json 無變動，略過寫入（共 ' + merged.length + ' 條）', "Top", cacheKeywordDataTop);
+        return;
+    }
     fs.writeFileSync('./message_stats.json', JSON.stringify(merged, null, 2));
     pushLog('💾 已將所有關鍵字統計寫入 message_stats.json (合併檔案, 共 ' + merged.length + ' 條)', "Top", cacheKeywordDataTop);
 }

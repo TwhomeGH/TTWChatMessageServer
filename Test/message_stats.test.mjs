@@ -53,3 +53,14 @@ test('亂序到達仍保留正確時間邊界，缺少發送時間時標記接�
     assert.equal(messageTime('bad'), null);
     assert.equal(messageTime(0), null);
 });
+
+test('合併具等冪性：與自身或空集合併的結果不變，讓無變動時可略過寫檔', () => {
+    const rows = [
+        { message: 'a', count: 3, firstSeen: null, lastSeen: null, platforms: ['Twitch'], transports: ['api'],
+          recent: [{ key: 'Twitch:1', receivedAt: Date.now(), message: 'a' }] },
+        { message: 'b', count: 1, firstSeen: null, lastSeen: null, platforms: [], transports: [], recent: [] }
+    ];
+    assert.deepStrictEqual(mergeStatEntries(rows, rows), rows);
+    assert.deepStrictEqual(mergeStatEntries(rows, []), rows);
+    assert.notDeepStrictEqual(mergeStatEntries(rows, [...rows, { message: 'c', count: 1, firstSeen: null, lastSeen: null, platforms: [], transports: [], recent: [] }]), rows);
+});
