@@ -14,6 +14,8 @@ server_tokens.json
 kick_tokens.json
 youtube_tokens.json
 OtherTool/live_engine/logs/live_engine.log
+Main_Log.log
+TikTokRun.log
 youtube_cache.json
 OtherTool/live_engine/cache/*
 sponsor_ads.json
