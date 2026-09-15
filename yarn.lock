@@ -671,22 +671,22 @@ tiktok-live-api-sdk@0.4.0-beta1:
   dependencies:
     axios "^1.9.0"
 
-tiktok-live-connector@^2.4.0:
-  version "2.4.0"
-  resolved "https://registry.npmjs.org/tiktok-live-connector/-/tiktok-live-connector-2.4.0.tgz"
-  integrity sha512-3CM0TQ0sNx+Kas+qyuUxPwi2+zwFz5gYgjRNOAQEdsFnn1T7Mgtx55ihTtGytzWBiH3e60Zn5GQpjGbBSpJ5rA==
+tiktok-live-connector@^2.4.4:
+  version "2.4.4"
+  resolved "https://registry.yarnpkg.com/tiktok-live-connector/-/tiktok-live-connector-2.4.4.tgz#890d28dfb08e16c77b012cc8d427a7fa267593e4"
+  integrity sha512-wQa8cDqf0NhLyJB3zGzrDcyubsqswUqJqCr3yT58Fzpz6sgn78arN0z7Pk06PFCYYdj8JEMbhW+SErqyzwH3gw==
   dependencies:
     "@bufbuild/protobuf" "^2.2.5"
     got "^15.0.3"
     tiktok-live-api-sdk "0.4.0-beta1"
-    tiktok-live-proto "0.2.3"
+    tiktok-live-proto "0.2.4"
     typed-emitter "^2.1.0"
     ws "^8.18.2"
 
-tiktok-live-proto@0.2.3:
-  version "0.2.3"
-  resolved "https://registry.npmjs.org/tiktok-live-proto/-/tiktok-live-proto-0.2.3.tgz"
-  integrity sha512-CSW01HFqCcGovT8UphsXcZ55ABA6jZarJ5AkO1ZpYRsPBlJ7ODjASO3ynYVzVfCaKF8fbKaJnbNd633iSakjFw==
+tiktok-live-proto@0.2.4:
+  version "0.2.4"
+  resolved "https://registry.yarnpkg.com/tiktok-live-proto/-/tiktok-live-proto-0.2.4.tgz#757bb42ccb337842f28037c1f5a42db4126eb577"
+  integrity sha512-MXvP8n7oBArkuEt/LkDkyThPpnSvnxaccSDf5HNviWI45ZL47Jr48VnBShROH6lLVCuWC4y4bTw/EmiUeA1t3A==
   dependencies:
     "@bufbuild/protobuf" "^2.2.5"
 
