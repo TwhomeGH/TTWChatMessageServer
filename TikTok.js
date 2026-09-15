@@ -200,6 +200,7 @@ let adTimers = {}; // { adId: setTimeout handle }
 
 const CACHE_FILE = path.resolve("./send_messages.json");
 const GIFT_MAP_FILE = path.resolve("./gift_map.json");
+const GIFT_MAP_EXAMPLE_FILE = path.resolve("./gift_map.example.json");
 const GIFT_LIST_FILE = path.resolve("./gift_list.json");
 let sentMessages = {}; // { uniqueKey: timestamp }
 let newSentMessages = {};    // 只保存這次新產生的訊息
@@ -240,9 +241,15 @@ async function loadGiftNameMap() {
         console.log(`✅ 載入 ${Object.keys(giftNameMap).length} 筆 gift_map 對應`);
     } catch (err) {
         if (err.code === 'ENOENT') {
-            giftNameMap = {};
-            await saveGiftNameMap();
-            console.log("⚠️ gift_map.json 不存在，已初始化空對照表");
+            try {
+                giftNameMap = JSON.parse(await fs.readFile(GIFT_MAP_EXAMPLE_FILE, "utf-8"));
+                await saveGiftNameMap();
+                console.log(`⚠️ gift_map.json 不存在，已由 gift_map.example.json 初始化 ${Object.keys(giftNameMap).length} 筆對應`);
+            } catch (seedErr) {
+                giftNameMap = {};
+                await saveGiftNameMap();
+                console.log("⚠️ gift_map.json 與 gift_map.example.json 皆不存在，已初始化空對照表");
+            }
         } else {
             console.error("❌ 載入 gift_map.json 失敗:", err);
             giftNameMap = {};

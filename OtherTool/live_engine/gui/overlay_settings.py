@@ -12,20 +12,23 @@ from PyQt6.QtGui import QColor
 
 from core.debug_log import log
 
-CONFIG_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "config", "overlay_settings.json"
+_CONFIG_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "config"
 )
+CONFIG_PATH = os.path.join(_CONFIG_DIR, "overlay_settings.json")
+EXAMPLE_PATH = os.path.join(_CONFIG_DIR, "overlay_settings.example.json")
 
 
 def load_overlay_config() -> dict:
     defaults = {"width": 420, "height": 400, "x": -1, "y": 50, "font_face": "Microsoft JhengHei", "font_size": 15, "spacing": 8, "content_gap": 2, "message_ttl": 15, "fade_speed": 2, "ad_overlay_duration": 10, "ad_overlay_font_size": 16, "ad_avatar_size": 40, "ad_show_avatar": True, "ad_avatar_offset": 3, "ad_bg_color": "#1E1E2E", "ad_accent_color": "#4C9EFF", "ad_user_color": "#8AB4FF", "ad_text_color": "#FFFFFF", "ad_bg_opacity": 88}
-    try:
-        if os.path.exists(CONFIG_PATH):
-            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                defaults.update(data)
-    except Exception:
-        pass
+    # 依序套用範本與實際設定：example 提供預設，overlay_settings.json 覆蓋。
+    for path in (EXAMPLE_PATH, CONFIG_PATH):
+        try:
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    defaults.update(json.load(f))
+        except Exception:
+            pass
     return defaults
 
 

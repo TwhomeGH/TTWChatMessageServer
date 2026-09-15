@@ -153,6 +153,11 @@ npm install
 > 本專案以 **npm** 為唯一套件管理器（CI 使用 `npm ci`）。請勿使用 yarn／pnpm，
 > 避免產生第二份 lock，以及覆蓋 `node_modules` 內以 patch 維護的第三方修改。
 
+執行期資料檔（`gift_map.json`、`gift_list.json`、`message_stats.json`、`autoclip_stats.json`、
+`send_messages.json`、`Main_Log.log`、`TikTokRun.log`、`OtherTool/live_engine/config/overlay_settings.json` 等）
+不納入版控，repo 內改以對應的 `*.example.json` 提供樣本。首次啟動時，缺少的 `gift_map.json`
+會由 `gift_map.example.json` 初始化，`overlay_settings.json` 的預設值也以範本為準，其餘檔案會自動建立。
+
 ### 2. 建立 .env 檔案
 
 在專案目錄下建立 .env，可參考範例：

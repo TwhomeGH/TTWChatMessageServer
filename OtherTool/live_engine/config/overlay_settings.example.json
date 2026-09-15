@@ -1,0 +1,22 @@
+{
+  "width": 400,
+  "height": 400,
+  "x": 67,
+  "y": 108,
+  "font_face": "微軟正黑體",
+  "font_size": 15,
+  "spacing": 8,
+  "content_gap": 2,
+  "message_ttl": 15,
+  "fade_speed": 2,
+  "ad_overlay_duration": 30,
+  "ad_overlay_font_size": 15,
+  "ad_avatar_size": 40,
+  "ad_show_avatar": true,
+  "ad_avatar_offset": 3,
+  "ad_bg_color": "#1e1e2e",
+  "ad_accent_color": "#4c9eff",
+  "ad_user_color": "#8ab4ff",
+  "ad_text_color": "#ffffff",
+  "ad_bg_opacity": 88
+}
