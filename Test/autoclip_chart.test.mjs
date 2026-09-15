@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const html = readFileSync(new URL('../autoclip.html', import.meta.url), 'utf8');
-const script = html.match(/<script>([\s\S]*?)<\/script>/gi)[1];
+const script = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)].map(match => match[1]).find(code => code.includes('function compactScoreSeries('));
 new vm.Script(script);
 const context = {};
 vm.createContext(context);
