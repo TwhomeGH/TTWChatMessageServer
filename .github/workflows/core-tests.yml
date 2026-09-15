@@ -1,0 +1,53 @@
+name: Core Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: Core (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        # LTS 基準與最新正式版並行，提前發現新版相容性問題。
+        node: ['24.x', 'node']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          check-latest: true
+          cache: npm
+      # 不需下載瀏覽器或執行直播 SDK 的安裝 hook。
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Core behavior
+        run: npm run test:core
+      - name: Startup and CSS build behavior
+        run: npm run test:startup
+      # 先檢查提交的產物，避免建置掩蓋漏更新的 CSS。
+      - name: Check committed CSS
+        run: npm run check:css
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Python socket receiver
+        run: python -B -m unittest discover -s Test -p socket_receiver_test.py

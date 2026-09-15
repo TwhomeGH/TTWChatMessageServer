@@ -1,7 +1,7 @@
 import { calculateMetrics } from './ScriptLib/autoclip/metrics.mjs';
 import { captureEvidence } from './ScriptLib/autoclip/evidence.mjs';
 import { requestClip } from './ScriptLib/autoclip/clipRequest.mjs';
-import { messageTime } from './MessageStats.mjs';
+import { messageTime } from './ScriptLib/messageStats/time.mjs';
 import { normalizeSource, normalizePlatform } from './MessageSource.mjs';
 const MINUTE = 60000;
 

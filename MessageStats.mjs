@@ -1,38 +1,43 @@
 import { randomUUID } from 'node:crypto';
 import { normalizeSource } from './MessageSource.mjs';
+import { messageTime } from './ScriptLib/messageStats/time.mjs';
+import { mergeStatEntries } from './ScriptLib/messageStats/merge.mjs';
+import { isDuplicate } from './ScriptLib/messageStats/dedup.mjs';
 
-export function messageTime(value) {
-    if (value == null || value === '' || typeof value === 'boolean') return null;
-    let n = value instanceof Date ? value.getTime() : Number(value);
-    if (!Number.isFinite(n) && typeof value === 'string') n = Date.parse(value);
-    if (n > 0 && n < 1e11) n *= 1000;
-    return Number.isFinite(n) && n >= 946684800000 && n <= Date.now() + 60000 ? n : null;
-}
-
-export function mergeStatEntries(...snapshots) {
-    const map = new Map();
-    for (const entries of snapshots) for (const row of entries || []) {
-        if (!row || typeof row.message !== 'string' || !Number.isFinite(row.count) || row.count < 0) continue;
-        const old = map.get(row.message) || { count: 0, recent: [], platforms: [] };
-        const recent = [...new Map([...old.recent, ...(Array.isArray(row.recent) ? row.recent : [])]
-            .filter(e => e && e.key && messageTime(e.receivedAt))
-            .map(e => [e.key, e])).values()].sort((a, b) => b.receivedAt - a.receivedAt).slice(0, 5);
-        const first = [old.firstSeen, row.firstSeen].map(messageTime).filter(x => x !== null);
-        const last = [old.lastSeen, row.lastSeen].map(messageTime).filter(x => x !== null);
-        map.set(row.message, { message: row.message, count: Math.max(old.count, row.count),
-            firstSeen: first.length ? Math.min(...first) : null,
-            lastSeen: last.length ? Math.max(...last) : null,
-            platforms: [...new Set([...old.platforms, ...(Array.isArray(row.platforms) ? row.platforms : [])])], recent });
-        map.get(row.message).transports = [...new Set([...(old.transports || []), ...(Array.isArray(row.transports) ? row.transports : [])])];
-    }
-    return [...map.values()].sort((a, b) => b.count - a.count);
-}
+// 保留公開入口，既有呼叫端不必跟著模組拆分修改路徑。
+export { messageTime, mergeStatEntries };
 
 export class MessageStats {
-    constructor() { this.rows = new Map(); this.ids = new Map(); this.crossSource = new Map(); }
-    clear() { this.rows.clear(); this.ids.clear(); this.crossSource.clear(); }
-    merge(rows) { this.rows = new Map(mergeStatEntries(this.all(), rows).map(r => [r.message, r])); }
-    all() { return [...this.rows.values()].sort((a, b) => b.count - a.count); }
+    /** 建立統計與去重狀態；保留既有 Map 欄位以維持相容性。 */
+    constructor() {
+        this.rows = new Map();
+        this.ids = new Map();
+        this.crossSource = new Map();
+    }
+
+    /** 同時清除統計與去重，讓同一事件可在新的統計週期重新計入。 */
+    clear() {
+        this.rows.clear();
+        this.ids.clear();
+        this.crossSource.clear();
+    }
+
+    /** 合併歷史快照；不重建或清除即時去重狀態。 */
+    merge(rows) {
+        this.rows = new Map(mergeStatEntries(this.all(), rows).map(r => [r.message, r]));
+    }
+
+    /** 回傳依次數排序的新陣列；其中統計列仍是目前狀態的參照。 */
+    all() {
+        return [...this.rows.values()].sort((a, b) => b.count - a.count);
+    }
+
+    /**
+     * 正規化事件並計數；重複事件僅補齊接收管道，不增加次數。
+     * @param {string} message 留言內容
+     * @param {object} meta 平台、管道、身分與發送／接收時間
+     * @returns {object|null} 新計入的事件；空白或重複留言回傳 null
+     */
     record(message, meta = {}) {
         if (typeof message !== 'string' || !message.trim()) return null;
         const receivedAt = messageTime(meta.receivedAt) ?? Date.now();
@@ -42,23 +47,15 @@ export class MessageStats {
         const id = meta.id == null ? null : String(meta.id);
         const key = id ? `${source.isTest ? 'test:' : ''}${platform}:${id}` : randomUUID();
         const now = Date.now();
-        for (const [k, at] of this.ids) { if (now - at < 1800000) break; this.ids.delete(k); }
-        const fingerprint = JSON.stringify([platform, source.isTest, meta.user || meta.userId || '', message]);
-        const previous = this.crossSource.get(fingerprint);
-        const crossDuplicate = previous && previous.transport !== transport &&
-            now - previous.at <= 3000 && (!id || !previous.id || id === previous.id);
-        if ((id && this.ids.has(key)) || crossDuplicate) {
+        const duplicate = isDuplicate(this, {
+            ...source, id, key, user: meta.user || meta.userId || '', message
+        }, now);
+        if (duplicate) {
             const row = this.rows.get(message);
             if (row) row.transports = [...new Set([...(row.transports || []), transport])];
-            if (id) { this.ids.delete(key); this.ids.set(key, now); }
-            while (this.ids.size > 10000) this.ids.delete(this.ids.keys().next().value);
             return null;
         }
-        this.crossSource.delete(fingerprint);
-        this.crossSource.set(fingerprint, { transport, id, at: now });
-        while (this.crossSource.size > 10000) this.crossSource.delete(this.crossSource.keys().next().value);
-        if (id) this.ids.set(key, now);
-        while (this.ids.size > 10000) this.ids.delete(this.ids.keys().next().value);
+
         const event = { key, id, ...source, userId: String(meta.userId || ''), user: meta.user || '',
             sentAt, receivedAt, timeSource: sentAt === null ? 'received' : 'platform', message };
         const old = this.rows.get(message) || { message, count: 0, platforms: [], recent: [] };

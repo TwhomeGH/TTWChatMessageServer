@@ -37,23 +37,25 @@ node --test Test/emoji_store.test.cjs Test/module_boundaries.test.cjs Test/autoc
 
 涵蓋熱載入、損壞檔案恢復、版本衝突、中文跨分段 JSON、相容入口，以及跨平台觸發／冷卻／失敗／逾時。
 
-## 後續整理計畫（尚未拆分）
+## MessageStats 拆分與後續維護
 
 EmojiMap.js 已補齊公開函數註解，目前保留文字替換及舊版相容介面。
 其 addEmoji/removeEmoji 只修改記憶體，saveEmojiMap 直接寫檔，與 store.change 的保護不同。
 後續先盤點呼叫端，再統一持久化路徑，不能只更名就改變同步／非同步契約。
 
-下一階段以 MessageStats.mjs 為優先，按責任拆分到 ScriptLib/messageStats/：
+MessageStats.mjs 已按責任拆分到 ScriptLib/messageStats/，原入口持續匯出 MessageStats、messageTime 與 mergeStatEntries：
 
-| 預定模組 | 範圍 | 必須維持的行為 |
+| 已完成模組 | 範圍 | 必須維持的行為 |
 | --- | --- | --- |
 | time.mjs | messageTime 的時間解析 | 秒／毫秒／日期字串、無效時間回傳 null、未來時間容許範圍 |
 | merge.mjs | mergeStatEntries 的快照合併 | 同留言計數取最大值而非加總、保留未知時間、最近 5 則按 key 去重 |
 | dedup.mjs | 平台 ID 與跨管道去重狀態 | 平台與測試資料隔離、3 秒跨管道窗口、30 分鐘 ID 保存與 10000 筆上限 |
 | MessageStats.mjs（既有入口） | record 流程、統計列與公開匯出 | 重複訊息仍補齊接收管道、不同人同文可計數、保留既有匯入路徑 |
 
-執行順序：先補齊函數契約與時間邊界測試，再抽出時間／合併函數，最後整理有狀態的去重。
-時間工具獨立後，AutoClip 可直接依賴它，避免只為解析時間而載入整個統計模組。
+已補齊函數契約，並增加時間有效範圍、去重期限／容量及 clear 重置的邊界測試。
+AutoClip 已直接依賴時間工具，避免只為解析時間而載入整個統計模組。
 每一步沿用 message_stats、message_source 與 autoclip_v2 回歸測試；不在拆分時調整計分或去重政策。
 
 測試可讀性規範與整理進度請參閱 [測試維護指南](../Test/README.md)。
+
+MessageStats 邊界測試：`node --test Test/message_stats_boundaries.test.mjs`。去重快取仍由主類別持有，子模組只管理判重與快取更新。
