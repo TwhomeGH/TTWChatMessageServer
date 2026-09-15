@@ -44,8 +44,8 @@ npm run dev
 ## 建置指紋與測試
 
 `assets/app.css.build.json` 保存來源及 CSS 的 SHA-256。必須與 `assets/app.css` 一同交付。
-來源包含根目錄 HTML 的內容與清單、`styles` 目錄、Tailwind 設定、建置程式、指定版本及 npm lockfile。
-這是目前 `content: ['./*.html']` 的掃描契約；若未來改成其他範本目錄，也要同步擴充 `fingerprint()` 的輸入清單。
+來源包含根目錄 HTML 的內容與清單、`styles` 目錄、建置程式、指定版本及 npm lockfile。
+掃描範圍由 `styles/app.css` 的 `@source "../*.html"` 指定；若未來改成其他範本目錄，也要同步擴充 `fingerprint()` 的輸入清單。
 lockfile 有任何變更會保守地重建一次。留言、剪輯資料與 `.env` 不參與比對。
 檔案修改時間不參與指紋，文字來源的 CRLF／LF 視為相同；CSS 產出則逐位元組檢查。
 

@@ -150,6 +150,9 @@ function isChinese() 的判斷條件 來更正那個你的母語
 npm install
 ```
 
+> 本專案以 **npm** 為唯一套件管理器（CI 使用 `npm ci`）。請勿使用 yarn／pnpm，
+> 避免產生第二份 lock，以及覆蓋 `node_modules` 內以 patch 維護的第三方修改。
+
 ### 2. 建立 .env 檔案
 
 在專案目錄下建立 .env，可參考範例：
