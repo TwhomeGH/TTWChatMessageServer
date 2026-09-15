@@ -285,6 +285,7 @@ function parseCookies(req) {
 }
 
 const server = http.createServer((req, res) => {
+    if (require('./WebAssets.cjs').serveWebAsset(req, res)) return;
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
 
     // =======================

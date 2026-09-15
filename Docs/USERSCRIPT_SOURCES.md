@@ -32,11 +32,16 @@ API＋Userscript 是同一個平台的兩個入口，不拆成兩份平台分數
 | liveCenter.user.js | 1.10 |
 | youtube-chat-userscript.user.js | 1.1 |
 | TestCenter.user.js | 1.5 |
-| ws-relay.user.js | 1.1 |
-| ws-relay.js | 1.2 |
+| ws-relay.user.js | 1.3（已合併 ws-relay.js） |
 
 聊天 DOM 沒有可靠 ID／時間欄位時保留 null。WS relay 附帶來源欄位，但仍維持原本
 的原始資料轉接流程，沒有新增解碼功能。未修改功能的其他腳本不更動版本。
 
 需要更新瀏覽器中安裝的腳本，並重新啟動伺服器與聊天程序。
+
+WS relay 統一使用 `UserScript/ws-relay.user.js`，保留 URL、二進位與文字資料轉接。
+每頁首次建立 webcast-ws 連線時回報 URL，每個 Socket 只安裝一個轉接監聽器，避免網頁多次註冊 handler 時重複轉送。
+`@updateURL`／`@downloadURL` 均指向此腳本自己的 GitHub raw 位址。
+舊 `ws-relay.js` 已移除；若瀏覽器仍安裝舊副本，請改裝統一版本並停用重複副本。
+本機修改尚未發布到 GitHub，遠端自動更新需等新版發布後才可取得。
 自動剪輯預設為影子模式；正式執行條件見 [自動剪輯說明](KEYWORD_AUTOCLIP_V2.md)。

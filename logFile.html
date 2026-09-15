@@ -4,7 +4,7 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>日誌文件查看器</title>
-        <script src="https://cdn.tailwindcss.com"></script>
+        <link rel="stylesheet" href="/assets/app.css">
     </head>
 
     <script>
@@ -91,7 +91,7 @@
 
     </script>
 
-    <body class="bg-gray-900 text-red-400 font-mono min-h-screen p-6 flex flex-col space-y-6">
+    <body class="app-ui bg-gray-900 text-red-400 font-mono min-h-screen p-6 flex flex-col space-y-6">
     
     <!-- 導航列 -->
     <nav class="flex gap-2 flex-wrap text-sm">
@@ -139,8 +139,8 @@
     </div>
 
     <!-- Console 區塊 -->
-    <div class="bg-gray-800 rounded-lg shadow-lg p-6 flex-1 flex flex-col max-h-[80vh]">
-        <div class="flex items-center justify-between mb-4 border-b border-gray-700 pb-2">
+    <div class="bg-gray-800 rounded-lg shadow-lg p-3 sm:p-6 flex-1 min-h-0 flex flex-col max-h-[80dvh]">
+        <div class="page-header mb-4 border-b border-gray-700 pb-2">
         <h1 class="text-xl font-bold text-gray-300">日誌文件 Console</h1>
 
         <div class="flex space-x-2">

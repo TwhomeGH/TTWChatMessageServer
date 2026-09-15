@@ -2,15 +2,16 @@
 <html lang="zh-TW">
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>剪輯歷史</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/assets/app.css">
 </head>
 
-<body class="bg-gray-900 text-gray-100 min-h-screen p-6">
+<body class="app-ui bg-gray-900 text-gray-100 min-h-screen p-6">
 
 <div class="max-w-5xl mx-auto space-y-8">
 
-    <div class="flex items-center justify-between">
+    <div class="page-header">
       <h1 class="text-3xl font-bold">🎬 剪輯歷史</h1>
       <nav class="flex gap-2 flex-wrap text-sm">
         <a href="/" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">🏠 主控台</a>
@@ -112,7 +113,7 @@ function render(clips) {
                     <a href="${esc(c.url)}" target="_blank" rel="noopener" class="text-blue-400 hover:underline">${esc(c.url)}</a>
                 </div>
             </div>
-            <div class="flex items-center gap-2 ml-auto">
+            <div class="flex flex-wrap items-center gap-2 ml-auto">
                 ${sourceBadge(c.source)}
                 <button class="preview-btn px-2 py-1 text-xs bg-cyan-600/80 hover:bg-cyan-500 text-white rounded" data-id="${esc(c.id)}">▶ 預覽</button>
                 <button class="copy-btn px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 text-white rounded" data-copy="${esc(c.url)}">複製連結</button>

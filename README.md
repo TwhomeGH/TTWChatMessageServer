@@ -140,6 +140,10 @@ function isChinese() 的判斷條件 來更正那個你的母語
 
 ## 安裝與環境設定
 
+網頁已改用預先產生的本機 Tailwind CSS。修改頁面 class 後執行 `npm run build:css`，
+並一同更新 `assets/app.css` 與 `assets/app.css.build.json`；一般啟動會檢查指紋，只在需要時重建。建置方式、升級重啟與各頁排版盤點見
+[網頁樣式與版面說明](Docs/WEB_UI.md)。
+
 ### 1. 安裝依賴
 
 ```bash
@@ -542,6 +546,10 @@ G#clip 這波操作太秀了
 - 需 SRS 啟用 HTTP-FLV 播放（如 Oryx 的 `:882/live/<key>.flv`）
 
 ## 啟動服務
+
+平常使用 `npm start`；調整樣式與排版使用 `npm run dev`（先建置 CSS，再監看變更）。
+開啟 http://localhost:3332 ，Ctrl+C 結束。兩種模式使用同一設定與連接埠，不要同時啟動。
+完整模式差異、CSS 指令與故障排查見 [啟動與開發模式](Docs/STARTUP.md)。
 
 ## 服務器預設運行在 Port 3332，提供 HTTP 控制介面
 

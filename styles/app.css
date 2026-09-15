@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Shared layout rules. Keep page-specific charts and business controls local. */
+.app-ui:not(.font-mono) { font-family: system-ui, 'Microsoft JhengHei', sans-serif; }
+.app-ui button, .app-ui input, .app-ui select, .app-ui textarea { max-width: 100%; }
+.app-ui button:disabled { cursor: default; opacity: .55; }
+.app-ui :is(button, a, input, select, textarea, summary):focus-visible { outline: 2px solid #60a5fa; outline-offset: 3px; }
+.app-ui nav { flex-wrap: wrap; }
+.app-ui nav a { display: inline-flex; align-items: center; min-height: 36px; }
+.page-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.page-header h1 { flex-shrink: 0; }
+.app-ui .flex > *, .app-ui .grid > * { min-width: 0; }
+.app-ui [role='dialog'], .app-ui #safetyOverlay > div { max-height: calc(100dvh - 32px); overflow-y: auto; }
+.config-page { display: block; padding: clamp(12px, 3vw, 32px); }
+.config-page #configContent { width: 100%; max-width: 1000px; margin: auto; }
+.config-page #configContent > div { max-width: none; padding: clamp(16px, 3vw, 32px); }
+.console-panel { height: calc(100dvh - 32px); min-height: 360px; padding: clamp(12px, 2vw, 24px); }
+.console-panel pre { min-height: 0; overflow-wrap: anywhere; }
+.app-ui pre { tab-size: 4; }
+@media (max-width: 640px) {
+  .app-ui { padding: 12px; }
+  .app-ui nav a, .app-ui button, .app-ui select { min-height: 40px; }
+  .app-ui h1 { font-size: 1.4rem; }
+  .page-header { align-items: flex-start; }
+  .page-header nav { width: 100%; }
+  .app-ui .mobile-wrap { flex-wrap: wrap; gap: 8px; }
+  .app-ui .mobile-stack { flex-direction: column; align-items: stretch; }
+  .app-ui #safetyOverlay { padding: 12px; }
+  .app-ui #safetyOverlay > div { padding: 24px 16px; margin: 0; }
+}

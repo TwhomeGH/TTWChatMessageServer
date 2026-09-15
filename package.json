@@ -20,5 +20,16 @@
   },
   "allowScripts": {
     "puppeteer@24.43.1": true
+  },
+  "scripts": {
+    "start": "node scripts/start.cjs",
+    "dev": "node scripts/start.cjs --dev",
+    "build:css": "node scripts/css-build.cjs",
+    "check:css": "node scripts/css-build.cjs --check",
+    "watch:css": "node scripts/css-build.cjs --watch",
+    "test:startup": "node --test Test/start.test.cjs Test/css_build.test.cjs"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
   }
 }
