@@ -12,17 +12,17 @@
     <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
       <h1 class="text-xl font-bold text-green-400">系統日誌 Console</h1>
       <nav class="flex gap-2 flex-wrap text-sm">
-        <a href="/runtime" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg">▶ 運行狀態</a>
-        <a href="/browser" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg">🌐 專用瀏覽器</a>
-        <a href="/emoji" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg">😀 表情映射</a>
-        <a href="/logViewer" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📋 日誌檔案</a>
-        <a href="/config" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">⚙️ 設定</a>
-        <a href="/sponsor" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📢 贊助廣告</a>
-        <a href="/keyword" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📊 關鍵字</a>
-        <a href="/clips" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">🎬 剪輯</a>
-        <a href="/autoclip" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📈 剪輯分析</a>
-        <a href="/pushdiag" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">🔧 推流診斷</a>
-      </nav>
+        <a href="/runtime" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg" data-i18n="nav.runtime">▶ 運行狀態</a>
+        <a href="/browser" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg" data-i18n="nav.browser">🌐 專用瀏覽器</a>
+        <a href="/emoji" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg" data-i18n="nav.emoji">😀 表情映射</a>
+        <a href="/logViewer" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition" data-i18n="nav.logViewer">📋 日誌檔案</a>
+        <a href="/config" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition" data-i18n="nav.config">⚙️ 設定</a>
+        <a href="/sponsor" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition" data-i18n="nav.sponsor">📢 贊助廣告</a>
+        <a href="/keyword" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition" data-i18n="nav.keyword">📊 關鍵字</a>
+        <a href="/clips" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition" data-i18n="nav.clips">🎬 剪輯</a>
+        <a href="/autoclip" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition" data-i18n="nav.autoclip">📈 剪輯分析</a>
+        <a href="/pushdiag" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition" data-i18n="nav.pushdiag">🔧 推流診斷</a>
+      <label style="display:inline-flex;gap:8px;align-items:center"><span data-i18n="common.language">語言</span><select data-language-select style="background:#374151;color:#fff;border-radius:6px;padding:6px"><option value="zh-TW">繁體中文</option></select></label></nav>
     </div>
     
     <!-- 日誌區塊 -->
@@ -33,7 +33,8 @@
     </div>
   </div>
 
-  <script>
+  <script src="/assets/i18n.js"></script>
+<script>
     const logEl = document.getElementById('log');
     const es = new EventSource('/status/stream');
 

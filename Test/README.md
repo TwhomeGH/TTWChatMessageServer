@@ -58,3 +58,5 @@ workflow 推送後才有 GitHub 執行結果；若要強制合併前通過，需
 瀏覽器 session／控制台測試已納入 test:core；實際登入和直播收訊需另外在專用瀏覽器驗證，詳見 ../Docs/BROWSER.md。
 
 運行狀態頁回歸：runtime_state.test.cjs（程序生命週期、停止去重、失敗與狀態路由），已納入核心 CI。
+
+- `i18n.test.cjs`：語系回退、插值、JSON 參數一致性、語言切換競態及載入失敗；不連接外部服務。

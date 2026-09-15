@@ -17,7 +17,7 @@ function findBrowser(config, env = process.env, platform = process.platform) {
         candidates.push('/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser');
     }
     const executable = candidates.find(candidate => candidate && fs.existsSync(candidate));
-    if (!executable) throw new Error('找不到 Chrome/Edge，請設定 BROWSER_EXECUTABLE 完整路徑');
+    if (!executable) throw Object.assign(new Error('找不到 Chrome/Edge，請設定 BROWSER_EXECUTABLE 完整路徑'), { code: 'BROWSER_NOT_FOUND' });
     return executable;
 }
 
@@ -77,14 +77,14 @@ function createController(config = browserConfig(), deps = {}) {
                 if ((await status()).connected) return;
                 await new Promise(resolve => setTimeout(resolve, 250));
             }
-            throw new Error('瀏覽器未就緒，請確認 profile 未被其他程序鎖定及偵錯埠設定');
+            throw Object.assign(new Error('瀏覽器未就緒，請確認 profile 未被其他程序鎖定及偵錯埠設定'), { code: 'BROWSER_START_TIMEOUT' });
         })().finally(() => { launching = null; });
         return launching;
     }
     async function show(id) {
         const pages = await tabs();
         const tab = id ? pages.find(page => page.id === id) : pages.find(page => page.url.startsWith('https://www.tiktok.com/'));
-        if (id && !tab) throw new Error('分頁已關閉，請重新整理');
+        if (id && !tab) throw Object.assign(new Error('分頁已關閉，請重新整理'), { code: 'TAB_CLOSED' });
         if (tab) {
             // 先啟用分頁，再還原最小化視窗；顯示操作由使用者按鈕明確觸發。
             await cdp('/json/activate/' + encodeURIComponent(tab.id));

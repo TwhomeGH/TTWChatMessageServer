@@ -9,7 +9,7 @@ function createHandler(controller) {
         try {
             if (!authorized) {
                 if (pathname.startsWith('/api/browser/')) {
-                    sendJson(res, 401, { error: '請先登入' });
+                    sendJson(res, 401, { code: 'AUTH_REQUIRED', error: '請先登入' });
                     return;
                 }
                 const login = await fs.readFile(path.resolve(__dirname, '../../login.html'), 'utf8');
@@ -34,7 +34,7 @@ function createHandler(controller) {
                 const protocol = req.socket?.encrypted ? 'https:' : 'http:';
                 const expected = protocol + '//' + req.headers.host;
                 if (req.headers.origin !== expected) {
-                    sendJson(res, 403, { error: '請由主服務管理頁操作' });
+                    sendJson(res, 403, { code: 'ORIGIN_DENIED', error: '請由主服務管理頁操作' });
                     return;
                 }
                 const body = await readJson(req, 2048);
@@ -43,9 +43,9 @@ function createHandler(controller) {
                 sendJson(res, 200, { success: true });
                 return;
             }
-            sendJson(res, 405, { error: '不支援的操作' });
+            sendJson(res, 405, { code: 'UNSUPPORTED_OPERATION', error: '不支援的操作' });
         } catch (error) {
-            sendJson(res, error.status || 400, { error: error.message });
+            sendJson(res, error.status || 400, { code: error.code || 'BROWSER_OPERATION_FAILED', error: error.message });
         }
     };
 }
