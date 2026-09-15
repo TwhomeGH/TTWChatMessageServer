@@ -28,6 +28,6 @@
     "test:ci": "npm run test:core && npm run test:startup && npm run check:css"
   },
   "devDependencies": {
-    "tailwindcss": "3.4.17"
+    "tailwindcss": "4.3.3"
   }
 }
