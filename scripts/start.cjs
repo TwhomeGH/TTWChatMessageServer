@@ -1,4 +1,3 @@
-const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const css = require('./css-build.cjs');
@@ -15,8 +14,7 @@ function start() {
     const args = process.argv.slice(2);
     if (args.some(arg => arg !== '--dev')) throw new Error('使用 npm start，或 npm run dev；不支援其他啟動參數。');
     process.chdir(root);
-    const compiler = path.join(root, 'node_modules/tailwindcss/lib/cli.js');
-    const plan = launchPlan({ dev: args.includes('--dev'), cssCurrent: css.inspect(root).current, compilerExists: fs.existsSync(compiler) });
+    const plan = launchPlan({ dev: args.includes('--dev'), cssCurrent: css.inspect(root).current, compilerExists: css.hasCompiler(root) });
     if (plan.build) {
         console.log('[啟動] 正在建置 CSS…');
         css.build(root);

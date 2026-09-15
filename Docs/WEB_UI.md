@@ -4,9 +4,9 @@
 
 一般啟動使用 `npm start`，排版開發使用 `npm run dev`；模式差異見 [啟動說明](STARTUP.md)。
 
-主服務的 9 個 Tailwind 頁面改用 `/assets/app.css`。沿用 Tailwind 3.4.17 編譯既有 class，
+主服務的 9 個 Tailwind 頁面改用 `/assets/app.css`。以 Tailwind 4.3.3（`@tailwindcss/cli`）編譯既有 class，
 瀏覽器不再載入 Tailwind Play CDN。keyword 原本即為獨立 CSS，保持原本的樣式方式。
-Chart.js、播放器與圖示仍有外部依賴；這次不是整站離線化或 Tailwind 4 遷移。
+Chart.js、播放器與圖示仍有外部依賴。
 
 ```sh
 npm install
@@ -15,7 +15,8 @@ npm run build:css
 npm run watch:css
 ```
 
-來源為 `styles/app.css`，掃描範圍由 `tailwind.config.cjs` 指定為根目錄 HTML，
+來源為 `styles/app.css`；v4 以 `@import "tailwindcss" source(none)` 關閉自動掃描，
+再由 `@source "../*.html"` 指定根目錄 HTML（原本由 `tailwind.config.cjs` 指定，該檔已移除），
 包含 HTML 內 JavaScript 的完整 class 字串。新增 class 後需重新建置，
 不要使用 `bg-${color}-500` 這類拼接名稱；改用完整 class 對照表。
 建置輸出的 `assets/app.css` 與 `assets/app.css.build.json` 應與頁面一同交付；
@@ -51,5 +52,5 @@ npm run watch:css
 - 執行 `node --test Test/web_assets.test.cjs Test/autoclip_chart.test.mjs` 驗證資源路由與圖表邏輯。
 - 版面使用獨立測試資料預覽，勿為了測試啟動聊天或送出真實剪輯、通知。
 
-流程依據：[Tailwind CLI 靜態建置](https://v3.tailwindcss.com/docs/installation)、
-[完整 class 名稱的掃描限制](https://v3.tailwindcss.com/docs/content-configuration#dynamic-class-names)。
+流程依據：[Tailwind CLI 靜態建置](https://tailwindcss.com/docs/installation/tailwind-cli)、
+[偵測來源檔案與完整 class 名稱限制](https://tailwindcss.com/docs/detecting-classes-in-source-files)。

@@ -4,17 +4,23 @@ const fs=require('node:fs');
 const path=require('node:path');
 const os=require('node:os');
 const { fingerprint,inspect,build }=require('../scripts/css-build.cjs');
+const VERSION='4.3.3';
+const FAKE_CLI="import fs from 'node:fs';\nfs.writeFileSync(process.argv[process.argv.indexOf('-o')+1],'.test{}');\n";
 function setup(t,real=false){
     const root=fs.mkdtempSync(path.join(os.tmpdir(),'ttw-css-test-'));
-    for(const dir of ['scripts','styles','assets','node_modules/tailwindcss/lib'])fs.mkdirSync(path.join(root,dir),{recursive:true});
+    for(const dir of ['scripts','styles','assets'])fs.mkdirSync(path.join(root,dir),{recursive:true});
     fs.copyFileSync(path.join(__dirname,'../scripts/css-build.cjs'),path.join(root,'scripts/css-build.cjs'));
-    fs.writeFileSync(path.join(root,'styles/app.css'),'@tailwind utilities;\n');
-    fs.writeFileSync(path.join(root,'tailwind.config.cjs'),'module.exports={content:["./*.html"]};');
-    fs.writeFileSync(path.join(root,'package.json'),'{"devDependencies":{"tailwindcss":"3.4.17"}}');
-    fs.writeFileSync(path.join(root,'node_modules/tailwindcss/package.json'),'{"version":"3.4.17"}');
+    fs.writeFileSync(path.join(root,'styles/app.css'),'@import "tailwindcss" source(none);\n@source "../*.html";\n');
+    fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({devDependencies:{'@tailwindcss/cli':VERSION,tailwindcss:VERSION}}));
+    if(real){
+        fs.symlinkSync(path.join(__dirname,'../node_modules'),path.join(root,'node_modules'),'junction');
+    }else{
+        for(const dir of ['node_modules/tailwindcss','node_modules/@tailwindcss/cli/dist'])fs.mkdirSync(path.join(root,dir),{recursive:true});
+        fs.writeFileSync(path.join(root,'node_modules/tailwindcss/package.json'),JSON.stringify({version:VERSION}));
+        fs.writeFileSync(path.join(root,'node_modules/@tailwindcss/cli/package.json'),JSON.stringify({version:VERSION,bin:{tailwindcss:'./dist/index.mjs'}}));
+        fs.writeFileSync(path.join(root,'node_modules/@tailwindcss/cli/dist/index.mjs'),FAKE_CLI);
+    }
     fs.writeFileSync(path.join(root,'page.html'),'<div class="text-red-500">test</div>\n');
-    const cli=real ? `require(${JSON.stringify(require.resolve('tailwindcss/lib/cli.js'))});` : "require('fs').writeFileSync(process.argv[process.argv.indexOf('-o')+1],'.test{}');";
-    fs.writeFileSync(path.join(root,'node_modules/tailwindcss/lib/cli.js'),cli);
     t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
     return root;
 }
@@ -25,14 +31,14 @@ test('content fingerprints ignore mtimes, CRLF and runtime data but detect sourc
     fs.writeFileSync(path.join(root,'message_stats.json'),'{}');assert.equal(inspect(root).current,true);
     fs.appendFileSync(page,'<b class="flex"></b>');assert.equal(inspect(root).current,false);
 });
-test('file additions, deletions, config, styles and version affect fingerprints',t=>{
+test('file additions, deletions, styles and versions affect fingerprints',t=>{
     const root=setup(t);const original=fingerprint(root);
     fs.writeFileSync(path.join(root,'extra.html'),'x');assert.notEqual(fingerprint(root),original);
     fs.unlinkSync(path.join(root,'extra.html'));assert.equal(fingerprint(root),original);
-    for(const file of ['styles/app.css','tailwind.config.cjs','scripts/css-build.cjs']){
+    for(const file of ['styles/app.css','scripts/css-build.cjs']){
         const full=path.join(root,file),old=fs.readFileSync(full);fs.appendFileSync(full,'\n/* changed */');assert.notEqual(fingerprint(root),original);fs.writeFileSync(full,old);
     }
-    fs.writeFileSync(path.join(root,'package.json'),'{"devDependencies":{"tailwindcss":"3.4.18"}}');assert.notEqual(fingerprint(root),original);
+    fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({devDependencies:{'@tailwindcss/cli':VERSION,tailwindcss:'4.3.4'}}));assert.notEqual(fingerprint(root),original);
 });
 test('missing/corrupt manifest and modified output require a rebuild',t=>{
     const root=setup(t);assert.equal(inspect(root).current,false);build(root);
@@ -42,7 +48,7 @@ test('missing/corrupt manifest and modified output require a rebuild',t=>{
 test('failed builds preserve the previous CSS and manifest',t=>{
     const root=setup(t);build(root);
     const before=fs.readFileSync(path.join(root,'assets/app.css.build.json'),'utf8');
-    fs.writeFileSync(path.join(root,'node_modules/tailwindcss/lib/cli.js'),'process.exit(2);');
+    fs.writeFileSync(path.join(root,'node_modules/@tailwindcss/cli/dist/index.mjs'),'process.exit(2);');
     fs.appendFileSync(path.join(root,'page.html'),'changed');
     assert.throws(()=>build(root),/建置失敗/);
     assert.equal(fs.readFileSync(path.join(root,'assets/app.css.build.json'),'utf8'),before);
@@ -51,7 +57,7 @@ test('failed builds preserve the previous CSS and manifest',t=>{
 });
 test('source changes during a build never receive a current manifest',t=>{
     const root=setup(t);
-    fs.writeFileSync(path.join(root,'node_modules/tailwindcss/lib/cli.js'),"const fs=require('fs');fs.writeFileSync(process.argv[process.argv.indexOf('-o')+1],'.test{}');fs.appendFileSync('page.html','change');");
+    fs.writeFileSync(path.join(root,'node_modules/@tailwindcss/cli/dist/index.mjs'),"import fs from 'node:fs';\nfs.writeFileSync(process.argv[process.argv.indexOf('-o')+1],'.test{}');\nfs.appendFileSync('page.html','change');\n");
     assert.throws(()=>build(root),/來源變更/);assert.equal(inspect(root).current,false);
 });
 
@@ -61,6 +67,12 @@ test('missing output, deleted HTML and compiler version mismatch are detected',t
     fs.unlinkSync(path.join(root,'page.html'));assert.equal(inspect(root).current,false);
     fs.writeFileSync(path.join(root,'node_modules/tailwindcss/package.json'),'{"version":"0.0.0"}');
     assert.throws(()=>build(root),/版本不同/);
+});
+
+test('missing CLI package is reported as an installation problem',t=>{
+    const root=setup(t);
+    fs.rmSync(path.join(root,'node_modules/@tailwindcss/cli'),{recursive:true,force:true});
+    assert.throws(()=>build(root),/npm install/);
 });
 
 test('watch rebuilds changed sources and updates the fingerprint',async t=>{
