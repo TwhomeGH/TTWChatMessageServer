@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-const html = readFileSync(new URL('../autoclip.html', import.meta.url), 'utf8');
-const script = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script\s*>/gi)].map(match => match[1]).find(code => code.includes('function compactScoreSeries('));
+const script = readFileSync(new URL('../assets/autoclip.js', import.meta.url), 'utf8');
 new vm.Script(script);
 const context = {};
 vm.createContext(context);

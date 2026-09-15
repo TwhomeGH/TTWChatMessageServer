@@ -37,6 +37,8 @@ function fingerprint(root = ROOT) {
         }
     }
     walk('styles');
+    const assetsDir = path.join(root, 'assets');
+    if (fs.existsSync(assetsDir)) for (const name of fs.readdirSync(assetsDir)) if (name.endsWith('.js')) files.push('assets/'+name);
     files.push('scripts/css-build.cjs');
     if (fs.existsSync(path.join(root, 'package-lock.json'))) files.push('package-lock.json');
     const devDependencies = readJson(path.join(root, 'package.json')).devDependencies || {};

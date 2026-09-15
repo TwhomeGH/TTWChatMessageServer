@@ -1,5 +1,6 @@
 @import "tailwindcss" source(none);
 @source "../*.html";
+@source "../assets/*.js";
 
 /* Shared layout rules. Keep page-specific charts and business controls local. */
 .app-ui:not(.font-mono) { font-family: system-ui, 'Microsoft JhengHei', sans-serif; }
