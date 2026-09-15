@@ -1,0 +1,4 @@
+# 產生的 CSS 是建置指紋的比對對象（逐位元組），必須跨平台一致。
+# Windows checkout 預設 core.autocrlf=true 會把 LF 轉成 CRLF，導致 CI 誤判需重建，故固定為 LF。
+assets/app.css text eol=lf
+assets/app.css.build.json text eol=lf
