@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-TW"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>表情映射管理</title><link rel="stylesheet" href="/assets/app.css"></head>
+<body class="app-ui bg-gray-900 text-gray-100 p-3 sm:p-6">
+<main class="max-w-5xl mx-auto space-y-4">
+<header class="page-header"><div><h1 class="text-2xl font-bold">表情映射管理</h1><p class="text-sm text-gray-400 mt-2">儲存後約 1 秒套用至新訊息；支援 [laughcry] 等完整代碼。</p></div><nav class="flex gap-3"><a href="/">主控台</a><a href="/keyword">關鍵字</a><a href="/config">設定</a></nav></header>
+<p id="status" role="status" class="text-sm text-gray-300"></p>
+<form id="editor" class="bg-gray-800 p-4 rounded-xl space-y-3">
+<h2 id="editorTitle" class="font-semibold">新增映射</h2>
+<div class="grid sm:grid-cols-2 gap-3"><label>表情代碼<input id="code" required maxlength="200" placeholder="[laughcry]" class="block w-full bg-gray-900 rounded p-2 mt-1"></label><label>圖片網址<input id="url" required type="url" maxlength="4096" placeholder="https://…/emoji.png" class="block w-full bg-gray-900 rounded p-2 mt-1"></label></div>
+<div class="flex flex-wrap items-center gap-3"><img id="preview" alt="圖片預覽" width="64" height="64" class="object-contain" hidden referrerpolicy="no-referrer"><span id="previewStatus" class="text-sm text-gray-400"></span><button type="button" id="previewBtn" class="bg-gray-700 rounded px-3 py-2">預覽圖片</button><button id="save" class="bg-blue-600 rounded px-3 py-2">儲存</button><button type="button" id="cancel" class="bg-gray-700 rounded px-3 py-2">取消編輯</button></div>
+</form>
+<section class="bg-gray-800 rounded-xl p-4 space-y-3"><div class="flex flex-wrap gap-3"><input id="search" aria-label="搜尋代碼或網址" placeholder="搜尋代碼或網址" class="bg-gray-900 rounded p-2 flex-1"><button id="reload" class="bg-gray-700 rounded px-3 py-2">重新載入</button><span id="count" class="text-sm text-gray-400"></span></div><div id="list" class="grid sm:grid-cols-2 gap-3"></div></section>
+</main>
+<script>
+let mapping={},revision='',originalCode=null,busy=false;
+const el=id=>document.getElementById(id);
+function status(text){el('status').textContent=text;}
+function safeUrl(value){try{return ['http:','https:'].includes(new URL(value).protocol);}catch{return false;}}
+function reset(){originalCode=null;el('editor').reset();el('editorTitle').textContent='新增映射';el('preview').hidden=true;el('previewStatus').textContent='';}
+function render(){
+ el('list').replaceChildren();const query=el('search').value.toLowerCase();const entries=Object.entries(mapping).filter(([code,url])=>(code+' '+url).toLowerCase().includes(query));el('count').textContent=entries.length+' / '+Object.keys(mapping).length+' 筆';
+ for(const [code,url] of entries){
+  const card=document.createElement('article');card.className='bg-gray-900 rounded-lg p-3 flex gap-3';
+  const image=document.createElement('img');image.src=url;image.alt=code;image.width=48;image.height=48;image.loading='lazy';image.referrerPolicy='no-referrer';image.className='object-contain w-12 h-12';
+  const body=document.createElement('div');body.className='flex-1 min-w-0';const name=document.createElement('p');name.textContent=code;name.className='font-semibold break-all';const address=document.createElement('p');address.textContent=url;address.className='text-xs text-gray-400 break-all';
+  image.onerror=()=>{image.hidden=true;address.textContent='圖片無法載入 · '+url;};
+  const actions=document.createElement('div');actions.className='flex gap-3 mt-2';
+  const edit=document.createElement('button');edit.textContent='編輯';edit.disabled=busy;edit.onclick=()=>{originalCode=code;el('code').value=code;el('url').value=url;el('editorTitle').textContent='編輯 '+code;el('preview').hidden=true;el('previewStatus').textContent='';el('code').focus();};
+  const remove=document.createElement('button');remove.textContent='刪除';remove.className='text-red-300';remove.disabled=busy;remove.onclick=()=>{if(confirm('刪除 '+code+' 的映射？'))mutate({operation:'delete',code});};
+  actions.append(edit,remove);body.append(name,address,actions);card.append(image,body);el('list').append(card);
+ }
+ if(!entries.length)el('list').textContent='沒有符合的映射';
+}
+async function request(options){const res=await fetch('/api/emoji',options);const data=await res.json();if(!res.ok||!data.success)throw Error(data.error||'請求失敗');return data;}
+async function load(){try{const data=await request();mapping=data.map;revision=data.revision;render();status(data.error?'檔案格式錯誤，保留上一版：'+data.error:'已載入；外部檔案變更可按重新載入查看。');}catch(error){status(error.message);}}
+async function mutate(action){if(busy)return;busy=true;el('save').disabled=true;el('reload').disabled=true;render();try{const data=await request({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...action,revision})});mapping=data.map;revision=data.revision;reset();status('已儲存，約 1 秒後套用至新訊息。');}catch(error){status(error.message);}finally{busy=false;el('save').disabled=false;el('reload').disabled=false;render();}}
+el('editor').onsubmit=event=>{event.preventDefault();if(!safeUrl(el('url').value)){status('請填寫完整 HTTP(S) 圖片網址');return;}mutate({operation:'save',code:el('code').value,url:el('url').value,originalCode});};
+el('previewBtn').onclick=()=>{const url=el('url').value;if(!safeUrl(url)){status('請填寫完整 HTTP(S) 圖片網址');return;}el('previewStatus').textContent='載入中';el('preview').hidden=false;el('preview').onload=()=>el('previewStatus').textContent='預覽成功';el('preview').onerror=()=>{el('preview').hidden=true;el('previewStatus').textContent='圖片無法載入';};el('preview').src=url;};
+el('cancel').onclick=reset;el('reload').onclick=load;el('search').oninput=render;load();
+</script></body></html>

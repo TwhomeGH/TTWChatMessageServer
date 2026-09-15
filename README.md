@@ -801,6 +801,9 @@ http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickU
 
 ## 其他功能
 
+表情對應可於登入後開啟 `/emoji` 管理，支援圖片預覽、增加、修改與刪除；
+映射更新約 1 秒後套用至新訊息，不需重啟聊天。詳見 [表情映射與熱載入](Docs/EMOJI_MAP.md)。
+
 ### 分支文件功能說明 
 
 - [主服務器的其他功能說明 Service.md](./Service.md)
@@ -1117,3 +1120,5 @@ pip install PyQt6 PyOpenGL numpy pillow requests
 
 
 
+
+模組拆分與維護責任請參閱 [模組說明](Docs/MODULES.md)。
