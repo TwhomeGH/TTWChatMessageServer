@@ -34,6 +34,21 @@ node Docs/apply-patches.mjs --revert   # 還原為原廠
 > `tiktok-signature` **不需要 patch**：執行期只讀取 `javascript/webmssdk_*.js`（與原廠相同），
 > `server.mjs` / `xgnarly.mjs` 並未被任何執行期程式 import。
 
+## 版本凍結：`tiktok-live-connector` 停在 2.4.0
+
+`package.json` 以精確版本 `"tiktok-live-connector": "2.4.0"` 鎖定，並在 `.github/dependabot.yml` 加入
+`ignore`，不自動升級。原因：
+
+1. **升級價值低**：2.4.0 → 2.4.4 的功能差異只有新增 `linkMicBattleItemCard` 事件，以及
+   `WebcastWebSocketClient`／`WebcastHttpClient` 由 default export 改為 named export；本專案本來就用
+   named import，兩者都用不到。其餘為 README／關鍵字等非功能變更。
+2. **授權變更**：2.4.4 起由 MIT 改為 AGPL-3.0-only。本專案是對外提供服務的伺服器，AGPL 的網路條款
+   會對整包衍生作品產生 copyleft 義務。
+3. **patch 是版本鎖定的**：升級必須重做 `2.4.4.patch`（lib chunk hash 已變）並重新驗證 im/fetch 流程。
+
+2.4.0 仍為 MIT，可自由 fork／vendor。若日後需要 2.4.4 之後才有的修正，或上游改動踩到本專案的關鍵
+路徑，再把 2.4.0 收進來自行維護，並以現有 `2.4.0.patch` 作為 fork 起點。
+
 ## 新增或更新修補
 
 1. 安裝對應版本：`npm install <套件>@<版本>`

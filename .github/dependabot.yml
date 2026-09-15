@@ -9,3 +9,7 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    ignore:
+      # tiktok-live-connector 以版本鎖定的 patch（Docs/patches/）修補，2.4.4 起更從 MIT 改為 AGPL-3.0。
+      # 不自動升級；要升級時請手動更新版本、重做 patch（node Docs/make-patches.mjs）並重新驗證 im/fetch。
+      - dependency-name: "tiktok-live-connector"
