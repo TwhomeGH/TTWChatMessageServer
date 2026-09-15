@@ -37,7 +37,7 @@ test('locale tables use supported keys and compatible placeholders', () => {
     for (const file of ['runtime.html', 'OtherTool/browser/index.html', 'log.html']) {
         const html = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
         for (const match of html.matchAll(/data-i18n="([^"]+)"/g)) assert.ok(Object.hasOwn(zh, match[1]), match[1]);
-        for (const match of html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)) new vm.Script(match[1], { filename: file });
+        for (const match of html.matchAll(/<script[^>]*>([\s\S]*?)<\/script\s*>/gi)) new vm.Script(match[1], { filename: file });
     }
 });
 
