@@ -287,26 +287,13 @@ function parseCookies(req) {
     return result;
 }
 
-const server = http.createServer((req, res) => {
-    if (serveRuntime(req, res, runtimeState)) return;
-    if (require('./WebAssets.cjs').serveWebAsset(req, res)) return;
-    if (require('./EmojiRoutes.cjs').serveEmoji(req, res, isValidToken(parseCookies(req).authToken))) return;
-    if (require('./BrowserRoutes.cjs').serveBrowser(req, res, isValidToken(parseCookies(req).authToken))) return;
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-
-    // =======================
-    // /open
-    // =======================
-    if (req.url.split('?')[0] === '/open') {
-        if (tiktokProcess) {
-            sendRuntimePage(res);
-            return;
-        }
-
+/** 新舊入口共用程序啟動；同步鎖定程序，避免連續請求重複建立。 */
+function startRuntime(url) {
+    if (tiktokProcess) throw Object.assign(new Error('程序已啟動或正在停止'), { status: 409, code: 'RUNTIME_BUSY' });
         console.log("開啟通知!!");
 
         // ✅ 新增：解析 query
-        const url = new URL(req.url, `http://${req.headers.host}`)
+
 
         const user = url.searchParams.get('user') ?? ''
         const twitchUser = url.searchParams.get('twitchUser') ?? ''
@@ -357,7 +344,7 @@ const server = http.createServer((req, res) => {
         pushLog(`[SYSTEM] user=${user} ${isTK ? '(TikTok)' : ''}${isTwitch ? '(Twitch)' : ''}${isKick ? '(Kick)' : ''}${isOdysee ? '(Odysee)' : ''}${isYoutube ? '(Youtube)' : ''}`);
 
         // ✅ 關鍵：把參數傳給 node
-        const args = ['TikTok.js']
+        const args = ['--require', path.join(__dirname, 'ScriptLib/runtime/resource-preload.cjs'), 'TikTok.js']
         if (user) args.push(user)
 
         // 若有 platforms 則傳遞組合字串，否則逐一傳遞個別旗標
@@ -383,9 +370,10 @@ const server = http.createServer((req, res) => {
 
         // Persist the parent baseline so a new child continues the same counts.
         SaveCacheKeywordDataAll();
-        tiktokProcess = spawn(process.execPath, args);
+        tiktokProcess = spawn(process.execPath, args, { stdio: ['pipe', 'pipe', 'pipe', 'ipc'] });
         const launchedProcess = tiktokProcess;
         runtimeState.attach(launchedProcess, activePlatforms);
+        runtimeState.data.features = { isSocket, isBark };
         launchedProcess.once('error', error => {
             pushLog('[SYSTEM] 程序啟動失敗:', error.code || 'PROCESS_ERROR');
             if (tiktokProcess === launchedProcess) tiktokProcess = null;
@@ -469,6 +457,28 @@ const server = http.createServer((req, res) => {
         let consoleLog = `TikTok.js started (user=${user}) isTK=${isTK} isBark=${isBark} isSocket=${isSocket} isTwitch=${isTwitch} isKick=${isKick} isBoth=${isBoth} platforms=${platforms}`;
 
         pushLog(`[SYSTEM] ${consoleLog}`);
+
+
+    return runtimeState.snapshot();
+}
+
+const server = http.createServer((req, res) => {
+    if (serveRuntime(req, res, runtimeState, startRuntime)) return;
+    if (require('./WebAssets.cjs').serveWebAsset(req, res)) return;
+    if (require('./EmojiRoutes.cjs').serveEmoji(req, res, isValidToken(parseCookies(req).authToken))) return;
+    if (require('./BrowserRoutes.cjs').serveBrowser(req, res, isValidToken(parseCookies(req).authToken))) return;
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+
+    // =======================
+    // /open
+    // =======================
+    if (req.url.split('?')[0] === '/open') {
+        if (tiktokProcess) {
+            sendRuntimePage(res);
+            return;
+        }
+
+        startRuntime(new URL(req.url, 'http://localhost'));
 
         sendRuntimePage(res);
 

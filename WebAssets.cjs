@@ -7,6 +7,7 @@ function createWebAssetHandler(root = __dirname) {
     return function serveWebAsset(req, res) {
         const files = {
             '/assets/app.css': ['assets/app.css', 'text/css; charset=utf-8'],
+            '/assets/runtime-start.js': ['assets/runtime-start.js', 'text/javascript; charset=utf-8'],
             '/assets/i18n.js': ['assets/i18n.js', 'text/javascript; charset=utf-8']
         };
         const pathname = req.url.split('?')[0];

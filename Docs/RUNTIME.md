@@ -12,3 +12,11 @@
 原 /status 純文字及 /status/stream 日誌介面保持相容；需要純文字的外部工具可改查 /status。
 
 驗證：node --test Test/runtime_state.test.cjs；測試使用假程序，不啟動直播或通知。
+
+## 可視化啟動
+
+在 /runtime 的「啟動選項」勾選 TikTok、Twitch、Kick、Odysee、YouTube 或 Socket、Bark。平台勾選後顯示帳號／頻道欄位；留空沿用服務现有設定。帳號與開關存在此來源 localStorage 的 ttw.runtime.options，頁面不儲存 Token。預設全部不勾選，至少選一項才能啟動。「恢復預設」清空已記憶的選項與帳號。
+
+按「啟動服務」透過 POST /api/runtime/start 送出 JSON，原頁顯示程序狀態。執行中或停止中鎖定選單；跨分頁重複啟動會回傳 409。GET /api/runtime/options 提供後端白名單。JSON 啟動要求必須來自相同 Origin。原 /open query 入口維持相容，共用同一程序啟動函數。
+
+Socket 使用既有 SOCKET_API 設定；Bark 使用既有通知設定。「開啟設定」只導向設定頁。程序啟動成功不代表各平台已完成登入。

@@ -78,3 +78,42 @@ test('共用頁不含倒數跳轉，API 回傳程序狀態且不接管舊 status
     assert.ok(body.includes("history.replaceState(null, '', '/runtime')"));
     assert.equal(body.includes('countdown'), false);
 });
+
+// 白名單驗證不能把任意 query、CLI 或錯誤型別傳入子程序。
+test('視覺化啟動參數只接受白名單並忽略未啟用平台帳號', () => {
+    const { startURL } = require('../ScriptLib/runtime/options.cjs');
+    const url = startURL({ isTwitch: true, isSocket: true, twitchUser: ' tester ', user: 'unused' });
+    assert.equal(url.searchParams.get('isTwitch'), '1');
+    assert.equal(url.searchParams.get('twitchUser'), 'tester');
+    assert.equal(url.searchParams.has('user'), false);
+    for (const body of [null, [], {}, { isTK: '1' }, { isTK: true, user: '--socket' }, { isTK: true, token: 'secret' }]) {
+        assert.throws(() => startURL(body), { code: 'INVALID_START_OPTIONS' });
+    }
+});
+
+// 使用假啟動函數，不建立實際平台連線或通知。
+test('JSON 啟動入口驗證方法、來源與重複啟動，回報即時狀態', async () => {
+    const { Readable } = require('node:stream');
+    const state = new RuntimeState();
+    let calls = 0;
+    const start = url => {
+        if (calls) throw Object.assign(new Error('busy'), { status: 409, code: 'RUNTIME_BUSY' });
+        calls++;
+        assert.equal(url.searchParams.get('isSocket'), '1');
+        state.attach(child(), ['twitch']); return state.snapshot();
+    };
+    function request(method, origin, body) {
+        return new Promise(resolve => {
+            const req = Readable.from([JSON.stringify(body)]);
+            Object.assign(req, { url: '/api/runtime/start', method, headers: { host: 'localhost:3332', origin, 'content-type': 'application/json' } });
+            serveRuntime(req, { writeHead(status) { this.status = status; }, end(data) { resolve({ status: this.status, data: data && JSON.parse(data) }); } }, state, start);
+        });
+    }
+    assert.equal((await request('GET', 'http://localhost:3332', {})).status, 405);
+    assert.equal((await request('POST', 'https://other.test', {})).status, 403);
+    assert.equal((await request('POST', 'http://localhost:3332', {})).status, 400);
+    const result = await request('POST', 'http://localhost:3332', { isTwitch: true, isSocket: true });
+    assert.equal(result.status, 202); assert.equal(result.data.state, 'starting');
+    assert.equal((await request('POST', 'http://localhost:3332', { isSocket: true })).status, 409);
+    assert.equal(calls, 1);
+});

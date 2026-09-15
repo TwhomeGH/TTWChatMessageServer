@@ -1,14 +1,16 @@
 <!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title data-i18n="runtime.title">運行狀態</title><link rel="stylesheet" href="/assets/app.css"></head>
 <body class="app-ui bg-gray-900 text-gray-200 min-h-screen p-4"><main class="max-w-4xl mx-auto">
-<nav class="flex flex-wrap gap-4 mb-6"><a href="/" data-i18n="common.logs">主控台／日誌</a><a href="/config" data-i18n="common.config">啟動設定</a><a href="/browser" data-i18n="common.browser">專用瀏覽器</a><label style="display:inline-flex;gap:8px;align-items:center"><span data-i18n="common.language">語言</span><select data-language-select style="background:#374151;color:#fff;border-radius:6px;padding:6px"><option value="zh-TW">繁體中文</option></select></label></nav>
+<nav class="flex flex-wrap gap-4 mb-6"><a href="/" data-i18n="common.logs">主控台／日誌</a><a href="/browser" data-i18n="common.browser">專用瀏覽器</a><label style="display:inline-flex;gap:8px;align-items:center"><span data-i18n="common.language">語言</span><select data-language-select style="background:#374151;color:#fff;border-radius:6px;padding:6px"><option value="zh-TW">繁體中文</option></select></label></nav>
 <h1 class="text-2xl font-bold mb-4" data-i18n="runtime.title">運行狀態</h1>
 <section class="bg-gray-800 rounded-lg p-6"><h2 id="state" class="text-xl font-bold" role="status" data-i18n="runtime.checking">正在確認程序狀態…</h2><p id="description" class="my-4" data-i18n="runtime.loading">正在讀取主服務資料</p>
-<dl class="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><dt data-i18n="runtime.process">程序</dt><dd>TikTok.js</dd></div><div><dt>PID</dt><dd id="pid">—</dd></div><div><dt data-i18n="runtime.platforms">啟用平台</dt><dd id="platforms">—</dd></div><div><dt data-i18n="runtime.uptime">運行時間</dt><dd id="uptime">—</dd></div><div><dt data-i18n="runtime.started">開始時間</dt><dd id="started">—</dd></div><div><dt data-i18n="runtime.exit">退出結果</dt><dd id="exit">—</dd></div></dl>
+<dl class="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><dt data-i18n="runtime.process">程序</dt><dd>TikTok.js</dd></div><div><dt>PID</dt><dd id="pid">—</dd></div><div><dt data-i18n="runtime.platforms">啟用平台</dt><dd id="platforms">—</dd></div><div><dt data-i18n="runtime.uptime">運行時間</dt><dd id="uptime">—</dd></div><div><dt data-i18n="runtime.started">開始時間</dt><dd id="started">—</dd></div><div><dt data-i18n="runtime.exit">退出結果</dt><dd id="exit">—</dd></div><div><dt data-i18n="runtime.cpu">CPU（單核心基準）</dt><dd id="cpu">—</dd></div><div><dt data-i18n="runtime.ram">RAM（RSS）</dt><dd id="ram">—</dd></div></dl><p class="text-sm text-gray-400 mt-4" data-i18n="runtime.resourcesNote">每 2 秒取樣聊天子程序；不含主服務或瀏覽器。CPU 100% 代表一個核心，逾 10 秒未回報顯示 —。</p>
 <p id="error" class="text-red-400 mt-4" role="alert"></p><p id="updated" class="text-gray-400 text-sm mt-4"></p>
-<div class="flex flex-wrap gap-4 mt-6"><a href="/config" class="bg-blue-600 rounded-lg px-4 py-2" data-i18n="runtime.start">設定並啟動</a><form action="/close" method="post"><button id="stop" disabled class="bg-red-700 rounded-lg px-4 py-2 disabled:opacity-50" data-i18n="runtime.stop">停止程序</button></form><button id="refresh" class="bg-gray-700 rounded-lg px-4 py-2" data-i18n="common.check">重新檢查</button></div></section>
+<div class="flex flex-wrap gap-4 mt-6"><a href="/config" class="bg-blue-600 rounded-lg px-4 py-2" data-i18n="runtime.start">開啟設定</a><form action="/close" method="post"><button id="stop" disabled class="bg-red-700 rounded-lg px-4 py-2 disabled:opacity-50" data-i18n="runtime.stop">停止程序</button></form><button id="refresh" class="bg-gray-700 rounded-lg px-4 py-2" data-i18n="common.check">重新檢查</button></div></section>
+<section class="bg-gray-800 rounded-lg p-6 mt-4"><h2 class="text-xl font-bold" data-i18n="runtime.options">啟動選項</h2><p class="my-4" data-i18n="runtime.optionsNote">勾選平台或功能；帳號留空沿用現有設定。選擇只儲存在此瀏覽器。</p><fieldset id="launch-options" disabled><div class="grid grid-cols-1 sm:grid-cols-2 gap-6"><section><h3 class="font-bold mb-3" data-i18n="runtime.platformGroup">聊天平台</h3><div id="launch-platforms" class="grid gap-3"></div></section><section><h3 class="font-bold mb-3" data-i18n="runtime.transportGroup">收發與通知</h3><p class="text-sm text-gray-400 mb-3" data-i18n="runtime.transportNote">Socket：訊息轉接；Bark：推播通知。</p><div id="launch-transport" class="grid gap-3"></div></section></div></fieldset><div class="flex flex-wrap gap-4 mt-4"><button id="launch" disabled class="bg-blue-600 rounded-lg px-4 py-2 disabled:opacity-50" data-i18n="runtime.launch">啟動服務</button><button id="reset-options" disabled class="bg-gray-700 rounded-lg px-4 py-2" data-i18n="runtime.reset">恢復預設</button></div><p id="launch-error" role="alert" class="text-red-400 mt-4"></p><p id="active-features" class="mt-4"></p></section>
 <p class="text-gray-400 mt-4" data-i18n="runtime.note">此處顯示程序生命週期。各平台登入、直播連線與收訊情況請查看日誌；瀏覽器狀態請到專用瀏覽器頁。</p></main>
 <script src="/assets/i18n.js"></script>
+<script src="/assets/runtime-start.js"></script>
 <script>
 const i18n = window.TTWI18n;
 const t = (...args) => i18n.t(...args);
@@ -24,6 +26,10 @@ async function refresh() {
         const response = await fetch('/api/runtime', {cache:'no-store'});
         if (!response.ok) throw Error(t('runtime.queryError', {status:response.status}, '狀態查詢失敗：{status}'));
         const state = await response.json();
+        window.runtimeStart.update(state);
+        const resources = state.resources;
+        document.getElementById('cpu').textContent = resources ? resources.cpuPercent.toFixed(1) + '%' : '—';
+        document.getElementById('ram').textContent = resources ? (resources.rssBytes / 1048576).toFixed(1) + ' MiB' : '—';
         document.getElementById('state').textContent = t('runtime.state.' + state.state, {}, stateLabels[state.state] || '未知狀態');
         document.getElementById('description').textContent = state.stopDelayed ? t('runtime.delayed', {}, '停止等待已超過 15 秒，程序尚未退出，請查看日誌。') : t('runtime.description.' + state.state, {}, t('common.unknown'));
         document.getElementById('pid').textContent = state.pid ?? '—';
@@ -35,6 +41,8 @@ async function refresh() {
         document.getElementById('stop').disabled = !['running','starting'].includes(state.state);
         document.getElementById('updated').textContent = t('common.updated', {time:new Date().toLocaleTimeString(i18n.language)}, '更新於 {time}');
     } catch (error) {
+        window.runtimeStart.update(null);
+        document.getElementById('cpu').textContent = document.getElementById('ram').textContent = '—';
         document.getElementById('state').textContent = t('runtime.unavailable', {}, '無法確認運行狀態');
         document.getElementById('error').textContent = t('runtime.serviceError', {message:error.message}, '{message}，主服務可能已停止。');
         document.getElementById('stop').disabled = true;

@@ -8,6 +8,12 @@ class RuntimeState {
     /** 綁定本次程序，過去程序的遲到事件不可覆寫新狀態。 */
     attach(child, platforms = []) {
         this.child = child;
+        this.resources = null;
+        child.on('message', message => {
+            if (this.child !== child || message?.type !== 'RUNTIME_RESOURCES') return;
+            if (!Number.isFinite(message.cpuPercent) || message.cpuPercent < 0 || !Number.isFinite(message.rssBytes) || message.rssBytes < 0) return;
+            this.resources = { cpuPercent: message.cpuPercent, rssBytes: message.rssBytes, sampledAt: this.now() };
+        });
         this.data = { state: 'starting', pid: null, startedAt: null, stoppedAt: null, stopRequestedAt: null, exitCode: null, signal: null, error: null, platforms: [...platforms] };
         child.once('spawn', () => {
             if (this.child !== child) return;
@@ -45,7 +51,7 @@ class RuntimeState {
         try { child.stdin.write('EXIT\n', failed); } catch (error) { failed(error); }
     }
     snapshot() {
-        return { ...this.data, platforms: [...this.data.platforms],
+        return { ...this.data, resources: this.child && ['running', 'stopping'].includes(this.data.state) && this.resources && this.now() - this.resources.sampledAt <= 10000 ? { ...this.resources } : null, platforms: [...this.data.platforms],
             uptimeMs: this.data.startedAt === null ? 0 : Math.max(0, (this.data.stoppedAt ?? this.now()) - this.data.startedAt),
             stopDelayed: this.data.state === 'stopping' && this.now() - this.data.stopRequestedAt >= 15000 };
     }
