@@ -96,6 +96,9 @@ writeLog("Default",TEST_LOG.join("\n"))
 process.loadEnvFile(".env"); // 讀取 .env
 
 let tiktokProcess = null;
+const { RuntimeState } = require('./ScriptLib/runtime/state.cjs');
+const runtimeState = new RuntimeState();
+const { sendRuntimePage, serveRuntime } = require('./RuntimeRoutes.cjs');
 
 let logs = [];
 const MAX_LOG_LINES = 200; // 最多保留 200 行
@@ -285,6 +288,7 @@ function parseCookies(req) {
 }
 
 const server = http.createServer((req, res) => {
+    if (serveRuntime(req, res, runtimeState)) return;
     if (require('./WebAssets.cjs').serveWebAsset(req, res)) return;
     if (require('./EmojiRoutes.cjs').serveEmoji(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (require('./BrowserRoutes.cjs').serveBrowser(req, res, isValidToken(parseCookies(req).authToken))) return;
@@ -293,9 +297,9 @@ const server = http.createServer((req, res) => {
     // =======================
     // /open
     // =======================
-    if (req.url.startsWith('/open')) {
+    if (req.url.split('?')[0] === '/open') {
         if (tiktokProcess) {
-            res.end('TikTok.js already running\n');
+            sendRuntimePage(res);
             return;
         }
 
@@ -379,7 +383,14 @@ const server = http.createServer((req, res) => {
 
         // Persist the parent baseline so a new child continues the same counts.
         SaveCacheKeywordDataAll();
-        tiktokProcess = spawn('node', args);
+        tiktokProcess = spawn(process.execPath, args);
+        const launchedProcess = tiktokProcess;
+        runtimeState.attach(launchedProcess, activePlatforms);
+        launchedProcess.once('error', error => {
+            pushLog('[SYSTEM] 程序啟動失敗:', error.code || 'PROCESS_ERROR');
+            if (tiktokProcess === launchedProcess) tiktokProcess = null;
+        });
+        launchedProcess.stdin.on('error', error => pushLog('[SYSTEM] 程序輸入錯誤:', error.code || 'STDIN_ERROR'));
 
         stdoutBuffer = ''; // 新進程開始，重置緩衝
 
@@ -438,7 +449,7 @@ const server = http.createServer((req, res) => {
 
         tiktokProcess.on('exit', (code, signal) => {
             pushLog(`[SYSTEM] Exit code=${code} signal=${signal}`);
-            tiktokProcess = null;
+            if (tiktokProcess === launchedProcess) tiktokProcess = null;
 
             // 離線（TikTok.js 結束）時才把自動剪輯分析歷史寫入磁碟
             try {
@@ -459,61 +470,7 @@ const server = http.createServer((req, res) => {
 
         pushLog(`[SYSTEM] ${consoleLog}`);
 
-        // 5s jump to / webpage
-        // 假設你在 Node.js/Express 裡
-        res.setHeader('Content-Type', 'text/html');
-
-        res.end(`
-  <html>
-    <head>
-     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
- 
-      <title>Redirecting...</title>
-    </head>
-    <style>
-        body {  
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #25211eff;
-            color: #e4d4d4ff;
-        }
-        pre {   
-            background-color: #333;
-            color: #eee;
-            padding: 10px;
-            border-radius: 5px;
-            overflow-x: auto;
-        }
-        #countdown {
-            margin-top: 20px;
-            font-size: 18px;
-            color: #edd4d4ff;
-            background-color: #444;
-            padding: 10px;
-            border-radius: 5px;
-        }
-    </style>
-    
-    <body>
-      <pre>${consoleLog}</pre>
-      <div id="countdown">5</div>
-      <script>
-        let seconds = 5;
-        const countdownEl = document.getElementById('countdown');
-        const interval = setInterval(() => {
-          seconds--;
-          countdownEl.textContent = "即將跳轉到日志頁面 " + seconds;
-          if (seconds <= 0) {
-            clearInterval(interval);
-            window.location.href = '/';
-          }
-        }, 1000);
-      </script>
-    </body>
-  </html>
-`);
-
+        sendRuntimePage(res);
 
     }
     // ===============================
@@ -582,73 +539,8 @@ const server = http.createServer((req, res) => {
     // /close
     // =======================
     else if (req.url === '/close') {
-
-        if (!tiktokProcess) {
-            res.end('TikTok.js not running\n');
-            return;
-        }
-
-        // 透過 stdin 發送退出命令
-        tiktokProcess.stdin.write('EXIT\n');
-
-
-        let consoleLog = `TikTok.js stopping...`;
-
-
-        pushLog(`[SYSTEM] ${consoleLog}`);
-
-        res.setHeader('Content-Type', 'text/html');
-        res.end(`
-  <html>
-    <head>
-     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
- 
-      <title>Redirecting...</title>
-    </head>
-    <style>
-        body {  
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #25211eff;
-            color: #e4d4d4ff;
-        }
-        pre {   
-            background-color: #333;
-            color: #eee;
-            padding: 10px;
-            border-radius: 5px;
-            overflow-x: auto;
-        }
-        #countdown {
-            margin-top: 20px;
-            font-size: 18px;
-            color: #edd4d4ff;
-            background-color: #444;
-            padding: 10px;
-            border-radius: 5px;
-        }
-    </style>
-    
-    <body>
-      <pre>${consoleLog}</pre>
-      <div id="countdown">5</div>
-      <script>
-        let seconds = 5;
-        const countdownEl = document.getElementById('countdown');
-        const interval = setInterval(() => {
-          seconds--;
-          countdownEl.textContent = "即將跳轉到日志頁面 " + seconds;
-          if (seconds <= 0) {
-            clearInterval(interval);
-            window.location.href = '/';
-          }
-        }, 1000);
-      </script>
-    </body>
-  </html>
-`);
-
+        runtimeState.stop(tiktokProcess);
+        sendRuntimePage(res);
     }
 
     // =======================
