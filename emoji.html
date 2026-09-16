@@ -7,7 +7,7 @@
 <form id="editor" class="bg-gray-800 p-4 rounded-xl space-y-3">
 <h2 id="editorTitle" class="font-semibold">新增映射</h2>
 <div class="grid sm:grid-cols-2 gap-3"><label>表情代碼<input id="code" required maxlength="200" placeholder="[laughcry]" class="block w-full bg-gray-900 rounded p-2 mt-1"></label><label>圖片網址<input id="url" required type="url" maxlength="4096" placeholder="https://…/emoji.png" class="block w-full bg-gray-900 rounded p-2 mt-1"></label></div>
-<div class="flex flex-wrap items-center gap-3"><img id="preview" alt="圖片預覽" width="64" height="64" class="object-contain" hidden referrerpolicy="no-referrer"><span id="previewStatus" class="text-sm text-gray-400"></span><button type="button" id="previewBtn" class="bg-gray-700 rounded px-3 py-2">預覽圖片</button><button id="save" class="bg-blue-600 rounded px-3 py-2">儲存</button><button type="button" id="cancel" class="bg-gray-700 rounded px-3 py-2">取消編輯</button></div>
+<div class="flex flex-wrap items-center gap-3"><img id="preview" alt="圖片預覽" width="64" height="64" class="object-contain" hidden referrerpolicy="no-referrer"><span id="previewStatus" class="text-sm text-gray-400"></span><button id="save" class="bg-blue-600 rounded px-3 py-2">儲存</button><button type="button" id="cancel" class="bg-gray-700 rounded px-3 py-2">取消編輯</button></div>
 </form>
 <section class="bg-gray-800 rounded-xl p-4 space-y-3"><div class="flex flex-wrap gap-3"><input id="search" aria-label="搜尋代碼或網址" placeholder="搜尋代碼或網址" class="bg-gray-900 rounded p-2 flex-1"><button id="reload" class="bg-gray-700 rounded px-3 py-2">重新載入</button><span id="count" class="text-sm text-gray-400"></span></div><div id="list" class="grid sm:grid-cols-2 gap-3"></div></section>
 </main>

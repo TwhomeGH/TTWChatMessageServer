@@ -6,6 +6,7 @@ let mapping = {};
 let revision = '';
 let originalCode = null;
 let busy = false;
+let previewTimer = null;
 
 const el = id => document.getElementById(id);
 
@@ -34,6 +35,7 @@ function shortHash(text) {
 
 // 重設表單為「新增」狀態。
 function resetForm() {
+    clearTimeout(previewTimer);
     originalCode = null;
     el('editor').reset();
     el('editorTitle').textContent = '新增映射';
@@ -106,6 +108,7 @@ function render() {
 
 // 將某筆映射載入表單進行編輯。
 function startEdit(code, url) {
+    clearTimeout(previewTimer);
     originalCode = code;
     el('code').value = code;
     el('url').value = url;
@@ -165,9 +168,11 @@ async function mutate(action) {
 
 // 預覽輸入的圖片網址。
 function previewImage() {
-    const url = parseImageUrl(el('url').value);
+    const raw = el('url').value.trim();
+    const url = parseImageUrl(raw);
     if (!url) {
-        setStatus('請填寫完整 HTTP(S) 圖片網址');
+        el('preview').hidden = true;
+        el('previewStatus').textContent = raw ? '請填寫完整 HTTP(S) 圖片網址' : '';
         return;
     }
     el('previewStatus').textContent = '載入中';
@@ -178,6 +183,12 @@ function previewImage() {
         el('previewStatus').textContent = '圖片無法載入';
     };
     el('preview').src = url;
+}
+
+// 輸入網址停止後自動預覽，避免每打一個字就觸發一次。
+function schedulePreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(previewImage, 500);
 }
 
 // 表單送出：新增或更新映射。
@@ -193,7 +204,7 @@ function onSubmit(event) {
 
 // 事件綁定與初始載入。
 el('editor').onsubmit = onSubmit;
-el('previewBtn').onclick = previewImage;
+el('url').oninput = schedulePreview;
 el('cancel').onclick = resetForm;
 el('reload').onclick = load;
 el('search').oninput = render;
