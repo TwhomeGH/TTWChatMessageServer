@@ -47,6 +47,40 @@ function sendAudienceUpdate(userNum, userList) {
     });
 }
 
+/**
+ * 讀中控台「直播指標」的累計成效。
+ * 用文字定位（不綁會變的雜湊 class），取標籤隔壁 span 的數字。
+ */
+function readMetrics() {
+    const pick = label => {
+        const node = [...document.querySelectorAll('div')]
+            .find(el => el.childElementCount === 0 && el.textContent.trim() === label);
+        const text = node?.parentElement?.querySelector('span')?.textContent ?? '';
+        const value = Number(text.replace(/[^\d.]/g, ''));
+        return Number.isFinite(value) ? value : null;
+    };
+    return {
+        diamonds: pick('鑽石數量'),
+        uniqueViewers: pick('觀眾總數'),
+        gifters: pick('送禮者'),
+        newFollowers: pick('新粉絲'),
+        likes: pick('獲讚')
+    };
+}
+
+/** 每 30 秒送一次累計成效，讓伺服器記錄場次成果。 */
+function sendMetrics() {
+    const metrics = readMetrics();
+    if (Object.values(metrics).every(value => value === null)) return;
+    GM_xmlhttpRequest({
+        method: "POST",
+        url: `http://${HTTP_HOST}:${HTTP_PORT}/chat`,
+        data: JSON.stringify({ type: 'metrics', platform: 'TikTok', transport: 'userscript', observedAt: Date.now(), ...metrics }),
+        headers: { "Content-Type": "application/json" },
+        onerror: () => { /* ignore */ }
+    });
+}
+
 function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 0, userList = [], metadata = {}) {
 
     const payload = {
@@ -195,6 +229,8 @@ function getTopFanUsers() {
                 console.log("頭號觀眾人數:", users.length);
                 console.log("名字清單:", users);
             }, 5000); // 每5秒更新一次頭號觀眾列表
+            sendMetrics();
+            setInterval(sendMetrics, 30000); // 每30秒記錄一次累計成效
 
         }, 3000); // 等頁面穩定
     });

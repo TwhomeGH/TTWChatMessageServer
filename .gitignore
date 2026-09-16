@@ -32,3 +32,6 @@ yarn.lock
 
 # 表情圖片的伺服器端快取（執行期產生）。
 cache/
+
+# Local traffic history (including SQLite WAL files)
+/data/traffic.sqlite*

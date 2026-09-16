@@ -384,6 +384,9 @@ function startRuntime(url) {
         SaveCacheKeywordDataAll();
         tiktokProcess = spawn(process.execPath, args, { stdio: ['pipe', 'pipe', 'pipe', 'ipc'] });
         const launchedProcess = tiktokProcess;
+        launchedProcess.on('message', event => {
+            if (tiktokProcess === launchedProcess && event?.type === 'TRAFFIC_EVENT') require('./TrafficRoutes.cjs').traffic.record(event.data);
+        });
         runtimeState.attach(launchedProcess, activePlatforms);
         runtimeState.data.features = { isSocket, isBark };
         launchedProcess.once('error', error => {
@@ -475,6 +478,7 @@ function startRuntime(url) {
 }
 
 const server = http.createServer((req, res) => {
+    if (require('./TrafficRoutes.cjs').serveTraffic(req,res)) return;
     if (serveRuntime(req, res, runtimeState, startRuntime)) return;
     if (require('./WebAssets.cjs').serveWebAsset(req, res)) return;
     if (require('./EmojiRoutes.cjs').serveEmoji(req, res, isValidToken(parseCookies(req).authToken))) return;
@@ -516,6 +520,7 @@ const server = http.createServer((req, res) => {
                 const raw = JSON.parse(body);
                 const data = { ...raw, ...(messageFilter?.normalizeSource(raw, 'userscript') || { platform: 'Unknown', transport: 'userscript', isTest: raw.isTest === true, heatEligible: raw.isTest !== true }), receivedAt: Date.now() };
 
+                require('./TrafficRoutes.cjs').traffic.record(data);
                 const { user, message } = data;
 
                 if (data.type === 'audience') {

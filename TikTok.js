@@ -1,3 +1,4 @@
+import { reportTraffic } from './ScriptLib/traffic/report.mjs';
 import { closeDirectSigner } from './SignServer/direct-signer.mjs';
 import { normalizeSource } from './MessageSource.mjs';
 import { ApiClient } from '@twurple/api';
@@ -1236,6 +1237,7 @@ function viewCache() {
         }
 
         writeViewCount += 1
+        reportTraffic({platform:'TikTok',type:'audience',userNum:Number(Viewer),streamId:RoomID != null ? String(RoomID) : undefined});
         autoClip?.updatePlatformViewers('TikTok', Number(Viewer));
         TikTokViewerCount = Viewer
         updateCombinedViewerCount();
@@ -1495,6 +1497,7 @@ function flushMemberBark() {
 }
 
 connection.on(WebcastEvent.MEMBER,data => {
+    reportTraffic({platform:'TikTok',eventType:'join',id:data.msgId || data.common?.msgId,sentAt:data.createTime || data.common?.createTime,userId:data.user?.userId || data.user?.id,user:data.user?.nickname});
     logRawEvent('MEMBER', data);
 
     let iconn = getTikTokProfilePic(data.user)
@@ -1554,6 +1557,7 @@ connection.on(WebcastEvent.FOLLOW,data =>{
 
 
 connection.on(WebcastEvent.CHAT, data => {
+    reportTraffic({platform:'TikTok',eventType:'chat',id:data.msgId || data.common?.msgId,sentAt:data.createTime || data.common?.createTime,userId:data.user?.userId || data.user?.id,user:data.user?.nickname,message:data.comment});
     if (isTK) {
         const result = tikTokChatGuard.check(data);
         if (!result.accepted) {
@@ -2243,6 +2247,7 @@ function twitchViewCache() {
     apiClient.streams.getStreamByUserId(tuser).then(stream => {
         if (stream) {
             TwitchViewerCount = stream.viewers;
+            reportTraffic({platform:'Twitch',type:'audience',userNum:stream.viewers,streamId:stream.id != null ? String(stream.id) : undefined});
             autoClip?.updateViewers(stream.viewers);
             let DA = new Date()
             console.log(`📊 Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`);
