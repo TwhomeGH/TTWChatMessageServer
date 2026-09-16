@@ -40,6 +40,14 @@ test('file additions, deletions, styles and versions affect fingerprints',t=>{
     }
     fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({devDependencies:{'@tailwindcss/cli':VERSION,tailwindcss:'4.3.4'}}));assert.notEqual(fingerprint(root),original);
 });
+test('front-end JS does not affect the CSS fingerprint (Tailwind scans HTML only)',t=>{
+    const root=setup(t);const original=fingerprint(root);
+    fs.writeFileSync(path.join(root,'assets/traffic.js'),'console.log(1);');
+    assert.equal(fingerprint(root),original);
+    fs.writeFileSync(path.join(root,'assets/traffic.js'),'console.log(2);');
+    assert.equal(fingerprint(root),original);
+});
+
 test('missing/corrupt manifest and modified output require a rebuild',t=>{
     const root=setup(t);assert.equal(inspect(root).current,false);build(root);
     fs.writeFileSync(path.join(root,'assets/app.css'),'corrupt');assert.equal(inspect(root).current,false);build(root);
