@@ -33,6 +33,7 @@ test('locale dictionaries and helper support GET/HEAD without exposing other fil
     }
     assert.match((await request('/assets/i18n.js')).headers['Content-Type'], /javascript/);
     assert.match((await request('/assets/autoclip.js')).headers['Content-Type'], /javascript/);
+    assert.match((await request('/assets/emoji.js')).headers['Content-Type'], /javascript/);
     assert.equal(await request('/lang/../package.json'), null);
     assert.equal((await request('/lang/fr.json')).status, 404);
     assert.equal((await request('/lang/en.json', 'POST')).status, 405);
