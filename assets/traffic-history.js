@@ -7,20 +7,52 @@
 
     const format = value => value == null ? '—' : value.toFixed(1);
 
+    /** 用第一列當表頭建立表格（thead／tbody），其餘為資料列。 */
+    function buildTable(rows) {
+        const table = document.createElement('table');
+        const [head, ...body] = rows;
+
+        const thead = document.createElement('thead');
+        const headRow = document.createElement('tr');
+        for (const value of head) {
+            const th = document.createElement('th');
+            th.textContent = value;
+            headRow.append(th);
+        }
+        thead.append(headRow);
+        table.append(thead);
+
+        const tbody = document.createElement('tbody');
+        for (const values of body) {
+            const tr = document.createElement('tr');
+            for (const value of values) {
+                const td = document.createElement('td');
+                td.textContent = value;
+                tr.append(td);
+            }
+            tbody.append(tr);
+        }
+        table.append(tbody);
+        return table;
+    }
+
     /** 熱圖：完整星期×小時格子。缺資料顯示 —，不把未直播時段填成 0。 */
     function renderHeatmap(cells) {
         const byKey = new Map(cells.map(cell => [cell.key, cell]));
         const max = Math.max(1, ...cells.map(cell => cell.averageViewers || 0));
 
         const table = document.createElement('table');
+        const thead = document.createElement('thead');
         const head = document.createElement('tr');
         for (const text of ['星期', ...Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0'))]) {
             const th = document.createElement('th');
             th.textContent = text;
             head.append(th);
         }
-        table.append(head);
+        thead.append(head);
+        table.append(thead);
 
+        const tbody = document.createElement('tbody');
         WEEKDAYS.forEach((day, index) => {
             const row = document.createElement('tr');
             const label = document.createElement('th');
@@ -32,7 +64,6 @@
                 const td = document.createElement('td');
                 const button = document.createElement('button');
                 button.textContent = format(cell?.averageViewers);
-                button.style.cssText = 'min-width:44px;padding:6px;border-radius:4px';
                 if (cell?.averageViewers != null) {
                     button.style.background = 'rgba(37,99,235,' + (0.15 + 0.85 * cell.averageViewers / max) + ')';
                 }
@@ -45,50 +76,29 @@
                 td.append(button);
                 row.append(td);
             }
-            table.append(row);
+            tbody.append(row);
         });
+        table.append(tbody);
 
         el('heatmap').replaceChildren(table);
     }
 
     /** 每日統計表。 */
     function renderDaily(daily) {
-        const table = document.createElement('table');
-        const rows = [
+        el('daily').replaceChildren(buildTable([
             ['日期', '進房次數', '聊天事件', '有取樣分鐘', '平均觀看'],
             ...daily.map(row => [row.key, row.joins, row.chats, row.observedMinutes, format(row.averageViewers)])
-        ];
-        for (const values of rows) {
-            const tr = document.createElement('tr');
-            for (const value of values) {
-                const td = document.createElement('td');
-                td.textContent = value;
-                tr.append(td);
-            }
-            table.append(tr);
-        }
-        el('daily').replaceChildren(table);
+        ]));
     }
 
     /** 每日成效表：互動指標跨場次相加，累計觸及人數取最大。 */
     function renderMetrics(metrics) {
         if (!metrics) return;
 
-        const table = document.createElement('table');
-        const rows = [
+        el('metrics').replaceChildren(buildTable([
             ['日期', '鑽石', '送禮者', '新粉絲', '獲讚', '累計觀眾'],
             ...metrics.daily.map(row => [row.key, row.diamonds, row.gifters, row.newFollowers, row.likes, row.uniqueViewers])
-        ];
-        for (const values of rows) {
-            const tr = document.createElement('tr');
-            for (const value of values) {
-                const td = document.createElement('td');
-                td.textContent = value;
-                tr.append(td);
-            }
-            table.append(tr);
-        }
-        el('metrics').replaceChildren(table);
+        ]));
     }
 
     /**
@@ -99,7 +109,6 @@
         if (!rankings) return;
 
         const enough = rankings.cells.filter(cell => !cell.insufficient);
-        const table = document.createElement('table');
         const rows = [['#', '時段', '場次', '中位數', '平均', '收縮平均', '95% 區間']];
 
         enough.forEach((cell, index) => {
@@ -114,16 +123,7 @@
             ]);
         });
 
-        for (const values of rows) {
-            const tr = document.createElement('tr');
-            for (const value of values) {
-                const td = document.createElement('td');
-                td.textContent = value;
-                tr.append(td);
-            }
-            table.append(tr);
-        }
-        el('ranking').replaceChildren(table);
+        el('ranking').replaceChildren(buildTable(rows));
 
         el('ranking-note').textContent = enough.length
             ? '共 ' + rankings.sessionCount + ' 個場次、' + rankings.cells.length + ' 個時段；每個時段至少 ' +

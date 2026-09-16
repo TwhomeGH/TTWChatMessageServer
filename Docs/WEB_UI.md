@@ -4,7 +4,7 @@
 
 一般啟動使用 `npm start`，排版開發使用 `npm run dev`；模式差異見 [啟動說明](STARTUP.md)。
 
-主服務的 9 個 Tailwind 頁面改用 `/assets/app.css`。以 Tailwind 4.3.3（`@tailwindcss/cli`）編譯既有 class，
+主服務的 Tailwind 頁面（含 `/traffic`）改用 `/assets/app.css`。以 Tailwind 4.3.3（`@tailwindcss/cli`）編譯既有 class，
 瀏覽器不再載入 Tailwind Play CDN。keyword 原本即為獨立 CSS，保持原本的樣式方式。
 Chart.js、播放器與圖示仍有外部依賴。
 
@@ -21,7 +21,8 @@ npm run watch:css
 不要使用 `bg-${color}-500` 這類拼接名稱；改用完整 class 對照表。
 建置輸出的 `assets/app.css` 與 `assets/app.css.build.json` 應與頁面一同交付；
 啟動時指紋一致就不需現場編譯，不一致才重建，詳見 [啟動說明](STARTUP.md)。
-本次以 npm 完成建置與驗證；安裝同時更新 `package-lock.json` 與既有 `yarn.lock` 的建置依賴。
+指紋只涵蓋會影響 CSS 產出的來源：根目錄 HTML、`styles/`、建置腳本與建置版本；前端 `assets/*.js` 不影響 CSS，因此不列入（改前端 JS 不需重建）。
+本專案只用 npm：`yarn.lock` 已移除並列入 `.gitignore`，`package-lock.json` 是唯一鎖檔。
 
 `WebAssets.cjs` 只公開明確列出的 CSS，支援 GET／HEAD，回傳正確 MIME，
 使用 `no-cache` 避免更新後繼續使用舊樣式。升級後需重啟 Server.js，讓新資源路由生效。
@@ -40,6 +41,7 @@ npm run watch:css
 | `/logViewer` | 工具列換行；內容高度使用動態視窗單位，日誌區內捲動 | 檔案篩選、搜尋與更新狀態 |
 | `/pushdiag` | 原有響應式分區保留；共用焦點與操作尺寸；本機樣式 | 將進階細節收合，保留診斷摘要 |
 | `/keyword` | 原有手機版、分頁與表格內捲動保留 | 平台篩選與最近紀錄的密度控制 |
+| `/traffic` | 重構為卡片＋雙圖並排＋可捲動表格；表格加表頭、斑馬紋與 hover；自訂選單樣式；動態產生的卡片與表格改用純 CSS（不依賴 Tailwind 掃描） | 場次成效納入排名（v2） |
 
 後續項目為盤點建議，尚未實作。`OtherTool` 的獨立顯示頁與第三方套件範例不屬於主服務操作頁，
 不套用管理介面的通用版面，避免影響直播顯示用途。

@@ -22,6 +22,6 @@
 依本地（星期 × 小時）分桶，計算中位數、平均、標準差與**收縮估計**（往整體平均拉，k=3），每桶至少 3 場才列入排名。
 這是你的歷史觀察，不是平台推流規律，也不代表因果。
 
-原生 TikTok 提供 MEMBER/CHAT，TikTok/Twitch 提供觀看取樣。其他來源 /chat 可送 eventType: join/chat，platform、transport、userId、msgId、sentAt；觀看數使用 type: audience 與數字 userNum。Unknown 仍計數，測試資料排除，不依留言包含「來了」判斷進房。聊天事件未套用剪輯有效互動過濾。
+原生 TikTok 提供 MEMBER/CHAT，TikTok/Twitch 提供觀看取樣。其他來源 /chat 可送 eventType: join/chat，platform、transport、userId、msgId、sentAt；userscript 的聊天以 type:'StreamMessage' 送出（沒有 eventType）也計為 chat；觀看數使用 type: audience 與數字 userNum。Unknown 仍計數，測試資料排除，不依留言包含「來了」判斷進房。聊天事件未套用剪輯有效互動過濾。
 
 去重與延遲限制沿用第一階段：事件 ID 24 小時、無 ID 同人同類型文字 10 秒，時間早超過 2 分鐘或超前 10 秒排除。去重資訊也落地，重啟不重算已接收 ID。原生 IPC 背壓時會丟失觀察事件，故不宣稱完整人流。正式剪輯規則維持原樣。
