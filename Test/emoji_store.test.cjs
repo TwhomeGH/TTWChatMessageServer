@@ -151,3 +151,68 @@ test('管理 API 檢查登入、持久化修改，並回報版本衝突', async 
     assert.equal(stale.status, 409);
     assert.ok(JSON.parse(await fs.readFile(file))['[api]']);
 });
+
+test('表情圖片路由快取來源圖片，第二次不再連外', async t => {
+    const http = require('node:http');
+    const { createImageCache } = require('../ScriptLib/emoji/image_cache.cjs');
+    const png = Buffer.from(
+        '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489' +
+        '0000000a49444154789c6360000002000154a24f8f0000000049454e44ae426082', 'hex');
+
+    let hits = 0;
+    const origin = http.createServer((req, res) => {
+        hits++;
+        res.writeHead(200, { 'Content-Type': 'image/png' });
+        res.end(png);
+    });
+    await new Promise(resolve => origin.listen(0, '127.0.0.1', resolve));
+    t.after(() => origin.close());
+
+    const url = `http://127.0.0.1:${origin.address().port}/img.png`;
+    const cacheDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ttw-emoji-img-'));
+    t.after(() => fs.rm(cacheDir, { recursive: true, force: true }));
+    const cache = createImageCache(cacheDir);
+    const store = { snapshot: () => ({ map: { ok: url } }) };
+
+    const request = code => new Promise((resolve, reject) => {
+        const req = Readable.from([]);
+        req.url = '/emoji/image?code=' + code;
+        req.method = 'GET';
+        req.headers = {};
+        const res = {
+            writeHead(status, headers) { this.status = status; this.headers = headers; },
+            end(body) { resolve({ status: this.status, headers: this.headers, body }); }
+        };
+        cache.serve(req, res, code, store).catch(reject);
+    });
+
+    const first = await request('ok');
+    assert.equal(first.status, 200);
+    assert.equal(first.headers['Content-Type'], 'image/png');
+    assert.equal(first.headers['Cache-Control'], 'public, max-age=31536000, immutable');
+    assert.ok(first.body.equals(png));
+    assert.equal(hits, 1);
+
+    // 第二次應由磁碟快取供應，來源端不再被連線。
+    const second = await request('ok');
+    assert.ok(second.body.equals(png));
+    assert.equal(hits, 1);
+
+    await assert.rejects(request('missing'), /找不到此表情/);
+});
+
+test('表情圖片路由需要登入', async () => {
+    const { serveEmoji } = require('../EmojiRoutes.cjs');
+    const result = await new Promise(resolve => {
+        const req = Readable.from([]);
+        req.url = '/emoji/image?code=ok';
+        req.method = 'GET';
+        req.headers = {};
+        const res = {
+            writeHead(status) { this.status = status; },
+            end(body) { resolve({ status: this.status, body }); }
+        };
+        serveEmoji(req, res, false);
+    });
+    assert.equal(result.status, 401);
+});

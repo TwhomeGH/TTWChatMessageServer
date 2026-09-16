@@ -25,6 +25,13 @@ function parseImageUrl(value) {
     }
 }
 
+// 網址的短雜湊（djb2），僅作為圖片快取的 cache-busting：網址一改，key 就換。
+function shortHash(text) {
+    let h = 5381;
+    for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+}
+
 // 重設表單為「新增」狀態。
 function resetForm() {
     originalCode = null;
@@ -40,7 +47,8 @@ function createCard(code, url) {
     card.className = 'bg-gray-900 rounded-lg p-3 flex gap-3';
 
     const image = document.createElement('img');
-    image.src = url;
+    // 走伺服器端快取路由（依代碼取圖）；v 讓網址變更時繞過瀏覽器快取。
+    image.src = '/emoji/image?code=' + encodeURIComponent(code) + '&v=' + shortHash(url);
     image.alt = code;
     image.width = 48;
     image.height = 48;

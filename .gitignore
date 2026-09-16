@@ -29,3 +29,6 @@ autoclip_stats.json
 
 # 本專案以 npm 為唯一套件管理器（CI 使用 npm ci）；忽略誤產生的 yarn lock。
 yarn.lock
+
+# 表情圖片的伺服器端快取（執行期產生）。
+cache/

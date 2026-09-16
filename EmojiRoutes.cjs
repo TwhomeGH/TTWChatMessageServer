@@ -1,6 +1,7 @@
 const { store } = require('./EmojiStore.cjs');
 const { sendJson } = require('./ScriptLib/emoji/http.cjs');
 const { sendPage, getMapping, changeMapping } = require('./ScriptLib/emoji/handlers.cjs');
+const { serveEmojiImage } = require('./ScriptLib/emoji/image_cache.cjs');
 
 /**
  * 處理已匹配的路由；authorized 由主伺服器現有登入機制判定。
@@ -8,13 +9,17 @@ const { sendPage, getMapping, changeMapping } = require('./ScriptLib/emoji/handl
  */
 async function dispatch(req, res, pathname, authorized) {
     if (!authorized) {
-        if (pathname === '/api/emoji') {
+        if (pathname === '/api/emoji' || pathname === '/emoji/image') {
             sendJson(res, 401, { success: false, error: '請先登入' });
             return;
         }
         return sendPage(res, false);
     }
     if (pathname === '/emoji' && req.method === 'GET') return sendPage(res, true);
+    if (pathname === '/emoji/image' && ['GET', 'HEAD'].includes(req.method)) {
+        const code = new URL(req.url, 'http://localhost').searchParams.get('code');
+        return serveEmojiImage(req, res, code, store);
+    }
     if (pathname === '/api/emoji' && req.method === 'GET') return getMapping(res, store);
     if (pathname === '/api/emoji' && req.method === 'POST') return changeMapping(req, res, store);
     sendJson(res, 405, { success: false, error: '不支援的請求' });
@@ -27,7 +32,7 @@ async function dispatch(req, res, pathname, authorized) {
  */
 function serveEmoji(req, res, authorized) {
     const pathname = req.url.split('?')[0];
-    if (!['/emoji', '/api/emoji'].includes(pathname)) return false;
+    if (!['/emoji', '/api/emoji', '/emoji/image'].includes(pathname)) return false;
     dispatch(req, res, pathname, authorized).catch(error => {
         sendJson(res, error.status || 400, { success: false, error: error.message });
     });
