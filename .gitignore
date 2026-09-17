@@ -35,3 +35,6 @@ cache/
 
 # Local traffic history (including SQLite WAL files)
 /data/traffic.sqlite*
+
+# 使用者自訂過濾規則（首次啟動從 FilterRules.custom.example.js 複製一份）。
+FilterRules.custom.js

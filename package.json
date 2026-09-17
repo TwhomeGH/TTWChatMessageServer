@@ -23,7 +23,7 @@
     "check:css": "node scripts/css-build.cjs --check",
     "watch:css": "node scripts/css-build.cjs --watch",
     "test:startup": "node --test Test/start.test.cjs Test/css_build.test.cjs",
-    "test:core": "node --test --test-concurrency=1 Test/message_stats.test.mjs Test/message_stats_boundaries.test.mjs Test/message_source.test.mjs Test/autoclip_v2.test.mjs Test/autoclip_chart.test.mjs Test/emoji_store.test.cjs Test/module_boundaries.test.cjs Test/socket_transport.test.mjs Test/tiktok_chat_guard.test.mjs Test/userscript_source.test.mjs Test/ws_relay.test.cjs Test/web_assets.test.cjs Test/browser_session.test.mjs Test/runtime_state.test.cjs Test/i18n.test.cjs Test/traffic.test.cjs",
+    "test:core": "node --test --test-concurrency=1 Test/message_stats.test.mjs Test/message_stats_boundaries.test.mjs Test/message_source.test.mjs Test/autoclip_v2.test.mjs Test/autoclip_chart.test.mjs Test/emoji_store.test.cjs Test/module_boundaries.test.cjs Test/socket_transport.test.mjs Test/tiktok_chat_guard.test.mjs Test/userscript_source.test.mjs Test/ws_relay.test.cjs Test/web_assets.test.cjs Test/browser_session.test.mjs Test/runtime_state.test.cjs Test/i18n.test.cjs Test/traffic.test.cjs Test/message_filter.test.mjs",
     "test:ci": "npm run test:core && npm run test:startup && npm run check:css"
   },
   "devDependencies": {

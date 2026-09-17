@@ -1,5 +1,5 @@
 import { normalizeSource } from './MessageSource.mjs';
-import { promises as fs } from 'fs';
+import { promises as fs, existsSync, copyFileSync } from 'fs';
 import { MessageStats, mergeStatEntries } from './MessageStats.mjs';
 export { mergeStatEntries };
 const stats = new MessageStats();
@@ -145,7 +145,15 @@ addFilterRules([
         name: 'user:廣告帳號-加LINE/加瀨',
         field: 'user',
         action: 'block',
-        test: (u) => /加(LINE|瀨|line|ｌｉｎｅ)/.test(u),
+        // 含簡體「濑」、異體「頼/賴」、全形 ｌｉｎｅ，並允許中間有空白。
+        test: (u) => /加\s*(LINE|line|ｌｉｎｅ|[瀨濑頼賴])/i.test(u),
+    },
+    {
+        name: 'user:廣告帳號-混淆字元',
+        field: 'user',
+        action: 'block',
+        // 圈號（①-⑳ 等 Enclosed Alphanumerics）與數學粗體字母（𝗔-𝟵）：正常暱稱幾乎不會出現。
+        test: (u) => /[\u2460-\u24FF]|[\u{1D400}-\u{1D7FF}]/u.test(u),
     },
     {
         name: 'user:廣告帳號-特殊組合字',
@@ -207,11 +215,11 @@ addFilterRules([
         replacement: ' ',
     },
     {
-        name: 'msg:補幣廣告改梗',
+        name: 'msg:廣告-補幣/按我頭像',
         field: 'message',
-        action: 'replace',
-        match: /補幣中，?按我頭像(?:\s|&#x20;)?/g,
-        replacement: '哈基中，關注主播不迷路',
+        action: 'block',
+        // 這類廣告會週期性換詞重刷，直接阻擋；不要再改寫成梗，否則等於變相洗版。
+        test: (m) => /補[幣币]|按我頭像/.test(m),
     },
 
     // ── 範例：replace / delete（預設關閉，使用者可按需啟用）──
@@ -237,6 +245,40 @@ addFilterRules([
     }
 
 ]);
+
+// ===== 自訂規則檔 =====
+
+// 使用者自己的規則放在 FilterRules.custom.js（不進版控）；首次啟動若不存在，從範本複製一份。
+const CUSTOM_RULES_FILE = './FilterRules.custom.js';
+const CUSTOM_RULES_EXAMPLE = './FilterRules.custom.example.js';
+
+/**
+ * 過濾掉格式不正確的自訂規則，避免一份打錯的檔案讓整個過濾器失效。
+ */
+export function validateFilterRules(rules) {
+    if (!Array.isArray(rules)) return [];
+    return rules.filter(rule => {
+        if (!rule || typeof rule !== 'object') return false;
+        if (!['user', 'message', 'any'].includes(rule.field)) return false;
+        const action = rule.action || 'block';
+        if (action === 'block') return typeof rule.test === 'function';
+        if (action === 'replace' || action === 'delete') return rule.match instanceof RegExp || typeof rule.match === 'string';
+        return false;
+    });
+}
+
+try {
+    if (!existsSync(CUSTOM_RULES_FILE) && existsSync(CUSTOM_RULES_EXAMPLE)) {
+        copyFileSync(CUSTOM_RULES_EXAMPLE, CUSTOM_RULES_FILE);
+        console.log('已從範本建立 FilterRules.custom.js');
+    }
+    const customRules = (await import('./FilterRules.custom.js')).default;
+    const validRules = validateFilterRules(customRules);
+    addFilterRules(validRules);
+    if (validRules.length) console.log(`已載入 ${validRules.length} 條自訂過濾規則`);
+} catch (error) {
+    if (error.code !== 'ERR_MODULE_NOT_FOUND') console.error('自訂過濾規則載入失敗:', error);
+}
 
 export default {
     normalizeSource,
