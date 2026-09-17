@@ -40,19 +40,21 @@
     <button id="rule-preset-emoji">純 emoji 洗頻</button>
   </div>
 
-  <h3>快速測試（從歷史挑一筆）</h3>
-  <p>在下方統計表格按「快速測試」帶入那筆紀錄，並顯示目前規則的實際結果：阻擋、改為某值、或不變。</p>
+  <h3>測試（手動輸入或從歷史帶入）</h3>
+  <p>自己貼上暱稱與內容，或在下方統計表格按「快速測試」帶入該筆紀錄。候選規則即時試算；「測目前生效規則」按鈕會打伺服器，回報實際結果（被哪條規則阻擋、或改寫成什麼）。</p>
   <div class="rule-form">
-    <label>原始暱稱 <input id="rule-sample-user" placeholder="（快速測試會自動帶入）"></label>
+    <label>暱稱 <input id="rule-sample-user" placeholder="貼上暱稱…"></label>
   </div>
-  <pre id="rule-quick-result">（尚未挑選紀錄）</pre>
-  <pre id="rule-actual-result">目前生效規則：—</pre>
+  <textarea id="rule-sample" placeholder="貼上訊息內容（可多行）…"></textarea>
 
-  <h3>測試樣本</h3>
-  <p>可貼多行文字，逐行標出正則命中。</p>
-  <textarea id="rule-sample" placeholder="貼上訊息內容或暱稱…"></textarea>
+  <p class="muted">候選規則</p>
+  <pre id="rule-quick-result">（先填正則）</pre>
   <p id="rule-test-status" class="muted" role="status"></p>
   <div id="rule-test-result"></div>
+
+  <p class="muted">目前生效規則</p>
+  <div class="rule-fields"><button id="rule-run-actual">測目前生效規則</button></div>
+  <pre id="rule-actual-result">（尚未測試）</pre>
 
   <h3>對歷史資料預覽</h3>
   <p id="rule-history-status" class="muted" role="status"></p>

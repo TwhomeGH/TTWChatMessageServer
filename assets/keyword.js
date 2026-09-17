@@ -185,11 +185,30 @@
         return { matched: true, result: value.replace(rule.match, rule.action === 'delete' ? '' : rule.replacement) };
     }
 
-    /** 把單一欄位的判定寫成一句話。 */
-    function outcomeText(label, outcome) {
-        if (!outcome.matched) return label + '：不變';
-        if (outcome.blocked) return label + '：⛔ 阻擋';
-        return label + '：改為「' + outcome.result + '」';
+    /** 把一個判定寫成一句話（不含欄位名，由呼叫端加）。 */
+    function outcomeText(outcome) {
+        if (!outcome.matched) return '不變';
+        if (outcome.blocked) return '⛔ 阻擋';
+        return '改為「' + outcome.result + '」';
+    }
+
+    /** 目前表單上的測試樣本（暱稱＋內容）。 */
+    function sample() {
+        return { user: el('rule-sample-user').value, message: el('rule-sample').value };
+    }
+
+    /** 候選規則對樣本的判定（依規則對象測暱稱與／或內容）。 */
+    function candidateLines(rule, record) {
+        const lines = [];
+        if (rule.field === 'user' || rule.field === 'any') {
+            lines.push('暱稱：' + outcomeText(applyRule(rule, record.user)));
+        }
+        if (rule.field === 'message' || rule.field === 'any') {
+            const rows = record.message ? record.message.split('\n') : [];
+            const hits = rows.filter(line => rule.test.test(line)).length;
+            lines.push('內容：' + rows.length + ' 行，命中 ' + hits + ' 行');
+        }
+        return lines;
     }
 
     /** 把伺服器端「目前生效規則集」的結果寫成一句話。 */
@@ -205,7 +224,7 @@
     /** 用伺服器端「目前生效的規則集」測同一筆，顯示實際結果。 */
     async function checkActual(record) {
         const line = el('rule-actual-result');
-        line.textContent = '目前生效規則：檢查中…';
+        line.textContent = '檢查中…';
         try {
             const response = await fetch('/api/filter/check', {
                 method: 'POST',
@@ -213,29 +232,17 @@
                 body: JSON.stringify({ user: record.user, message: record.message }),
             });
             if (!response.ok) throw new Error('HTTP ' + response.status);
-            line.textContent = '目前生效規則：' + actualText(await response.json());
+            line.textContent = actualText(await response.json());
         } catch (error) {
-            line.textContent = '目前生效規則：讀取失敗（' + error.message + '）';
+            line.textContent = '讀取失敗（' + error.message + '）';
         }
     }
 
-    /** 從歷史挑一筆快速測試：候選規則（前端）＋目前生效規則（後端）的實際結果。 */
+    /** 從歷史挑一筆快速測試：帶入樣本後同時跑候選規則與目前生效規則。 */
     async function quickTest(record) {
         el('rule-sample-user').value = record.user || '';
         el('rule-sample').value = record.message || '';
-
-        const box = el('rule-quick-result');
-        const head = ['原始內容：' + (record.message || '（無）'), '原始暱稱：' + (record.user || '（無）')];
-        const rule = currentRule();
-        if (rule) {
-            if (rule.field === 'user' || rule.field === 'any') head.push('候選規則 → ' + outcomeText('暱稱', applyRule(rule, record.user)));
-            if (rule.field === 'message' || rule.field === 'any') head.push('候選規則 → ' + outcomeText('內容', applyRule(rule, record.message)));
-            box.textContent = head.join('\n');
-            updateRulePreview();
-        } else {
-            box.textContent = head.join('\n') + '\n（先填正則才能測候選規則）';
-        }
-
+        updateRulePreview();
         await checkActual(record);
     }
 
@@ -279,27 +286,28 @@
         const result = el('rule-test-result');
         const history = el('rule-history');
         if (!rule) {
+            el('rule-quick-result').textContent = '（先填正則）';
+            el('rule-test-status').textContent = '';
             result.replaceChildren();
             history.replaceChildren();
             el('rule-history-status').textContent = '';
             return;
         }
 
-        // 樣本測試：逐行標出命中片段。
+        // 候選規則對樣本的判定（暱稱＋內容）。
+        const record = sample();
+        const candidate = candidateLines(rule, record);
+        el('rule-quick-result').textContent = candidate.length ? candidate.join('\n') : '（先輸入暱稱或內容）';
+
+        // 逐行標出內容命中片段。
         result.replaceChildren();
-        const sample = el('rule-sample').value;
-        if (sample) {
-            const lines = sample.split('\n');
-            const hits = lines.filter(line => rule.test.test(line)).length;
-            el('rule-test-status').textContent = `樣本 ${lines.length} 行，命中 ${hits} 行`;
-            for (const line of lines) {
-                const div = document.createElement('div');
-                div.className = 'rule-line';
-                div.append(highlight(line, rule.test));
-                result.append(div);
-            }
-        } else {
-            el('rule-test-status').textContent = '';
+        const sampleRows = record.message ? record.message.split('\n') : [];
+        el('rule-test-status').textContent = sampleRows.length ? '' : '（沒有內容可逐行標示）';
+        for (const line of sampleRows) {
+            const div = document.createElement('div');
+            div.className = 'rule-line';
+            div.append(highlight(line, rule.test));
+            result.append(div);
         }
 
         // 歷史預覽：對目前載入的統計跑一次，先看會不會誤殺。
@@ -403,11 +411,12 @@
         finally { el('clearBtn').disabled = false; }
     };
 
-    for (const id of ['rule-name', 'rule-pattern', 'rule-flags', 'rule-replacement', 'rule-sample']) {
+    for (const id of ['rule-name', 'rule-pattern', 'rule-flags', 'rule-replacement', 'rule-sample', 'rule-sample-user']) {
         el(id).oninput = updateRulePreview;
     }
     for (const id of ['rule-field', 'rule-action']) el(id).onchange = updateRulePreview;
     for (const id of Object.keys(PRESETS)) el(id).onclick = () => applyPreset(id);
+    el('rule-run-actual').onclick = () => checkActual(sample());
 
     el('rule-copy').onclick = async () => {
         const snippet = buildSnippet();
