@@ -289,6 +289,45 @@ class TrafficDatabase {
         return this.db.prepare('SELECT DISTINCT platform FROM minutes ORDER BY platform').all().map(row => row.platform);
     }
 
+    /** 該平台最早的一分鐘彙總時間（「全部」範圍的起點）；沒有資料回傳 null。 */
+    earliest(platform) {
+        const row = this.db.prepare('SELECT MIN(time) AS time FROM minutes WHERE platform=?').get(platform || '');
+        return row?.time ?? null;
+    }
+
+    /**
+     * 圖表序列：從 minutes（每分鐘彙總）取範圍資料，依 bucketMs 分桶。
+     * 觀看數取桶內「有取樣分鐘」的平均；沒有取樣為 null，折線才會斷開而不是被補成 0。
+     */
+    series(platform, since, bucketMs, now) {
+        const rows = this.db.prepare(`SELECT time, joins, chats, viewerSum, viewerCount
+            FROM minutes WHERE platform=? AND time>=? AND time<=? ORDER BY time`)
+            .all(platform || '', since, now);
+
+        const totals = new Map();
+        for (const row of rows) {
+            const time = Math.floor(row.time / bucketMs) * bucketMs;
+            if (!totals.has(time)) totals.set(time, { joins: 0, chats: 0, viewerSum: 0, viewerCount: 0 });
+            const bucket = totals.get(time);
+            bucket.joins += row.joins ?? 0;
+            bucket.chats += row.chats ?? 0;
+            bucket.viewerSum += row.viewerSum ?? 0;
+            bucket.viewerCount += row.viewerCount ?? 0;
+        }
+
+        const series = [];
+        for (let time = Math.floor(since / bucketMs) * bucketMs; time <= now; time += bucketMs) {
+            const bucket = totals.get(time);
+            series.push({
+                time,
+                joins: bucket?.joins ?? 0,
+                chats: bucket?.chats ?? 0,
+                viewers: bucket?.viewerCount ? Math.round(bucket.viewerSum / bucket.viewerCount) : null
+            });
+        }
+        return series;
+    }
+
     /** 最近的事件（原始證據），供即時視窗使用。 */
     recent(since) {
         return this.db.prepare('SELECT payload FROM events WHERE time>=? ORDER BY time DESC LIMIT 20000')

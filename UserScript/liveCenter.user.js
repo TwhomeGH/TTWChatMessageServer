@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat → Socket Bridge
 // @namespace    pip-chat-bridge
-// @version      1.11
+// @version      1.12
 // @description  Listen TikTok live chat and forward to socket server
 // @author       Nuclear0709
 // @match        https://livecenter.tiktok.com/*
@@ -229,8 +229,15 @@ function getTopFanUsers() {
                 console.log("頭號觀眾人數:", users.length);
                 console.log("名字清單:", users);
             }, 5000); // 每5秒更新一次頭號觀眾列表
-            sendMetrics();
-            setInterval(sendMetrics, 30000); // 每30秒記錄一次累計成效
+            // 每 30 秒固定回報觀眾數與累計成效：只在收到聊天時才送會讓備用樣本太稀疏，
+            // 聊天一安靜就超過伺服器的 90 秒新鮮度門檻。
+            const report = () => {
+                const users = getTopFanUsers();
+                sendAudienceUpdate(users.length, users);
+                sendMetrics();
+            };
+            report();
+            setInterval(report, 30000);
 
         }, 3000); // 等頁面穩定
     });

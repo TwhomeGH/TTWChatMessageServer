@@ -5,6 +5,21 @@ const NATIVE_PRIORITY_MS = 90000;
 // 中控台「直播指標」的累計成效欄位。
 const METRIC_FIELDS = ['diamonds', 'gifters', 'newFollowers', 'likes', 'uniqueViewers'];
 
+// 圖表範圍：值為分鐘數，'all' 代表全部歷史（以資料庫最早的一筆為起點）。
+const RANGES = { '10': 10, '30': 30, '60': 60, '180': 180, '360': 360, '720': 720, '1440': 1440, all: null };
+
+// 可用的桶寬（由小到大）；依範圍挑一個，讓點數不超過 TARGET_POINTS，長範圍才不會擠成一團。
+const BUCKET_SIZES = [60000, 300000, 900000, 1800000, 3600000, 10800000, 21600000, 43200000, 86400000, 604800000];
+const TARGET_POINTS = 240;
+
+/** 依範圍毫秒數挑桶寬。 */
+function bucketSize(rangeMs) {
+    for (const size of BUCKET_SIZES) {
+        if (rangeMs / size <= TARGET_POINTS) return size;
+    }
+    return BUCKET_SIZES.at(-1);
+}
+
 /**
  * 人流即時狀態與寫入入口。
  *
@@ -161,9 +176,7 @@ class TrafficStore {
      *
      * 缺少觀看數保持 null；不跨平台相加，避免把不同平台的人數誤認成去重人數。
      */
-    snapshot(platform, minutes = 30) {
-        const now = this.now();
-        const since = now - minutes * 60000;
+    snapshot(platform, range = '30', now = this.now()) {
         this.events = this.events.filter(e => e.time >= now - 86400000);
 
         const platforms = this.database
@@ -171,25 +184,19 @@ class TrafficStore {
             : [...new Set(this.events.map(e => e.platform))].sort();
         platform = platforms.includes(platform) ? platform : platforms[0];
 
+        // 圖表序列：取自資料庫的 minutes（含全部歷史、不受 24 小時／20,000 筆上限影響），
+        // 桶寬依範圍自適應，長範圍才不會擠成上千個點。
+        const minutes = Object.hasOwn(RANGES, range) ? RANGES[range] : 30;
+        const since = minutes === null
+            ? (this.database?.earliest(platform) ?? now - 60000)
+            : now - minutes * 60000;
+        const bucketMs = bucketSize(Math.max(60000, now - since));
+        const buckets = this.database ? this.database.series(platform, since, bucketMs, now) : [];
+
+        // 卡片與進房明細本質是「現在／近期」，維持用記憶體中的事件。
         const events = this.events
-            .filter(e => e.platform === platform && e.time >= since)
+            .filter(e => e.platform === platform)
             .sort((a, b) => a.time - b.time);
-
-        const buckets = new Map();
-        for (let t = Math.floor(since / 60000) * 60000; t <= now; t += 60000) {
-            buckets.set(t, { time: t, joins: 0, chats: 0, viewers: null, users: new Set() });
-        }
-        for (const event of events) {
-            const bucket = buckets.get(Math.floor(event.time / 60000) * 60000);
-            if (!bucket) continue;
-            if (event.kind === 'join') bucket.joins++;
-            if (event.kind === 'chat') {
-                bucket.chats++;
-                if (event.userId) bucket.users.add(event.userId);
-            }
-            if (event.kind === 'viewers') bucket.viewers = event.viewers;
-        }
-
         const samples = events.filter(e => e.kind === 'viewers');
         const last = samples.at(-1);
         const fresh = last && now - last.time <= 90000;
@@ -208,17 +215,33 @@ class TrafficStore {
             }
         }
 
+        // 診斷：最近一次原生／備用觀看取樣與樣本量，方便判斷是哪一條來源斷了。
+        const nativeSamples = samples.filter(event => event.transport === 'native');
+        const declaredSamples = samples.filter(event => event.transport !== 'native');
+
         return {
             startedAt: this.startedAt,
             now,
             platform,
             platforms,
+            range,
+            since,
+            bucketMs,
+            buckets,
             currentViewers: fresh ? last.viewers : null,
             lastViewerAt: last?.time ?? null,
             growth,
             growingMs,
-            buckets: [...buckets.values()].map(bucket => ({ ...bucket, users: bucket.users.size })),
-            events: events.filter(e => e.kind === 'join').slice(-200)
+            events: events.filter(e => e.kind === 'join').slice(-200),
+            diagnostics: {
+                lastNativeViewerAt: nativeSamples.at(-1)?.time ?? null,
+                lastDeclaredViewerAt: declaredSamples.at(-1)?.time ?? null,
+                viewerSamples: samples.length,
+                nativeViewerSamples: nativeSamples.length,
+                memoryEvents: this.events.length,
+                observedBuckets: buckets.filter(bucket => bucket.viewers !== null).length,
+                totalBuckets: buckets.length
+            }
         };
     }
 }

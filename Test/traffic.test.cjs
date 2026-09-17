@@ -254,3 +254,28 @@ test('成效事件開場次並以累計最大值記錄', () => {
     assert.equal(daily.daily[0].diamonds, 30);
     db.close();
 });
+
+// 圖表序列：從 minutes 取範圍資料，依桶寬彙總，缺資料處 viewers 為 null（折線才斷得開）。
+test('圖表序列依桶寬彙總並保留缺資料', () => {
+    const db = new TrafficDatabase(':memory:');
+    let now = Date.parse('2026-09-01T02:00:00Z');
+    const store = new TrafficStore(() => now, db);
+
+    store.record({ eventType: 'join', platform: 'TikTok', id: 'a' });
+    store.record({ type: 'audience', platform: 'TikTok', userNum: 10 });
+    now += 60000;
+    store.record({ eventType: 'join', platform: 'TikTok', id: 'b' });
+    store.record({ type: 'audience', platform: 'TikTok', userNum: 30 });
+
+    assert.equal(db.earliest('TikTok'), Date.parse('2026-09-01T02:00:00Z'));
+
+    const series = db.series('TikTok', Date.parse('2026-09-01T02:00:00Z'), 300000, now);
+    assert.equal(series.length, 1);       // 兩分鐘落在同一個 5 分鐘桶
+    assert.equal(series[0].joins, 2);
+    assert.equal(series[0].viewers, 20);  // (10 + 30) / 2
+
+    const empty = db.series('TikTok', Date.parse('2026-09-01T02:05:00Z'), 300000, Date.parse('2026-09-01T02:10:00Z'));
+    assert.equal(empty[0].viewers, null);
+    assert.equal(empty[0].joins, 0);
+    db.close();
+});

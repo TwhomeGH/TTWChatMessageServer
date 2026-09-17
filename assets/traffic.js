@@ -34,16 +34,37 @@
         return table;
     }
 
-    /** 進房明細：未選取分鐘時顯示最近 200 筆，選取時只顯示該分鐘。 */
+    /** 桶時間的顯示格式：範圍越長、粒度越粗。 */
+    function bucketLabel(value) {
+        const date = new Date(value);
+        const bucketMs = data?.bucketMs ?? 60000;
+        const pad = number => String(number).padStart(2, '0');
+        if (bucketMs >= 86400000) return (date.getMonth() + 1) + '/' + date.getDate();
+        if (bucketMs >= 3600000) return (date.getMonth() + 1) + '/' + date.getDate() + ' ' + pad(date.getHours()) + ':00';
+        return pad(date.getHours()) + ':' + pad(date.getMinutes());
+    }
+
+    /** 進房明細：未選取桶時顯示最近 200 筆，選取時只顯示落在該桶範圍的事件。 */
     function renderDetails() {
+        const bucketMs = data.bucketMs ?? 60000;
         const rows = data.events
-            .filter(event => selected === null || Math.floor(event.time / 60000) * 60000 === selected)
+            .filter(event => selected === null || (event.time >= selected && event.time < selected + bucketMs))
             .slice()
             .reverse();
 
         el('detail-title').textContent = selected === null
             ? '最近進房事件（最多 200 筆）'
-            : time(selected) + ' 進房明細';
+            : bucketLabel(selected) + ' 進房明細';
+
+        if (!rows.length) {
+            const note = document.createElement('p');
+            note.className = 'text-gray-500 text-xs';
+            note.textContent = selected === null
+                ? '目前沒有進房事件（不是所有平台都提供；原生只有 TikTok 有 MEMBER 事件）。'
+                : '這個時間區間沒有進房事件。';
+            el('details').replaceChildren(note);
+            return;
+        }
 
         el('details').replaceChildren(buildTable([
             ['時間', '使用者／ID', '來源', '辨識'],
@@ -110,9 +131,13 @@
             ctx.stroke();
         });
 
+        // 時間刻度：均勻取 5 個位置，格式隨桶寬改變。
         ctx.fillStyle = '#9ca3af';
-        for (const i of [0, Math.floor((rows.length - 1) / 2), rows.length - 1]) {
-            ctx.fillText(time(rows[i].time), Math.max(0, Math.min(width - 70, pointX(i))), height - 8);
+        const ticks = rows.length <= 5
+            ? rows.map((_, i) => i)
+            : [0, 0.25, 0.5, 0.75, 1].map(fraction => Math.round(fraction * (rows.length - 1)));
+        for (const i of [...new Set(ticks)]) {
+            ctx.fillText(bucketLabel(rows[i].time), Math.max(2, Math.min(width - 66, pointX(i))), height - 8);
         }
 
         canvas.onclick = event => {
@@ -128,7 +153,7 @@
         busy = true;
         try {
             const res = await fetch(
-                '/api/traffic?platform=' + encodeURIComponent(el('platform').value) + '&minutes=' + el('minutes').value,
+                '/api/traffic?platform=' + encodeURIComponent(el('platform').value) + '&range=' + el('range').value,
                 { cache: 'no-store' }
             );
             if (!res.ok) throw Error('讀取失敗');
@@ -142,14 +167,28 @@
             }));
             el('platform').value = data.platform || '';
 
+            const diagnostics = data.diagnostics ?? {};
+            const ago = value => value == null ? '無' : Math.round((data.now - value) / 1000) + ' 秒前';
+
             el('status').textContent = data.platform
-                ? '更新 ' + time(data.now) + ' · ' + (data.currentViewers === null ? '觀看數缺漏或已超過 90 秒' : '觀看數更新 ' + time(data.lastViewerAt))
+                ? '更新 ' + time(data.now) + ' · ' + (data.currentViewers === null
+                    ? '目前沒有新鮮的觀看取樣（超過 90 秒）'
+                    : '觀看數 ' + data.currentViewers + '（' + ago(data.lastViewerAt) + '）')
                 : '尚未收到人流資料';
+
+            // 診斷列：直接指出哪一條觀看來源斷了，免得只看到「—」卻找不到原因。
+            el('diagnostics').textContent = data.platform
+                ? '觀看取樣：範圍內 ' + (diagnostics.observedBuckets ?? 0) + '/' + (diagnostics.totalBuckets ?? 0) + ' 格有值'
+                  + ' · 最近原生 ' + ago(diagnostics.lastNativeViewerAt)
+                  + '、備用 ' + ago(diagnostics.lastDeclaredViewerAt)
+                  + '（記憶體 ' + (diagnostics.viewerSamples ?? 0) + ' 筆樣本／' + (diagnostics.memoryEvents ?? 0) + ' 筆事件）'
+                : '';
 
             const cards = [
                 ['目前觀看', data.currentViewers ?? '—'],
                 ['觀看淨增／分鐘', data.growth === null ? '—' : data.growth.toFixed(1)],
-                ['持續增長', Math.round(data.growingMs / 1000) + ' 秒'],
+                // 沒有新鮮樣本時顯示 —：0 秒是「沒在成長」，跟「沒資料」不同。
+                ['持續增長', data.currentViewers === null ? '—' : Math.round(data.growingMs / 1000) + ' 秒'],
                 ['此範圍進房次數', data.buckets.reduce((n, bucket) => n + bucket.joins, 0)]
             ];
             el('cards').replaceChildren(...cards.map(([name, value]) => {
@@ -175,7 +214,7 @@
         }
     }
 
-    for (const id of ['platform', 'minutes']) el(id).onchange = () => { selected = null; refresh(); };
+    for (const id of ['platform', 'range']) el(id).onchange = () => { selected = null; refresh(); };
     window.addEventListener('resize', () => {
         if (!data) return;
         draw('viewers', ['viewers']);

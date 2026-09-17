@@ -68,11 +68,10 @@ function serveTraffic(req, res) {
     }
 
     if (url.pathname === '/api/traffic') {
-        const minutes = Number(url.searchParams.get('minutes'));
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.end(JSON.stringify(traffic.snapshot(
             url.searchParams.get('platform'),
-            [10, 30, 60, 1440].includes(minutes) ? minutes : 30
+            url.searchParams.get('range') || '30'
         )));
         return true;
     }

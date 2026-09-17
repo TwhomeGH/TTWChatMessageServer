@@ -166,6 +166,7 @@ let tikTokReplayDropped = 0;
 // TikTok 直播間斷線自動重連（有限次數 + 指數退避）
 let tkReconnectTimer = null;   // 重連計時器
 let viewCacheInterval = null;  // viewer 更新 interval handle（斷線時確實清除，避免重連後疊加）
+let viewCacheFailures = 0;     // 連續的 fetchRoomInfo 失敗次數，用來診斷觀看數為何沒更新
 let streamEnded = false;       // 直播真正結束（使用者主動結束 / 平台封鎖）→ 不再重連
 const TK_RETRY_MAX = 5;        // 最大重連次數（避免無限重試）
 const TK_RETRY_BASE = 15000;   // 重連基礎間隔 15 秒（指數退避 15s→30s→60s→120s→240s）
@@ -1228,6 +1229,7 @@ function viewCache() {
     console.log("📋 CacheUserList:", CacheUserList);
 
     connection.fetchRoomInfo(RoomID).then(async (roomInfo) => {
+        viewCacheFailures = 0
         let Viewer = roomInfo.data.user_count
 
         if (writeViewCount > 100 && writeDebugView) {
@@ -1243,7 +1245,8 @@ function viewCache() {
         updateCombinedViewerCount();
 
     }).catch(err => {
-        console.log("RoomError", err.message)
+        viewCacheFailures += 1
+        console.log(`RoomError（連續 ${viewCacheFailures} 次，觀看數不會更新）:`, err.message)
     })
 }
 
@@ -2699,6 +2702,8 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
         
     }
 
+    reportTraffic({ platform: 'Twitch', eventType: 'chat', id: event.messageId, userId: event.chatterId, user: event.chatterDisplayName, message: event.messageText });
+
     const fr = processFilter({ user: event.chatterDisplayName, message: event.messageText });
     if (fr.blocked) {
         console.log('🚫 過濾器阻擋(Twitch):', event.chatterDisplayName, event.messageText, `(規則: ${fr.reason})`);
@@ -2927,6 +2932,7 @@ async function startKickChat() {
 
         console.info(`[Kick Chat] ${userName} : ${message}`);
         writeLog("Default", `${userName} : ${message}`, "Kick Chat Original");
+        reportTraffic({ platform: 'Kick', eventType: 'chat', id: data.id, userId: data.sender?.id, user: userName, sentAt: data.created_at, message });
 
         const fr = processFilter({ user: userName, message });
         if (fr.blocked) {
@@ -3101,6 +3107,7 @@ function connectOdyseeChat(claimId, channelName) {
 
                 console.info(`[Odysee Chat] ${userName} : ${message}`)
                 writeLog("Default", `${userName} : ${message}`, "Odysee Chat Original")
+                reportTraffic({ platform: 'Odysee', eventType: 'chat', user: userName, message })
 
                 const fr = processFilter({ user: userName, message })
                 if (fr.blocked) {
@@ -3405,6 +3412,7 @@ function connectYoutubeChat(liveChatId, videoId, channelName) {
 
                             console.info(`[Youtube Chat] ${userName} : ${message}`)
                             writeLog("Default", `${userName} : ${message}`, "Youtube Chat Original")
+                            reportTraffic({ platform: 'Youtube', eventType: 'chat', id: item.id, userId: item.authorDetails?.channelId, user: userName, sentAt: item.snippet.publishedAt, message })
 
                             const fr = processFilter({ user: userName, message })
                             if (fr.blocked) {

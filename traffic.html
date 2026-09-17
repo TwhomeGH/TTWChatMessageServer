@@ -25,15 +25,20 @@
 
     <section class="toolbar">
       <label>平台 <select id="platform"></select></label>
-      <label>時間 <select id="minutes">
+      <label>範圍 <select id="range">
         <option value="10">10 分鐘</option>
         <option value="30" selected>30 分鐘</option>
         <option value="60">1 小時</option>
+        <option value="180">3 小時</option>
+        <option value="360">6 小時</option>
+        <option value="720">12 小時</option>
         <option value="1440">24 小時</option>
+        <option value="all">全部</option>
       </select></label>
     </section>
 
     <p id="status" role="status" class="text-gray-400 text-sm"></p>
+    <p id="diagnostics" class="text-gray-500 text-xs"></p>
 
     <section id="cards" class="cards"></section>
 
@@ -41,20 +46,20 @@
       <h2>即時圖表</h2>
       <div class="charts">
         <figure class="chart">
-          <figcaption>觀看數（每分鐘最後一筆，缺值斷線）
+          <figcaption>觀看數（依範圍自動分桶，缺值斷線）
             <span class="legend"><i style="background:#60a5fa"></i>觀看數</span>
           </figcaption>
           <canvas id="viewers"></canvas>
         </figure>
         <figure class="chart">
-          <figcaption>進房與聊天（每分鐘）
+          <figcaption>進房與聊天（依範圍自動分桶；進房僅部分平台提供）
             <span class="legend"><i style="background:#60a5fa"></i>進房</span>
             <span class="legend"><i style="background:#34d399"></i>聊天</span>
           </figcaption>
           <canvas id="arrivals"></canvas>
         </figure>
       </div>
-      <p>點選圖表查看該分鐘進房明細；兩張圖共用時間軸。聊天數尚未套用剪輯過濾規則。</p>
+      <p>點選圖表查看該時間區間的進房明細；兩張圖共用時間軸。聊天數尚未套用剪輯過濾規則。</p>
     </section>
 
     <section class="panel">
@@ -79,6 +84,7 @@
 
     <section class="panel">
       <h2 id="detail-title">最近進房事件（最多 200 筆）</h2>
+      <p class="text-gray-500 text-xs">進房事件不是每個平台都提供：原生目前只有 TikTok 的 MEMBER 事件；Twitch／Kick／Odysee／YouTube 沒有「觀眾進房」事件，因此這裡可能是空的。</p>
       <div id="details" class="table-wrap"></div>
     </section>
 
