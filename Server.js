@@ -748,6 +748,38 @@ const server = http.createServer((req, res) => {
         }
     }
 
+    // 目前生效的過濾規則（只回可序列化的中繼資料，供 /keyword 顯示；test 是函式無法外送）
+    else if (req.url === '/api/filter/rules') {
+        try {
+            const rules = messageFilter ? messageFilter.getFilterRules().map(rule => ({
+                name: rule.name,
+                field: rule.field,
+                action: rule.action || 'block'
+            })) : [];
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ rules }));
+        } catch (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: err.message }));
+        }
+    }
+
+    // 用「目前生效的規則集」測一筆，回傳實際結果（阻擋原因，或改寫後的值）
+    else if (req.url === '/api/filter/check' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const { user, message } = JSON.parse(body || '{}');
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(processFilter({ user, message })));
+            } catch (err) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message }));
+            }
+        });
+    }
+
     // ── 剪輯歷史頁面 ──
     else if (req.url === '/clips') {
         const filePath = path.join(__dirname, 'clips.html');

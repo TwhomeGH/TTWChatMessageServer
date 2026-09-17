@@ -9,10 +9,16 @@ function createWebAssetHandler(root = __dirname) {
             '/assets/traffic-history.js': ['assets/traffic-history.js', 'text/javascript; charset=utf-8'],
             '/assets/traffic.js': ['assets/traffic.js', 'text/javascript; charset=utf-8'],
             '/assets/app.css': ['assets/app.css', 'text/css; charset=utf-8'],
+            '/assets/keyword.css': ['assets/keyword.css', 'text/css; charset=utf-8'],
+            '/assets/autoclip.css': ['assets/autoclip.css', 'text/css; charset=utf-8'],
+            '/assets/pushdiag.css': ['assets/pushdiag.css', 'text/css; charset=utf-8'],
+            '/assets/sponsor.css': ['assets/sponsor.css', 'text/css; charset=utf-8'],
+            '/assets/traffic.css': ['assets/traffic.css', 'text/css; charset=utf-8'],
             '/assets/runtime-start.js': ['assets/runtime-start.js', 'text/javascript; charset=utf-8'],
             '/assets/i18n.js': ['assets/i18n.js', 'text/javascript; charset=utf-8'],
             '/assets/autoclip.js': ['assets/autoclip.js', 'text/javascript; charset=utf-8'],
-            '/assets/emoji.js': ['assets/emoji.js', 'text/javascript; charset=utf-8']
+            '/assets/emoji.js': ['assets/emoji.js', 'text/javascript; charset=utf-8'],
+            '/assets/keyword.js': ['assets/keyword.js', 'text/javascript; charset=utf-8']
         };
         const pathname = req.url.split('?')[0];
         const locale = /^\/lang\/([a-zA-Z0-9-]+)\.json$/.exec(pathname)?.[1];

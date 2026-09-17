@@ -6,22 +6,7 @@
     <title>自動剪輯分析</title>
     <link rel="stylesheet" href="/assets/app.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-      .dashboard { max-width: 1600px; margin: auto; }
-      .platform-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-      .platform-card { text-align:left; background:#1f2937; border:1px solid #475569; border-top:3px solid var(--platform-color); border-radius:12px; padding:12px; min-width:0; }
-      .platform-card[aria-pressed="true"] { outline:2px solid var(--platform-color); outline-offset:2px; }
-      .platform-card.winner { background:#243347; }
-      .analysis-grid { display:grid; gap:16px; }
-      .chart-panel,.detail-panel { min-width:0; background:#1f2937; border-radius:16px; padding:16px; }
-      .chart-frame { height:clamp(230px,38vh,440px); }
-      [hidden] { display:none !important; }
-      .chart-tabs { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
-      .chart-tabs button { padding:6px 12px; border-radius:8px; background:#374151; }
-      .chart-tabs button[aria-pressed="true"] { background:#6d28d9; }
-      button:focus-visible,select:focus-visible { outline:2px solid #c4b5fd; outline-offset:3px; }
-      @media(min-width:1000px) { .platform-grid { grid-template-columns:repeat(6,minmax(0,1fr)); } .analysis-grid { grid-template-columns:minmax(0,2fr) minmax(300px,1fr); } .detail-panel { max-height:calc(440px + 110px); overflow:auto; } }
-    </style>
+    <link rel="stylesheet" href="/assets/autoclip.css">
 </head>
 
 <body class="app-ui bg-gray-900 text-gray-100 min-h-screen p-3 sm:p-6">

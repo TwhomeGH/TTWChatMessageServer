@@ -1,0 +1,5 @@
+/* /pushdiag SRS 推流診斷：頁面專用樣式。 */
+
+/* 分析中每 250ms 會重建表格／info card DOM，瀏覽器的 scroll anchoring 會誤把錨點消失
+   解讀成版面變動而把捲軸往上拉。即時更新頁面應關閉 anchoring，讓使用者自由停留在想看的區塊。 */
+html, body { overflow-anchor: none; }

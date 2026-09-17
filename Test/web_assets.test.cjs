@@ -34,6 +34,11 @@ test('locale dictionaries and helper support GET/HEAD without exposing other fil
     assert.match((await request('/assets/i18n.js')).headers['Content-Type'], /javascript/);
     assert.match((await request('/assets/autoclip.js')).headers['Content-Type'], /javascript/);
     assert.match((await request('/assets/emoji.js')).headers['Content-Type'], /javascript/);
+    assert.match((await request('/assets/keyword.js')).headers['Content-Type'], /javascript/);
+    // 各頁面專用的獨立樣式表（非 Tailwind 產物）也都要能取得。
+    for (const css of ['/assets/keyword.css', '/assets/autoclip.css', '/assets/pushdiag.css', '/assets/sponsor.css', '/assets/traffic.css']) {
+        assert.match((await request(css)).headers['Content-Type'], /^text\/css/);
+    }
     assert.equal(await request('/lang/../package.json'), null);
     assert.equal((await request('/lang/fr.json')).status, 404);
     assert.equal((await request('/lang/en.json', 'POST')).status, 405);

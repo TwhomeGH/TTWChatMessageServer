@@ -1,0 +1,139 @@
+/* /keyword 留言關鍵字統計：頁面專用樣式（不使用 Tailwind，維持獨立 CSS）。 */
+
+:root {
+  color-scheme: dark;
+  font-family: system-ui, "Microsoft JhengHei", sans-serif;
+  background: #0d1524;
+  color: #e7edf7;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; padding: 32px; }
+main { max-width: 1240px; margin: auto; }
+
+/* 版面容器：標題列、工具列、導覽與分頁共用橫向排列。 */
+header, .toolbar, .section-title, nav, .pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+header, .section-title { justify-content: space-between; }
+
+h1 { font-size: 28px; margin: 0 0 8px; }
+h2 { font-size: 19px; margin: 0; }
+p, .muted { color: #93a4bc; font-size: 13px; }
+a { color: #a8c9ff; text-decoration: none; }
+nav { font-size: 13px; margin: 18px 0 24px; }
+
+/* 區塊與表單元件。 */
+section {
+  background: #151f31;
+  border: 1px solid #26334a;
+  border-radius: 16px;
+  padding: 22px;
+  margin: 18px 0;
+}
+button, input, select {
+  font: inherit;
+  border: 1px solid #344663;
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: #202e45;
+  color: #e7edf7;
+}
+button { cursor: pointer; }
+button:disabled { opacity: .4; cursor: default; }
+button:hover { background: #304462; }
+td button + button { margin-left: 8px; }
+input { min-width: 220px; flex: 1; }
+
+.danger { color: #ffb4b4; }
+.badge { border-radius: 20px; padding: 5px 12px; background: #20334e; font-size: 12px; }
+.toolbar { margin: 18px 0; }
+.scroll { overflow: auto; max-height: 530px; }
+
+/* 表格。 */
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th {
+  text-align: left;
+  background: #1b2940;
+  color: #9fb3d2;
+  font-size: 12px;
+  position: sticky;
+  top: 0;
+  white-space: nowrap;
+}
+td, th { padding: 12px; border-bottom: 1px solid #26334a; }
+td:first-child { min-width: 230px; max-width: 440px; white-space: pre-wrap; overflow-wrap: anywhere; }
+td:not(:first-child) { white-space: nowrap; }
+.time { font-variant-numeric: tabular-nums; font-size: 12px; }
+.empty { text-align: center; color: #93a4bc; padding: 25px; }
+
+/* 熱門 Top 10 卡片。 */
+.top { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin-top: 16px; }
+.top-item { padding: 12px; background: #1b2940; border-radius: 10px; overflow-wrap: anywhere; min-width: 0; }
+.top-item strong { color: #7fc7ff; float: right; }
+
+.pager { justify-content: flex-end; margin-top: 15px; }
+
+/* ── 規則產生器與測試 ── */
+
+/* 表單：標籤在上、控制項在下，欄寬一致並自動換行。 */
+.rule-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 4px 0 12px; }
+.rule-form label { display: flex; flex-direction: column; gap: 4px; color: #93a4bc; font-size: 13px; }
+.rule-form input, .rule-form select { width: 100%; min-width: 0; flex: none; }
+#rule-flags { max-width: 120px; }
+
+/* 快速範本按鈕列。 */
+.rule-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 12px; }
+.rule-presets .muted { margin-right: 4px; }
+.rule-presets button { font-size: 13px; padding: 6px 10px; }
+
+#rule-sample {
+  width: 100%;
+  min-height: 76px;
+  font: inherit;
+  border: 1px solid #344663;
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: #202e45;
+  color: #e7edf7;
+  resize: vertical;
+}
+
+#rule-snippet {
+  background: #0d1524;
+  border: 1px solid #26334a;
+  border-radius: 10px;
+  padding: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px;
+  margin: 0;
+}
+
+#rule-quick-result, #rule-actual-result {
+  white-space: pre-wrap;
+  margin: 8px 0;
+  background: #0d1524;
+  border: 1px solid #26334a;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px;
+}
+
+#rule-test-result { max-height: 220px; overflow: auto; }
+.rule-line { border-bottom: 1px solid #26334a; padding: 4px 0; overflow-wrap: anywhere; }
+mark { background: #7c3aed; color: #fff; border-radius: 3px; padding: 0 1px; }
+code { background: #202e45; padding: 1px 5px; border-radius: 5px; }
+
+/* 小螢幕：縮小留白，表單元件改為整行。 */
+@media (max-width: 600px) {
+  body { padding: 14px; }
+  section { padding: 14px; }
+  h1 { font-size: 23px; }
+  input { min-width: 100%; width: 100%; }
+}

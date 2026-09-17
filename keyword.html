@@ -1,41 +1,70 @@
 <!doctype html>
-<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>留言關鍵字統計</title>
-<style>
-:root{color-scheme:dark;font-family:system-ui,"Microsoft JhengHei",sans-serif;background:#0d1524;color:#e7edf7}*{box-sizing:border-box}body{margin:0;padding:32px}main{max-width:1240px;margin:auto}header,.toolbar,.section-title,nav,.pager{display:flex;align-items:center;gap:12px;flex-wrap:wrap}header,.section-title{justify-content:space-between}h1{font-size:28px;margin:0 0 8px}h2{font-size:19px;margin:0}p,.muted{color:#93a4bc;font-size:13px}a{color:#a8c9ff;text-decoration:none}nav{font-size:13px;margin:18px 0 24px}section{background:#151f31;border:1px solid #26334a;border-radius:16px;padding:22px;margin:18px 0}button,input,select{font:inherit;border:1px solid #344663;border-radius:8px;padding:9px 12px;background:#202e45;color:#e7edf7}button{cursor:pointer}button:disabled{opacity:.4;cursor:default}button:hover{background:#304462}input{min-width:220px;flex:1}.danger{color:#ffb4b4}.badge{border-radius:20px;padding:5px 12px;background:#20334e;font-size:12px}.toolbar{margin:18px 0}.scroll{overflow:auto;max-height:530px}table{border-collapse:collapse;width:100%;font-size:14px}th{text-align:left;background:#1b2940;color:#9fb3d2;font-size:12px;position:sticky;top:0;white-space:nowrap}td,th{padding:12px;border-bottom:1px solid #26334a}td:first-child{min-width:230px;max-width:440px;white-space:pre-wrap;overflow-wrap:anywhere}td:not(:first-child){white-space:nowrap}.time{font-variant-numeric:tabular-nums;font-size:12px}.top{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin-top:16px}.top-item{padding:12px;background:#1b2940;border-radius:10px;overflow-wrap:anywhere;min-width:0}.top-item strong{color:#7fc7ff;float:right}.pager{justify-content:flex-end;margin-top:15px}.empty{text-align:center;color:#93a4bc;padding:25px}@media(max-width:600px){body{padding:14px}section{padding:14px}h1{font-size:23px}input{min-width:100%;width:100%}}
-</style></head><body><main>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>留言關鍵字統計</title>
+<link rel="stylesheet" href="/assets/keyword.css">
+</head>
+<body><main>
+
 <header><div><h1>留言關鍵字統計</h1><p>以完整留言彙整次數，查看出現時間與最近紀錄</p></div><span id="connection" class="badge" role="status">連線中</span></header>
-<nav><a href="/">主控台</a><a href="/config">設定</a><a href="/autoclip">剪輯分析</a><a href="/clips">剪輯紀錄</a><a href="/logViewer">日誌</a><a href="/traffic" class="bg-gray-700 rounded px-3 py-2">人流分析</a></nav>
+<nav><a href="/">主控台</a><a href="/config">設定</a><a href="/autoclip">剪輯分析</a><a href="/clips">剪輯紀錄</a><a href="/logViewer">日誌</a><a href="/traffic">人流分析</a></nav>
+
 <section><div class="section-title"><h2>熱門 Top 10</h2><button id="clearBtn" class="danger">清空統計</button></div><div id="top10" class="top"></div></section>
+
 <section><div class="section-title"><h2>全部關鍵字</h2><span id="summary" class="muted"></span></div>
 <div class="toolbar"><input id="search" aria-label="搜尋留言" placeholder="搜尋留言內容"><select id="sort" aria-label="排序"><option value="count">次數最多</option><option value="lastSeen">最近出現</option><option value="firstSeen">最早出現</option></select></div>
 <p>時間以 Asia/Taipei 顯示；優先使用平台發送時間，缺少時採接收時間。舊資料未保存時間會顯示未知。</p>
 <div class="scroll"><table><thead><tr><th>訊息內容</th><th>次數</th><th>首次出現</th><th>最後出現</th><th>平台</th><th>接收管道</th><th>操作</th></tr></thead><tbody id="all"></tbody></table></div>
 <div class="pager"><button id="prev">上一頁</button><span id="page"></span><button id="next">下一頁</button></div></section>
-<section><div class="section-title"><h2>最近訊息紀錄</h2><span class="muted">每種留言保留最近 5 筆，此處最多顯示 200 筆</span></div><div class="scroll"><table><thead><tr><th>訊息內容</th><th>發送／接收時間</th><th>時間來源</th><th>使用者</th><th>平台</th><th>接收管道</th></tr></thead><tbody id="recent"></tbody></table></div></section>
-</main><script>
-let rows=[],page=1,source=null;const size=25;
-const sourceLabel=p=>p==='Unknown'||p==='Userscript'?'未知來源':p;
-const transportLabel=t=>t==='userscript'?'Userscript':t==='api'?'API／直連':'未記錄';
-const el=id=>document.getElementById(id);
-function time(v){return v==null?'未知':new Date(v).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false});}
-function cell(tr,text,cls){const td=document.createElement('td');td.textContent=text; if(cls)td.className=cls;tr.append(td);return td;}
-function empty(body,span){const tr=document.createElement('tr');const td=cell(tr,'尚無資料','empty');td.colSpan=span;body.append(tr);}
-function render(){
- const query=el('search').value.trim().toLowerCase(),sort=el('sort').value;
- const filtered=rows.filter(r=>r.message.toLowerCase().includes(query)).sort((a,b)=>sort==='firstSeen'?(a.firstSeen??Infinity)-(b.firstSeen??Infinity):(b[sort]??0)-(a[sort]??0));
- const pages=Math.max(1,Math.ceil(filtered.length/size));page=Math.min(page,pages);
- el('summary').textContent=filtered.length+' 種留言 · '+rows.reduce((n,r)=>n+r.count,0)+' 次累計';
- const body=el('all');body.replaceChildren();
- for(const r of filtered.slice((page-1)*size,page*size)){const tr=document.createElement('tr');cell(tr,r.message);cell(tr,r.count);cell(tr,time(r.firstSeen),'time');cell(tr,time(r.lastSeen),'time');cell(tr,(r.platforms||[]).map(sourceLabel).join(' / ')||'未知來源');cell(tr,(r.transports||[]).map(transportLabel).join('＋')||'未記錄');const button=document.createElement('button');button.textContent='複製';button.onclick=async()=>{try{await navigator.clipboard.writeText(r.message);button.textContent='已複製';}catch{button.textContent='複製失敗';}};cell(tr,'').append(button);body.append(tr);}
- if(!filtered.length)empty(body,7);
- el('page').textContent=page+' / '+pages;el('prev').disabled=page<=1;el('next').disabled=page>=pages;
- el('top10').replaceChildren();for(const [i,r] of [...rows].sort((a,b)=>b.count-a.count).slice(0,10).entries()){const item=document.createElement('div');item.className='top-item';const count=document.createElement('strong');count.textContent=r.count;const text=document.createElement('div');text.textContent=(i+1)+'. '+r.message;const date=document.createElement('p');date.textContent='最近 '+time(r.lastSeen);item.append(count,text,date);el('top10').append(item);}
- const recent=el('recent');recent.replaceChildren();const events=filtered.flatMap(r=>(r.recent||[]).map(e=>({...e,message:r.message}))).sort((a,b)=>b.receivedAt-a.receivedAt).slice(0,200);
- for(const e of events){const tr=document.createElement('tr');cell(tr,e.message);cell(tr,time(e.sentAt??e.receivedAt),'time');cell(tr,e.sentAt==null?'接收時間':'平台時間');cell(tr,e.user||'未知');cell(tr,sourceLabel(e.platform)||'未知來源');cell(tr,transportLabel(e.transport)+(e.isTest?'（測試）':''));recent.append(tr);}if(!events.length)empty(recent,6);
-}
-function connect(){if(source||document.hidden)return;source=new EventSource('/status/keyword');source.onopen=()=>el('connection').textContent='即時更新中';source.onerror=()=>el('connection').textContent='連線中斷，重試中';source.onmessage=event=>{try{const msg=JSON.parse(event.data);if(msg.type==='all'&&Array.isArray(msg.data)){rows=msg.data;render();}}catch{el('connection').textContent='資料格式錯誤';}};}
-function close(){source?.close();source=null;}
-el('search').oninput=el('sort').onchange=()=>{page=1;render();};el('prev').onclick=()=>{page--;render();};el('next').onclick=()=>{page++;render();};
-el('clearBtn').onclick=async()=>{if(!confirm('確定清空留言統計與最近紀錄？'))return;el('clearBtn').disabled=true;try{const r=await fetch('/keyword/clear',{method:'POST'});const data=await r.json();if(!data.success)throw new Error(data.error||'清空失敗');rows=[];page=1;render();}catch(e){alert(e.message);}finally{el('clearBtn').disabled=false;}};
-document.addEventListener('visibilitychange',()=>{if(document.hidden){close();el('connection').textContent='暫停更新';}else connect();});window.addEventListener('pagehide',close);window.addEventListener('pageshow',connect);render();connect();
-</script></body></html>
+
+<section><div class="section-title"><h2>最近訊息紀錄</h2><span class="muted">每種留言保留最近 5 筆，此處最多顯示 200 筆</span></div><div class="scroll"><table><thead><tr><th>訊息內容</th><th>發送／接收時間</th><th>時間來源</th><th>使用者</th><th>平台</th><th>接收管道</th><th>操作</th></tr></thead><tbody id="recent"></tbody></table></div></section>
+
+<section>
+  <div class="section-title"><h2>規則產生器與測試</h2></div>
+  <p>產生「訊息過濾規則」片段：選動作、填正則，用下方測試器確認命中，再按「複製」貼到 <code>FilterRules.custom.js</code> 的 <code>export default [ ... ]</code> 裡，<strong>重啟主服務</strong>後生效。歷史預覽用的是「已過濾後」的留言（暱稱則是原始值），內容規則的預覽僅供參考。</p>
+
+  <div class="rule-form">
+    <label>名稱 <input id="rule-name" placeholder="例：user:廣告帳號-加LINE"></label>
+    <label>對象 <select id="rule-field"><option value="user">user（暱稱）</option><option value="message" selected>message（內容）</option><option value="any">any（兩者）</option></select></label>
+    <label>動作 <select id="rule-action"><option value="block" selected>block（阻擋）</option><option value="replace">replace（取代）</option><option value="delete">delete（刪除）</option></select></label>
+    <label>正則 <input id="rule-pattern" placeholder="例：加\s*(LINE|瀨)"></label>
+    <label>旗標 <input id="rule-flags" placeholder="iu"></label>
+    <label>取代文字 <input id="rule-replacement" placeholder="replace 用"></label>
+  </div>
+  <div class="rule-presets">
+    <span class="muted">快速範本</span>
+    <button id="rule-preset-ad">廣告帳號-加LINE/加瀨</button>
+    <button id="rule-preset-obfuscate">圈號／數學粗體</button>
+    <button id="rule-preset-emoji">純 emoji 洗頻</button>
+  </div>
+
+  <h3>快速測試（從歷史挑一筆）</h3>
+  <p>在下方統計表格按「快速測試」帶入那筆紀錄，並顯示目前規則的實際結果：阻擋、改為某值、或不變。</p>
+  <div class="rule-form">
+    <label>原始暱稱 <input id="rule-sample-user" placeholder="（快速測試會自動帶入）"></label>
+  </div>
+  <pre id="rule-quick-result">（尚未挑選紀錄）</pre>
+  <pre id="rule-actual-result">目前生效規則：—</pre>
+
+  <h3>測試樣本</h3>
+  <p>可貼多行文字，逐行標出正則命中。</p>
+  <textarea id="rule-sample" placeholder="貼上訊息內容或暱稱…"></textarea>
+  <p id="rule-test-status" class="muted" role="status"></p>
+  <div id="rule-test-result"></div>
+
+  <h3>對歷史資料預覽</h3>
+  <p id="rule-history-status" class="muted" role="status"></p>
+  <div id="rule-history" class="scroll"></div>
+
+  <h3>產生的片段</h3>
+  <pre id="rule-snippet">（先填正則）</pre>
+  <div class="toolbar"><button id="rule-copy">複製片段</button></div>
+
+  <h3>目前生效的規則</h3>
+  <p id="rule-active-status" class="muted" role="status">讀取中…</p>
+  <div id="rule-active" class="scroll"></div>
+</section>
+
+</main><script src="/assets/keyword.js"></script></body></html>

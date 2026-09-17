@@ -8,11 +8,7 @@
     <link rel="stylesheet" href="/assets/app.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.js"></script>
-    <style>
-      /* 分析中每 250ms 會重建表格/info card DOM，瀏覽器的 scroll anchoring 會誤把錨點消失解讀成版面變動，
-         把捲軸往上拉。即時更新頁面應關閉 anchoring，讓使用者自由停留在想看的區塊。 */
-      html, body { overflow-anchor: none; }
-    </style>
+    <link rel="stylesheet" href="/assets/pushdiag.css">
 </head>
 
 <body class="app-ui bg-gray-900 text-gray-100 min-h-screen p-3 sm:p-6">

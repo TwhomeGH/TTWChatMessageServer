@@ -24,6 +24,8 @@ npm run watch:css
 指紋只涵蓋會影響 CSS 產出的來源：根目錄 HTML、`styles/`、建置腳本與建置版本；前端 `assets/*.js` 不影響 CSS，因此不列入（改前端 JS 不需重建）。
 本專案只用 npm：`yarn.lock` 已移除並列入 `.gitignore`，`package-lock.json` 是唯一鎖檔。
 
+各頁面專用的樣式放在 `assets/<page>.css`（`app.css`、`keyword.css`、`autoclip.css`、`pushdiag.css`、`sponsor.css`、`traffic.css`），由 `WebAssets.cjs` 白名單提供，HTML 只留結構、不再內嵌 `<style>`；這些獨立樣式表不是 Tailwind 產物，**不列入建置指紋**。
+
 `WebAssets.cjs` 只公開明確列出的 CSS，支援 GET／HEAD，回傳正確 MIME，
 使用 `no-cache` 避免更新後繼續使用舊樣式。升級後需重啟 Server.js，讓新資源路由生效。
 
@@ -40,7 +42,7 @@ npm run watch:css
 | 更新完成頁 | 補 viewport、手機邊距與鍵盤焦點樣式 | 保持簡短結果與下一步入口 |
 | `/logViewer` | 工具列換行；內容高度使用動態視窗單位，日誌區內捲動 | 檔案篩選、搜尋與更新狀態 |
 | `/pushdiag` | 原有響應式分區保留；共用焦點與操作尺寸；本機樣式 | 將進階細節收合，保留診斷摘要 |
-| `/keyword` | 原有手機版、分頁與表格內捲動保留 | 平台篩選與最近紀錄的密度控制 |
+| `/keyword` | 原有手機版、分頁與表格內捲動保留；內嵌樣式與腳本抽成 `assets/keyword.css`、`assets/keyword.js`，新增「規則產生器與測試」（正則測試＋歷史預覽＋快速測試＋目前生效規則） | 平台篩選與最近紀錄的密度控制 |
 | `/traffic` | 重構為卡片＋雙圖並排＋可捲動表格；表格加表頭、斑馬紋與 hover；自訂選單樣式；動態產生的卡片與表格改用純 CSS（不依賴 Tailwind 掃描） | 場次成效納入排名（v2） |
 
 後續項目為盤點建議，尚未實作。`OtherTool` 的獨立顯示頁與第三方套件範例不屬於主服務操作頁，

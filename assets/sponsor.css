@@ -1,0 +1,10 @@
+/* /sponsor 贊助廣告管理：頁面專用樣式。 */
+
+body { font-family: system-ui, -apple-system, sans-serif; }
+
+/* 審核狀態圓點。 */
+.status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+.status-approved { background: #22c55e; }
+.status-pending { background: #eab308; }
+.status-rejected { background: #ef4444; }
+.status-disabled { background: #6b7280; }
