@@ -117,3 +117,16 @@ test('configured platform delay adjusts evidence time and rejects reactions now 
     assert.equal(f.manager.messages[0].originalTime, f.now());
     assert.equal(f.chat('one', { platform: 'Youtube' }), false);
 });
+
+// 集中度：分辨「很多人各一則」與「一個人洗頻」。
+test('topUserMsgs 反映集中度（單人洗頻 vs 多人各一則）', () => {
+    const f = setup(); f.warm();
+    for (let i = 0; i < 5; i++) f.chat('spammer');   // maxPerUser=3，只計 3 則
+    for (const user of ['a', 'b', 'c']) f.chat(user);
+    const stats = f.manager.getStats(f.now());
+    assert.equal(stats.windowMsgs, 6);
+    assert.equal(stats.uniqueUsers, 4);
+    assert.equal(stats.topUserMsgs, 3);
+    assert.equal(stats.platforms[0].topUserMsgs, 3);
+    assert.equal(stats.platforms[0].uniqueUsers, 4);
+});

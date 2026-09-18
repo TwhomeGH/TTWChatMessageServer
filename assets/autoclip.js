@@ -100,7 +100,7 @@ function renderPlatformCards() {
         <div class="font-semibold">${sourceLabel(platform)}</div>
         <div class="text-xs text-gray-400">${esc(p?.transports?.map(transportLabel).join('＋') || '管道未記錄')}</div>
         <div class="text-xl font-bold my-1">${numberText(p?.score)} <span class="text-xs text-gray-400">/ ${numberText(threshold)}</span></div>
-        <div class="text-xs">${status}</div><div class="text-xs text-gray-400 mt-1">${p ? esc(p.windowMsgs??'—')+' 則 · '+esc(p.uniqueUsers??'—')+' 人':'— 則 · — 人'}</div>
+        <div class="text-xs">${status}</div><div class="text-xs text-gray-400 mt-1">${p ? esc(p.windowMsgs??'—')+' 則 · '+esc(p.uniqueUsers??'—')+' 人'+(p.topUserMsgs>1?'（最多 '+esc(p.topUserMsgs)+' 則/人）':''):'— 則 · — 人'}</div>
         <div class="text-xs text-gray-400">採計分數 ${numberText(p?.contribution)}</div>
       </button>`;
     }).join('');
@@ -191,7 +191,7 @@ function renderTriggerDetail() {
     const summary=document.createElement('p');summary.className='text-gray-400 my-2';
     summary.textContent='統計窗口 '+fmtTime(ev.windowStart)+'–'+fmtTime(ev.windowEnd)+' · '+ev.total+' 則 / '+ev.uniqueUsers+' 位 · 最少 '+ev.minMessages+' 則 / '+ev.minUsers+' 位 · 分數 '+Number(row.score).toFixed(2)+' / 門檻 '+ev.threshold+' · 每人最多計入 '+ev.maxPerUser+' 則'+(ev.truncated?' · 僅保留最後 200 則':'');detail.append(summary);
     const contribution=document.createElement('div');contribution.className='my-3 space-y-1 text-gray-300';
-    for(const p of ev.platforms||[]){const line=document.createElement('p');line.textContent=sourceLabel(p.platform)+' · '+((p.transports||[]).map(transportLabel).join('＋')||'管道未記錄')+' · '+p.windowMsgs+' 則 / '+p.uniqueUsers+' 位 · '+Number(p.msgRate).toFixed(1)+'/min，基準 '+Number(p.baseMsgRate).toFixed(1)+' · 平台分數 '+Number(p.score).toFixed(2)+' · '+(p.platform===ev.sourcePlatform?'觸發來源，採計 '+Number(p.contribution).toFixed(2):p.eligible?'合格，未高於來源平台':'未達最低反應門檻');contribution.append(line);}detail.append(contribution);
+    for(const p of ev.platforms||[]){const line=document.createElement('p');line.textContent=sourceLabel(p.platform)+' · '+((p.transports||[]).map(transportLabel).join('＋')||'管道未記錄')+' · '+p.windowMsgs+' 則 / '+p.uniqueUsers+' 位'+(p.topUserMsgs>1?'（最多 '+p.topUserMsgs+' 則/人）':'')+' · '+Number(p.msgRate).toFixed(1)+'/min，基準 '+Number(p.baseMsgRate).toFixed(1)+' · 平台分數 '+Number(p.score).toFixed(2)+' · '+(p.platform===ev.sourcePlatform?'觸發來源，採計 '+Number(p.contribution).toFixed(2):p.eligible?'合格，未高於來源平台':'未達最低反應門檻');contribution.append(line);}detail.append(contribution);
     const list=document.createElement('div');list.className='max-h-72 overflow-y-auto space-y-2';
     for(const m of ev.messages||[]){const item=document.createElement('div');item.className='bg-gray-900 rounded-lg p-3';const meta=document.createElement('p');meta.className='text-xs text-gray-400';meta.textContent=fmtTime(m.t)+' · '+m.name+' · '+sourceLabel(m.platform)+' / '+transportLabel(m.transport)+' · '+(m.timeSource==='platform'?'平台時間':'接收時間')+(m.originalTime&&m.originalTime!==m.t?'（校準前 '+fmtTime(m.originalTime)+'）':'');const content=document.createElement('p');content.className='whitespace-pre-wrap break-words mt-1';content.textContent=m.message;item.append(meta,content);list.append(item);}detail.append(list);
 }
