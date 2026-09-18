@@ -270,6 +270,8 @@ export function takeThrottleSummaries(now = Date.now(), state = liveThrottleStat
                     rule: rule.name,
                     user: group.user,
                     count: group.pending,
+                    // 最早可能送出的時間＝最後一則 + 視窗；實際還要等下一次輪詢（最多再 +5 秒）。
+                    at: group.time + rule.windowMs,
                     message: (rule.summary || '連續 {n} 則相似訊息（已省略）：{sample}')
                         .replace('{n}', String(group.pending))
                         .replace('{sample}', group.sample)
