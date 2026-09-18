@@ -8,6 +8,7 @@
     let page = 1;
     let source = null;
     let activeRuleNames = new Set();   // 目前生效的規則名稱（用來提示候選規則是否已生效）
+    let customFileContent = null;      // 快取的自訂規則檔內容（「顯示要貼在哪裡」用）
 
     const sourceLabel = platform => (platform === 'Unknown' || platform === 'Userscript') ? '未知來源' : platform;
     const transportLabel = transport => transport === 'userscript' ? 'Userscript' : transport === 'api' ? 'API／直連' : '未記錄';
@@ -452,19 +453,36 @@
         ].join('\n');
     }
 
-    /** 讀使用者的 FilterRules.custom.js，把目前片段插到正確位置並整份顯示。 */
-    async function showInsert() {
+    /** 依目前片段重畫「貼在哪裡」引導（已顯示時，規則變動會即時跟著更新）。 */
+    function renderInsert() {
         const snippet = buildSnippet();
-        if (!snippet) { toast('先填好規則，再按「顯示要貼在哪裡」。'); return; }
+        if (!snippet || customFileContent === null) return;
+        el('rule-insert-content').replaceChildren(highlightJs(insertSnippet(customFileContent, snippet)));
+        el('rule-insert').hidden = false;
+        el('rule-show-insert').textContent = '隱藏貼上位置';
+    }
 
+    /** 讀使用者的 FilterRules.custom.js（首次讀取後快取），顯示/隱藏「貼在哪裡」引導。 */
+    async function showInsert() {
         const box = el('rule-insert');
+        // 由使用者自己控制開關：顯示中再按一次就收起，不會自動隱藏。
+        if (!box.hidden) {
+            box.hidden = true;
+            el('rule-show-insert').textContent = '顯示要貼在哪裡';
+            return;
+        }
+
+        if (!buildSnippet()) { toast('先填好規則，再按「顯示要貼在哪裡」。'); return; }
+
         try {
-            const response = await fetch('/api/filter/custom', { cache: 'no-store' });
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            const data = await response.json();
-            el('rule-insert-path').textContent = data.path || 'FilterRules.custom.js';
-            el('rule-insert-content').replaceChildren(highlightJs(insertSnippet(data.content || 'export default [\n];\n', snippet)));
-            box.hidden = false;
+            if (customFileContent === null) {
+                const response = await fetch('/api/filter/custom', { cache: 'no-store' });
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                const data = await response.json();
+                customFileContent = data.content || 'export default [\n];\n';
+                el('rule-insert-path').textContent = data.path || 'FilterRules.custom.js';
+            }
+            renderInsert();
             toast('已標出片段要貼的位置（只複製上面的片段即可）');
         } catch (error) {
             box.hidden = true;
@@ -505,15 +523,26 @@
 
             const blocked = data.results.filter(item => item.blocked).length;
             const rewritten = data.results.filter(item => !item.blocked && item.output !== item.message).length;
-            status.textContent = `${data.results.length} 則中 ${blocked} 則被攔、${rewritten} 則改寫、${data.summaries.length} 則摘要`;
-            const rows = [['#', '訊息', '結果', '規則']];
+            status.textContent = `${data.results.length} 則中 ${blocked} 則被攔、${rewritten} 則改寫、${data.summaries.length} 則摘要（每則間隔 1 秒；摘要在爆量結束後才送）`;
+
+            // 時間欄：相對第一則的偏移，讓「摘要不是即時」看得出來。
+            const start = data.results.length ? data.results[0].time : Date.now();
+            const at = value => '+' + ((value - start) / 1000).toFixed(1) + 's';
+            const rows = [['#', '時間', '訊息', '結果', '規則']];
             data.results.forEach((item, index) => rows.push([
                 index + 1,
+                at(item.time),
                 item.message,
                 item.blocked ? '⛔ 阻擋' : (item.output !== item.message ? '改寫 → ' + item.output : '放行'),
                 item.reason || ''
             ]));
-            for (const summary of data.summaries) rows.push(['—', '（摘要）' + summary.message, '', summary.rule]);
+            for (const summary of data.summaries) rows.push([
+                '—',
+                summary.at ? at(summary.at) : '—',
+                '🗒️ ' + summary.message,
+                '摘要（爆量結束後，輪詢最多再 +5 秒）',
+                summary.rule
+            ]);
             box.replaceChildren(buildTable(rows));
         } catch (error) {
             status.textContent = '讀取失敗：' + error.message;
@@ -525,7 +554,7 @@
     function updateRulePreview() {
         el('rule-snippet').replaceChildren(highlightJs(buildSnippet() || '（先填正則）'));
         updateSnippetState();
-        el('rule-insert').hidden = true;   // 規則改了，插入位置引導要重按
+        if (!el('rule-insert').hidden) renderInsert();   // 已顯示時跟著更新，不自動隱藏
 
         const rule = currentRule();
         const box = el('rule-test-result');
