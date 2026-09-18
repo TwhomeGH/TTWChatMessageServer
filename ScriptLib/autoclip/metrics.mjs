@@ -38,7 +38,8 @@ export function calculateMetrics(state, now) {
             .filter(([, at]) => now - at <= state.staleMs).map(([transport]) => transport);
         return { platform, transports, viewers, baseViewers, msgRate, baseMsgRate, messageRatio,
             windowMsgs: messages.length, uniqueUsers, topUserMsgs, score,
-            eligible: messages.length >= state.minMessages && uniqueUsers >= state.minUsers && messageRatio >= 1.5 };
+            eligible: messages.length >= state.minMessages && uniqueUsers >= state.minUsers
+                && messageRatio >= (state.minMessageRatio ?? 1.5) };
     });
     // 取獨立達標的最高分，避免安靜平台稀釋其他平台的突增。
     const winner = platforms.filter(p => p.eligible).sort((a, b) => b.score - a.score)[0];

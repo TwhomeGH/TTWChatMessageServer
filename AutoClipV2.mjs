@@ -12,10 +12,10 @@ export class AutoClipManager {
         rateWindowMin = 0.5, baselineWindowMin = 15, wViewers = 0.2, wMsg = 0.8,
         scoreThreshold = 1.8, floorViewers = 2, floorMsgPerMin = 2,
         cooldownMin = 15, sustainMin = 0.167, warmupMs = 180000,
-        minMessages = 6, minUsers = 3, maxPerUser = 3, staleMs = 90000,
+        minMessages = 6, minUsers = 3, minMessageRatio = 1.5, maxPerUser = 3, staleMs = 90000,
         titlePrefix = '', log = console.log, now = Date.now, requestTimeoutMs = 60000 } = {}) {
         Object.assign(this, { onCreateClip, shadow, platform, delayOffsetsMs, wViewers, wMsg, scoreThreshold,
-            floorViewers, floorMsgPerMin, warmupMs, minMessages, minUsers, maxPerUser,
+            floorViewers, floorMsgPerMin, warmupMs, minMessages, minUsers, minMessageRatio, maxPerUser,
             staleMs, titlePrefix, log, now, requestTimeoutMs });
         this.rateMs = Math.max(5000, rateWindowMin * MINUTE);
         this.baselineMs = Math.max(this.rateMs * 2, baselineWindowMin * MINUTE);
@@ -126,7 +126,8 @@ export class AutoClipManager {
             sustainMin: this.sustainMs / MINUTE, cooldownMin: this.cooldownMs / MINUTE,
             wViewers: this.wViewers, wMsg: this.wMsg, scoreThreshold: this.scoreThreshold,
             floorViewers: this.floorViewers, floorMsgPerMin: this.floorMsgPerMin,
-            minMessages: this.minMessages, minUsers: this.minUsers, warmupMs: this.warmupMs };
+            minMessages: this.minMessages, minUsers: this.minUsers, minMessageRatio: this.minMessageRatio,
+            maxPerUser: this.maxPerUser, warmupMs: this.warmupMs };
     }
 
     /** 推進暖機、持續熱度與冷卻狀態；每次記錄統計，符合條件才提交剪輯。 */
@@ -140,7 +141,7 @@ export class AutoClipManager {
         } else if (now - this.startedAt < this.warmupMs || s.sampleCount < 3) reason = '暖機收集基準';
         else if (s.viewers < this.floorViewers) reason = '觀眾不足';
         else if (s.windowMsgs < this.minMessages || s.uniqueUsers < this.minUsers) reason = '有效留言或不同發言人不足';
-        else if (s.messageRatio < 1.5 || s.score < this.scoreThreshold) reason = '未達聊天突增門檻';
+        else if (s.messageRatio < this.minMessageRatio || s.score < this.scoreThreshold) reason = '未達聊天突增門檻';
         const qualified = !reason;
         if (!qualified) {
             this.aboveSince = null;

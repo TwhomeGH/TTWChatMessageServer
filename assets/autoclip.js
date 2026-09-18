@@ -94,9 +94,18 @@ function renderPlatformCards() {
       const p = platforms?.find(p => p.platform === platform);
       const winner = p && source === platform;
       const limits = historical ? row?.evidence : cfg;
-      const missing = p ? [p.windowMsgs < (limits?.minMessages??6)?'留言不足':'', p.uniqueUsers < (limits?.minUsers??3)?'人數不足':'', p.messageRatio < 1.5?'聊天倍率不足':''].filter(Boolean) : [];
+      const minMessages = limits?.minMessages ?? 6;
+      const minUsers = limits?.minUsers ?? 3;
+      const minRatio = limits?.minMessageRatio ?? 1.5;
+      // 顯示「目前值/門檻」，直接看出差多少，而不是只看到「不足」。
+      const missing = p ? [
+        p.windowMsgs < minMessages ? `留言 ${p.windowMsgs}/${minMessages}` : '',
+        p.uniqueUsers < minUsers ? `人數 ${p.uniqueUsers}/${minUsers}` : '',
+        Number(p.messageRatio) < minRatio ? `聊天倍率 ${Number(p.messageRatio).toFixed(1)}/${minRatio}` : ''
+      ].filter(Boolean) : [];
       const status = !p ? historical?'未保存平台數據':'尚無平台樣本' : winner?'本次主導':p.eligible?'平台合格':missing.join('、')||'未達平台門檻';
-      return `<button class="platform-card ${winner?'winner':''}" style="--platform-color:${platformColors[platform]}" data-platform="${platform}" aria-pressed="${focusedPlatform===platform}">
+      const hint = `觸發門檻：30 秒窗口內至少 ${minMessages} 筆留言、${minUsers} 位不同發言人，且聊天倍率（目前速率 ÷ 基準速率）至少 ${minRatio} 倍`;
+      return `<button class="platform-card ${winner?'winner':''}" style="--platform-color:${platformColors[platform]}" data-platform="${platform}" aria-pressed="${focusedPlatform===platform}" title="${esc(hint)}">
         <div class="font-semibold">${sourceLabel(platform)}</div>
         <div class="text-xs text-gray-400">${esc(p?.transports?.map(transportLabel).join('＋') || '管道未記錄')}</div>
         <div class="text-xl font-bold my-1">${numberText(p?.score)} <span class="text-xs text-gray-400">/ ${numberText(threshold)}</span></div>
@@ -191,7 +200,7 @@ function renderTriggerDetail() {
     const summary=document.createElement('p');summary.className='text-gray-400 my-2';
     summary.textContent='統計窗口 '+fmtTime(ev.windowStart)+'–'+fmtTime(ev.windowEnd)+' · '+ev.total+' 則 / '+ev.uniqueUsers+' 位 · 最少 '+ev.minMessages+' 則 / '+ev.minUsers+' 位 · 分數 '+Number(row.score).toFixed(2)+' / 門檻 '+ev.threshold+' · 每人最多計入 '+ev.maxPerUser+' 則'+(ev.truncated?' · 僅保留最後 200 則':'');detail.append(summary);
     const contribution=document.createElement('div');contribution.className='my-3 space-y-1 text-gray-300';
-    for(const p of ev.platforms||[]){const line=document.createElement('p');line.textContent=sourceLabel(p.platform)+' · '+((p.transports||[]).map(transportLabel).join('＋')||'管道未記錄')+' · '+p.windowMsgs+' 則 / '+p.uniqueUsers+' 位'+(p.topUserMsgs>1?'（最多 '+p.topUserMsgs+' 則/人）':'')+' · '+Number(p.msgRate).toFixed(1)+'/min，基準 '+Number(p.baseMsgRate).toFixed(1)+' · 平台分數 '+Number(p.score).toFixed(2)+' · '+(p.platform===ev.sourcePlatform?'觸發來源，採計 '+Number(p.contribution).toFixed(2):p.eligible?'合格，未高於來源平台':'未達最低反應門檻');contribution.append(line);}detail.append(contribution);
+    for(const p of ev.platforms||[]){const line=document.createElement('p');line.textContent=sourceLabel(p.platform)+' · '+((p.transports||[]).map(transportLabel).join('＋')||'管道未記錄')+' · '+p.windowMsgs+' 則 / '+p.uniqueUsers+' 位'+(p.topUserMsgs>1?'（最多 '+p.topUserMsgs+' 則/人）':'')+'（門檻 '+(cfg.minMessages??6)+' 則 / '+(cfg.minUsers??3)+' 位） · '+Number(p.msgRate).toFixed(1)+'/min，基準 '+Number(p.baseMsgRate).toFixed(1)+' · 平台分數 '+Number(p.score).toFixed(2)+' · '+(p.platform===ev.sourcePlatform?'觸發來源，採計 '+Number(p.contribution).toFixed(2):p.eligible?'合格，未高於來源平台':'未達最低反應門檻');contribution.append(line);}detail.append(contribution);
     const list=document.createElement('div');list.className='max-h-72 overflow-y-auto space-y-2';
     for(const m of ev.messages||[]){const item=document.createElement('div');item.className='bg-gray-900 rounded-lg p-3';const meta=document.createElement('p');meta.className='text-xs text-gray-400';meta.textContent=fmtTime(m.t)+' · '+m.name+' · '+sourceLabel(m.platform)+' / '+transportLabel(m.transport)+' · '+(m.timeSource==='platform'?'平台時間':'接收時間')+(m.originalTime&&m.originalTime!==m.t?'（校準前 '+fmtTime(m.originalTime)+'）':'');const content=document.createElement('p');content.className='whitespace-pre-wrap break-words mt-1';content.textContent=m.message;item.append(meta,content);list.append(item);}detail.append(list);
 }
