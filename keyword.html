@@ -38,6 +38,7 @@
     <button id="rule-preset-ad">廣告帳號-加LINE/加瀨</button>
     <button id="rule-preset-obfuscate">圈號／數學粗體</button>
     <button id="rule-preset-emoji">純 emoji 洗頻</button>
+    <button id="rule-preset-emoji-run">大量 emoji（連續 5+）</button>
   </div>
 
   <h3>測試（手動輸入或從歷史帶入）</h3>
@@ -53,8 +54,15 @@
   <div id="rule-test-result"></div>
 
   <p class="muted">目前生效規則</p>
-  <div class="rule-fields"><button id="rule-run-actual">測目前生效規則</button></div>
+  <div class="rule-actions"><button id="rule-run-actual">測目前生效規則</button></div>
   <pre id="rule-actual-result">（尚未測試）</pre>
+
+  <h3>頻率／序列測試</h3>
+  <p>用「目前生效的規則」跑一串訊息（每行一則，模擬每 1 秒一則），看哪幾則被頻率規則攔下、以及 summarize 的摘要。使用者用上面的「暱稱」欄位。</p>
+  <textarea id="sequence-lines" placeholder="每行一則訊息…"></textarea>
+  <div class="rule-actions"><button id="sequence-run">跑序列測試</button></div>
+  <p id="sequence-status" class="muted" role="status"></p>
+  <div id="sequence-result" class="scroll"></div>
 
   <h3>對歷史資料預覽</h3>
   <p id="rule-history-status" class="muted" role="status"></p>

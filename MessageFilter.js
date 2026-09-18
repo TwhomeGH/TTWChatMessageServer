@@ -42,6 +42,9 @@ await loadStatsFromFile();
 
 const filterRules = [];
 
+// 頻率規則的線上狀態：Map(rule → 群組陣列)。模擬測試會用另一份 Map 完全隔離。
+const liveThrottleState = new Map();
+
 export function addFilterRule(rule) {
     filterRules.push(rule);
 }
@@ -57,7 +60,7 @@ export function addFilterRules(rules) {
  * @param {{ user?: string, message?: string }} input
  * @returns {{ user?: string, message?: string, blocked: boolean, reason?: string, field?: string, modified: boolean }}
  */
-export function processFilter({ user, message } = {}) {
+export function processFilter({ user, message } = {}, now = Date.now(), throttleState = liveThrottleState) {
     user = (typeof user === 'string') ? user : '';
     message = (typeof message === 'string') ? message : '';
     let result = { user, message, blocked: false, reason: undefined, field: undefined, modified: false };
@@ -100,6 +103,13 @@ export function processFilter({ user, message } = {}) {
                 }
             }
         }
+
+        if (action === 'throttle') {
+            const outcome = applyThrottle(rule, result, now, throttleState);
+            if (!outcome) continue;
+            if (outcome.blocked) return { ...result, blocked: true, reason: rule.name, field: 'throttle' };
+            result = { ...result, message: outcome.message, modified: true, reason: rule.name, field: 'message' };
+        }
     }
 
     return result;
@@ -126,6 +136,7 @@ export function isFiltered(input) {
  */
 export function clearFilterRules() {
     filterRules.length = 0;
+    liveThrottleState.clear();
 }
 
 /**
@@ -133,6 +144,148 @@ export function clearFilterRules() {
  */
 export function getFilterRules() {
     return [...filterRules];
+}
+
+// ===== 頻率控制（有狀態；跨訊息）=====
+
+/**
+ * @typedef {Object} ThrottleRule
+ * @property {'throttle'} action
+ * @property {string} name
+ * @property {'user'|'content'} scope  - user：同一人；content：同內容跨人
+ * @property {number} windowMs         - 觀察窗（毫秒）
+ * @property {number} max              - 窗內允許幾則，第 max+1 則起處置
+ * @property {'off'|'exact'|'normalized'} similarity - off：純頻率（不看內容）；exact：完全相同；normalized：正規化後比對
+ * @property {number} [distance]       - normalized 允許的編輯距離（預設 2）
+ * @property {'drop'|'marker'|'summarize'} onExceed
+ * @property {string} [marker]         - marker 模式的字尾，{n} 換成次數
+ * @property {string} [summary]        - summarize 模式的摘要，{n}／{sample} 會替換
+ */
+
+/** 正規化：去掉 emoji 與其修飾、標點、符號、空白，再轉小寫。 */
+function normalizeForCompare(text) {
+    return text
+        .replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u{1F3FB}-\u{1F3FF}]/gu, '')
+        .replace(/[\p{P}\p{S}\s]/gu, '')
+        .toLowerCase();
+}
+
+/** Levenshtein 距離；長度差已超過 limit 就直接回傳 limit + 1。 */
+function editDistance(a, b, limit) {
+    if (Math.abs(a.length - b.length) > limit) return limit + 1;
+    let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+    for (let i = 1; i <= a.length; i++) {
+        const current = [i];
+        for (let j = 1; j <= b.length; j++) {
+            const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+            current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost);
+        }
+        previous = current;
+    }
+    return previous[b.length];
+}
+
+/** 兩則訊息是否算同一群。 */
+function isSimilar(rule, a, b) {
+    if (rule.similarity === 'off') return true;
+    if (rule.similarity === 'exact') return a === b;
+    const limit = rule.distance ?? 2;
+    return editDistance(normalizeForCompare(a), normalizeForCompare(b), limit) <= limit;
+}
+
+/** 取得（必要時建立）某條規則在指定狀態下的群組。 */
+function throttleGroups(state, rule) {
+    let groups = state.get(rule);
+    if (!groups) { groups = []; state.set(rule, groups); }
+    return groups;
+}
+
+/**
+ * 套用一條頻率規則。
+ * @returns {null|{blocked?: boolean, message?: string}} null 表示放行；否則阻擋或改寫內容
+ */
+function applyThrottle(rule, result, now, state) {
+    const groups = throttleGroups(state, rule);
+    for (let i = groups.length - 1; i >= 0; i--) {
+        if (now - groups[i].time > rule.windowMs) groups.splice(i, 1);
+    }
+
+    // 找最近的相符群組（依 scope 決定是否限同一人，再比相似度）。
+    let group = null;
+    for (let i = groups.length - 1; i >= 0; i--) {
+        const candidate = groups[i];
+        if (rule.scope === 'user' && candidate.user !== result.user) continue;
+        if (!isSimilar(rule, candidate.sample, result.message)) continue;
+        group = candidate;
+        break;
+    }
+    if (!group) {
+        group = { user: result.user, sample: result.message, time: now, count: 0, pending: 0 };
+        groups.push(group);
+    }
+
+    group.time = now;
+    group.count += 1;
+    group.sample = result.message;   // 以「上一則」為比較基準（符合「與上一則差異不大」）
+    if (group.count <= rule.max) return null;
+
+    if (rule.onExceed === 'summarize') {
+        group.pending += 1;
+        return { blocked: true };
+    }
+    if (rule.onExceed === 'marker') {
+        // marker 是「整串取代」的模板：{text}＝原文、{n}＝累積次數。
+        // 預設只留標記；要保留原文就寫 '{text}（×{n}）'。
+        const marker = (rule.marker || '（×{n}）')
+            .replace('{text}', result.message)
+            .replace('{n}', String(group.count));
+        return { message: marker };
+    }
+    return { blocked: true };
+}
+
+/**
+ * 取出「爆量已結束」的摘要（summarize 模式）。呼叫端負責把摘要送出去。
+ */
+export function takeThrottleSummaries(now = Date.now(), state = liveThrottleState) {
+    const summaries = [];
+    for (const rule of filterRules) {
+        if ((rule.action || 'block') !== 'throttle') continue;
+        const groups = state.get(rule);
+        if (!groups) continue;
+        for (let i = groups.length - 1; i >= 0; i--) {
+            const group = groups[i];
+            if (now - group.time <= rule.windowMs) continue;
+            if (group.pending > 0) {
+                summaries.push({
+                    rule: rule.name,
+                    user: group.user,
+                    count: group.pending,
+                    message: (rule.summary || '連續 {n} 則相似訊息（已省略）：{sample}')
+                        .replace('{n}', String(group.pending))
+                        .replace('{sample}', group.sample)
+                });
+            }
+            groups.splice(i, 1);
+        }
+    }
+    return summaries;
+}
+
+/**
+ * 用一串訊息跑一次「隔離」的模擬（不動到線上狀態），供 /keyword 的序列測試。
+ * 每則間隔 stepMs 毫秒；最後把時間往後推，讓 summarize 的摘要能結算出來。
+ */
+export function simulateSequence({ user = '', messages = [], stepMs = 1000 } = {}, now = Date.now()) {
+    const state = new Map();
+    const results = messages.map((entry, index) => {
+        const record = typeof entry === 'string' ? { user, message: entry } : entry;
+        const time = now + index * stepMs;
+        const result = processFilter({ user: record.user, message: record.message }, time, state);
+        return { index, time, user: record.user, message: record.message, blocked: result.blocked, reason: result.reason, output: result.message };
+    });
+    const summaries = takeThrottleSummaries(now + messages.length * stepMs + 3600000, state);
+    return { results, summaries };
 }
 
 // ===== 預設規則 =====
@@ -149,11 +302,19 @@ addFilterRules([
         test: (u) => /加\s*(LINE|line|ｌｉｎｅ|[瀨濑頼賴])/i.test(u),
     },
     {
-        name: 'user:廣告帳號-混淆字元',
-        field: 'user',
+        name: 'any:廣告-混淆字元',
+        field: 'any',
         action: 'block',
-        // 圈號（①-⑳ 等 Enclosed Alphanumerics）與數學粗體字母（𝗔-𝟵）：正常暱稱幾乎不會出現。
-        test: (u) => /[\u2460-\u24FF]|[\u{1D400}-\u{1D7FF}]/u.test(u),
+        // 圈號（①-⑳ 等 Enclosed Alphanumerics）與數學粗體字母（𝗔-𝟵）：正常暱稱或留言幾乎不會出現。
+        // 用 any 是「預先防範」廣告哪天改成把帳號名塞進留言內容（目前尚未觀察到；目前是 emoji 洗頻）。
+        test: (v) => /[\u2460-\u24FF]|[\u{1D400}-\u{1D7FF}]/u.test(v),
+    },
+    {
+        name: 'msg:大量 emoji',
+        field: 'message',
+        action: 'block',
+        // 連續 5 個以上 emoji：廣告用 emoji 洗頻，或拿來墊在帳號名前面。門檻可調。
+        test: (m) => /(?:\p{Extended_Pictographic}[\uFE0F\u200D\u{1F3FB}-\u{1F3FF}]*){5,}/u.test(m),
     },
     {
         name: 'user:廣告帳號-特殊組合字',
@@ -263,6 +424,13 @@ export function validateFilterRules(rules) {
         const action = rule.action || 'block';
         if (action === 'block') return typeof rule.test === 'function';
         if (action === 'replace' || action === 'delete') return rule.match instanceof RegExp || typeof rule.match === 'string';
+        if (action === 'throttle') {
+            return ['user', 'content'].includes(rule.scope)
+                && Number.isFinite(rule.windowMs) && rule.windowMs > 0
+                && Number.isFinite(rule.max) && rule.max >= 0
+                && ['off', 'exact', 'normalized'].includes(rule.similarity || 'normalized')
+                && ['drop', 'marker', 'summarize'].includes(rule.onExceed || 'drop');
+        }
         return false;
     });
 }
@@ -298,4 +466,6 @@ export default {
     isFiltered,
     clearFilterRules,
     getFilterRules,
+    takeThrottleSummaries,
+    simulateSequence,
 };

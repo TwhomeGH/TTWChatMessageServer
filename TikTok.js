@@ -25,7 +25,7 @@ import { TikTokLiveConnection, WebcastEvent,ControlEvent,ControlAction } from 't
 import { setupCustomSignServer, waitForSigner, setStreamerName } from './SignServer/index.js';
 import { type } from 'os';
 import Translate from "./TranslateTest.js"
-import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFilter, clearStats } from "./MessageFilter.js"
+import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFilter, clearStats, takeThrottleSummaries } from "./MessageFilter.js"
 import { replaceEmojis, loadEmojiMap, getEmojiMap } from "./EmojiMap.js"
 import { KickWebSocket } from 'kick-wss';
 import console from 'console';
@@ -159,6 +159,19 @@ function recordChatHeat(message, metadata) {
     if (event) autoClip?.onChatMessage(event);
     return event;
 }
+// 頻率規則（throttle）summarize 的摘要：定時檢查「爆量已結束」的群組並送出。
+setInterval(() => {
+    try {
+        for (const summary of takeThrottleSummaries()) {
+            console.log('🗒️ 頻率摘要:', summary.user, summary.message);
+            writeLog("Default", `頻率摘要: ${summary.user} : ${summary.message}`, "ThrottleSummary");
+            sendSocketMessage(summary.user || "系統", summary.message, "", "", false, CacheUserNum, CacheUserList);
+        }
+    } catch (err) {
+        console.error('⚠️ 頻率摘要送出失敗:', err.message);
+    }
+}, 5000).unref();
+
 const tikTokChatGuard = new TikTokChatGuard();
 let lastTikTokReplayLog = 0;
 let tikTokReplayDropped = 0;
@@ -577,6 +590,12 @@ process.stdin.on('data', async (chunk) => {
 
 
             if (json.type === 'audience') { applyRelayAudience(json); return; }
+
+            // 由 Server.js 轉來的頻率摘要：直接顯示，不再過濾（避免摘要本身被同一條規則攔下）。
+            if (json.type === 'ThrottleSummary') {
+                sendSocketMessage(json.user || '系統', json.message, '', '', false, CacheUserNum, CacheUserList);
+                return;
+            }
 
             if (json.type === 'StreamMessage') {
                 // 先存原始值供去重比對

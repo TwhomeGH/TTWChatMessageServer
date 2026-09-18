@@ -21,6 +21,35 @@
         return td;
     }
 
+    /** 用第一列當表頭建立表格（thead／tbody），其餘為資料列。 */
+    function buildTable(rows) {
+        const table = document.createElement('table');
+        const [head, ...body] = rows;
+
+        const thead = document.createElement('thead');
+        const headRow = document.createElement('tr');
+        for (const value of head) {
+            const th = document.createElement('th');
+            th.textContent = value;
+            headRow.append(th);
+        }
+        thead.append(headRow);
+        table.append(thead);
+
+        const tbody = document.createElement('tbody');
+        for (const values of body) {
+            const tr = document.createElement('tr');
+            for (const value of values) {
+                const td = document.createElement('td');
+                td.textContent = value;
+                tr.append(td);
+            }
+            tbody.append(tr);
+        }
+        table.append(tbody);
+        return table;
+    }
+
     /** 在 tbody 放一列「尚無資料」，橫跨 span 欄。 */
     function emptyRow(body, span) {
         const tr = document.createElement('tr');
@@ -258,7 +287,7 @@
 
             const table = document.createElement('table');
             const head = document.createElement('tr');
-            for (const text of ['規則名稱', '對象', '動作']) {
+            for (const text of ['規則名稱', '對象', '動作', '說明']) {
                 const th = document.createElement('th');
                 th.textContent = text;
                 head.append(th);
@@ -267,11 +296,50 @@
             for (const rule of rules) {
                 const tr = document.createElement('tr');
                 cell(tr, rule.name);
-                cell(tr, rule.field);
+                cell(tr, rule.field ?? '');
                 cell(tr, rule.action);
+                cell(tr, rule.detail ?? '');
                 table.append(tr);
             }
             box.replaceChildren(table);
+        } catch (error) {
+            status.textContent = '讀取失敗：' + error.message;
+            box.replaceChildren();
+        }
+    }
+
+    /** 用目前生效的規則跑一串訊息，看頻率規則的實際行為（模擬每 1 秒一則）。 */
+    async function runSequence() {
+        const status = el('sequence-status');
+        const box = el('sequence-result');
+        const lines = el('sequence-lines').value.split('\n').map(line => line.trim()).filter(Boolean);
+        if (!lines.length) {
+            status.textContent = '先貼上至少一則訊息。';
+            box.replaceChildren();
+            return;
+        }
+
+        status.textContent = '執行中…';
+        try {
+            const response = await fetch('/api/filter/sequence', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user: el('rule-sample-user').value, messages: lines, stepMs: 1000 }),
+            });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const data = await response.json();
+
+            const blocked = data.results.filter(item => item.blocked).length;
+            status.textContent = `${data.results.length} 則中 ${blocked} 則被攔、${data.summaries.length} 則摘要`;
+            const rows = [['#', '訊息', '結果', '規則']];
+            data.results.forEach((item, index) => rows.push([
+                index + 1,
+                item.message,
+                item.blocked ? '⛔ 阻擋' : (item.output !== item.message ? '改寫 → ' + item.output : '放行'),
+                item.reason || ''
+            ]));
+            for (const summary of data.summaries) rows.push(['—', '（摘要）' + summary.message, '', summary.rule]);
+            box.replaceChildren(buildTable(rows));
         } catch (error) {
             status.textContent = '讀取失敗：' + error.message;
             box.replaceChildren();
@@ -350,8 +418,9 @@
     // 常用範本：一鍵填好表單，再用測試器確認。
     const PRESETS = {
         'rule-preset-ad': { name: 'user:廣告帳號-加LINE/加瀨', field: 'user', action: 'block', pattern: '加\\s*(LINE|line|ｌｉｎｅ|[瀨濑頼賴])', flags: 'i' },
-        'rule-preset-obfuscate': { name: 'user:廣告帳號-混淆字元', field: 'user', action: 'block', pattern: '[\\u2460-\\u24FF]|[\\u{1D400}-\\u{1D7FF}]', flags: 'u' },
+        'rule-preset-obfuscate': { name: 'any:廣告-混淆字元', field: 'any', action: 'block', pattern: '[\\u2460-\\u24FF]|[\\u{1D400}-\\u{1D7FF}]', flags: 'u' },
         'rule-preset-emoji': { name: 'msg:純emoji洗頻', field: 'message', action: 'block', pattern: '^(?:[\\p{Extended_Pictographic}\\uFE0F\\u200D\\s]){3,}$', flags: 'u' },
+        'rule-preset-emoji-run': { name: 'msg:大量 emoji', field: 'message', action: 'block', pattern: '(?:\\p{Extended_Pictographic}[\\uFE0F\\u200D\\u{1F3FB}-\\u{1F3FF}]*){5,}', flags: 'u' },
     };
 
     function applyPreset(id) {
@@ -417,6 +486,7 @@
     for (const id of ['rule-field', 'rule-action']) el(id).onchange = updateRulePreview;
     for (const id of Object.keys(PRESETS)) el(id).onclick = () => applyPreset(id);
     el('rule-run-actual').onclick = () => checkActual(sample());
+    el('sequence-run').onclick = runSequence;
 
     el('rule-copy').onclick = async () => {
         const snippet = buildSnippet();

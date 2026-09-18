@@ -133,6 +133,18 @@ function processFilter({ user, message } = {}) {
     return messageFilter ? messageFilter.processFilter({ user, message }) : { user, message, blocked: false, modified: false };
 }
 
+// 頻率規則（throttle）summarize 的摘要：/chat 轉接路徑的狀態在這個行程，定時轉給 TikTok.js 顯示。
+setInterval(() => {
+    if (!messageFilter) return;
+    try {
+        for (const summary of messageFilter.takeThrottleSummaries()) {
+            sendToTikTok({ type: 'ThrottleSummary', user: summary.user, message: summary.message });
+        }
+    } catch (err) {
+        pushLog('⚠️ 頻率摘要送出失敗:', err.message);
+    }
+}, 5000).unref();
+
 function readFileStats() {
     try {
         const previous = JSON.parse(fs.readFileSync('./message_stats.json', 'utf-8'));
@@ -754,7 +766,10 @@ const server = http.createServer((req, res) => {
             const rules = messageFilter ? messageFilter.getFilterRules().map(rule => ({
                 name: rule.name,
                 field: rule.field,
-                action: rule.action || 'block'
+                action: rule.action || 'block',
+                detail: rule.action === 'throttle'
+                    ? `${rule.scope === 'content' ? '同內容跨人' : '同一人'} · ${rule.windowMs / 1000} 秒內 ${rule.max} 則 · ${rule.similarity || 'normalized'} · ${rule.onExceed || 'drop'}`
+                    : ''
             })) : [];
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ rules }));
@@ -762,6 +777,25 @@ const server = http.createServer((req, res) => {
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: err.message }));
         }
+    }
+
+    // 用「目前生效的規則集」跑一串訊息（模擬時間），看頻率規則的實際行為
+    else if (req.url === '/api/filter/sequence' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', () => {
+            try {
+                const { user, messages, stepMs } = JSON.parse(body || '{}');
+                const result = messageFilter
+                    ? messageFilter.simulateSequence({ user, messages, stepMs })
+                    : { results: [], summaries: [] };
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(result));
+            } catch (err) {
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: err.message }));
+            }
+        });
     }
 
     // 用「目前生效的規則集」測一筆，回傳實際結果（阻擋原因，或改寫後的值）
