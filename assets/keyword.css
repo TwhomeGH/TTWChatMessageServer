@@ -133,6 +133,24 @@ td:not(:first-child) { white-space: nowrap; }
 #rule-test-result { max-height: 260px; overflow: auto; }
 mark { background: #7c3aed; color: #fff; border-radius: 3px; padding: 0 1px; }
 
+/* 程式碼區塊：註解／字串／數字／插入標記各自一色，避免整片白看不出哪裡是註解。 */
+.code-block {
+  margin: 8px 0 12px;
+  padding: 12px;
+  background: #0d1524;
+  border: 1px solid #26334a;
+  border-radius: 10px;
+  overflow: auto;
+  max-height: 320px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px;
+}
+.code-block code { background: none; padding: 0; border-radius: 0; color: #e7edf7; }
+.js-comment { color: #7f9f7f; }
+.js-string { color: #e5b567; }
+.js-number { color: #7fc7ff; }
+.js-marker { color: #fbbf24; font-weight: 700; }
+
 /* 右下角短暫提示（按鈕有反應與測試結果）。 */
 #toast {
   position: fixed;

@@ -7,6 +7,7 @@
     let rows = [];
     let page = 1;
     let source = null;
+    let activeRuleNames = new Set();   // 目前生效的規則名稱（用來提示候選規則是否已生效）
 
     const sourceLabel = platform => (platform === 'Unknown' || platform === 'Userscript') ? '未知來源' : platform;
     const transportLabel = transport => transport === 'userscript' ? 'Userscript' : transport === 'api' ? 'API／直連' : '未記錄';
@@ -235,6 +236,41 @@
         return '改為「' + outcome.result + '」';
     }
 
+    /** 逐段標出註解、字串與數字（極簡上色；不解析語法）。 */
+    function appendTokens(parent, line) {
+        const pattern = /(\/\/.*$)|('[^']*'|"[^"]*")|(\b\d+\b)/g;
+        let last = 0;
+        for (const match of line.matchAll(pattern)) {
+            if (match.index > last) parent.append(line.slice(last, match.index));
+            const span = document.createElement('span');
+            span.className = match[1] ? 'js-comment' : match[2] ? 'js-string' : 'js-number';
+            span.textContent = match[0];
+            parent.append(span);
+            last = match.index + match[0].length;
+        }
+        parent.append(line.slice(last));
+    }
+
+    /** 極簡 JS 上色：整行註解、插入標記、字串與數字各自一色。 */
+    function highlightJs(text) {
+        const fragment = document.createDocumentFragment();
+        for (const line of text.split('\n')) {
+            const trimmed = line.trim();
+            const span = document.createElement('span');
+            if (line.includes('↓↓↓') || line.includes('↑↑↑')) {
+                span.className = 'js-marker';
+                span.textContent = line;
+            } else if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
+                span.className = 'js-comment';
+                span.textContent = line;
+            } else {
+                appendTokens(span, line);
+            }
+            fragment.append(span, '\n');
+        }
+        return fragment;
+    }
+
     /** 目前表單上的測試樣本（暱稱＋內容）。 */
     function sample() {
         return { user: el('rule-sample-user').value, message: el('rule-sample').value };
@@ -351,6 +387,7 @@
             const response = await fetch('/api/filter/rules', { cache: 'no-store' });
             if (!response.ok) throw new Error('HTTP ' + response.status);
             const { rules } = await response.json();
+            activeRuleNames = new Set(rules.map(rule => rule.name));
             status.textContent = '共 ' + rules.length + ' 條（內建 + 自訂，合併後依序套用；block 會中斷，replace/delete 會改值）';
 
             const table = document.createElement('table');
@@ -370,10 +407,79 @@
                 table.append(tr);
             }
             box.replaceChildren(table);
+            updateSnippetState();
         } catch (error) {
             status.textContent = '讀取失敗：' + error.message;
             box.replaceChildren();
         }
+    }
+
+    /** 複製文字到剪貼簿，按鈕文字暫時改成結果。 */
+    async function copyText(text, button) {
+        const label = button.textContent;
+        try {
+            await navigator.clipboard.writeText(text);
+            button.textContent = '已複製';
+            toast('已複製到剪貼簿');
+        } catch {
+            button.textContent = '複製失敗';
+            toast('複製失敗（瀏覽器未授權剪貼簿）');
+        }
+        setTimeout(() => { button.textContent = label; }, 1600);
+    }
+
+    /**
+     * 產生「貼在哪裡」的參考：檔尾最後幾行 + 片段貼上後的位置。
+     * 只給視覺引導，不提供整檔覆蓋（避免覆蓋錯或語法錯誤的風險）。
+     */
+    function insertSnippet(content, snippet) {
+        const tail = content.match(/\]\s*;?\s*$/);   // 檔尾的 `];`
+        const head = tail ? content.slice(0, tail.index) : content;
+        const end = tail ? content.slice(tail.index) : '];';
+
+        const headLines = head.split('\n');
+        const context = headLines.slice(-8).join('\n').replace(/\s*$/, '\n');
+        const omitted = headLines.length > 8 ? '    // …（前面略）\n' : '';
+        const block = snippet.split('\n').map(line => '    ' + line).join('\n');
+
+        return [
+            omitted + context,
+            '    // ✏️ 片段貼在這裡（就在這行下面）↓↓↓',
+            block,
+            '    // ↑↑↑ 片段結束 ↑↑↑',
+            '',
+            end
+        ].join('\n');
+    }
+
+    /** 讀使用者的 FilterRules.custom.js，把目前片段插到正確位置並整份顯示。 */
+    async function showInsert() {
+        const snippet = buildSnippet();
+        if (!snippet) { toast('先填好規則，再按「顯示要貼在哪裡」。'); return; }
+
+        const box = el('rule-insert');
+        try {
+            const response = await fetch('/api/filter/custom', { cache: 'no-store' });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const data = await response.json();
+            el('rule-insert-path').textContent = data.path || 'FilterRules.custom.js';
+            el('rule-insert-content').replaceChildren(highlightJs(insertSnippet(data.content || 'export default [\n];\n', snippet)));
+            box.hidden = false;
+            toast('已標出片段要貼的位置（只複製上面的片段即可）');
+        } catch (error) {
+            box.hidden = true;
+            toast('讀取自訂規則檔失敗：' + error.message);
+        }
+    }
+
+    /** 提示產生的規則是否已在「目前生效清單」裡（比對規則名稱）。 */
+    function updateSnippetState() {
+        const state = el('rule-active-state');
+        const name = el('rule-name').value.trim();
+        if (!name) { state.textContent = ''; return; }
+        state.textContent = activeRuleNames.has(name)
+            ? '✅「' + name + '」已在目前生效清單裡'
+            : '⚠️「' + name + '」目前未生效——按「複製片段」貼到 FilterRules.custom.js 的 export default [ ... ] 後重啟主服務（比對規則名稱）。';
     }
 
     /** 用目前生效的規則跑一串訊息，看頻率規則的實際行為（模擬每 1 秒一則）。 */
@@ -417,7 +523,9 @@
 
     /** 更新候選規則的「每筆樣本套用後」表格、歷史預覽與產生的片段。 */
     function updateRulePreview() {
-        el('rule-snippet').textContent = buildSnippet() || '（先填正則）';
+        el('rule-snippet').replaceChildren(highlightJs(buildSnippet() || '（先填正則）'));
+        updateSnippetState();
+        el('rule-insert').hidden = true;   // 規則改了，插入位置引導要重按
 
         const rule = currentRule();
         const box = el('rule-test-result');
@@ -513,6 +621,9 @@
         'rule-preset-obfuscate': { name: 'any:廣告-混淆字元', field: 'any', action: 'block', pattern: '[\\u2460-\\u24FF]|[\\u{1D400}-\\u{1D7FF}]', flags: 'u', sampleUser: '✔️1OOO薹=⑨萬钭＋濑：@TR55' },
         'rule-preset-emoji': { name: 'msg:純emoji洗頻', field: 'message', action: 'block', pattern: '^(?:[\\p{Extended_Pictographic}\\uFE0F\\u200D\\s]){3,}$', flags: 'u', sampleMessage: '😌😌😌😌😉' },
         'rule-preset-emoji-run': { name: 'msg:大量 emoji', field: 'message', action: 'block', pattern: '(?:\\p{Extended_Pictographic}[\\uFE0F\\u200D\\u{1F3FB}-\\u{1F3FF}]*){5,}', flags: 'u', sampleMessage: '😌😌😌😌😉\n😄😄' },
+        'rule-preset-buyme': { name: 'msg:廣告-補幣/按我頭像', field: 'message', action: 'block', pattern: '補[幣币]|按我頭像', flags: '', sampleMessage: '補幣中，按我頭像' },
+        'rule-preset-url': { name: 'msg:刪除網址', field: 'message', action: 'delete', pattern: 'https?://\\S+', flags: 'g', sampleMessage: '來看我直播 https://example.com/abc 謝謝' },
+        'rule-preset-profanity': { name: 'msg:遮罩髒話', field: 'message', action: 'replace', pattern: '他媽的|操你媽|幹你娘', flags: 'g', replacement: '***', sampleMessage: '他媽的這也太扯' },
     };
 
     function applyPreset(id) {
@@ -523,7 +634,7 @@
         el('rule-action').value = preset.action;
         el('rule-pattern').value = preset.pattern;
         el('rule-flags').value = preset.flags;
-        el('rule-replacement').value = '';
+        el('rule-replacement').value = preset.replacement ?? '';
         // 一併帶入示範樣本，按下去就能看到「原始 → 結果」。
         el('rule-sample-user').value = preset.sampleUser ?? '';
         el('rule-sample').value = preset.sampleMessage ?? '';
@@ -543,6 +654,10 @@
         'seq-preset-marker': {
             rule: { scope: 'user', windowSec: 10, max: 2, similarity: 'normalized', distance: 1, onExceed: 'marker', marker: '{text}（×{n}）' },
             lines: ['SPAM', 'SPAM', 'SPAM', 'SPAM']
+        },
+        'seq-preset-summarize': {
+            rule: { scope: 'user', windowSec: 10, max: 2, similarity: 'normalized', distance: 0, onExceed: 'summarize' },
+            lines: ['SPAM', 'SPAM', 'SPAM', 'SPAM', 'SPAM']
         },
     };
 
@@ -621,12 +736,11 @@
     el('rule-run-actual').onclick = () => checkActual(sample());
     el('sequence-run').onclick = runSequence;
 
-    el('rule-copy').onclick = async () => {
+    el('rule-copy').onclick = () => {
         const snippet = buildSnippet();
-        if (!snippet) return;
-        try { await navigator.clipboard.writeText(snippet); el('rule-copy').textContent = '已複製'; }
-        catch { el('rule-copy').textContent = '複製失敗'; }
+        if (snippet) copyText(snippet, el('rule-copy'));
     };
+    el('rule-show-insert').onclick = showInsert;
 
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) { close(); el('connection').textContent = '暫停更新'; }

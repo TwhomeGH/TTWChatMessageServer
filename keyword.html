@@ -48,11 +48,22 @@
     <button id="rule-preset-obfuscate" title="暱稱或內容出現圈號①-⑳／數學粗體𝗔-𝟵 就阻擋">圈號／數學粗體</button>
     <button id="rule-preset-emoji" title="內容只有 emoji（≥3 個）就阻擋">純 emoji 洗頻</button>
     <button id="rule-preset-emoji-run" title="內容連續 5 個以上 emoji 就阻擋">大量 emoji（連續 5+）</button>
+    <button id="rule-preset-buyme" title="內容出現補幣／按我頭像就阻擋">補幣廣告 → block</button>
+    <button id="rule-preset-url" title="刪除內容裡的網址">刪除網址 → delete</button>
+    <button id="rule-preset-profanity" title="把髒話取代成 ***">遮罩髒話 → replace</button>
   </div>
 
   <h3>② 產生的片段</h3>
   <pre id="rule-snippet">（先填正則）</pre>
-  <div class="rule-actions"><button id="rule-copy">複製片段</button></div>
+  <p id="rule-active-state" class="muted" role="status"></p>
+  <div class="rule-actions">
+    <button id="rule-copy">複製片段</button>
+    <button id="rule-show-insert">顯示要貼在哪裡</button>
+  </div>
+  <div id="rule-insert" hidden>
+    <p class="muted">下面是 <code id="rule-insert-path">FilterRules.custom.js</code> 的<strong>最後幾行</strong>與片段貼上後的位置——請<strong>只複製上面的「片段」</strong>，貼到 <code>✏️</code> 那行下面，再<strong>重啟主服務</strong>（不需要整檔覆蓋）。片段結尾的逗號<strong>不是最後一組時必須</strong>、<strong>最後一組留著也合法</strong>（JS 允許陣列尾逗號）。</p>
+    <pre class="code-block"><code id="rule-insert-content"></code></pre>
+  </div>
 
   <h3>③ 測試單筆規則</h3>
   <p>自己貼上暱稱與內容，或在下方統計表格按「快速測試」帶入紀錄。<strong>候選規則</strong>即時試算「每筆樣本套用後會變成什麼」；<strong>目前生效規則</strong>按按鈕後由伺服器回報實際結果。</p>
@@ -74,6 +85,7 @@
     <button id="seq-preset-spam" title="同一人 10 秒內第 4 則相似 emoji 起丟棄">同一人 emoji 洗頻 → drop</button>
     <button id="seq-preset-drift" title="與上一則差異不大（編輯距離 2）也視為同一群">與上一則差異不大 → drop</button>
     <button id="seq-preset-marker" title="超量改成「原文（×N）」短標記">重複改寫成標記 → marker</button>
+    <button id="seq-preset-summarize" title="超量不顯示，爆量結束後補一則摘要">超量省略後補摘要 → summarize</button>
   </div>
   <div class="rule-form">
     <label>暱稱 <input id="sequence-user" placeholder="留空則用上面③的暱稱"></label>
