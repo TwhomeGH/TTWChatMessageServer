@@ -779,6 +779,18 @@ const server = http.createServer((req, res) => {
         }
     }
 
+    // 讀取自訂規則檔，讓 /keyword 能引導使用者「片段要貼在哪裡」
+    else if (req.url === '/api/filter/custom' && req.method === 'GET') {
+        const customFile = require('node:path').join(__dirname, 'FilterRules.custom.js');
+        const exists = require('node:fs').existsSync(customFile);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+            path: customFile,
+            exists,
+            content: exists ? require('node:fs').readFileSync(customFile, 'utf8') : ''
+        }));
+    }
+
     // 用「目前生效的規則集」跑一串訊息（模擬時間），看頻率規則的實際行為
     else if (req.url === '/api/filter/sequence' && req.method === 'POST') {
         let body = '';
