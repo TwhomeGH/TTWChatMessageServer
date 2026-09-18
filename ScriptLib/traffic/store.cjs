@@ -126,7 +126,10 @@ class TrafficStore {
             viewers: kind === 'viewers' ? raw.userNum : null,
             stream,
             evidence: transport === 'native' ? 'native' : 'declared',
-            timeSource: sentAt > 0 ? 'platform' : 'received'
+            timeSource: sentAt > 0 ? 'platform' : 'received',
+            // 只有 filter 事件會用到：是不是被「廣告類」規則擋下、以及規則名稱。
+            ad: raw.ad === true,
+            rule: typeof raw.rule === 'string' ? raw.rule.slice(0, 120) : null
         };
         if (metrics) Object.assign(event, metrics);
 
@@ -154,6 +157,7 @@ class TrafficStore {
     kindOf(raw) {
         if (raw.type === 'audience') return 'viewers';
         if (raw.type === 'metrics') return 'metrics';
+        if (raw.type === 'filter') return 'filter';   // 被過濾器擋下的訊息（只進攔截／廣告統計）
         if (raw.eventType === 'join') return 'join';
         if (raw.eventType === 'chat' || raw.type === 'StreamMessage') return 'chat';
         return null;
@@ -192,6 +196,8 @@ class TrafficStore {
             : now - minutes * 60000;
         const bucketMs = bucketSize(Math.max(60000, now - since));
         const buckets = this.database ? this.database.series(platform, since, bucketMs, now) : [];
+        const activeUsers = this.database ? this.database.activeUsers(platform, since, now) : 0;
+        const adUsers = this.database ? this.database.adUsers(platform, since, now) : 0;
 
         // 卡片與進房明細本質是「現在／近期」，維持用記憶體中的事件。
         const events = this.events
@@ -228,6 +234,8 @@ class TrafficStore {
             since,
             bucketMs,
             buckets,
+            activeUsers,
+            adUsers,
             currentViewers: fresh ? last.viewers : null,
             lastViewerAt: last?.time ?? null,
             growth,

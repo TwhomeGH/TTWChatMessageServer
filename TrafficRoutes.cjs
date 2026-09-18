@@ -5,6 +5,12 @@ const { TrafficDatabase } = require('./ScriptLib/traffic/database.cjs');
 
 const database = new TrafficDatabase(path.join(__dirname, 'data/traffic.sqlite'));
 const traffic = new TrafficStore(Date.now, database);
+
+// 啟動時清掉過期的原始事件（7 天），並定期再清一次；分鐘彙總等統計永久保留。
+const pruned = database.prune();
+if (pruned) console.log(`[Traffic] 已清理 ${pruned} 筆過期事件`);
+const pruneTimer = setInterval(() => database.prune(), 6 * 3600000);
+pruneTimer.unref();
 let storageError = null;
 
 // 包一層記錄：保存失敗時只提示訊息，不讓整個程序因磁碟問題中斷。

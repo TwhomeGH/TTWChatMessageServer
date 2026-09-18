@@ -279,3 +279,51 @@ test('圖表序列依桶寬彙總並保留缺資料', () => {
     assert.equal(empty[0].joins, 0);
     db.close();
 });
+
+// 活躍發言人數：同一分鐘同一人只算一次，跨分鐘的同一個人也不會重複計。
+test('活躍發言人數以不同發言者計（跨分鐘不重複）', () => {
+    const db = new TrafficDatabase(':memory:');
+    let now = Date.parse('2026-09-01T02:00:00Z');
+    const store = new TrafficStore(() => now, db);
+
+    store.record({ eventType: 'chat', platform: 'TikTok', id: 'c1', userId: 'a', message: 'hi' });
+    store.record({ eventType: 'chat', platform: 'TikTok', id: 'c2', userId: 'a', message: 'yo' });
+    store.record({ eventType: 'chat', platform: 'TikTok', id: 'c3', userId: 'b', message: 'hi' });
+    assert.equal(db.activeUsers('TikTok', Date.parse('2026-09-01T02:00:00Z'), now), 2);
+
+    now += 60000;   // 下一分鐘，同一人再發
+    store.record({ eventType: 'chat', platform: 'TikTok', id: 'c4', userId: 'a', message: 'again' });
+    assert.equal(db.activeUsers('TikTok', Date.parse('2026-09-01T02:00:00Z'), now), 2);
+
+    const series = db.series('TikTok', Date.parse('2026-09-01T02:00:00Z'), 60000, now);
+    assert.equal(series[0].activeUsers, 2);
+    assert.equal(series[1].activeUsers, 1);
+
+    // 桶寬大於一分鐘時，同一桶內跨分鐘的不同發言者要合併（不是每分鐘各算一次）。
+    now += 3 * 60000;
+    store.record({ eventType: 'chat', platform: 'TikTok', id: 'c5', userId: 'c', message: 'hi' });
+    const wide = db.series('TikTok', Date.parse('2026-09-01T02:00:00Z'), 300000, now);
+    assert.equal(wide[0].activeUsers, 3);
+    db.close();
+});
+
+// 過濾攔截與廣告：filter 事件只進攔截／廣告統計，不算聊天數；廣告帳號仍算發言者。
+test('過濾攔截率與廣告帳號比例', () => {
+    const db = new TrafficDatabase(':memory:');
+    const now = Date.parse('2026-09-01T02:00:00Z');
+    const store = new TrafficStore(() => now, db);
+    const since = Date.parse('2026-09-01T02:00:00Z');
+
+    store.record({ eventType: 'chat', platform: 'TikTok', id: 'c1', userId: 'a', message: 'hi' });
+    store.record({ eventType: 'chat', platform: 'TikTok', id: 'c2', userId: 'b', message: 'yo' });
+    store.record({ type: 'filter', platform: 'TikTok', id: 'f1', userId: 'adbot', user: 'adbot', rule: 'user:廣告帳號-加LINE/加瀨', ad: true });
+    store.record({ type: 'filter', platform: 'TikTok', id: 'f2', userId: 'spammer', user: 'spammer', rule: 'msg:大量 emoji', ad: false });
+
+    const series = db.series('TikTok', since, 60000, now);
+    assert.equal(series[0].chats, 2);         // filter 不算聊天
+    assert.equal(series[0].blocked, 2);
+    assert.equal(series[0].adBlocked, 1);
+    assert.equal(db.activeUsers('TikTok', since, now), 4);   // 廣告帳號也計入發言者
+    assert.equal(db.adUsers('TikTok', since, now), 1);
+    db.close();
+});

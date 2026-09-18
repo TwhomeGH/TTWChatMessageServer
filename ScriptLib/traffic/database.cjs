@@ -58,9 +58,20 @@ class TrafficDatabase {
                 time INTEGER,
                 joins INTEGER DEFAULT 0,
                 chats INTEGER DEFAULT 0,
+                blocked INTEGER DEFAULT 0,
+                adBlocked INTEGER DEFAULT 0,
                 viewerSum REAL DEFAULT 0,
                 viewerCount INTEGER DEFAULT 0,
                 PRIMARY KEY(platform,time)
+            );
+
+            -- 每分鐘「有發言的人」去重後的名單：用來算活躍發言人數（同一個人跨分鐘只算一次）。
+            CREATE TABLE IF NOT EXISTS chat_users (
+                platform TEXT NOT NULL,
+                time INTEGER NOT NULL,
+                userId TEXT NOT NULL,
+                ad INTEGER DEFAULT 0,
+                PRIMARY KEY(platform,time,userId)
             );
 
             CREATE TABLE IF NOT EXISTS sessions (
@@ -97,6 +108,22 @@ class TrafficDatabase {
         for (const column of SESSION_METRIC_COLUMNS) {
             if (!columns.has(column)) this.db.exec(`ALTER TABLE sessions ADD COLUMN ${column} REAL DEFAULT 0`);
         }
+
+        // minutes／chat_users 的廣告與攔截欄位也是後加的。
+        const minuteColumns = new Set(this.db.prepare('PRAGMA table_info(minutes)').all().map(column => column.name));
+        if (!minuteColumns.has('blocked')) this.db.exec('ALTER TABLE minutes ADD COLUMN blocked INTEGER DEFAULT 0');
+        if (!minuteColumns.has('adBlocked')) this.db.exec('ALTER TABLE minutes ADD COLUMN adBlocked INTEGER DEFAULT 0');
+        const chatUserColumns = new Set(this.db.prepare('PRAGMA table_info(chat_users)').all().map(column => column.name));
+        if (!chatUserColumns.has('ad')) this.db.exec('ALTER TABLE chat_users ADD COLUMN ad INTEGER DEFAULT 0');
+
+        // 一次性回填：chat_users 是後來才加的，若還沒有資料就從 events 的 payload 補回來
+        // （舊資料才有活躍發言人數可用；id 空白的 userscript 訊息用暱稱當身分）。
+        if (!this.db.prepare('SELECT COUNT(*) AS n FROM chat_users').get().n) {
+            this.db.prepare(`INSERT OR IGNORE INTO chat_users(platform,time,userId)
+                SELECT platform, (time / 60000) * 60000,
+                    COALESCE(NULLIF(json_extract(payload,'$.userId'),''), json_extract(payload,'$.user'), '')
+                FROM events WHERE kind='chat'`).run();
+        }
     }
 
     /**
@@ -118,10 +145,12 @@ class TrafficDatabase {
             db.prepare('INSERT INTO events(time,platform,kind,dedup,expires,payload) VALUES(?,?,?,?,?,?)')
                 .run(event.time, event.platform, event.kind, key, expires, JSON.stringify(event));
 
-            db.prepare(`INSERT INTO minutes(platform,time,joins,chats,viewerSum,viewerCount) VALUES(?,?,?,?,?,?)
+            db.prepare(`INSERT INTO minutes(platform,time,joins,chats,blocked,adBlocked,viewerSum,viewerCount) VALUES(?,?,?,?,?,?,?,?)
                 ON CONFLICT(platform,time) DO UPDATE SET
                     joins=joins+excluded.joins,
                     chats=chats+excluded.chats,
+                    blocked=blocked+excluded.blocked,
+                    adBlocked=adBlocked+excluded.adBlocked,
                     viewerSum=viewerSum+excluded.viewerSum,
                     viewerCount=viewerCount+excluded.viewerCount`)
                 .run(
@@ -129,9 +158,21 @@ class TrafficDatabase {
                     Math.floor(event.time / 60000) * 60000,
                     event.kind === 'join' ? 1 : 0,
                     event.kind === 'chat' ? 1 : 0,
+                    event.kind === 'filter' ? 1 : 0,
+                    event.kind === 'filter' && event.ad ? 1 : 0,
                     event.viewers ?? 0,
                     event.kind === 'viewers' ? 1 : 0
                 );
+
+            // 記錄發言者（同一分鐘同一人只留一筆），供活躍發言人數統計。
+            // userscript 來源常常只有暱稱沒有 userId，所以兩者取其一當身分。
+            // 被廣告規則擋下的人標 ad（同分鐘已有列就更新，不會重複算人）。
+            const speaker = String(event.userId || event.user || '').slice(0, 100);
+            if ((event.kind === 'chat' || event.kind === 'filter') && speaker) {
+                db.prepare(`INSERT INTO chat_users(platform,time,userId,ad) VALUES(?,?,?,?)
+                    ON CONFLICT(platform,time,userId) DO UPDATE SET ad=MAX(ad,excluded.ad)`)
+                    .run(event.platform, Math.floor(event.time / 60000) * 60000, speaker, event.kind === 'filter' && event.ad ? 1 : 0);
+            }
 
             this.updateSession(event);
             db.exec('COMMIT');
@@ -289,6 +330,36 @@ class TrafficDatabase {
         return this.db.prepare('SELECT DISTINCT platform FROM minutes ORDER BY platform').all().map(row => row.platform);
     }
 
+    /**
+     * 清理過期的原始事件（預設 7 天；去重只需要 24 小時），分鐘彙總／發言者／場次永久保留，
+     * 所以成長趨勢看得到、資料庫又不會無限膨脹。順便把 WAL 收斂回主檔。
+     * 由應用端（TrafficRoutes）在啟動時呼叫，不由建構子自動執行（避免影響測試的固定時間資料）。
+     */
+    prune(retentionMs = 7 * 86400000, now = Date.now()) {
+        try {
+            const removed = this.db.prepare('DELETE FROM events WHERE time < ?').run(now - retentionMs).changes;
+            this.db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+            return removed;
+        } catch (error) {
+            console.warn('[Traffic] 清理舊事件失敗:', error.message);
+            return 0;
+        }
+    }
+
+    /** 範圍內「不同的發言者」人數（活躍發言人數）；同一個人跨分鐘只算一次。 */
+    activeUsers(platform, since, now) {
+        const row = this.db.prepare('SELECT COUNT(DISTINCT userId) AS users FROM chat_users WHERE platform=? AND time>=? AND time<=?')
+            .get(platform || '', since, now);
+        return row?.users ?? 0;
+    }
+
+    /** 範圍內「被廣告規則擋過的不同的帳號」數（廣告帳戶比例用）。 */
+    adUsers(platform, since, now) {
+        const row = this.db.prepare('SELECT COUNT(DISTINCT userId) AS users FROM chat_users WHERE platform=? AND time>=? AND time<=? AND ad=1')
+            .get(platform || '', since, now);
+        return row?.users ?? 0;
+    }
+
     /** 該平台最早的一分鐘彙總時間（「全部」範圍的起點）；沒有資料回傳 null。 */
     earliest(platform) {
         const row = this.db.prepare('SELECT MIN(time) AS time FROM minutes WHERE platform=?').get(platform || '');
@@ -300,20 +371,31 @@ class TrafficDatabase {
      * 觀看數取桶內「有取樣分鐘」的平均；沒有取樣為 null，折線才會斷開而不是被補成 0。
      */
     series(platform, since, bucketMs, now) {
-        const rows = this.db.prepare(`SELECT time, joins, chats, viewerSum, viewerCount
+        const rows = this.db.prepare(`SELECT time, joins, chats, blocked, adBlocked, viewerSum, viewerCount
             FROM minutes WHERE platform=? AND time>=? AND time<=? ORDER BY time`)
             .all(platform || '', since, now);
 
         const totals = new Map();
         for (const row of rows) {
             const time = Math.floor(row.time / bucketMs) * bucketMs;
-            if (!totals.has(time)) totals.set(time, { joins: 0, chats: 0, viewerSum: 0, viewerCount: 0 });
+            if (!totals.has(time)) totals.set(time, { joins: 0, chats: 0, blocked: 0, adBlocked: 0, viewerSum: 0, viewerCount: 0 });
             const bucket = totals.get(time);
             bucket.joins += row.joins ?? 0;
             bucket.chats += row.chats ?? 0;
+            bucket.blocked += row.blocked ?? 0;
+            bucket.adBlocked += row.adBlocked ?? 0;
             bucket.viewerSum += row.viewerSum ?? 0;
             bucket.viewerCount += row.viewerCount ?? 0;
         }
+
+        // 活躍發言人數：每個桶裡「不同的發言者」，用 COUNT(DISTINCT) 才不會被同一個人跨分鐘重複計算。
+        const activeByBucket = new Map(
+            // 一定要 CAST 成整數：參數是浮點數時 SQLite 會做浮點除法，每個分鐘就自成一個桶。
+            this.db.prepare(`SELECT CAST(time / ? AS INTEGER) AS bucket, COUNT(DISTINCT userId) AS users
+                FROM chat_users WHERE platform=? AND time>=? AND time<=? GROUP BY bucket`)
+                .all(bucketMs, platform || '', since, now)
+                .map(row => [row.bucket * bucketMs, row.users])
+        );
 
         const series = [];
         for (let time = Math.floor(since / bucketMs) * bucketMs; time <= now; time += bucketMs) {
@@ -322,7 +404,10 @@ class TrafficDatabase {
                 time,
                 joins: bucket?.joins ?? 0,
                 chats: bucket?.chats ?? 0,
-                viewers: bucket?.viewerCount ? Math.round(bucket.viewerSum / bucket.viewerCount) : null
+                blocked: bucket?.blocked ?? 0,
+                adBlocked: bucket?.adBlocked ?? 0,
+                viewers: bucket?.viewerCount ? Math.round(bucket.viewerSum / bucket.viewerCount) : null,
+                activeUsers: activeByBucket.get(time) ?? 0
             });
         }
         return series;

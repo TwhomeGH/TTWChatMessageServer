@@ -172,6 +172,14 @@ setInterval(() => {
     }
 }, 5000).unref();
 
+/**
+ * 回報「被過濾器擋下」的事件：只進攔截率與廣告比例統計，不算聊天數。
+ * 廣告類規則由規則的 `ad` 旗標或名稱含「廣告」判定（MessageFilter 端算好放在 fr.ad）。
+ */
+function reportFiltered(fr, meta) {
+    reportTraffic({ ...meta, type: 'filter', rule: fr.reason, ad: fr.ad === true });
+}
+
 const tikTokChatGuard = new TikTokChatGuard();
 let lastTikTokReplayLog = 0;
 let tikTokReplayDropped = 0;
@@ -1609,6 +1617,7 @@ connection.on(WebcastEvent.CHAT, data => {
 
     const fr = processFilter({ user: data.user.nickname, message: data.content });
     if (fr.blocked) {
+        reportFiltered(fr, { platform: 'TikTok', id: data.msgId || data.common?.msgId, sentAt: data.createTime || data.common?.createTime, userId: data.user?.userId || data.user?.id, user: data.user.nickname, message: data.content });
         console.log('🚫 過濾器阻擋:', data.user.nickname, data.content, `(規則: ${fr.reason})`);
         writeLog("Default", `過濾器阻擋訊息: ${data.user.nickname} : ${data.content} (規則: ${fr.reason})`, "FilterBlocked")
         addToSyncBuffer(data.user.nickname.trim(), data.content.trim());
@@ -2725,6 +2734,7 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
     const fr = processFilter({ user: event.chatterDisplayName, message: event.messageText });
     if (fr.blocked) {
+        reportFiltered(fr, { platform: 'Twitch', id: event.messageId, userId: event.chatterId, user: event.chatterDisplayName, message: event.messageText });
         console.log('🚫 過濾器阻擋(Twitch):', event.chatterDisplayName, event.messageText, `(規則: ${fr.reason})`);
         writeLog("Default", `過濾器阻擋(Twitch): ${event.chatterDisplayName} : ${event.messageText} (規則: ${fr.reason})`, "Filter")
 
@@ -2955,6 +2965,7 @@ async function startKickChat() {
 
         const fr = processFilter({ user: userName, message });
         if (fr.blocked) {
+            reportFiltered(fr, { platform: 'Kick', id: data.id, userId: data.sender?.id, user: userName, sentAt: data.created_at, message });
             console.info('🚫 過濾器阻擋(Kick):', userName, message, `(規則: ${fr.reason})`);
             writeLog("Default", `過濾器阻擋(Kick): ${userName} : ${message} (規則: ${fr.reason})`, "Filter");
             return;
@@ -3130,6 +3141,7 @@ function connectOdyseeChat(claimId, channelName) {
 
                 const fr = processFilter({ user: userName, message })
                 if (fr.blocked) {
+                    reportFiltered(fr, { platform: 'Odysee', user: userName, message });
                     console.info('🚫 過濾器阻擋(Odysee):', userName, message, `(規則: ${fr.reason})`)
                     writeLog("Default", `過濾器阻擋(Odysee): ${userName} : ${message} (規則: ${fr.reason})`, "Filter")
                     return
@@ -3435,6 +3447,7 @@ function connectYoutubeChat(liveChatId, videoId, channelName) {
 
                             const fr = processFilter({ user: userName, message })
                             if (fr.blocked) {
+                                reportFiltered(fr, { platform: 'Youtube', id: item.id, userId: item.authorDetails?.channelId, user: userName, sentAt: item.snippet.publishedAt, message });
                                 console.info('🚫 過濾器阻擋(Youtube):', userName, message, `(規則: ${fr.reason})`)
                                 writeLog("Default", `過濾器阻擋(Youtube): ${userName} : ${message} (規則: ${fr.reason})`, "Filter")
                                 continue

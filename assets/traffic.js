@@ -34,13 +34,19 @@
         return table;
     }
 
-    /** 桶時間的顯示格式：範圍越長、粒度越粗。 */
+    /**
+     * 桶時間的顯示格式：粒度越粗、或範圍跨過一天，就越需要日期。
+     * 只看 bucketMs 不夠——例如「全部」可能只有 15 分鐘的桶、卻橫跨 30 小時，
+     * 那時只顯示 HH:MM 會分不出是哪一天。
+     */
     function bucketLabel(value) {
         const date = new Date(value);
         const bucketMs = data?.bucketMs ?? 60000;
+        const spanMs = (data?.now ?? value) - (data?.since ?? value);
         const pad = number => String(number).padStart(2, '0');
-        if (bucketMs >= 86400000) return (date.getMonth() + 1) + '/' + date.getDate();
-        if (bucketMs >= 3600000) return (date.getMonth() + 1) + '/' + date.getDate() + ' ' + pad(date.getHours()) + ':00';
+        const day = (date.getMonth() + 1) + '/' + date.getDate();
+        if (bucketMs >= 86400000 || spanMs >= 3 * 86400000) return day;
+        if (bucketMs >= 3600000 || spanMs >= 86400000) return day + ' ' + pad(date.getHours()) + ':00';
         return pad(date.getHours()) + ':' + pad(date.getMinutes());
     }
 
@@ -116,8 +122,25 @@
         const pointX = i => plot.left + i * (plot.right - plot.left) / Math.max(1, rows.length - 1);
         const pointY = value => plot.bottom - value / max * (plot.bottom - plot.top);
 
+        // 沒有資料的桶鋪一層淡色底：讓「空窗」跟「線掉到 0」分得出來。
+        const hasData = row => row.viewers !== null || row.joins > 0 || row.chats > 0;
+        const step = (plot.right - plot.left) / Math.max(1, rows.length - 1);
+        const half = rows.length > 1 ? step / 2 : 0;
+        ctx.fillStyle = 'rgba(148, 163, 184, .12)';
+        let emptyFrom = -1;
+        for (let i = 0; i <= rows.length; i++) {
+            const empty = i < rows.length && !hasData(rows[i]);
+            if (empty && emptyFrom === -1) emptyFrom = i;
+            if (!empty && emptyFrom !== -1) {
+                const x0 = Math.max(plot.left, pointX(emptyFrom) - half);
+                const x1 = Math.min(plot.right, pointX(i - 1) + half);
+                ctx.fillRect(x0, plot.top, Math.max(1, x1 - x0), plot.bottom - plot.top);
+                emptyFrom = -1;
+            }
+        }
+
         keys.forEach((key, index) => {
-            ctx.strokeStyle = index ? '#34d399' : '#60a5fa';
+            ctx.strokeStyle = ['#60a5fa', '#34d399', '#fbbf24'][index] || '#fbbf24';
             ctx.lineWidth = 1.5;
             ctx.beginPath();
             let open = false;
@@ -170,6 +193,18 @@
             const diagnostics = data.diagnostics ?? {};
             const ago = value => value == null ? '無' : Math.round((data.now - value) / 1000) + ' 秒前';
 
+            // 每觀眾訊息量（則/分）：總訊息 ÷ 區間分鐘 ÷ 同區間的平均同時觀看。
+            const rangeMin = Math.max(1, (data.now - data.since) / 60000);
+            const chats = data.buckets.reduce((n, bucket) => n + bucket.chats, 0);
+            const viewerSamples = data.buckets.filter(bucket => bucket.viewers !== null).map(bucket => bucket.viewers);
+            const avgViewers = viewerSamples.length ? viewerSamples.reduce((a, b) => a + b, 0) / viewerSamples.length : null;
+            const perViewerMsg = avgViewers ? (chats / rangeMin) / avgViewers : null;
+
+            // 過濾攔截率：被擋訊息 ÷ 總訊息。廣告帳戶比例：被廣告規則擋過的帳號 ÷ 活躍發言人數。
+            const blockedChats = data.buckets.reduce((n, bucket) => n + (bucket.blocked ?? 0), 0);
+            const blockedRatio = chats ? blockedChats / chats : null;
+            const adRatio = data.activeUsers ? (data.adUsers ?? 0) / data.activeUsers : null;
+
             el('status').textContent = data.platform
                 ? '更新 ' + time(data.now) + ' · ' + (data.currentViewers === null
                     ? '目前沒有新鮮的觀看取樣（超過 90 秒）'
@@ -182,6 +217,8 @@
                   + ' · 最近原生 ' + ago(diagnostics.lastNativeViewerAt)
                   + '、備用 ' + ago(diagnostics.lastDeclaredViewerAt)
                   + '（記憶體 ' + (diagnostics.viewerSamples ?? 0) + ' 筆樣本／' + (diagnostics.memoryEvents ?? 0) + ' 筆事件）'
+                  + ' · 攔截 ' + blockedChats + '/' + chats + ' 則'
+                  + ' · 廣告帳號 ' + (data.adUsers ?? 0) + '/' + (data.activeUsers ?? 0) + ' 人'
                 : '';
 
             const cards = [
@@ -189,7 +226,12 @@
                 ['觀看淨增／分鐘', data.growth === null ? '—' : data.growth.toFixed(1)],
                 // 沒有新鮮樣本時顯示 —：0 秒是「沒在成長」，跟「沒資料」不同。
                 ['持續增長', data.currentViewers === null ? '—' : Math.round(data.growingMs / 1000) + ' 秒'],
-                ['此範圍進房次數', data.buckets.reduce((n, bucket) => n + bucket.joins, 0)]
+                ['此範圍進房次數', data.buckets.reduce((n, bucket) => n + bucket.joins, 0)],
+                ['活躍發言人數', (data.activeUsers ?? 0) + ' 人'],
+                // 每觀眾訊息量：分子分母都是「同一區間」，不會有累積 vs 瞬時的基準不一致問題。
+                ['每觀眾訊息', perViewerMsg === null ? '—' : perViewerMsg.toFixed(2) + ' 則/分'],
+                ['過濾攔截率', blockedRatio === null ? '—' : (blockedRatio * 100).toFixed(1) + '%'],
+                ['廣告帳戶比例', adRatio === null ? '—' : (adRatio * 100).toFixed(1) + '%']
             ];
             el('cards').replaceChildren(...cards.map(([name, value]) => {
                 const card = document.createElement('div');
@@ -205,7 +247,7 @@
             }));
 
             draw('viewers', ['viewers']);
-            draw('arrivals', ['joins', 'chats']);
+            draw('arrivals', ['joins', 'chats', 'activeUsers']);
             renderDetails();
         } catch {
             el('status').textContent = '資料更新失敗；下方保留上次結果，非即時資料。';
@@ -218,7 +260,7 @@
     window.addEventListener('resize', () => {
         if (!data) return;
         draw('viewers', ['viewers']);
-        draw('arrivals', ['joins', 'chats']);
+        draw('arrivals', ['joins', 'chats', 'activeUsers']);
     });
     refresh();
     setInterval(refresh, 5000);

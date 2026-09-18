@@ -545,6 +545,8 @@ const server = http.createServer((req, res) => {
 
                 const fr = processFilter({ user, message });
                 if (fr.blocked) {
+                    // 另記一筆 filter 事件：只進攔截率／廣告比例，不算聊天數（chat 已在上面記過）。
+                    require('./TrafficRoutes.cjs').traffic.record({ ...data, type: 'filter', rule: fr.reason, ad: fr.ad === true });
                     pushLog('🚫 過濾器阻擋(/chat):', user, message, `(規則: ${fr.reason})`);
                     res.writeHead(200);
                     res.end("Filtered");

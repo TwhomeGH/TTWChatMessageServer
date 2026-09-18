@@ -75,12 +75,12 @@ function processWithRules(rules, { user, message } = {}, now, throttleState) {
         if (action === 'block') {
             if (rule.field === 'user' || rule.field === 'any') {
                 if (result.user && rule.test(result.user)) {
-                    return { ...result, blocked: true, reason: rule.name, field: 'user' };
+                    return { ...result, blocked: true, reason: rule.name, field: 'user', ad: isAdRule(rule) };
                 }
             }
             if (rule.field === 'message' || rule.field === 'any') {
                 if (result.message && rule.test(result.message)) {
-                    return { ...result, blocked: true, reason: rule.name, field: 'message' };
+                    return { ...result, blocked: true, reason: rule.name, field: 'message', ad: isAdRule(rule) };
                 }
             }
         }
@@ -111,7 +111,7 @@ function processWithRules(rules, { user, message } = {}, now, throttleState) {
         if (action === 'throttle') {
             const outcome = applyThrottle(rule, result, now, throttleState);
             if (!outcome) continue;
-            if (outcome.blocked) return { ...result, blocked: true, reason: rule.name, field: 'throttle' };
+            if (outcome.blocked) return { ...result, blocked: true, reason: rule.name, field: 'throttle', ad: isAdRule(rule) };
             result = { ...result, message: outcome.message, modified: true, reason: rule.name, field: 'message' };
         }
     }
@@ -122,6 +122,14 @@ function processWithRules(rules, { user, message } = {}, now, throttleState) {
 /** 用線上規則處理一筆訊息。 */
 export function processFilter(input = {}, now = Date.now(), throttleState = liveThrottleState) {
     return processWithRules(filterRules, input, now, throttleState);
+}
+
+/**
+ * 這條規則算不算「廣告類」：明確標 `ad: true`，或名稱含「廣告」。
+ * 只用於統計（廣告訊息／廣告帳號比例），不影響過濾行為。
+ */
+function isAdRule(rule) {
+    return rule.ad === true || /廣告/.test(rule.name || '');
 }
 
 /**
