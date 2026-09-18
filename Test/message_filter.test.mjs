@@ -83,3 +83,13 @@ test('頻率控制：三種處置、編輯距離、跨人與視窗', () => {
     const cross = simulateSequence({ messages: [{ user: 'a', message: 'SAME' }, { user: 'b', message: 'SAME' }, { user: 'c', message: 'SAME' }], stepMs: 1000 });
     assert.deepEqual(cross.results.map(r => r.blocked), [false, true, true]);
 });
+
+// 序列模擬可以帶入「候選規則」，不必先啟用就能試。
+test('序列模擬可帶入候選 throttle 規則', () => {
+    clearFilterRules();
+    const rule = { name: 'test:candidate', action: 'throttle', scope: 'user', windowMs: 10000, max: 1, similarity: 'normalized', distance: 0, onExceed: 'drop' };
+    const run = simulateSequence({ user: 'u', messages: ['A', 'A', 'A'], stepMs: 1000, extraRules: [rule] });
+    assert.deepEqual(run.results.map(r => r.blocked), [false, true, true]);
+    // 沒有候選規則時就完全放行
+    assert.deepEqual(simulateSequence({ user: 'u', messages: ['A', 'A', 'A'], stepMs: 1000 }).results.map(r => r.blocked), [false, false, false]);
+});

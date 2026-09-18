@@ -60,12 +60,16 @@ export function addFilterRules(rules) {
  * @param {{ user?: string, message?: string }} input
  * @returns {{ user?: string, message?: string, blocked: boolean, reason?: string, field?: string, modified: boolean }}
  */
-export function processFilter({ user, message } = {}, now = Date.now(), throttleState = liveThrottleState) {
+/**
+ * 用指定規則清單處理一筆訊息。
+ * `processFilter` 用線上規則；序列模擬會把候選規則接在後面一起跑。
+ */
+function processWithRules(rules, { user, message } = {}, now, throttleState) {
     user = (typeof user === 'string') ? user : '';
     message = (typeof message === 'string') ? message : '';
     let result = { user, message, blocked: false, reason: undefined, field: undefined, modified: false };
 
-    for (const rule of filterRules) {
+    for (const rule of rules) {
         const action = rule.action || 'block';
 
         if (action === 'block') {
@@ -113,6 +117,11 @@ export function processFilter({ user, message } = {}, now = Date.now(), throttle
     }
 
     return result;
+}
+
+/** 用線上規則處理一筆訊息。 */
+export function processFilter(input = {}, now = Date.now(), throttleState = liveThrottleState) {
+    return processWithRules(filterRules, input, now, throttleState);
 }
 
 /**
@@ -247,9 +256,9 @@ function applyThrottle(rule, result, now, state) {
 /**
  * 取出「爆量已結束」的摘要（summarize 模式）。呼叫端負責把摘要送出去。
  */
-export function takeThrottleSummaries(now = Date.now(), state = liveThrottleState) {
+export function takeThrottleSummaries(now = Date.now(), state = liveThrottleState, rules = filterRules) {
     const summaries = [];
-    for (const rule of filterRules) {
+    for (const rule of rules) {
         if ((rule.action || 'block') !== 'throttle') continue;
         const groups = state.get(rule);
         if (!groups) continue;
@@ -276,15 +285,16 @@ export function takeThrottleSummaries(now = Date.now(), state = liveThrottleStat
  * 用一串訊息跑一次「隔離」的模擬（不動到線上狀態），供 /keyword 的序列測試。
  * 每則間隔 stepMs 毫秒；最後把時間往後推，讓 summarize 的摘要能結算出來。
  */
-export function simulateSequence({ user = '', messages = [], stepMs = 1000 } = {}, now = Date.now()) {
+export function simulateSequence({ user = '', messages = [], stepMs = 1000, extraRules = [] } = {}, now = Date.now()) {
     const state = new Map();
+    const rules = extraRules.length ? [...filterRules, ...extraRules] : filterRules;
     const results = messages.map((entry, index) => {
         const record = typeof entry === 'string' ? { user, message: entry } : entry;
         const time = now + index * stepMs;
-        const result = processFilter({ user: record.user, message: record.message }, time, state);
+        const result = processWithRules(rules, { user: record.user, message: record.message }, time, state);
         return { index, time, user: record.user, message: record.message, blocked: result.blocked, reason: result.reason, output: result.message };
     });
-    const summaries = takeThrottleSummaries(now + messages.length * stepMs + 3600000, state);
+    const summaries = takeThrottleSummaries(now + messages.length * stepMs + 3600000, state, rules);
     return { results, summaries };
 }
 

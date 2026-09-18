@@ -785,9 +785,9 @@ const server = http.createServer((req, res) => {
         req.on('data', chunk => body += chunk);
         req.on('end', () => {
             try {
-                const { user, messages, stepMs } = JSON.parse(body || '{}');
+                const { user, messages, stepMs, rule } = JSON.parse(body || '{}');
                 const result = messageFilter
-                    ? messageFilter.simulateSequence({ user, messages, stepMs })
+                    ? messageFilter.simulateSequence({ user, messages, stepMs, extraRules: rule ? [rule] : [] })
                     : { results: [], summaries: [] };
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify(result));
