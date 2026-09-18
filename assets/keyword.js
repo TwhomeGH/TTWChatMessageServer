@@ -156,8 +156,21 @@
      */
     function buildSnippet() {
         const name = el('rule-name').value.trim() || '自訂規則';
-        const field = el('rule-field').value;
         const action = el('rule-action').value;
+
+        if (action === 'throttle') {
+            const similarity = el('rule-similarity').value;
+            const onExceed = el('rule-onexceed').value;
+            const marker = el('rule-marker').value.replace(/'/g, "\\'");
+            return [
+                `{ name: '${name}', action: 'throttle',`,
+                `  scope: '${el('rule-scope').value}', windowMs: ${(Number(el('rule-window').value) || 10) * 1000}, max: ${Number(el('rule-max').value) || 0},`,
+                `  similarity: '${similarity}',${similarity === 'normalized' ? ` distance: ${Number(el('rule-distance').value) || 0},` : ''}`,
+                `  onExceed: '${onExceed}'${onExceed === 'marker' ? `, marker: '${marker || '（×{n}）'}'` : ''} },`
+            ].join('\n');
+        }
+
+        const field = el('rule-field').value;
         const pattern = el('rule-pattern').value.replace(/\//g, '\\/').replace(/\n/g, '\\n');
         const flags = el('rule-flags').value.trim();
         if (!pattern) return '';
@@ -190,6 +203,7 @@
 
     /** 讀表單並編譯正則；語法錯誤時顯示訊息並回傳 null。 */
     function currentRule() {
+        if (el('rule-action').value === 'throttle') return null;   // 頻率規則沒有單筆正則
         const pattern = el('rule-pattern').value;
         if (!pattern) return null;
         const flags = el('rule-flags').value;
@@ -226,25 +240,62 @@
         return { user: el('rule-sample-user').value, message: el('rule-sample').value };
     }
 
-    /** 候選規則對樣本的判定（依規則對象測暱稱與／或內容）。 */
-    function candidateLines(rule, record) {
-        const lines = [];
+    /** 候選規則要顯示的樣本列：`[標籤, 原始值, 判定]`。 */
+    function candidateRows(rule, record) {
+        const rows = [];
         if (rule.field === 'user' || rule.field === 'any') {
-            lines.push('暱稱：' + outcomeText(applyRule(rule, record.user)));
+            rows.push(['暱稱', record.user, applyRule(rule, record.user)]);
         }
         if (rule.field === 'message' || rule.field === 'any') {
-            const rows = record.message ? record.message.split('\n') : [];
-            const hits = rows.filter(line => rule.test.test(line)).length;
-            lines.push('內容：' + rows.length + ' 行，命中 ' + hits + ' 行');
+            (record.message ? record.message.split('\n') : []).forEach((line, index) => {
+                rows.push(['內容 ' + (index + 1), line, applyRule(rule, line)]);
+            });
         }
-        return lines;
+        return rows;
+    }
+
+    /** 右下角短暫提示：讓使用者知道按鈕有反應，以及測試結果。 */
+    function toast(text, ms = 2600) {
+        let box = document.getElementById('toast');
+        if (!box) {
+            box = document.createElement('div');
+            box.id = 'toast';
+            document.body.append(box);
+        }
+        box.textContent = text;
+        box.classList.add('show');
+        clearTimeout(toast.timer);
+        toast.timer = setTimeout(() => box.classList.remove('show'), ms);
+    }
+
+    /** 建立「樣本／原始（命中處標色）／結果」表格。 */
+    function buildOutcomeTable(rows, rule) {
+        const table = document.createElement('table');
+        const head = document.createElement('tr');
+        for (const text of ['樣本', '原始（命中處標色）', '結果']) {
+            const th = document.createElement('th');
+            th.textContent = text;
+            head.append(th);
+        }
+        table.append(head);
+
+        for (const [label, original, outcome] of rows) {
+            const tr = document.createElement('tr');
+            cell(tr, label);
+            const source = document.createElement('td');
+            source.append(highlight(original || '（空）', rule.test));
+            tr.append(source);
+            cell(tr, outcomeText(outcome));
+            table.append(tr);
+        }
+        return table;
     }
 
     /** 把伺服器端「目前生效規則集」的結果寫成一句話。 */
     function actualText(result) {
         if (result.blocked) {
-            const field = result.field === 'user' ? '暱稱' : '內容';
-            return '⛔ 阻擋（' + (result.reason || '未命名規則') + '／' + field + '）';
+            const field = result.field === 'user' ? '暱稱' : result.field === 'message' ? '內容' : '頻率';
+            return '⛔ 阻擋（規則：' + (result.reason || '未命名') + '／對象：' + field + '）';
         }
         if (!result.modified) return '不變';
         return '改為 → 暱稱「' + result.user + '」／內容「' + result.message + '」';
@@ -253,7 +304,8 @@
     /** 用伺服器端「目前生效的規則集」測同一筆，顯示實際結果。 */
     async function checkActual(record) {
         const line = el('rule-actual-result');
-        line.textContent = '檢查中…';
+        const original = '原始：暱稱「' + (record.user || '') + '」／內容「' + (record.message || '') + '」\n';
+        line.textContent = original + '結果：檢查中…';
         try {
             const response = await fetch('/api/filter/check', {
                 method: 'POST',
@@ -261,9 +313,12 @@
                 body: JSON.stringify({ user: record.user, message: record.message }),
             });
             if (!response.ok) throw new Error('HTTP ' + response.status);
-            line.textContent = actualText(await response.json());
+            const text = actualText(await response.json());
+            line.textContent = original + '結果：' + text;
+            toast('目前生效規則：' + text);
         } catch (error) {
-            line.textContent = '讀取失敗（' + error.message + '）';
+            line.textContent = original + '結果：讀取失敗（' + error.message + '）';
+            toast('測試失敗：' + error.message);
         }
     }
 
@@ -272,6 +327,19 @@
         el('rule-sample-user').value = record.user || '';
         el('rule-sample').value = record.message || '';
         updateRulePreview();
+
+        // 立刻給回饋，避免使用者以為「點了沒反應」。
+        const rule = currentRule();
+        if (!rule) {
+            toast('已帶入樣本，但還沒填正則，無法測候選規則。');
+        } else {
+            const rows = candidateRows(rule, sample());
+            const blocked = rows.filter(row => row[2].blocked).length;
+            toast('已帶入樣本並測試（候選規則）：' + (rows.length
+                ? rows.length + ' 筆樣本' + (blocked ? '，' + blocked + ' 筆會阻擋' : '，都不會被擋')
+                : '沒有樣本'));
+        }
+
         await checkActual(record);
     }
 
@@ -324,13 +392,14 @@
             const response = await fetch('/api/filter/sequence', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user: el('rule-sample-user').value, messages: lines, stepMs: 1000 }),
+                body: JSON.stringify({ user: el('sequence-user').value || el('rule-sample-user').value, messages: lines, stepMs: 1000, rule: candidateThrottleRule() }),
             });
             if (!response.ok) throw new Error('HTTP ' + response.status);
             const data = await response.json();
 
             const blocked = data.results.filter(item => item.blocked).length;
-            status.textContent = `${data.results.length} 則中 ${blocked} 則被攔、${data.summaries.length} 則摘要`;
+            const rewritten = data.results.filter(item => !item.blocked && item.output !== item.message).length;
+            status.textContent = `${data.results.length} 則中 ${blocked} 則被攔、${rewritten} 則改寫、${data.summaries.length} 則摘要`;
             const rows = [['#', '訊息', '結果', '規則']];
             data.results.forEach((item, index) => rows.push([
                 index + 1,
@@ -346,36 +415,34 @@
         }
     }
 
-    /** 更新樣本測試、歷史預覽與產生的片段。 */
+    /** 更新候選規則的「每筆樣本套用後」表格、歷史預覽與產生的片段。 */
     function updateRulePreview() {
         el('rule-snippet').textContent = buildSnippet() || '（先填正則）';
 
         const rule = currentRule();
-        const result = el('rule-test-result');
+        const box = el('rule-test-result');
         const history = el('rule-history');
         if (!rule) {
-            el('rule-quick-result').textContent = '（先填正則）';
-            el('rule-test-status').textContent = '';
-            result.replaceChildren();
+            el('rule-test-status').textContent = el('rule-action').value === 'throttle'
+                ? '（throttle 是跨訊息的頻率規則，沒有單筆正則；請用下方 ④ 序列測試）'
+                : '';
+            box.replaceChildren();
             history.replaceChildren();
             el('rule-history-status').textContent = '';
             return;
         }
 
-        // 候選規則對樣本的判定（暱稱＋內容）。
+        // 候選規則：列出每筆樣本「原始 → 結果」。
         const record = sample();
-        const candidate = candidateLines(rule, record);
-        el('rule-quick-result').textContent = candidate.length ? candidate.join('\n') : '（先輸入暱稱或內容）';
+        const rows = candidateRows(rule, record);
 
-        // 逐行標出內容命中片段。
-        result.replaceChildren();
-        const sampleRows = record.message ? record.message.split('\n') : [];
-        el('rule-test-status').textContent = sampleRows.length ? '' : '（沒有內容可逐行標示）';
-        for (const line of sampleRows) {
-            const div = document.createElement('div');
-            div.className = 'rule-line';
-            div.append(highlight(line, rule.test));
-            result.append(div);
+        if (!rows.length) {
+            el('rule-test-status').textContent = '先輸入暱稱或內容。';
+            box.replaceChildren();
+        } else {
+            const blocked = rows.filter(row => row[2].blocked).length;
+            el('rule-test-status').textContent = rows.length + ' 筆樣本' + (blocked ? '，其中 ' + blocked + ' 筆會被阻擋' : '');
+            box.replaceChildren(buildOutcomeTable(rows, rule));
         }
 
         // 歷史預覽：對目前載入的統計跑一次，先看會不會誤殺。
@@ -415,12 +482,37 @@
         history.append(table);
     }
 
+    /** 依動作切換表單：throttle 顯示頻率欄位，其餘顯示正則欄位。 */
+    function syncRuleForm() {
+        const throttle = el('rule-action').value === 'throttle';
+        el('rule-throttle-fields').hidden = !throttle;
+        for (const id of ['rule-pattern-label', 'rule-flags-label', 'rule-replacement-label']) el(id).hidden = throttle;
+        el('rule-field').closest('label').hidden = throttle;
+        updateRulePreview();
+    }
+
+    /** 若 ① 目前是 throttle 規則，回傳它（序列測試會把它接在線上規則後一起跑）。 */
+    function candidateThrottleRule() {
+        if (el('rule-action').value !== 'throttle') return null;
+        return {
+            name: el('rule-name').value.trim() || '候選 throttle',
+            action: 'throttle',
+            scope: el('rule-scope').value,
+            windowMs: (Number(el('rule-window').value) || 10) * 1000,
+            max: Number(el('rule-max').value) || 0,
+            similarity: el('rule-similarity').value,
+            distance: Number(el('rule-distance').value) || 0,
+            onExceed: el('rule-onexceed').value,
+            marker: el('rule-marker').value || '（×{n}）'
+        };
+    }
+
     // 常用範本：一鍵填好表單，再用測試器確認。
     const PRESETS = {
-        'rule-preset-ad': { name: 'user:廣告帳號-加LINE/加瀨', field: 'user', action: 'block', pattern: '加\\s*(LINE|line|ｌｉｎｅ|[瀨濑頼賴])', flags: 'i' },
-        'rule-preset-obfuscate': { name: 'any:廣告-混淆字元', field: 'any', action: 'block', pattern: '[\\u2460-\\u24FF]|[\\u{1D400}-\\u{1D7FF}]', flags: 'u' },
-        'rule-preset-emoji': { name: 'msg:純emoji洗頻', field: 'message', action: 'block', pattern: '^(?:[\\p{Extended_Pictographic}\\uFE0F\\u200D\\s]){3,}$', flags: 'u' },
-        'rule-preset-emoji-run': { name: 'msg:大量 emoji', field: 'message', action: 'block', pattern: '(?:\\p{Extended_Pictographic}[\\uFE0F\\u200D\\u{1F3FB}-\\u{1F3FF}]*){5,}', flags: 'u' },
+        'rule-preset-ad': { name: 'user:廣告帳號-加LINE/加瀨', field: 'user', action: 'block', pattern: '加\\s*(LINE|line|ｌｉｎｅ|[瀨濑頼賴])', flags: 'i', sampleUser: '加賴看片88' },
+        'rule-preset-obfuscate': { name: 'any:廣告-混淆字元', field: 'any', action: 'block', pattern: '[\\u2460-\\u24FF]|[\\u{1D400}-\\u{1D7FF}]', flags: 'u', sampleUser: '✔️1OOO薹=⑨萬钭＋濑：@TR55' },
+        'rule-preset-emoji': { name: 'msg:純emoji洗頻', field: 'message', action: 'block', pattern: '^(?:[\\p{Extended_Pictographic}\\uFE0F\\u200D\\s]){3,}$', flags: 'u', sampleMessage: '😌😌😌😌😉' },
+        'rule-preset-emoji-run': { name: 'msg:大量 emoji', field: 'message', action: 'block', pattern: '(?:\\p{Extended_Pictographic}[\\uFE0F\\u200D\\u{1F3FB}-\\u{1F3FF}]*){5,}', flags: 'u', sampleMessage: '😌😌😌😌😉\n😄😄' },
     };
 
     function applyPreset(id) {
@@ -432,7 +524,46 @@
         el('rule-pattern').value = preset.pattern;
         el('rule-flags').value = preset.flags;
         el('rule-replacement').value = '';
-        updateRulePreview();
+        // 一併帶入示範樣本，按下去就能看到「原始 → 結果」。
+        el('rule-sample-user').value = preset.sampleUser ?? '';
+        el('rule-sample').value = preset.sampleMessage ?? '';
+        syncRuleForm();
+    }
+
+    // 序列測試的快速範例：會設定 ① 的 throttle 規則並帶入序列，按下去直接跑。
+    const SEQUENCE_PRESETS = {
+        'seq-preset-spam': {
+            rule: { scope: 'user', windowSec: 10, max: 3, similarity: 'normalized', distance: 2, onExceed: 'drop' },
+            lines: ['😛😛😛😛😛', '😂😂😂😂😂', '😁😁😁😁😁', '😅😅😅😅😅', '😄😄😄😄😄']
+        },
+        'seq-preset-drift': {
+            rule: { scope: 'user', windowSec: 10, max: 3, similarity: 'normalized', distance: 2, onExceed: 'drop' },
+            lines: ['哈囉大家好', '哈囉大家好', '哈囉大家好', '哈囉大家好呀', '哈囉大家好']
+        },
+        'seq-preset-marker': {
+            rule: { scope: 'user', windowSec: 10, max: 2, similarity: 'normalized', distance: 1, onExceed: 'marker', marker: '{text}（×{n}）' },
+            lines: ['SPAM', 'SPAM', 'SPAM', 'SPAM']
+        },
+    };
+
+    /** 套用序列範例：設定 throttle 規則 + 帶入序列，並立刻跑一次。 */
+    function applySequencePreset(id) {
+        const preset = SEQUENCE_PRESETS[id];
+        if (!preset) return;
+        el('rule-name').value = 'throttle:' + id.replace('seq-preset-', '');
+        el('rule-action').value = 'throttle';
+        el('rule-scope').value = preset.rule.scope;
+        el('rule-window').value = preset.rule.windowSec;
+        el('rule-max').value = preset.rule.max;
+        el('rule-similarity').value = preset.rule.similarity;
+        el('rule-distance').value = preset.rule.distance ?? 2;
+        el('rule-onexceed').value = preset.rule.onExceed;
+        el('rule-marker').value = preset.rule.marker ?? '';
+        // 示範用一般暱稱，避免 any 類規則（例如混淆字元）把整個序列都擋掉而看不出頻率效果。
+        el('sequence-user').value = 'demo_user';
+        el('sequence-lines').value = preset.lines.join('\n');
+        syncRuleForm();
+        runSequence();
     }
 
     // ===== 即時連線 =====
@@ -483,8 +614,10 @@
     for (const id of ['rule-name', 'rule-pattern', 'rule-flags', 'rule-replacement', 'rule-sample', 'rule-sample-user']) {
         el(id).oninput = updateRulePreview;
     }
-    for (const id of ['rule-field', 'rule-action']) el(id).onchange = updateRulePreview;
+    el('rule-field').onchange = updateRulePreview;
+    el('rule-action').onchange = syncRuleForm;
     for (const id of Object.keys(PRESETS)) el(id).onclick = () => applyPreset(id);
+    for (const id of Object.keys(SEQUENCE_PRESETS)) el(id).onclick = () => applySequencePreset(id);
     el('rule-run-actual').onclick = () => checkActual(sample());
     el('sequence-run').onclick = runSequence;
 
@@ -503,7 +636,7 @@
     window.addEventListener('pageshow', connect);
 
     render();
-    updateRulePreview();
+    syncRuleForm();
     loadActiveRules();
     connect();
 })();

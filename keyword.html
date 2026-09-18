@@ -23,56 +23,72 @@
 
 <section>
   <div class="section-title"><h2>規則產生器與測試</h2></div>
-  <p>產生「訊息過濾規則」片段：選動作、填正則，用下方測試器確認命中，再按「複製」貼到 <code>FilterRules.custom.js</code> 的 <code>export default [ ... ]</code> 裡，<strong>重啟主服務</strong>後生效。歷史預覽用的是「已過濾後」的留言（暱稱則是原始值），內容規則的預覽僅供參考。</p>
-
+  <h3>① 規則</h3>
+  <p>選對象與動作、填正則；用下方測試確認效果，再按「複製」把片段貼到 <code>FilterRules.custom.js</code> 的 <code>export default [ ... ]</code>，<strong>重啟主服務</strong>後生效。</p>
   <div class="rule-form">
     <label>名稱 <input id="rule-name" placeholder="例：user:廣告帳號-加LINE"></label>
     <label>對象 <select id="rule-field"><option value="user">user（暱稱）</option><option value="message" selected>message（內容）</option><option value="any">any（兩者）</option></select></label>
-    <label>動作 <select id="rule-action"><option value="block" selected>block（阻擋）</option><option value="replace">replace（取代）</option><option value="delete">delete（刪除）</option></select></label>
-    <label>正則 <input id="rule-pattern" placeholder="例：加\s*(LINE|瀨)"></label>
-    <label>旗標 <input id="rule-flags" placeholder="iu"></label>
-    <label>取代文字 <input id="rule-replacement" placeholder="replace 用"></label>
+    <label>動作 <select id="rule-action"><option value="block" selected>block（阻擋）</option><option value="replace">replace（取代）</option><option value="delete">delete（刪除）</option><option value="throttle">throttle（頻率）</option></select></label>
+    <label id="rule-pattern-label">正則 <input id="rule-pattern" placeholder="例：加\s*(LINE|瀨)"></label>
+    <label id="rule-flags-label">旗標 <input id="rule-flags" placeholder="iu"></label>
+    <label id="rule-replacement-label">取代文字 <input id="rule-replacement" placeholder="replace 用"></label>
+  </div>
+  <div class="rule-form" id="rule-throttle-fields" hidden>
+    <label>範圍 <select id="rule-scope"><option value="user">user（同一人）</option><option value="content">content（同內容跨人）</option></select></label>
+    <label>視窗（秒） <input id="rule-window" type="number" min="1" value="10"></label>
+    <label>上限 <input id="rule-max" type="number" min="0" value="3"></label>
+    <label>相似度 <select id="rule-similarity"><option value="normalized" selected>normalized（去 emoji／標點）</option><option value="exact">exact（完全相同）</option><option value="off">off（純頻率）</option></select></label>
+    <label>編輯距離 <input id="rule-distance" type="number" min="0" value="2"></label>
+    <label>超過處置 <select id="rule-onexceed"><option value="drop" selected>drop（丟棄）</option><option value="marker">marker（改寫）</option><option value="summarize">summarize（摘要）</option></select></label>
+    <label>標記 <input id="rule-marker" placeholder="（×{n}）"></label>
   </div>
   <div class="rule-presets">
-    <span class="muted">快速範本</span>
-    <button id="rule-preset-ad">廣告帳號-加LINE/加瀨</button>
-    <button id="rule-preset-obfuscate">圈號／數學粗體</button>
-    <button id="rule-preset-emoji">純 emoji 洗頻</button>
-    <button id="rule-preset-emoji-run">大量 emoji（連續 5+）</button>
+    <span class="muted">快速範本（會一併帶入示範樣本）</span>
+    <button id="rule-preset-ad" title="暱稱含「加LINE／加瀨／加濑」就阻擋（廣告帳號）">廣告帳號-加LINE/加瀨</button>
+    <button id="rule-preset-obfuscate" title="暱稱或內容出現圈號①-⑳／數學粗體𝗔-𝟵 就阻擋">圈號／數學粗體</button>
+    <button id="rule-preset-emoji" title="內容只有 emoji（≥3 個）就阻擋">純 emoji 洗頻</button>
+    <button id="rule-preset-emoji-run" title="內容連續 5 個以上 emoji 就阻擋">大量 emoji（連續 5+）</button>
   </div>
 
-  <h3>測試（手動輸入或從歷史帶入）</h3>
-  <p>自己貼上暱稱與內容，或在下方統計表格按「快速測試」帶入該筆紀錄。候選規則即時試算；「測目前生效規則」按鈕會打伺服器，回報實際結果（被哪條規則阻擋、或改寫成什麼）。</p>
+  <h3>② 產生的片段</h3>
+  <pre id="rule-snippet">（先填正則）</pre>
+  <div class="rule-actions"><button id="rule-copy">複製片段</button></div>
+
+  <h3>③ 測試單筆規則</h3>
+  <p>自己貼上暱稱與內容，或在下方統計表格按「快速測試」帶入紀錄。<strong>候選規則</strong>即時試算「每筆樣本套用後會變成什麼」；<strong>目前生效規則</strong>按按鈕後由伺服器回報實際結果。</p>
   <div class="rule-form">
     <label>暱稱 <input id="rule-sample-user" placeholder="貼上暱稱…"></label>
   </div>
   <textarea id="rule-sample" placeholder="貼上訊息內容（可多行）…"></textarea>
-
-  <p class="muted">候選規則</p>
-  <pre id="rule-quick-result">（先填正則）</pre>
+  <p class="muted">候選規則：每筆樣本套用後</p>
   <p id="rule-test-status" class="muted" role="status"></p>
-  <div id="rule-test-result"></div>
-
-  <p class="muted">目前生效規則</p>
+  <div id="rule-test-result" class="scroll"></div>
+  <p class="muted">目前生效規則（伺服器端）</p>
   <div class="rule-actions"><button id="rule-run-actual">測目前生效規則</button></div>
   <pre id="rule-actual-result">（尚未測試）</pre>
 
-  <h3>頻率／序列測試</h3>
-  <p>用「目前生效的規則」跑一串訊息（每行一則，模擬每 1 秒一則），看哪幾則被頻率規則攔下、以及 summarize 的摘要。使用者用上面的「暱稱」欄位。</p>
+  <h3>④ 頻率／序列測試</h3>
+  <p>用「目前生效的規則」＋①目前的候選規則，跑一串訊息（每行一則，模擬每 1 秒一則），看哪幾則被攔、改寫或摘要。<strong>暱稱也會套用規則</strong>（`any` 規則會看它），所以這裡獨立一個欄位。</p>
+  <div class="rule-presets">
+    <span class="muted">快速範例（會設定上面的 throttle 規則並帶入序列）</span>
+    <button id="seq-preset-spam" title="同一人 10 秒內第 4 則相似 emoji 起丟棄">同一人 emoji 洗頻 → drop</button>
+    <button id="seq-preset-drift" title="與上一則差異不大（編輯距離 2）也視為同一群">與上一則差異不大 → drop</button>
+    <button id="seq-preset-marker" title="超量改成「原文（×N）」短標記">重複改寫成標記 → marker</button>
+  </div>
+  <div class="rule-form">
+    <label>暱稱 <input id="sequence-user" placeholder="留空則用上面③的暱稱"></label>
+  </div>
   <textarea id="sequence-lines" placeholder="每行一則訊息…"></textarea>
   <div class="rule-actions"><button id="sequence-run">跑序列測試</button></div>
   <p id="sequence-status" class="muted" role="status"></p>
   <div id="sequence-result" class="scroll"></div>
 
-  <h3>對歷史資料預覽</h3>
+  <h3>⑤ 對歷史資料預覽</h3>
+  <p>對目前載入的統計跑一次，先看會命中哪些留言與暱稱。歷史的<strong>留言是過濾後</strong>的值、<strong>暱稱是原始</strong>值，所以帳號規則的預覽準、內容規則僅供參考。</p>
   <p id="rule-history-status" class="muted" role="status"></p>
   <div id="rule-history" class="scroll"></div>
 
-  <h3>產生的片段</h3>
-  <pre id="rule-snippet">（先填正則）</pre>
-  <div class="toolbar"><button id="rule-copy">複製片段</button></div>
-
-  <h3>目前生效的規則</h3>
+  <h3>⑥ 目前生效的規則</h3>
   <p id="rule-active-status" class="muted" role="status">讀取中…</p>
   <div id="rule-active" class="scroll"></div>
 </section>
