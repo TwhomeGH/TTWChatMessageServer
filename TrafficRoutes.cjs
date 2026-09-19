@@ -43,14 +43,55 @@ startHeartbeat();
 /** 人流觀察路由，與自動剪輯分離，不產生剪輯請求。 */
 function serveTraffic(req, res) {
     const url = new URL(req.url, 'http://localhost');
-    if (!['/traffic', '/api/traffic', '/api/traffic/history'].includes(url.pathname)) return false;
+    if (!['/traffic', '/api/traffic', '/api/traffic/history', '/api/traffic/clear'].includes(url.pathname)) return false;
+
+    res.setHeader('Cache-Control', 'no-store');
+
+    // 清理統計：POST { platform, from, to, confirm }。沒有 confirm 只回預覽筆數，
+    // 有 confirm 才真的刪除；用來清掉誤收的髒資料，不必整庫重來。
+    if (url.pathname === '/api/traffic/clear') {
+        if (req.method !== 'POST') {
+            res.writeHead(405);
+            res.end();
+            return true;
+        }
+        let body = '';
+        req.on('data', chunk => {
+            body += chunk;
+            if (body.length > 10000) req.destroy();
+        });
+        req.on('end', () => {
+            try {
+                const { platform = 'all', from, to, confirm } = JSON.parse(body || '{}');
+                if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) throw new Error('時間範圍不正確');
+                res.setHeader('Content-Type', 'application/json; charset=utf-8');
+                if (!confirm) {
+                    const timezone = url.searchParams.get('timezone') || 'Asia/Taipei';
+                    new Intl.DateTimeFormat('en-US', { timeZone: timezone });   // 先驗證時區字串
+                    res.end(JSON.stringify({
+                        preview: true, from, to,
+                        counts: database.countRange(platform, from, to),
+                        detail: database.previewRange(platform, from, to, timezone)
+                    }));
+                    return;
+                }
+                const removed = database.deleteRange(platform, from, to);
+                const memoryEvents = traffic.reload();
+                console.log('[Traffic] 已清理統計', new Date(from).toISOString(), '~', new Date(to).toISOString(), removed);
+                res.end(JSON.stringify({ removed, memoryEvents }));
+            } catch (error) {
+                res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ error: error.message }));
+            }
+        });
+        return true;
+    }
 
     if (req.method !== 'GET') {
         res.writeHead(405);
         res.end();
         return true;
     }
-    res.setHeader('Cache-Control', 'no-store');
 
     if (url.pathname === '/api/traffic/history') {
         try {

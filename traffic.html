@@ -25,6 +25,7 @@
 
     <section class="toolbar">
       <label>平台 <select id="platform"></select></label>
+      <label>時區 <select id="timezone" title="預設跟隨系統時區，可手動更正"></select></label>
       <label>範圍 <select id="range">
         <option value="10">10 分鐘</option>
         <option value="30" selected>30 分鐘</option>
@@ -88,6 +89,24 @@
       <p class="text-gray-500 text-xs">進房事件不是每個平台都提供：原生目前只有 TikTok 的 MEMBER 事件；Twitch／Kick／Odysee／YouTube 沒有「觀眾進房」事件，因此這裡可能是空的。</p>
       <div id="details" class="table-wrap"></div>
     </section>
+
+    <details class="panel" id="cleanup">
+      <summary>🧹 清理統計（清掉誤收的髒資料，不必整庫重來）</summary>
+      <p class="text-gray-400 text-sm mt-2">可以只清「某一天」或「最近 N 小時」；刪除後圖表與歷史會立即反映。場次以「開始時間落在範圍內」為準，心跳不會刪。</p>
+      <div class="cleanup-form">
+        <label>平台 <select id="clean-platform"><option value="all">全部</option></select></label>
+        <label>方式 <select id="clean-mode">
+          <option value="day">某一天</option>
+          <option value="hours">最近 N 小時</option>
+        </select></label>
+        <label id="clean-day-label">日期 <input type="date" id="clean-day"></label>
+        <label id="clean-hours-label" hidden>小時 <input type="number" id="clean-hours" min="1" max="720" value="6"></label>
+        <button id="clean-preview">預覽要刪除的筆數</button>
+        <button id="clean-run" disabled>確定刪除</button>
+      </div>
+      <p id="clean-status" class="muted" role="status"></p>
+      <div id="clean-preview-data"></div>
+    </details>
 
     <p class="text-gray-500 text-xs">資料自動保存於本機 SQLite，重啟保留。即時圖僅顯示最近 24 小時／20,000 筆；週月統計使用完整分鐘彙總。原生進房／聊天先支援 TikTok，原生觀看數支援 TikTok、Twitch；其他來源需明確上報。</p>
   </main>

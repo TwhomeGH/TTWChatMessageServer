@@ -256,6 +256,128 @@
         }
     }
 
+    // ── 清理統計：先預覽筆數，確定後才刪除（可選某一天或最近 N 小時）──
+    function cleanRange() {
+        if (el('clean-mode').value === 'day') {
+            const value = el('clean-day').value;
+            if (!value) return null;
+            const [year, month, day] = value.split('-').map(Number);
+            const from = new Date(year, month - 1, day).getTime();
+            return { from, to: from + 86400000 };
+        }
+        const hours = Math.min(720, Math.max(1, Number(el('clean-hours').value) || 6));
+        return { from: Date.now() - hours * 3600000, to: Date.now() };
+    }
+
+    /** 把主平台選單的選項鏡射到清理用的平台選單（只在使用者展開時同步）。 */
+    function syncCleanPlatforms() {
+        const target = el('clean-platform');
+        const wanted = [...el('platform').options].map(option => ({ value: option.value, text: option.textContent }));
+        if (!wanted.length) return;
+        if (wanted.map(option => option.value).join() === [...target.options].map(option => option.value).join()) return;
+        const keep = target.value;
+        target.replaceChildren(...wanted.map(({ value, text }) => new Option(text, value)));
+        if (wanted.some(option => option.value === keep)) target.value = keep;
+    }
+
+    async function cleanRequest(confirmDelete) {
+        const status = el('clean-status');
+        const range = cleanRange();
+        if (!range) { status.textContent = '請先選日期。'; return; }
+        status.textContent = confirmDelete ? '刪除中…' : '讀取中…';
+        try {
+            // 跟歷史區塊用同一個時區選單（預設系統時區、可手動更正）。
+            const timezone = el('timezone')?.value || Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const response = await fetch('/api/traffic/clear?timezone=' + encodeURIComponent(timezone), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ platform: el('clean-platform').value, from: range.from, to: range.to, confirm: confirmDelete })
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || 'HTTP ' + response.status);
+            const span = new Date(range.from).toLocaleString('zh-TW', { hour12: false }) + ' ~ ' +
+                new Date(range.to).toLocaleString('zh-TW', { hour12: false });
+            if (!confirmDelete) {
+                const c = result.counts;
+                status.textContent = span + '：分鐘彙總 ' + c.minutes + ' 筆、聊天事件 ' + c.events + ' 筆、發言者 ' + c.chatUsers + ' 筆、場次 ' + c.sessions + ' 筆。以下是即將刪除的內容：';
+                renderCleanPreview(result.detail);
+                el('clean-run').disabled = false;
+                return;
+            }
+            const r = result.removed;
+            status.textContent = '已刪除：分鐘彙總 ' + r.minutes + ' 筆、聊天事件 ' + r.events + ' 筆、發言者 ' + r.chatUsers + ' 筆、場次 ' + r.sessions + ' 筆（記憶體剩 ' + result.memoryEvents + ' 筆事件）。';
+            el('clean-run').disabled = true;
+            refresh();
+            window.dispatchEvent(new Event('traffic-cleared'));   // 讓歷史區塊也跟著重讀
+        } catch (error) {
+            status.textContent = '失敗：' + error.message;
+        }
+    }
+
+    /** 預覽明細：列出即將刪除的每日彙總、場次、發言最多的帳號與訊息樣本。 */
+    function renderCleanPreview(detail) {
+        const box = el('clean-preview-data');
+        if (!detail) { box.replaceChildren(); return; }
+        const nodes = [];
+        const title = text => {
+            const p = document.createElement('p');
+            p.className = 'clean-title';
+            p.textContent = text;
+            return p;
+        };
+        const lines = values => {
+            const p = document.createElement('p');
+            p.className = 'clean-lines';
+            p.textContent = values.join('\n');
+            return p;
+        };
+        const localTime = value => new Date(value).toLocaleString('zh-TW', { hour12: false });
+
+        if (detail.days?.length) {
+            nodes.push(title('每日彙總（將被刪除）'));
+            nodes.push(buildTable([['日期', '進房', '聊天', '取樣分鐘', '平均觀看'],
+                ...detail.days.map(day => [day.day, day.joins, day.chats, day.observedMinutes,
+                    day.averageViewers === null ? '—' : day.averageViewers.toFixed(1)])]));
+        }
+        if (detail.sessions?.length) {
+            nodes.push(title('場次（' + detail.sessions.length + ' 筆）'));
+            nodes.push(lines(detail.sessions.map(session =>
+                (session.platform || '?') + ' ' + localTime(session.started) +
+                (session.ended ? ' ~ ' + localTime(session.ended) : '（進行中）') +
+                ' · 峰值 ' + (session.peak ?? '—') + ' · 聊天 ' + session.chats)));
+        }
+        if (detail.speakers?.length) {
+            nodes.push(title('發言最多的帳號'));
+            nodes.push(lines([detail.speakers.map(speaker => speaker.userId + '（' + speaker.minutes + ' 分鐘）').join('、')]));
+        }
+        if (detail.samples?.length) {
+            // traffic 只記錄發送者與時間、不存訊息內容（隱私與容量），所以這裡不會有文字。
+            nodes.push(title('範圍內最早的 5 則訊息（只記錄發送者與時間，不含內容）'));
+            nodes.push(lines(detail.samples.map(sample =>
+                new Date(sample.time).toLocaleTimeString('zh-TW', { hour12: false }) + ' ' + sample.user +
+                (sample.message ? '：' + sample.message : ''))));
+        }
+        box.replaceChildren(...nodes);
+    }
+
+    function setupCleanup() {
+        const iso = date => date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+        el('clean-day').value = iso(new Date());
+        syncCleanPlatforms();
+        el('cleanup').addEventListener('toggle', syncCleanPlatforms);
+        el('clean-mode').onchange = () => {
+            const byDay = el('clean-mode').value === 'day';
+            el('clean-day-label').hidden = !byDay;
+            el('clean-hours-label').hidden = byDay;
+            el('clean-run').disabled = true;
+            el('clean-status').textContent = '';
+        };
+        el('clean-preview').onclick = () => cleanRequest(false);
+        el('clean-run').onclick = () => cleanRequest(true);
+    }
+
+    setupCleanup();
+
     for (const id of ['platform', 'range']) el(id).onchange = () => { selected = null; refresh(); };
     window.addEventListener('resize', () => {
         if (!data) return;

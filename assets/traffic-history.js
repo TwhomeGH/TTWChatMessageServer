@@ -1,9 +1,31 @@
 (() => {
     const el = id => document.getElementById(id);
-    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
     let busy = false;
+
+    // 時區預設跟隨系統，可手動更正（有些環境系統時區是錯的），選擇存在 localStorage。
+    const SYSTEM_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const TIMEZONE_KEY = 'ttw_traffic_timezone';
+    const timezone = () => el('timezone')?.value || SYSTEM_TIMEZONE;
+
+    /** 建立時區選單：系統時區在最前面並標示，其餘用瀏覽器支援的清單。 */
+    function setupTimezone() {
+        const select = el('timezone');
+        if (!select) return;
+        let supported = [];
+        try { supported = Intl.supportedValuesOf('timeZone'); } catch { /* 舊瀏覽器沒有這個 API */ }
+        // supportedValuesOf 不含 'UTC'，但那是常用選項，手動補在最前面並去重。
+        const zones = [SYSTEM_TIMEZONE, 'UTC', ...supported].filter((zone, index, list) => list.indexOf(zone) === index);
+        select.replaceChildren(...zones.map(zone => new Option(zone === SYSTEM_TIMEZONE ? zone + '（系統）' : zone, zone)));
+        let saved = null;
+        try { saved = localStorage.getItem(TIMEZONE_KEY); } catch { /* ignore */ }
+        select.value = zones.includes(saved) ? saved : SYSTEM_TIMEZONE;
+        select.onchange = () => {
+            try { localStorage.setItem(TIMEZONE_KEY, select.value); } catch { /* ignore */ }
+            refresh();
+        };
+    }
 
     const format = value => value == null ? '—' : value.toFixed(1);
 
@@ -139,14 +161,14 @@
             const res = await fetch(
                 '/api/traffic/history?platform=' + encodeURIComponent(el('platform').value) +
                 '&days=' + el('history-days').value +
-                '&timezone=' + encodeURIComponent(timezone),
+                '&timezone=' + encodeURIComponent(timezone()),
                 { cache: 'no-store' }
             );
             if (!res.ok) throw Error();
             const data = await res.json();
 
             el('history-status').textContent = (data.storageError ? data.storageError + ' · ' : '') +
-                (data.platform || '尚無資料') + ' · ' + timezone + ' · 自動保存 · ' +
+                (data.platform || '尚無資料') + ' · ' + timezone() + ' · 自動保存 · ' +
                 (data.rankings?.sessionCount ?? 0) + ' 個觀測場次';
 
             renderHeatmap(data.cells);
@@ -162,6 +184,8 @@
 
     el('history-days').addEventListener('change', refresh);
     el('platform').addEventListener('change', refresh);
+    window.addEventListener('traffic-cleared', refresh);   // 清理統計後立刻重讀歷史
+    setupTimezone();
     refresh();
     setInterval(refresh, 60000);
 })();

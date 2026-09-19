@@ -346,6 +346,70 @@ class TrafficDatabase {
         }
     }
 
+    /** 統計某段時間範圍內各表的筆數（清理前預覽用）。platform 傳 'all' 代表全部平台。 */
+    countRange(platform, from, to) {
+        const all = !platform || platform === 'all';
+        const count = (table, column = 'time') => all
+            ? this.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${column}>=? AND ${column}<?`).get(from, to).n
+            : this.db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE platform=? AND ${column}>=? AND ${column}<?`).get(platform, from, to).n;
+        return { minutes: count('minutes'), chatUsers: count('chat_users'), events: count('events'), sessions: count('sessions', 'started') };
+    }
+
+    /**
+     * 清理前的預覽：不只看筆數，也列出「即將被刪除的是哪些資料」——
+     * 每日彙總、範圍內的場次、發言最多的帳號，以及少量訊息樣本。
+     */
+    previewRange(platform, from, to, timezone) {
+        const all = !platform || platform === 'all';
+        const where = all ? '' : 'platform=? AND ';
+        const args = all ? [from, to] : [platform, from, to];
+
+        const formatter = new Intl.DateTimeFormat('en-US', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' });
+        const days = new Map();
+        for (const row of this.db.prepare(`SELECT time, joins, chats, viewerSum, viewerCount FROM minutes WHERE ${where}time>=? AND time<? ORDER BY time`).all(...args)) {
+            const parts = Object.fromEntries(formatter.formatToParts(row.time).map(part => [part.type, part.value]));
+            const key = parts.year + '-' + parts.month + '-' + parts.day;
+            if (!days.has(key)) days.set(key, { day: key, joins: 0, chats: 0, observedMinutes: 0, viewerSum: 0 });
+            const item = days.get(key);
+            item.joins += row.joins ?? 0;
+            item.chats += row.chats ?? 0;
+            if (row.viewerCount) { item.observedMinutes++; item.viewerSum += row.viewerSum / row.viewerCount; }
+        }
+
+        const sessions = this.db.prepare(`SELECT platform, started, ended, peak, joins, chats FROM sessions WHERE ${where}started>=? AND started<? ORDER BY started`).all(...args);
+        const speakers = this.db.prepare(`SELECT userId, COUNT(*) AS minutes FROM chat_users WHERE ${where}time>=? AND time<? GROUP BY userId ORDER BY minutes DESC, userId LIMIT 5`).all(...args);
+        const samples = this.db.prepare(`SELECT time, platform, payload FROM events WHERE ${where}time>=? AND time<? AND kind='chat' ORDER BY time LIMIT 5`).all(...args)
+            .map(row => {
+                try {
+                    const payload = JSON.parse(row.payload);
+                    return { time: row.time, platform: row.platform, user: payload.user || '', message: String(payload.message || '').slice(0, 60) };
+                } catch {
+                    return { time: row.time, platform: row.platform, user: '', message: '' };
+                }
+            });
+
+        return {
+            days: [...days.values()].map(({ viewerSum, ...item }) => ({
+                ...item,
+                averageViewers: item.observedMinutes ? viewerSum / item.observedMinutes : null
+            })),
+            sessions, speakers, samples
+        };
+    }
+
+    /**
+     * 刪除某段時間範圍的統計資料——用來清掉誤收的髒資料（例如舊版 userscript 亂逛別台），
+     * 不必整庫重來。涵蓋分鐘彙總、發言者、原始事件，以及「開始時間落在範圍內」的場次；
+     * 心跳不刪（那是程式運作紀錄，不是平台資料）。
+     */
+    deleteRange(platform, from, to) {
+        const all = !platform || platform === 'all';
+        const drop = (table, column = 'time') => all
+            ? this.db.prepare(`DELETE FROM ${table} WHERE ${column}>=? AND ${column}<?`).run(from, to).changes
+            : this.db.prepare(`DELETE FROM ${table} WHERE platform=? AND ${column}>=? AND ${column}<?`).run(platform, from, to).changes;
+        return { minutes: drop('minutes'), chatUsers: drop('chat_users'), events: drop('events'), sessions: drop('sessions', 'started') };
+    }
+
     /** 範圍內「不同的發言者」人數（活躍發言人數）；同一個人跨分鐘只算一次。 */
     activeUsers(platform, since, now) {
         const row = this.db.prepare('SELECT COUNT(DISTINCT userId) AS users FROM chat_users WHERE platform=? AND time>=? AND time<=?')

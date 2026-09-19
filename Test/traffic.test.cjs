@@ -327,3 +327,52 @@ test('過濾攔截率與廣告帳號比例', () => {
     assert.equal(db.adUsers('TikTok', since, now), 1);
     db.close();
 });
+
+// 可選範圍清理：只刪指定範圍內的資料，範圍外保留。
+test('清理統計只刪指定範圍，範圍外保留', () => {
+    const db = new TrafficDatabase(':memory:');
+    let now = Date.parse('2026-09-01T02:00:00Z');
+    const store = new TrafficStore(() => now, db);
+
+    store.record({ eventType: 'chat', platform: 'TikTok', id: 'a1', userId: 'u1', message: 'hi' });
+    now += 3600000;   // 下一小時再一則
+    store.record({ eventType: 'chat', platform: 'TikTok', id: 'a2', userId: 'u2', message: 'yo' });
+
+    const from = Date.parse('2026-09-01T02:00:00Z');
+    const to = Date.parse('2026-09-01T03:00:00Z');
+    const counts = db.countRange('TikTok', from, to);
+    assert.equal(counts.minutes, 1);
+    assert.equal(counts.chatUsers, 1);
+    assert.equal(counts.events, 1);
+
+    const removed = db.deleteRange('TikTok', from, to);
+    assert.equal(removed.minutes, 1);
+    assert.equal(removed.chatUsers, 1);
+    assert.equal(removed.events, 1);
+
+    // 範圍外（03:00）那一筆還在
+    assert.equal(db.series('TikTok', from, 60000, now).reduce((n, bucket) => n + bucket.chats, 0), 1);
+    assert.equal(db.activeUsers('TikTok', from, now), 1);
+    db.close();
+});
+
+// 清理預覽要能說出「刪的是什麼」，不能只給筆數。
+test('清理預覽列出每日彙總、場次、帳號與樣本', () => {
+    const db = new TrafficDatabase(':memory:');
+    const now = Date.parse('2026-09-01T02:00:00Z');
+    const store = new TrafficStore(() => now, db);
+    store.record({ eventType: 'chat', platform: 'TikTok', id: 'a1', userId: 'u1', user: '甲', message: 'hi' });
+    store.record({ type: 'audience', platform: 'TikTok', userNum: 175 });
+
+    const from = Date.parse('2026-09-01T00:00:00Z');
+    const to = Date.parse('2026-09-02T00:00:00Z');
+    const preview = db.previewRange('TikTok', from, to, 'UTC');
+    assert.equal(preview.days.length, 1);
+    assert.equal(preview.days[0].chats, 1);
+    assert.equal(preview.days[0].averageViewers, 175);
+    assert.equal(preview.sessions.length, 1);
+    assert.deepEqual(preview.speakers.map(speaker => speaker.userId), ['u1']);
+    assert.equal(preview.samples.length, 1);
+    assert.equal(preview.samples[0].user, 'u1');   // 有 userId 時以 userId 為身分
+    db.close();
+});

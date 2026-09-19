@@ -4,6 +4,21 @@
 
 :root { color-scheme: dark; }
 main { display: flex; flex-direction: column; gap: 16px; }
+[hidden] { display: none !important; }
+
+/* 清理統計（可選範圍刪除，不整庫重來） */
+#cleanup summary { cursor: pointer; font-weight: 700; }
+.cleanup-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 10px 0; }
+.cleanup-form label { display: flex; flex-direction: column; align-items: stretch; gap: 4px; font-size: 12px; color: #9ca3af; }
+.cleanup-form input { padding: 8px 10px; background: #0d1524; border: 1px solid #344663; border-radius: 8px; color: #e7edf7; font: inherit; }
+#cleanup button { padding: 8px 12px; border: 1px solid #344663; border-radius: 8px; background: #1b2940; color: #e7edf7; cursor: pointer; font: inherit; }
+#cleanup button:hover:not(:disabled) { background: #24344f; }
+#cleanup button:disabled { opacity: .5; cursor: not-allowed; }
+#cleanup #clean-run { border-color: #7f1d1d; background: #3b1d1d; }
+#cleanup #clean-run:hover:not(:disabled) { background: #552424; }
+/* 預覽明細：光看筆數看不出是哪些資料，所以列出每日彙總、場次、帳號與訊息樣本。 */
+#cleanup .clean-title { margin: 12px 0 4px; color: #9ca3af; font-size: 12px; }
+#cleanup .clean-lines { margin: 0; color: #cbd5e1; font-size: 13px; white-space: pre-line; overflow-wrap: anywhere; }
 
 /* 選單 */
 label { display: inline-flex; align-items: center; gap: 8px; color: #9ca3af; font-size: .9rem; }

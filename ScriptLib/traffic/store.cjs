@@ -141,6 +141,12 @@ class TrafficStore {
         return true;
     }
 
+    /** 重新從資料庫載入近 24 小時事件（清理統計後讓記憶體同步，不必重啟）。 */
+    reload() {
+        this.events = this.database ? this.database.recent(this.now() - 86400000) : [];
+        return this.events.length;
+    }
+
     /** 平台時間可能是秒、毫秒或 ISO 字串；統一轉成毫秒。 */
     sentAtOf(raw) {
         let sentAt = raw.sentAt ?? raw.createTime;
