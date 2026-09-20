@@ -372,6 +372,8 @@ test('清理預覽列出每日彙總、場次、帳號與樣本', () => {
     assert.equal(preview.days[0].averageViewers, 175);
     assert.equal(preview.sessions.length, 1);
     assert.deepEqual(preview.speakers.map(speaker => speaker.userId), ['u1']);
+    assert.equal(preview.speakers[0].chats, 1);            // 訊息則數
+    assert.equal(preview.speakers[0].activeMinutes, 1);    // 有發言的分鐘數
     assert.equal(preview.samples.length, 1);
     assert.equal(preview.samples[0].user, 'u1');   // 有 userId 時以 userId 為身分
     db.close();

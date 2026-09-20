@@ -71,6 +71,7 @@ class TrafficDatabase {
                 time INTEGER NOT NULL,
                 userId TEXT NOT NULL,
                 ad INTEGER DEFAULT 0,
+                chats INTEGER DEFAULT 0,
                 PRIMARY KEY(platform,time,userId)
             );
 
@@ -115,6 +116,17 @@ class TrafficDatabase {
         if (!minuteColumns.has('adBlocked')) this.db.exec('ALTER TABLE minutes ADD COLUMN adBlocked INTEGER DEFAULT 0');
         const chatUserColumns = new Set(this.db.prepare('PRAGMA table_info(chat_users)').all().map(column => column.name));
         if (!chatUserColumns.has('ad')) this.db.exec('ALTER TABLE chat_users ADD COLUMN ad INTEGER DEFAULT 0');
+        if (!chatUserColumns.has('chats')) this.db.exec('ALTER TABLE chat_users ADD COLUMN chats INTEGER DEFAULT 0');
+
+        // 一次性回填每人則數（chats 是後加的）：從 events 的 payload 數回來。
+        if (!this.db.prepare('SELECT COUNT(*) AS n FROM chat_users WHERE chats > 0').get().n) {
+            this.db.prepare(`UPDATE chat_users SET chats = COALESCE((
+                SELECT COUNT(*) FROM events e
+                WHERE e.kind='chat' AND e.platform = chat_users.platform
+                  AND CAST(e.time / 60000 AS INTEGER) * 60000 = chat_users.time
+                  AND COALESCE(NULLIF(json_extract(e.payload,'$.userId'),''), json_extract(e.payload,'$.user'), '') = chat_users.userId
+            ), 0)`).run();
+        }
 
         // 一次性回填：chat_users 是後來才加的，若還沒有資料就從 events 的 payload 補回來
         // （舊資料才有活躍發言人數可用；id 空白的 userscript 訊息用暱稱當身分）。
@@ -169,9 +181,16 @@ class TrafficDatabase {
             // 被廣告規則擋下的人標 ad（同分鐘已有列就更新，不會重複算人）。
             const speaker = String(event.userId || event.user || '').slice(0, 100);
             if ((event.kind === 'chat' || event.kind === 'filter') && speaker) {
-                db.prepare(`INSERT INTO chat_users(platform,time,userId,ad) VALUES(?,?,?,?)
-                    ON CONFLICT(platform,time,userId) DO UPDATE SET ad=MAX(ad,excluded.ad)`)
-                    .run(event.platform, Math.floor(event.time / 60000) * 60000, speaker, event.kind === 'filter' && event.ad ? 1 : 0);
+                // 只有 chat 會累加則數；filter 事件只負責把 ad 標起來（訊息已由 chat 事件記過一次）。
+                db.prepare(`INSERT INTO chat_users(platform,time,userId,ad,chats) VALUES(?,?,?,?,?)
+                    ON CONFLICT(platform,time,userId) DO UPDATE SET ad=MAX(ad,excluded.ad), chats=chats+excluded.chats`)
+                    .run(
+                        event.platform,
+                        Math.floor(event.time / 60000) * 60000,
+                        speaker,
+                        event.kind === 'filter' && event.ad ? 1 : 0,
+                        event.kind === 'chat' ? 1 : 0
+                    );
             }
 
             this.updateSession(event);
@@ -377,9 +396,9 @@ class TrafficDatabase {
         }
 
         const sessions = this.db.prepare(`SELECT platform, started, ended, peak, joins, chats FROM sessions WHERE ${where}started>=? AND started<? ORDER BY started`).all(...args);
-        // 注意：chat_users 是「每分鐘一位發言者一列」，所以這裡算的是「有幾個分鐘發過言」，
-        // 不是訊息則數（訊息則數沒有存在這張表）。
-        const speakers = this.db.prepare(`SELECT userId, COUNT(*) AS activeMinutes FROM chat_users WHERE ${where}time>=? AND time<? GROUP BY userId ORDER BY activeMinutes DESC, userId LIMIT 5`).all(...args);
+        // chats 是訊息則數、activeMinutes 是「有幾個分鐘發過言」——兩個一起看才分得出
+        // 短時間爆量（洗頻）與長期纏著（廣告帳號），也能算出發言強度（則/活躍分鐘）。
+        const speakers = this.db.prepare(`SELECT userId, SUM(chats) AS chats, COUNT(*) AS activeMinutes FROM chat_users WHERE ${where}time>=? AND time<? GROUP BY userId ORDER BY chats DESC, activeMinutes DESC, userId LIMIT 5`).all(...args);
         const samples = this.db.prepare(`SELECT time, platform, payload FROM events WHERE ${where}time>=? AND time<? AND kind='chat' ORDER BY time LIMIT 5`).all(...args)
             .map(row => {
                 try {

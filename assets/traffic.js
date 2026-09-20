@@ -372,8 +372,12 @@
                 ' · 峰值 ' + (session.peak ?? '—') + ' · 聊天 ' + session.chats)));
         }
         if (detail.speakers?.length) {
-            nodes.push(title('最常發言的帳號（依「有發言的分鐘數」排序）'));
-            nodes.push(lines([detail.speakers.map(speaker => speaker.userId + '（' + speaker.activeMinutes + ' 個分鐘有發言）').join('、')]));
+            nodes.push(title('發言最多的帳號（則數 / 活躍分鐘 → 強度）'));
+            nodes.push(lines(detail.speakers.map(speaker => {
+                const chats = speaker.chats ?? 0;
+                const minutes = speaker.activeMinutes ?? 0;
+                return speaker.userId + '：' + chats + ' 則 / ' + minutes + ' 個活躍分鐘（' + (minutes ? (chats / minutes).toFixed(1) : '—') + ' 則/分）';
+            })));
         }
         if (detail.samples?.length) {
             // traffic 只記錄發送者與時間、不存訊息內容（隱私與容量），所以這裡不會有文字。
