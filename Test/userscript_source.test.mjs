@@ -80,6 +80,28 @@ test('轉送種類判斷：有禮物圖＝送禮、isMain=false＝加入、其�
     assert.equal(ctx.sentKind(true, 'blob:gift'), '送禮');
 });
 
+test('YouTube 轉接預設關閉，只有明確 enabled:true 才開啟', () => {
+    const source = fs.readFileSync(new URL('../UserScript/youtube-chat-userscript.user.js', import.meta.url), 'utf8');
+    const a = source.indexOf('const STATE_KEY');
+    const b = source.indexOf('let lastBlockedLog');
+    assert.ok(a >= 0 && b > a, '找不到 YouTube 轉接開關區塊');
+
+    const load = saved => {
+        const ctx = vm.createContext({
+            localStorage: { getItem: () => saved, setItem() {} },
+            location: { search: '' },
+            console: { log() {}, error() {} }
+        });
+        vm.runInContext(source.slice(a, b), ctx);
+        return ctx.loadState();
+    };
+
+    assert.equal(load(null).enabled, false);                                    // 沒設定過 → 關閉
+    assert.equal(load(JSON.stringify({ enabled: true })).enabled, true);
+    assert.equal(load(JSON.stringify({ enabled: 'yes' })).enabled, false);      // 只認布林 true
+    assert.equal(load('{壞掉的 JSON').enabled, false);                           // 壞資料也不炸
+});
+
 // Windows checkout 可能轉成 CRLF；定位函數不應依賴多行註解或換行格式。
 for (const [label, newline] of [['LF', '\n'], ['CRLF', '\r\n']]) {
     test('Live Center 在 ' + label + ' 來源下仍能擷取並轉送訊息', () => {
