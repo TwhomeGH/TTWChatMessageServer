@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      2.8
+// @version      2.9
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像；新增目標直播間鎖定，避免亂逛誤送）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
@@ -392,25 +392,49 @@ function hasContent(el) {
         if (last) last.textContent = '最近轉送：' + kind + ' ' + short + '（本頁已送 ' + sentCount + ' 則）';
     }
 
+    /**
+     * 用 DOM API 建立元素。有些站台（例如 YouTube）啟用 Trusted Types，`innerHTML`
+     * 會直接丟 TypeError，面板就整個建不起來，所以這裡不用 innerHTML 字串組。
+     */
+    function h(tag, attrs = {}, children = []) {
+        const node = document.createElement(tag);
+        for (const [key, value] of Object.entries(attrs)) {
+            if (key === 'class') node.className = value;
+            else if (key === 'text') node.textContent = value;
+            else if (value === true) node.setAttribute(key, '');
+            else if (value !== false && value != null) node.setAttribute(key, value);
+        }
+        for (const child of [].concat(children)) node.append(child);
+        return node;
+    }
+
     function buildPanel() {
         if (document.getElementById('ttw-panel')) return;
         const style = document.createElement('style');
         style.textContent = PANEL_CSS;
         document.head.append(style);
 
-        const box = document.createElement('div');
-        box.id = 'ttw-panel';
-        box.innerHTML = `
-            <div class="ttw-flash" id="ttw-flash"></div>
-            <button class="ttw-pill" id="ttw-pill" title="TikTok 轉接設定">🎯 <span id="ttw-pill-text">轉接設定</span></button>
-            <div class="ttw-body" id="ttw-body" hidden>
-              <div class="ttw-title">目標直播間</div>
-              <div class="ttw-field"><span>@</span><input type="text" id="ttw-handle" placeholder="a0936931" autocomplete="off"></div>
-              <label class="ttw-switch"><input type="checkbox" id="ttw-enabled"><span class="ttw-track"></span><span class="ttw-switch-text">啟用轉接</span></label>
-              <div class="ttw-state" id="ttw-state"></div>
-              <div class="ttw-last" id="ttw-last"></div>
-              <div class="ttw-hint">只有這個直播間才會發送，避免亂逛別台誤送。設定自動存在此瀏覽器。</div>
-            </div>`;
+        const box = h('div', { id: 'ttw-panel' }, [
+            h('div', { class: 'ttw-flash', id: 'ttw-flash' }),
+            h('button', { class: 'ttw-pill', id: 'ttw-pill', title: 'TikTok 轉接設定' }, [
+                '🎯 ', h('span', { id: 'ttw-pill-text', text: '轉接設定' })
+            ]),
+            h('div', { class: 'ttw-body', id: 'ttw-body', hidden: true }, [
+                h('div', { class: 'ttw-title', text: '目標直播間' }),
+                h('div', { class: 'ttw-field' }, [
+                    h('span', { text: '@' }),
+                    h('input', { type: 'text', id: 'ttw-handle', placeholder: 'a0936931', autocomplete: 'off' })
+                ]),
+                h('label', { class: 'ttw-switch' }, [
+                    h('input', { type: 'checkbox', id: 'ttw-enabled' }),
+                    h('span', { class: 'ttw-track' }),
+                    h('span', { class: 'ttw-switch-text', text: '啟用轉接' })
+                ]),
+                h('div', { class: 'ttw-state', id: 'ttw-state' }),
+                h('div', { class: 'ttw-last', id: 'ttw-last' }),
+                h('div', { class: 'ttw-hint', text: '只有這個直播間才會發送，避免亂逛別台誤送。設定自動存在此瀏覽器。' })
+            ])
+        ]);
         document.body.append(box);
 
         const input = box.querySelector('#ttw-handle');

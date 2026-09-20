@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Chat to TTW Server
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  直接從 YouTube Studio 直播聊天室 DOM 抓訊息送到 TTW 伺服器（不耗 API quota；新增面板可手動開關轉接）
 // @author       TTW
 // @match        https://studio.youtube.com/live_chat*
@@ -152,24 +152,45 @@
 #ttw-yt-panel .ttw-flash.show { max-height: 72px; margin-bottom: 6px; padding: 6px 10px; opacity: 1; }
 `
 
+    /**
+     * 用 DOM API 建立元素。YouTube 啟用 Trusted Types（`innerHTML` 會丟 TypeError），
+     * 所以面板不能用 innerHTML 字串組，否則整個面板建不起來。
+     */
+    function h(tag, attrs = {}, children = []) {
+        const node = document.createElement(tag)
+        for (const [key, value] of Object.entries(attrs)) {
+            if (key === 'class') node.className = value
+            else if (key === 'text') node.textContent = value
+            else if (value === true) node.setAttribute(key, '')
+            else if (value !== false && value != null) node.setAttribute(key, value)
+        }
+        for (const child of [].concat(children)) node.append(child)
+        return node
+    }
+
     function buildPanel() {
         if (document.getElementById('ttw-yt-panel')) return
         const style = document.createElement('style')
         style.textContent = PANEL_CSS
         document.head.append(style)
 
-        const box = document.createElement('div')
-        box.id = 'ttw-yt-panel'
-        box.innerHTML = `
-            <div class="ttw-flash" id="ttw-yt-flash"></div>
-            <button class="ttw-pill" id="ttw-yt-pill" title="YouTube 轉接設定">🎯 <span id="ttw-yt-pill-text">轉接設定</span></button>
-            <div class="ttw-body" id="ttw-yt-body" hidden>
-              <div class="ttw-title">YouTube 轉接</div>
-              <label class="ttw-switch"><input type="checkbox" id="ttw-yt-enabled"><span class="ttw-track"></span><span class="ttw-switch-text">啟用轉接</span></label>
-              <div class="ttw-state" id="ttw-yt-state"></div>
-              <div class="ttw-last" id="ttw-yt-last"></div>
-              <div class="ttw-hint">YouTube 無法自動判斷是不是目標直播主，請自己確認這一台再開啟。設定自動存在此瀏覽器。</div>
-            </div>`
+        const box = h('div', { id: 'ttw-yt-panel' }, [
+            h('div', { class: 'ttw-flash', id: 'ttw-yt-flash' }),
+            h('button', { class: 'ttw-pill', id: 'ttw-yt-pill', title: 'YouTube 轉接設定' }, [
+                '🎯 ', h('span', { id: 'ttw-yt-pill-text', text: '轉接設定' })
+            ]),
+            h('div', { class: 'ttw-body', id: 'ttw-yt-body', hidden: true }, [
+                h('div', { class: 'ttw-title', text: 'YouTube 轉接' }),
+                h('label', { class: 'ttw-switch' }, [
+                    h('input', { type: 'checkbox', id: 'ttw-yt-enabled' }),
+                    h('span', { class: 'ttw-track' }),
+                    h('span', { class: 'ttw-switch-text', text: '啟用轉接' })
+                ]),
+                h('div', { class: 'ttw-state', id: 'ttw-yt-state' }),
+                h('div', { class: 'ttw-last', id: 'ttw-yt-last' }),
+                h('div', { class: 'ttw-hint', text: 'YouTube 無法自動判斷是不是目標直播主，請自己確認這一台再開啟。設定自動存在此瀏覽器。' })
+            ])
+        ])
         document.body.append(box)
 
         const enabled = box.querySelector('#ttw-yt-enabled')
