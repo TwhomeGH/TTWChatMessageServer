@@ -92,14 +92,16 @@
 
     <details class="panel" id="cleanup">
       <summary>🧹 清理統計（清掉誤收的髒資料，不必整庫重來）</summary>
-      <p class="text-gray-400 text-sm mt-2">可以只清「某一天」或「最近 N 小時」；刪除後圖表與歷史會立即反映。場次以「開始時間落在範圍內」為準，心跳不會刪。</p>
+      <p class="text-gray-400 text-sm mt-2">可以只清「某一天」、「某天的某段時間（幾點到幾點）」或「最近 N 小時」；刪除後圖表與歷史會立即反映。場次以「開始時間落在範圍內」為準，心跳不會刪。</p>
       <div class="cleanup-form">
         <label>平台 <select id="clean-platform"><option value="all">全部</option></select></label>
         <label>方式 <select id="clean-mode">
-          <option value="day">某一天</option>
+          <option value="day">某一天（整天）</option>
+          <option value="slot">某天的某段時間</option>
           <option value="hours">最近 N 小時</option>
         </select></label>
         <label id="clean-day-label">日期 <input type="date" id="clean-day"></label>
+        <label id="clean-slot-label" hidden>起訖時間 <span class="clean-times"><input type="time" id="clean-start"> ～ <input type="time" id="clean-end"></span></label>
         <label id="clean-hours-label" hidden>小時 <input type="number" id="clean-hours" min="1" max="720" value="6"></label>
         <button id="clean-preview">預覽要刪除的筆數</button>
         <button id="clean-run" disabled>確定刪除</button>

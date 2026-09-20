@@ -377,7 +377,9 @@ class TrafficDatabase {
         }
 
         const sessions = this.db.prepare(`SELECT platform, started, ended, peak, joins, chats FROM sessions WHERE ${where}started>=? AND started<? ORDER BY started`).all(...args);
-        const speakers = this.db.prepare(`SELECT userId, COUNT(*) AS minutes FROM chat_users WHERE ${where}time>=? AND time<? GROUP BY userId ORDER BY minutes DESC, userId LIMIT 5`).all(...args);
+        // 注意：chat_users 是「每分鐘一位發言者一列」，所以這裡算的是「有幾個分鐘發過言」，
+        // 不是訊息則數（訊息則數沒有存在這張表）。
+        const speakers = this.db.prepare(`SELECT userId, COUNT(*) AS activeMinutes FROM chat_users WHERE ${where}time>=? AND time<? GROUP BY userId ORDER BY activeMinutes DESC, userId LIMIT 5`).all(...args);
         const samples = this.db.prepare(`SELECT time, platform, payload FROM events WHERE ${where}time>=? AND time<? AND kind='chat' ORDER BY time LIMIT 5`).all(...args)
             .map(row => {
                 try {

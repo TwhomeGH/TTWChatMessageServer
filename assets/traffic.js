@@ -257,16 +257,40 @@
     }
 
     // ── 清理統計：先預覽筆數，確定後才刪除（可選某一天或最近 N 小時）──
+    /** 解析 HH:MM；不合法回傳 null。 */
+    function parseTime(value) {
+        const match = /^(\d{1,2}):(\d{2})$/.exec(value || '');
+        if (!match) return null;
+        const hours = Number(match[1]);
+        const minutes = Number(match[2]);
+        if (hours > 23 || minutes > 59) return null;
+        return { hours, minutes };
+    }
+
+    /** 依「方式」算出要清理的時間範圍（毫秒）。 */
     function cleanRange() {
-        if (el('clean-mode').value === 'day') {
-            const value = el('clean-day').value;
-            if (!value) return null;
-            const [year, month, day] = value.split('-').map(Number);
+        const mode = el('clean-mode').value;
+        if (mode === 'hours') {
+            const hours = Math.min(720, Math.max(1, Number(el('clean-hours').value) || 6));
+            return { from: Date.now() - hours * 3600000, to: Date.now() };
+        }
+
+        const value = el('clean-day').value;
+        if (!value) return null;
+        const [year, month, day] = value.split('-').map(Number);
+        if (mode === 'day') {
             const from = new Date(year, month - 1, day).getTime();
             return { from, to: from + 86400000 };
         }
-        const hours = Math.min(720, Math.max(1, Number(el('clean-hours').value) || 6));
-        return { from: Date.now() - hours * 3600000, to: Date.now() };
+
+        // slot：某天的某段時間，起訖用 HH:MM。不自動跨午夜——寧可擋下來也不要誤刪一大段。
+        const start = parseTime(el('clean-start').value);
+        const end = parseTime(el('clean-end').value);
+        if (!start || !end) return null;
+        return {
+            from: new Date(year, month - 1, day, start.hours, start.minutes).getTime(),
+            to: new Date(year, month - 1, day, end.hours, end.minutes).getTime()
+        };
     }
 
     /** 把主平台選單的選項鏡射到清理用的平台選單（只在使用者展開時同步）。 */
@@ -283,7 +307,8 @@
     async function cleanRequest(confirmDelete) {
         const status = el('clean-status');
         const range = cleanRange();
-        if (!range) { status.textContent = '請先選日期。'; return; }
+        if (!range) { status.textContent = '請先選日期與起訖時間。'; return; }
+        if (range.to <= range.from) { status.textContent = '結束時間必須晚於開始時間。'; return; }
         status.textContent = confirmDelete ? '刪除中…' : '讀取中…';
         try {
             // 跟歷史區塊用同一個時區選單（預設系統時區、可手動更正）。
@@ -347,8 +372,8 @@
                 ' · 峰值 ' + (session.peak ?? '—') + ' · 聊天 ' + session.chats)));
         }
         if (detail.speakers?.length) {
-            nodes.push(title('發言最多的帳號'));
-            nodes.push(lines([detail.speakers.map(speaker => speaker.userId + '（' + speaker.minutes + ' 分鐘）').join('、')]));
+            nodes.push(title('最常發言的帳號（依「有發言的分鐘數」排序）'));
+            nodes.push(lines([detail.speakers.map(speaker => speaker.userId + '（' + speaker.activeMinutes + ' 個分鐘有發言）').join('、')]));
         }
         if (detail.samples?.length) {
             // traffic 只記錄發送者與時間、不存訊息內容（隱私與容量），所以這裡不會有文字。
@@ -361,14 +386,21 @@
     }
 
     function setupCleanup() {
-        const iso = date => date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
-        el('clean-day').value = iso(new Date());
+        const pad = number => String(number).padStart(2, '0');
+        const iso = date => date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate());
+        const now = new Date();
+        el('clean-day').value = iso(now);
+        // 起訖預設「上一個整點 ~ 這個整點」，避免預設值本身就不合法。
+        const hour = Math.min(22, now.getHours());
+        el('clean-start').value = pad(hour) + ':00';
+        el('clean-end').value = pad(hour + 1) + ':00';
         syncCleanPlatforms();
         el('cleanup').addEventListener('toggle', syncCleanPlatforms);
         el('clean-mode').onchange = () => {
-            const byDay = el('clean-mode').value === 'day';
-            el('clean-day-label').hidden = !byDay;
-            el('clean-hours-label').hidden = byDay;
+            const mode = el('clean-mode').value;
+            el('clean-day-label').hidden = mode === 'hours';
+            el('clean-slot-label').hidden = mode !== 'slot';
+            el('clean-hours-label').hidden = mode !== 'hours';
             el('clean-run').disabled = true;
             el('clean-status').textContent = '';
         };
