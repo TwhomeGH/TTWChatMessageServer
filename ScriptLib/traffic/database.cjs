@@ -110,6 +110,11 @@ class TrafficDatabase {
             if (!columns.has(column)) this.db.exec(`ALTER TABLE sessions ADD COLUMN ${column} REAL DEFAULT 0`);
         }
 
+        for (const [name,type] of [['actualStarted','INTEGER'],['lastEventAt','INTEGER']]) {
+            if(!columns.has(name)) this.db.exec('ALTER TABLE sessions ADD COLUMN '+name+' '+type);
+        }
+        this.db.exec('UPDATE sessions SET lastEventAt=lastSampleAt WHERE lastEventAt IS NULL');
+
         // minutes／chat_users 的廣告與攔截欄位也是後加的。
         const minuteColumns = new Set(this.db.prepare('PRAGMA table_info(minutes)').all().map(column => column.name));
         if (!minuteColumns.has('blocked')) this.db.exec('ALTER TABLE minutes ADD COLUMN blocked INTEGER DEFAULT 0');
@@ -235,12 +240,15 @@ class TrafficDatabase {
      */
     isContinuous(open, event) {
         if (open.stream && event.stream) return open.stream === event.stream;
-        return event.time - open.lastSampleAt <= SESSION_GAP_MS;
+        return event.time - (open.lastEventAt ?? open.lastSampleAt) <= SESSION_GAP_MS;
     }
 
     extendOrOpenSession(event) {
         const open = this.openSession(event.platform);
+        // 遲到事件保留原始／分鐘資料，不倒退即時場次累積指標。
+        if(open && event.time < (open.lastEventAt ?? open.lastSampleAt)) return;
         if (open && this.isContinuous(open, event)) {
+            this.db.prepare('UPDATE sessions SET stream=COALESCE(stream,?), lastEventAt=? WHERE id=?').run(event.stream??null,event.time,open.id);
             if (event.kind === 'metrics') this.applySessionMetrics(open.id, event);
             else this.extendSession(open, event);
             return;
@@ -256,13 +264,14 @@ class TrafficDatabase {
             VALUES(?,?,?,NULL,?,?,?,0,0,0,0,?,0,0)`)
             .run(event.platform, event.stream ?? null, event.time,
                 event.time, viewers, viewers, samples);
+        this.db.prepare('UPDATE sessions SET actualStarted=?,lastEventAt=? WHERE id=?').run(event.actualStarted??null,event.time,result.lastInsertRowid);
         if (event.kind === 'metrics') this.applySessionMetrics(result.lastInsertRowid, event);
     }
 
     /** 以累計值更新場次成效；同一場次只前進不退（避免重送或延遲造成倒退）。 */
     applySessionMetrics(sessionId, event) {
         this.db.prepare(`UPDATE sessions SET
-                lastSampleAt=?,
+                lastEventAt=?,
                 diamonds=MAX(diamonds, ?),
                 gifters=MAX(gifters, ?),
                 newFollowers=MAX(newFollowers, ?),
@@ -279,7 +288,7 @@ class TrafficDatabase {
      */
     extendSession(open, event) {
         const gap = event.time - open.lastSampleAt;
-        const observed = gap > 0 && gap <= SESSION_GAP_MS;
+        const observed = open.lastViewers !== null && gap > 0 && gap <= SESSION_GAP_MS;
         const viewers = event.viewers;
 
         const area = open.area + (observed ? ((open.lastViewers + viewers) / 2) * gap : 0);
@@ -310,7 +319,8 @@ class TrafficDatabase {
     extendEarlyWindow(open, event, dt) {
         let earlyArea = open.earlyArea;
         let earlySpanMs = open.earlySpanMs;
-        const earlyEnd = open.started + EARLY_WINDOW_MS;
+        if(open.actualStarted == null) return {earlyArea,earlySpanMs};
+        const earlyEnd = open.actualStarted + EARLY_WINDOW_MS;
 
         if (dt > 0 && open.lastSampleAt < earlyEnd) {
             const segmentEnd = Math.min(event.time, earlyEnd);
@@ -378,7 +388,9 @@ class TrafficDatabase {
      * 清理前的預覽：不只看筆數，也列出「即將被刪除的是哪些資料」——
      * 每日彙總、範圍內的場次、發言最多的帳號，以及少量訊息樣本。
      */
-    previewRange(platform, from, to, timezone) {
+    previewRange(platform, from, to, timezone, page = 1) {
+        if(!Number.isSafeInteger(page) || page < 1) throw new Error('頁碼不正確');
+        const pageSize = 50, offset = (page-1)*pageSize;
         const all = !platform || platform === 'all';
         const where = all ? '' : 'platform=? AND ';
         const args = all ? [from, to] : [platform, from, to];
@@ -395,26 +407,32 @@ class TrafficDatabase {
             if (row.viewerCount) { item.observedMinutes++; item.viewerSum += row.viewerSum / row.viewerCount; }
         }
 
-        const sessions = this.db.prepare(`SELECT platform, started, ended, peak, joins, chats FROM sessions WHERE ${where}started>=? AND started<? ORDER BY started`).all(...args);
+        const sessions = this.db.prepare(`SELECT platform, started, ended, peak, joins, chats FROM sessions WHERE ${where}started>=? AND started<? ORDER BY started,id LIMIT ? OFFSET ?`).all(...args,pageSize,offset);
         // chats 是訊息則數、activeMinutes 是「有幾個分鐘發過言」——兩個一起看才分得出
         // 短時間爆量（洗頻）與長期纏著（廣告帳號），也能算出發言強度（則/活躍分鐘）。
-        const speakers = this.db.prepare(`SELECT userId, SUM(chats) AS chats, COUNT(*) AS activeMinutes FROM chat_users WHERE ${where}time>=? AND time<? GROUP BY userId ORDER BY chats DESC, activeMinutes DESC, userId LIMIT 5`).all(...args);
-        const samples = this.db.prepare(`SELECT time, platform, payload FROM events WHERE ${where}time>=? AND time<? AND kind='chat' ORDER BY time LIMIT 5`).all(...args)
+        const speakers = this.db.prepare(`SELECT platform, userId, SUM(chats) AS chats, COUNT(*) AS activeMinutes FROM chat_users WHERE ${where}time>=? AND time<? GROUP BY platform,userId ORDER BY chats DESC, activeMinutes DESC, platform,userId LIMIT ? OFFSET ?`).all(...args,pageSize,offset);
+        const samples = this.db.prepare(`SELECT n, time, platform, kind, payload FROM events WHERE ${where}time>=? AND time<? ORDER BY time,n LIMIT ? OFFSET ?`).all(...args,pageSize,offset)
             .map(row => {
                 try {
                     const payload = JSON.parse(row.payload);
-                    return { time: row.time, platform: row.platform, user: payload.user || '', message: String(payload.message || '').slice(0, 60) };
+                    return { id:row.n, time: row.time, platform: row.platform, kind:row.kind, user: payload.user || '', message: String(payload.message || ''), viewers:payload.viewers??null, transport:payload.transport||'unknown' };
                 } catch {
-                    return { time: row.time, platform: row.platform, user: '', message: '' };
+                    return { id:row.n,time: row.time, platform: row.platform,kind:row.kind, user: '', message: '' };
                 }
             });
 
         return {
-            days: [...days.values()].map(({ viewerSum, ...item }) => ({
+            days: [...days.values()].slice(offset,offset+pageSize).map(({ viewerSum, ...item }) => ({
                 ...item,
                 averageViewers: item.observedMinutes ? viewerSum / item.observedMinutes : null
             })),
-            sessions, speakers, samples
+            sessions, speakers, samples,
+            pagination: { page, pageSize, totals: {
+                days:days.size,
+                sessions:this.countRange(platform,from,to).sessions,
+                speakers:this.db.prepare('SELECT COUNT(*) n FROM (SELECT platform,userId FROM chat_users WHERE '+where+'time>=? AND time<? GROUP BY platform,userId)').get(...args).n,
+                samples:this.countRange(platform,from,to).events
+            } }
         };
     }
 
@@ -424,11 +442,20 @@ class TrafficDatabase {
      * 心跳不刪（那是程式運作紀錄，不是平台資料）。
      */
     deleteRange(platform, from, to) {
+        if(!Number.isFinite(from)||!Number.isFinite(to)||to<=from||from%60000||to%60000)
+            throw Object.assign(new Error('清理範圍須以完整分鐘指定'),{status:400});
         const all = !platform || platform === 'all';
-        const drop = (table, column = 'time') => all
-            ? this.db.prepare(`DELETE FROM ${table} WHERE ${column}>=? AND ${column}<?`).run(from, to).changes
-            : this.db.prepare(`DELETE FROM ${table} WHERE platform=? AND ${column}>=? AND ${column}<?`).run(platform, from, to).changes;
-        return { minutes: drop('minutes'), chatUsers: drop('chat_users'), events: drop('events'), sessions: drop('sessions', 'started') };
+        this.db.exec('BEGIN IMMEDIATE');
+        try {
+            const affected = this.db.prepare('SELECT * FROM sessions WHERE '+(all?'':'platform=? AND ')+'started<? AND COALESCE(lastEventAt,lastSampleAt)>=?').all(...(all?[to,from]:[platform,to,from]));
+            if(affected.some(s=>s.started<from || (s.lastEventAt??s.lastSampleAt)>=to))
+                throw Object.assign(new Error('範圍只涵蓋部分場次，請擴大至完整場次後重新預覽'),{status:409});
+            const drop = (table, column = 'time') => all
+                ? this.db.prepare('DELETE FROM '+table+' WHERE '+column+'>=? AND '+column+'<?').run(from,to).changes
+                : this.db.prepare('DELETE FROM '+table+' WHERE platform=? AND '+column+'>=? AND '+column+'<?').run(platform,from,to).changes;
+            const result={minutes:drop('minutes'),chatUsers:drop('chat_users'),events:drop('events'),sessions:drop('sessions','started')};
+            this.db.exec('COMMIT');return result;
+        } catch(error) {this.db.exec('ROLLBACK');throw error;}
     }
 
     /** 範圍內「不同的發言者」人數（活躍發言人數）；同一個人跨分鐘只算一次。 */
@@ -574,9 +601,9 @@ class TrafficDatabase {
         platform = platforms.includes(platform) ? platform : platforms[0];
 
         const rows = this.db.prepare(`SELECT * FROM sessions
-            WHERE platform=? AND started>=? AND sampleCount>=? AND spanMs>=?
+            WHERE platform=? AND actualStarted>=? AND actualStarted<=? AND sampleCount>=? AND earlySpanMs>=?
             ORDER BY started`)
-            .all(platform || '', now - days * 86400000, MIN_SESSION_SAMPLES, MIN_SESSION_SPAN_MS);
+            .all(platform || '', now - days * 86400000, now - EARLY_WINDOW_MS, MIN_SESSION_SAMPLES, 20*60000);
 
         const formatter = new Intl.DateTimeFormat('en-US', {
             timeZone: timezone, weekday: 'short', hour: '2-digit', hourCycle: 'h23',
@@ -590,7 +617,7 @@ class TrafficDatabase {
             const early = session.earlySpanMs > 0 ? session.earlyArea / session.earlySpanMs : null;
             if (early === null) continue;
 
-            const parts = Object.fromEntries(formatter.formatToParts(session.started).map(part => [part.type, part.value]));
+            const parts = Object.fromEntries(formatter.formatToParts(session.actualStarted).map(part => [part.type, part.value]));
             const key = parts.weekday + ' ' + parts.hour;
             const date = parts.year + '-' + parts.month + '-' + parts.day;
 
@@ -622,9 +649,9 @@ class TrafficDatabase {
                 median,
                 sd,
                 shrunk,
-                ci95: n > 1 ? 1.96 * sd / Math.sqrt(n) : null,
+                ci95: null, // 小樣本不顯示容易被誤解的常態近似信賴區間。
                 observedDays: bucket.dates.size,
-                insufficient: n < MIN_BUCKET_SESSIONS
+                insufficient: n < MIN_BUCKET_SESSIONS || bucket.dates.size < 3
             };
         });
 

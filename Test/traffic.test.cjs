@@ -162,27 +162,15 @@ test('時段排名取開場平均並做收縮與樣本門檻', () => {
     let now = startOfWeek;
     const db = new TrafficDatabase(':memory:');
     const store = new TrafficStore(() => now, db);
-    const audience = (viewers, streamId) => ({ type: 'audience', platform: 'TikTok', userNum: viewers, streamId });
-
-    // 週一 18:00 三場（開場平均 100 / 200 / 300）
-    for (let week = 0; week < 3; week++) {
-        const base = startOfWeek + week * 7 * 86400000;
-        now = base;
-        store.record(audience(100 + week * 100, 'mon' + week));
-        now = base + 60000;
-        store.record(audience(100 + week * 100, 'mon' + week));
+    for(let week=0;week<3;week++) for(let day=0;day<2;day++) {
+        const base=startOfWeek+(week*7+day)*86400000;
+        for(let minute=0;minute<=20;minute++) {
+            now=base+minute*60000;
+            store.record({type:'audience',platform:'TikTok',userNum:(day?10:100)*(week+1),streamId:week+'-'+day,startedAt:new Date(base).toISOString()});
+        }
     }
-    // 週二 18:00 三場（開場平均 10 / 20 / 30）
-    for (let week = 0; week < 3; week++) {
-        const base = startOfWeek + 86400000 + week * 7 * 86400000;
-        now = base;
-        store.record(audience(10 + week * 10, 'tue' + week));
-        now = base + 60000;
-        store.record(audience(10 + week * 10, 'tue' + week));
-    }
-    // 只有單一樣本的場次不納入（樣本門檻）
-    now = startOfWeek + 2 * 86400000;
-    store.record(audience(9999, 'wed'));
+    now=startOfWeek+16*86400000;
+    store.record({type:'audience',platform:'TikTok',userNum:9999,streamId:'missing-start'});
 
     const rankNow = startOfWeek + 20 * 86400000;
     const rankings = db.rankings('TikTok', 30, rankNow, 'Asia/Taipei');
@@ -374,7 +362,106 @@ test('清理預覽列出每日彙總、場次、帳號與樣本', () => {
     assert.deepEqual(preview.speakers.map(speaker => speaker.userId), ['u1']);
     assert.equal(preview.speakers[0].chats, 1);            // 訊息則數
     assert.equal(preview.speakers[0].activeMinutes, 1);    // 有發言的分鐘數
-    assert.equal(preview.samples.length, 1);
+    assert.equal(preview.samples.length, 2);
     assert.equal(preview.samples[0].user, 'u1');   // 有 userId 時以 userId 為身分
     db.close();
+});
+
+// 成效時鐘不佔用觀看時間；遲到取樣不得讓積分重疊。
+test('成效、遲到取樣與補登 ID 不破壞觀看積分',()=>{
+ const db=new TrafficDatabase(':memory:');
+ const add=(time,kind,extra={})=>db.append({time,receivedAt:time,platform:'TikTok',kind,...extra},null,0);
+ add(1000000,'viewers',{viewers:100});add(1030000,'metrics',{diamonds:1});
+ add(1060000,'viewers',{viewers:100,stream:'a'});
+ let row=db.openSession('TikTok');assert.equal(row.spanMs,60000);assert.equal(row.stream,'a');
+ add(1040000,'viewers',{viewers:10,stream:'a'});
+ add(1120000,'viewers',{viewers:100,stream:'a'});
+ assert.equal(db.openSession('TikTok').spanMs,120000);
+ add(1500000,'viewers',{viewers:100,stream:'a'});
+ assert.equal(db.db.prepare('SELECT COUNT(*) n FROM sessions').get().n,1);
+ db.close();
+});
+
+// 清理半場必須原子拒絕；完全涵蓋後所有表一起刪除。
+test('清理半場不殘留不一致統計，交易失敗會回滾',()=>{
+ const db=new TrafficDatabase(':memory:');
+ for(const time of [600000,660000,720000]) db.append({time,receivedAt:time,platform:'TikTok',kind:'viewers',viewers:10,stream:'a'},null,0);
+ assert.throws(()=>db.deleteRange('TikTok',660000,720000),{status:409});
+ assert.equal(db.countRange('TikTok',600000,780000).events,3);
+ db.db.exec("CREATE TRIGGER fail_delete BEFORE DELETE ON events BEGIN SELECT RAISE(ABORT,'test failure'); END");
+ assert.throws(()=>db.deleteRange('TikTok',600000,780000));
+ assert.equal(db.countRange('TikTok',600000,780000).minutes,3);
+ db.db.exec('DROP TRIGGER fail_delete');
+ assert.equal(db.deleteRange('TikTok',600000,780000).sessions,1);db.close();
+});
+
+// 中途觀測與未知開播時間不當成完整開場，三場同日也不能達標。
+test('排名排除未知開播和覆蓋不足，要求不同日期',()=>{
+ const db=new TrafficDatabase(':memory:');const base=Date.parse('2026-09-07T10:00:00Z');
+ for(let session=0;session<3;session++) {
+  const start=base+session*60000;
+  db.db.prepare('INSERT INTO sessions(platform,stream,started,actualStarted,lastSampleAt,earlyArea,earlySpanMs,sampleCount,spanMs) VALUES(?,?,?,?,?,?,?,?,?)').run('TikTok','s'+session,start,start,start+1200000,120000000,1200000,21,1200000);
+ }
+ db.db.prepare('INSERT INTO minutes(platform,time) VALUES(?,?)').run('TikTok',base);
+ let r=db.rankings('TikTok',30,base+86400000,'UTC');assert.equal(r.cells[0].insufficient,true);
+ db.db.exec('UPDATE sessions SET actualStarted=NULL');assert.equal(db.rankings('TikTok',30,base+86400000,'UTC').sessionCount,0);
+ db.close();
+});
+
+test('清理預覽與刪除都要求登入及同來源 JSON',()=>{
+ const {clearAccess}=require('../ScriptLib/traffic/clearPolicy.cjs');
+ const req={headers:{host:'localhost:3332',origin:'http://localhost:3332','content-type':'application/json'}};
+ assert.equal(clearAccess(req,false),401);assert.equal(clearAccess(req,true),0);
+ assert.equal(clearAccess({headers:{...req.headers,origin:'https://other.test'}},true),403);
+ assert.equal(clearAccess({headers:{...req.headers,'content-type':'text/plain'}},true),403);
+});
+
+// 超過五十筆仍可逐頁查完；同時間以事件 ID 排序，不遺漏或重複。
+test('清理完整預覽分頁涵蓋全部事件與跨平台帳號',()=>{
+ const db=new TrafficDatabase(':memory:');const from=Date.parse('2026-09-01T00:00:00Z'),to=from+60000;
+ for(let i=0;i<123;i++)db.append({time:from,receivedAt:from,kind:'chat',platform:i%2?'TikTok':'Twitch',user:'u'+i,userId:'u'+i,message:'長訊息'.repeat(40)},null,0);
+ db.append({time:from,receivedAt:from,kind:'viewers',platform:'TikTok',viewers:12},null,0);
+ const pages=[1,2,3].map(page=>db.previewRange('all',from,to,'UTC',page));
+ assert.deepEqual(pages.map(p=>p.samples.length),[50,50,24]);
+ assert.equal(pages[0].pagination.totals.samples,124);
+ assert.equal(pages[0].pagination.totals.speakers,123);
+ assert.equal(new Set(pages.flatMap(p=>p.samples.map(e=>e.id))).size,124);
+ assert.equal(pages.flatMap(p=>p.speakers).length,123);
+ assert.equal(pages[0].samples[0].message.length,120);
+ assert.equal(pages[2].samples.at(-1).kind,'viewers');
+ assert.ok(db.previewRange('TikTok',from,to,'UTC').samples.every(e=>e.platform==='TikTok'));
+ assert.equal(db.previewRange('all',to,to+60000,'UTC').pagination.totals.samples,0);
+ assert.throws(()=>db.previewRange('all',from,to,'UTC',0));
+ assert.throws(()=>db.previewRange('all',from,to,'UTC',1.5));db.close();
+});
+
+// 執行真正的路由函數，隔離資料庫與背景計時器，驗證 JSON 頁碼一路傳至查詢。
+test('清理預覽路由接受預設與指定頁碼', async()=>{
+ const vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
+ const {EventEmitter}=require('node:events');const pages=[];
+ class FakeDatabase {
+  prune(){return 0;}
+  countRange(){return {};}
+  previewRange(platform,from,to,timezone,page){pages.push(page);return {pagination:{page}};}
+ }
+ class FakeStore {record(){} heartbeat(){} }
+ const context={module:{exports:{}},__dirname:path.resolve(__dirname,'..'),URL,console,
+  setInterval:()=>({unref(){}}),require:name=>{
+   if(name==='./ScriptLib/traffic/database.cjs')return {TrafficDatabase:FakeDatabase};
+   if(name==='./ScriptLib/traffic/store.cjs')return {TrafficStore:FakeStore};
+   if(name==='./ScriptLib/traffic/clearPolicy.cjs')return require('../ScriptLib/traffic/clearPolicy.cjs');
+   return require(name);
+  }};
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../TrafficRoutes.cjs'),'utf8'),context);
+ for(const page of [undefined,2]){
+  const result=await new Promise(resolve=>{
+   const req=new EventEmitter();Object.assign(req,{url:'/api/traffic/clear',method:'POST',headers:{host:'localhost:3332',origin:'http://localhost:3332','content-type':'application/json'}});
+   const res={status:200,setHeader(){},writeHead(status){this.status=status;},end(body){resolve({status:this.status,body:JSON.parse(body)});}};
+   context.module.exports.serveTraffic(req,res,true);
+   req.emit('data',JSON.stringify({platform:'TikTok',from:60000,to:120000,confirm:false,page}));req.emit('end');
+  });
+  assert.equal(result.status,200);assert.equal(result.body.preview,true);
+  assert.equal(result.body.detail.pagination.page,page??1);
+ }
+ assert.deepEqual(pages,[1,2]);
 });

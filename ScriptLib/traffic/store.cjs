@@ -125,6 +125,8 @@ class TrafficStore {
             userId: String(raw.userId || ''),
             viewers: kind === 'viewers' ? raw.userNum : null,
             stream,
+            // 開播時間必須由來源明確提供，不可用首次接收時間代替。
+            actualStarted: Number.isFinite(Date.parse(raw.startedAt)) && Date.parse(raw.startedAt) <= time ? Date.parse(raw.startedAt) : null,
             evidence: transport === 'native' ? 'native' : 'declared',
             timeSource: sentAt > 0 ? 'platform' : 'received',
             // 只有 filter 事件會用到：是不是被「廣告類」規則擋下、以及規則名稱。

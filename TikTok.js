@@ -2278,7 +2278,7 @@ function twitchViewCache() {
     apiClient.streams.getStreamByUserId(tuser).then(stream => {
         if (stream) {
             TwitchViewerCount = stream.viewers;
-            reportTraffic({platform:'Twitch',type:'audience',userNum:stream.viewers,streamId:stream.id != null ? String(stream.id) : undefined});
+            reportTraffic({platform:'Twitch',type:'audience',userNum:stream.viewers,streamId:stream.id != null ? String(stream.id) : undefined,startedAt:stream.startDate?.toISOString()});
             autoClip?.updateViewers(stream.viewers);
             let DA = new Date()
             console.log(`📊 Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`);

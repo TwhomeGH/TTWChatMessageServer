@@ -490,7 +490,7 @@ function startRuntime(url) {
 }
 
 const server = http.createServer((req, res) => {
-    if (require('./TrafficRoutes.cjs').serveTraffic(req,res)) return;
+    if (require('./TrafficRoutes.cjs').serveTraffic(req,res,isValidToken(parseCookies(req).authToken))) return;
     if (serveRuntime(req, res, runtimeState, startRuntime)) return;
     if (require('./WebAssets.cjs').serveWebAsset(req, res)) return;
     if (require('./EmojiRoutes.cjs').serveEmoji(req, res, isValidToken(parseCookies(req).authToken))) return;

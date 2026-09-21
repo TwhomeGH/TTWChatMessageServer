@@ -41,13 +41,13 @@ function startHeartbeat() {
 startHeartbeat();
 
 /** 人流觀察路由，與自動剪輯分離，不產生剪輯請求。 */
-function serveTraffic(req, res) {
+function serveTraffic(req, res, authorized = false) {
     const url = new URL(req.url, 'http://localhost');
     if (!['/traffic', '/api/traffic', '/api/traffic/history', '/api/traffic/clear'].includes(url.pathname)) return false;
 
     res.setHeader('Cache-Control', 'no-store');
 
-    // 清理統計：POST { platform, from, to, confirm }。沒有 confirm 只回預覽筆數，
+    // 清理統計：POST { platform, from, to, confirm, page = 1 }。沒有 confirm 只回預覽筆數，
     // 有 confirm 才真的刪除；用來清掉誤收的髒資料，不必整庫重來。
     if (url.pathname === '/api/traffic/clear') {
         if (req.method !== 'POST') {
@@ -55,6 +55,8 @@ function serveTraffic(req, res) {
             res.end();
             return true;
         }
+        const denied = require('./ScriptLib/traffic/clearPolicy.cjs').clearAccess(req,authorized);
+        if(denied) {res.writeHead(denied);res.end(JSON.stringify({error:denied===401?'請先登入主服務':'請由主服務管理頁操作'}));return true;}
         let body = '';
         req.on('data', chunk => {
             body += chunk;
@@ -62,16 +64,18 @@ function serveTraffic(req, res) {
         });
         req.on('end', () => {
             try {
-                const { platform = 'all', from, to, confirm } = JSON.parse(body || '{}');
+                const { platform = 'all', from, to, confirm, page = 1 } = JSON.parse(body || '{}');
+                if (confirm !== undefined && typeof confirm !== 'boolean') throw new Error('confirm 必須是布林值');
+                if (typeof platform !== 'string' || !platform) throw new Error('平台不正確');
                 if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) throw new Error('時間範圍不正確');
                 res.setHeader('Content-Type', 'application/json; charset=utf-8');
-                if (!confirm) {
+                if (confirm !== true) {
                     const timezone = url.searchParams.get('timezone') || 'Asia/Taipei';
                     new Intl.DateTimeFormat('en-US', { timeZone: timezone });   // 先驗證時區字串
                     res.end(JSON.stringify({
                         preview: true, from, to,
                         counts: database.countRange(platform, from, to),
-                        detail: database.previewRange(platform, from, to, timezone)
+                        detail: database.previewRange(platform, from, to, timezone, page)
                     }));
                     return;
                 }
@@ -80,7 +84,7 @@ function serveTraffic(req, res) {
                 console.log('[Traffic] 已清理統計', new Date(from).toISOString(), '~', new Date(to).toISOString(), removed);
                 res.end(JSON.stringify({ removed, memoryEvents }));
             } catch (error) {
-                res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.writeHead(error.status || 400, { 'Content-Type': 'application/json; charset=utf-8' });
                 res.end(JSON.stringify({ error: error.message }));
             }
         });

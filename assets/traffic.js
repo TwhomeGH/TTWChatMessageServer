@@ -272,7 +272,8 @@
         const mode = el('clean-mode').value;
         if (mode === 'hours') {
             const hours = Math.min(720, Math.max(1, Number(el('clean-hours').value) || 6));
-            return { from: Date.now() - hours * 3600000, to: Date.now() };
+            const to = Math.floor(Date.now()/60000)*60000;
+            return { from: to - hours * 3600000, to };
         }
 
         const value = el('clean-day').value;
@@ -280,7 +281,7 @@
         const [year, month, day] = value.split('-').map(Number);
         if (mode === 'day') {
             const from = new Date(year, month - 1, day).getTime();
-            return { from, to: from + 86400000 };
+            return { from, to: new Date(year, month - 1, day + 1).getTime() };
         }
 
         // slot：某天的某段時間，起訖用 HH:MM。不自動跨午夜——寧可擋下來也不要誤刪一大段。
@@ -304,38 +305,50 @@
         if (wanted.some(option => option.value === keep)) target.value = keep;
     }
 
-    async function cleanRequest(confirmDelete) {
+    let cleanSelection = null, cleanGeneration = 0;
+    function invalidateClean() {
+        cleanGeneration++; cleanSelection = null;
+        el('clean-run').disabled = true; el('clean-preview-data').replaceChildren();
+    }
+    async function cleanRequest(confirmDelete, page = 1, paging = false) {
         const status = el('clean-status');
-        const range = cleanRange();
+        const generation = ++cleanGeneration;
+        const range = (confirmDelete || paging) ? cleanSelection : cleanRange();
+        if(confirmDelete && !cleanSelection) return;
+        const selection = cleanSelection && (confirmDelete || paging) ? cleanSelection : {...range, platform:el('clean-platform').value};
+        el('clean-run').disabled = true;
         if (!range) { status.textContent = '請先選日期與起訖時間。'; return; }
         if (range.to <= range.from) { status.textContent = '結束時間必須晚於開始時間。'; return; }
         status.textContent = confirmDelete ? '刪除中…' : '讀取中…';
         try {
-            // 跟歷史區塊用同一個時區選單（預設系統時區、可手動更正）。
-            const timezone = el('timezone')?.value || Intl.DateTimeFormat().resolvedOptions().timeZone;
+            // 彙總時區固定在本次預覽；清理起訖由本機日期輸入換算。
+            const timezone = selection.timezone || el('timezone')?.value || Intl.DateTimeFormat().resolvedOptions().timeZone;
+            selection.timezone = timezone;
             const response = await fetch('/api/traffic/clear?timezone=' + encodeURIComponent(timezone), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ platform: el('clean-platform').value, from: range.from, to: range.to, confirm: confirmDelete })
+                body: JSON.stringify({ platform: selection.platform, from: selection.from, to: selection.to, confirm: confirmDelete, page })
             });
             const result = await response.json();
+            if(generation !== cleanGeneration) return;
             if (!response.ok) throw new Error(result.error || 'HTTP ' + response.status);
             const span = new Date(range.from).toLocaleString('zh-TW', { hour12: false }) + ' ~ ' +
                 new Date(range.to).toLocaleString('zh-TW', { hour12: false });
             if (!confirmDelete) {
                 const c = result.counts;
-                status.textContent = span + '：分鐘彙總 ' + c.minutes + ' 筆、聊天事件 ' + c.events + ' 筆、發言者 ' + c.chatUsers + ' 筆、場次 ' + c.sessions + ' 筆。以下是即將刪除的內容：';
+                status.textContent = span + '：分鐘彙總 ' + c.minutes + ' 筆、原始事件 ' + c.events + ' 筆、發言者 ' + c.chatUsers + ' 筆、場次 ' + c.sessions + ' 筆。以下是即將刪除的內容：';
+                cleanSelection = selection;
                 renderCleanPreview(result.detail);
                 el('clean-run').disabled = false;
                 return;
             }
             const r = result.removed;
-            status.textContent = '已刪除：分鐘彙總 ' + r.minutes + ' 筆、聊天事件 ' + r.events + ' 筆、發言者 ' + r.chatUsers + ' 筆、場次 ' + r.sessions + ' 筆（記憶體剩 ' + result.memoryEvents + ' 筆事件）。';
-            el('clean-run').disabled = true;
+            status.textContent = '已刪除：分鐘彙總 ' + r.minutes + ' 筆、原始事件 ' + r.events + ' 筆、發言者 ' + r.chatUsers + ' 筆、場次 ' + r.sessions + ' 筆（記憶體剩 ' + result.memoryEvents + ' 筆事件）。';
+            invalidateClean();
             refresh();
             window.dispatchEvent(new Event('traffic-cleared'));   // 讓歷史區塊也跟著重讀
         } catch (error) {
-            status.textContent = '失敗：' + error.message;
+            if(generation === cleanGeneration) { invalidateClean(); status.textContent = '失敗：' + error.message; }
         }
     }
 
@@ -365,26 +378,86 @@
                     day.averageViewers === null ? '—' : day.averageViewers.toFixed(1)])]));
         }
         if (detail.sessions?.length) {
-            nodes.push(title('場次（' + detail.sessions.length + ' 筆）'));
+            nodes.push(title('場次（本頁 ' + detail.sessions.length + ' 筆）'));
             nodes.push(lines(detail.sessions.map(session =>
                 (session.platform || '?') + ' ' + localTime(session.started) +
                 (session.ended ? ' ~ ' + localTime(session.ended) : '（進行中）') +
                 ' · 峰值 ' + (session.peak ?? '—') + ' · 聊天 ' + session.chats)));
         }
         if (detail.speakers?.length) {
-            nodes.push(title('發言最多的帳號（則數 / 活躍分鐘 → 強度）'));
-            nodes.push(lines(detail.speakers.map(speaker => {
-                const chats = speaker.chats ?? 0;
-                const minutes = speaker.activeMinutes ?? 0;
-                return speaker.userId + '：' + chats + ' 則 / ' + minutes + ' 個活躍分鐘（' + (minutes ? (chats / minutes).toFixed(1) : '—') + ' 則/分）';
-            })));
+            nodes.push(title('發言帳號（依則數排序；可分頁查看全部）'));
+            const table=document.createElement('table');table.className='clean-events clean-speakers';
+            const headings=['平台','帳號／ID','留言則數','活躍分鐘','則／活躍分鐘'];
+            const caption=document.createElement('caption');caption.className='clean-visually-hidden';caption.textContent='發言帳號統計';table.append(caption);
+            const head=document.createElement('thead'),header=document.createElement('tr');
+            for(const label of headings){const th=document.createElement('th');th.scope='col';th.textContent=label;header.append(th);}head.append(header);table.append(head);
+            const body=document.createElement('tbody');
+            for(const speaker of detail.speakers){
+                const chats=speaker.chats??0,minutes=speaker.activeMinutes??0;
+                const row=document.createElement('tr');
+                [speaker.platform,speaker.userId,chats,minutes,minutes?(chats/minutes).toFixed(1):'—'].forEach((value,index)=>{
+                    const td=document.createElement('td');td.dataset.label=headings[index];
+                    const content=document.createElement('span');content.textContent=value;td.append(content);row.append(td);
+                });body.append(row);
+            }
+            table.append(body);nodes.push(table);
         }
         if (detail.samples?.length) {
-            // traffic 只記錄發送者與時間、不存訊息內容（隱私與容量），所以這裡不會有文字。
-            nodes.push(title('範圍內最早的 5 則訊息（只記錄發送者與時間，不含內容）'));
-            nodes.push(lines(detail.samples.map(sample =>
-                new Date(sample.time).toLocaleTimeString('zh-TW', { hour12: false }) + ' ' + sample.user +
-                (sample.message ? '：' + sample.message : ''))));
+            // 顯示已保存的資料；未保存的訊息內容不假造補齊。
+            nodes.push(title('原始事件（依時間排序；未保存的訊息內容無法還原）'));
+            const table=document.createElement('table');table.className='clean-events';
+            const caption=document.createElement('caption');caption.textContent='原始事件明細';caption.className='clean-visually-hidden';table.append(caption);
+            const headings=['時間','平台／管道','事件','使用者／ID','內容／數值'];
+            const head=document.createElement('thead'),header=document.createElement('tr');
+            for(const label of headings){const th=document.createElement('th');th.scope='col';th.textContent=label;header.append(th);}head.append(header);table.append(head);
+            const body=document.createElement('tbody');
+            const kinds={viewers:'觀看人數',metrics:'成效快照',join:'觀眾進房',chat:'聊天訊息',filter:'過濾攔截'};
+            for(const sample of detail.samples){
+                const row=document.createElement('tr');
+                const value=sample.viewers!=null?'觀看 '+sample.viewers+' 人':sample.message || (sample.kind==='metrics'?'成效更新（此預覽未展開數值）':sample.kind==='join'?'進入直播間':'未保存內容');
+                const values=[localTime(sample.time),sample.platform+(sample.transport?' / '+sample.transport:''),kinds[sample.kind]||sample.kind||'未知事件',sample.user||'不適用／未提供',value];
+                values.forEach((text,index)=>{const td=document.createElement('td');td.dataset.label=headings[index];
+                    if(index===2){const badge=document.createElement('span');badge.className='clean-event-kind';badge.textContent=text;td.append(badge);}else td.textContent=text;
+                    row.append(td);
+                });body.append(row);
+            }
+            table.append(body);nodes.push(table);
+        }
+        if(detail.pagination) {
+            const {page,pageSize,totals}=detail.pagination;
+            const pages=Math.max(1,...Object.values(totals).map(total=>Math.ceil(total/pageSize)));
+            const names={days:'每日彙總',sessions:'場次',speakers:'帳號',samples:'原始事件'};
+            const overview=document.createElement('div');overview.className='clean-preview-summary';
+            for(const [key,total] of Object.entries(totals)){
+                const card=document.createElement('div'),label=document.createElement('span'),count=document.createElement('strong'),range=document.createElement('small');
+                label.textContent=names[key];count.textContent='共 '+total+' 筆';
+                range.textContent='本頁 '+(total>(page-1)*pageSize?((page-1)*pageSize+1)+'–'+Math.min(total,page*pageSize):'0')+' 筆';
+                card.append(label,count,range);overview.append(card);
+            }
+            // 僅在預覽上方提供分頁；頁碼與操作分組。
+            const pagination = () => {
+                const controls=document.createElement('nav');
+                controls.className='clean-pagination';controls.setAttribute('aria-label','清理預覽分頁');
+                const info=document.createElement('div');info.className='clean-page-info';
+                const current=document.createElement('strong');current.textContent='第 '+page+' / '+pages+' 頁';
+                const size=document.createElement('span');size.textContent='每類每頁 '+pageSize+' 筆';info.append(current,size);
+                const actions=document.createElement('div');actions.className='clean-page-actions';
+                for(const [label,target,disabled] of [['← 上一頁',page-1,page<=1],['下一頁 →',page+1,page>=pages]]) {
+                    const button=document.createElement('button');button.type='button';button.textContent=label;button.disabled=disabled;
+                    button.onclick=async()=>{
+                        box.setAttribute('aria-busy','true');
+                        box.querySelectorAll('.clean-pagination button').forEach(b=>b.disabled=true);
+                        await cleanRequest(false,target,true);
+                        box.removeAttribute('aria-busy');
+                        const top=box.querySelector('.clean-pagination');
+                        if(top){top.tabIndex=-1;top.focus({preventScroll:true});top.scrollIntoView({block:'nearest',behavior:'auto'});}
+                    };
+                    actions.append(button);
+                }
+                controls.append(info,actions);return controls;
+            };
+            nodes.unshift(overview,pagination());
+            nodes.push(title('原始事件僅保留 7 天；更早區間可看彙總，沒有事件不代表當時沒有資料。'));
         }
         box.replaceChildren(...nodes);
     }
@@ -408,6 +481,7 @@
             el('clean-run').disabled = true;
             el('clean-status').textContent = '';
         };
+        for(const id of ['clean-mode','clean-day','clean-start','clean-end','clean-hours','clean-platform','timezone']) el(id)?.addEventListener('input',invalidateClean);
         el('clean-preview').onclick = () => cleanRequest(false);
         el('clean-run').onclick = () => cleanRequest(true);
     }

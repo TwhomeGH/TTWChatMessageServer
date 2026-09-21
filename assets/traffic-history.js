@@ -131,7 +131,7 @@
         if (!rankings) return;
 
         const enough = rankings.cells.filter(cell => !cell.insufficient);
-        const rows = [['#', '時段', '場次', '中位數', '平均', '收縮平均', '95% 區間']];
+        const rows = [['#', '時段', '場次', '中位數', '平均', '收縮平均']];
 
         enough.forEach((cell, index) => {
             rows.push([
@@ -140,8 +140,7 @@
                 cell.n,
                 format(cell.median),
                 format(cell.mean),
-                format(cell.shrunk),
-                cell.ci95 == null ? '—' : '±' + cell.ci95.toFixed(1)
+                format(cell.shrunk)
             ]);
         });
 
@@ -149,8 +148,8 @@
 
         el('ranking-note').textContent = enough.length
             ? '共 ' + rankings.sessionCount + ' 個場次、' + rankings.cells.length + ' 個時段；每個時段至少 ' +
-              rankings.minSessions + ' 場才排名。這是你的歷史觀察，不是平台推流規律。'
-            : '目前沒有時段達到 ' + rankings.minSessions + ' 場門檻（共 ' + rankings.sessionCount + ' 個場次），暫不排名。';
+              rankings.minSessions + ' 場且分布於至少 3 天才排名；需真實開播時間及開場 30 分鐘內至少 20 分鐘觀測。這是你的歷史觀察，不是平台推流規律。'
+            : '目前沒有時段達到 ' + rankings.minSessions + ' 場及 3 天門檻，且需真實開播時間與至少 20 分鐘開場觀測（共 ' + rankings.sessionCount + ' 個場次），暫不排名。';
     }
 
     /** 重新抓取歷史並更新熱圖、每日統計與時段排名。 */
