@@ -49,6 +49,7 @@ class SystemTray(QObject):
         self._tray.activated.connect(self._on_activated)
 
         self._visible = True
+        self._game_mode = False
         log("System tray menu built: toggle, overlay, tts, filter, quit")
 
     def _quit_app(self):
@@ -73,7 +74,27 @@ class SystemTray(QObject):
 
     def set_overlay_visible(self, visible):
         self._visible = visible
-        self._toggle_act.setText("隱藏疊加層" if visible else "顯示疊加層")
+        if not self._game_mode:
+            self._toggle_act.setText("隱藏疊加層" if visible else "顯示疊加層")
+
+    def set_game_mode(self, active, name=""):
+        """Reflect the auto game-mode state on the tray icon/menu."""
+        self._game_mode = bool(active)
+        if active:
+            self._tray.setToolTip(f"Live Engine － 已暫停（偵測到 {name or '防作弊程式'}）")
+            self._toggle_act.setText("疊加層已自動隱藏")
+            self._toggle_act.setEnabled(False)
+        else:
+            self._tray.setToolTip("Live Engine - 聊天疊加層")
+            self._toggle_act.setEnabled(True)
+            self._toggle_act.setText("隱藏疊加層" if self._visible else "顯示疊加層")
+
+    def notify(self, title, message, msecs=4000):
+        """Show a native tray notification (toast)."""
+        try:
+            self._tray.showMessage(title, message, self._tray.icon(), msecs)
+        except Exception as e:
+            log("SystemTray notify failed:", e)
 
     def _on_toggle(self):
         self.toggle_overlay.emit()

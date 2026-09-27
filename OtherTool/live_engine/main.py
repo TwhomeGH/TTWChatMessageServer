@@ -61,6 +61,19 @@ if __name__ == "__main__":
     tray.show_overlay_settings.connect(_open_overlay_settings)
     tray.show()
 
+    def _on_game_mode(active, name):
+        tray.set_game_mode(active, name)
+        tray.set_overlay_visible(w.isVisible())
+        if active:
+            tray.notify(
+                "已暫停聊天疊層",
+                f"偵測到防作弊程式「{name or '未知'}」，已自動隱藏疊層並停用全域熱鍵。",
+            )
+        else:
+            tray.notify("聊天疊層已恢復", "防作弊程式已結束，疊層與全域熱鍵已恢復。")
+
+    w.game_mode_changed.connect(_on_game_mode)
+
     log("Live Engine started with system tray")
 
     sys.exit(app.exec())

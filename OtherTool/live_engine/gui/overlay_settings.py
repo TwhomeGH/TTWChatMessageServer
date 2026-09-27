@@ -5,12 +5,14 @@ from ctypes import wintypes
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QTabWidget,
-    QSpinBox, QPushButton, QLabel, QCheckBox, QComboBox, QColorDialog
+    QSpinBox, QPushButton, QLabel, QCheckBox, QComboBox, QColorDialog,
+    QMessageBox
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor
 
 from core.debug_log import log
+from core.hotkey import format_hotkey
 
 _CONFIG_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "config"
@@ -20,7 +22,7 @@ EXAMPLE_PATH = os.path.join(_CONFIG_DIR, "overlay_settings.example.json")
 
 
 def load_overlay_config() -> dict:
-    defaults = {"width": 420, "height": 400, "x": -1, "y": 50, "font_face": "Microsoft JhengHei", "font_size": 15, "spacing": 8, "content_gap": 2, "message_ttl": 15, "fade_speed": 2, "ad_overlay_duration": 10, "ad_overlay_font_size": 16, "ad_avatar_size": 40, "ad_show_avatar": True, "ad_avatar_offset": 3, "ad_bg_color": "#1E1E2E", "ad_accent_color": "#4C9EFF", "ad_user_color": "#8AB4FF", "ad_text_color": "#FFFFFF", "ad_bg_opacity": 88}
+    defaults = {"width": 420, "height": 400, "x": -1, "y": 50, "font_face": "Microsoft JhengHei", "font_size": 15, "spacing": 8, "content_gap": 2, "message_ttl": 15, "fade_speed": 2, "ad_overlay_duration": 10, "ad_overlay_font_size": 16, "ad_avatar_size": 40, "ad_show_avatar": True, "ad_avatar_offset": 3, "ad_bg_color": "#1E1E2E", "ad_accent_color": "#4C9EFF", "ad_user_color": "#8AB4FF", "ad_text_color": "#FFFFFF", "ad_bg_opacity": 88, "hotkey": "Ctrl+Alt+F9", "auto_hide_on_anticheat": False}
     # 依序套用範本與實際設定：example 提供預設，overlay_settings.json 覆蓋。
     for path in (EXAMPLE_PATH, CONFIG_PATH):
         try:
@@ -33,7 +35,7 @@ def load_overlay_config() -> dict:
 
 
 def save_overlay_config(data: dict):
-    merged = {"width": 420, "height": 400, "x": -1, "y": 50, "font_face": "Microsoft JhengHei", "font_size": 15, "spacing": 8, "content_gap": 2, "message_ttl": 15, "fade_speed": 2, "ad_overlay_duration": 10, "ad_overlay_font_size": 16, "ad_avatar_size": 40, "ad_show_avatar": True, "ad_avatar_offset": 3, "ad_bg_color": "#1E1E2E", "ad_accent_color": "#4C9EFF", "ad_user_color": "#8AB4FF", "ad_text_color": "#FFFFFF", "ad_bg_opacity": 88}
+    merged = {"width": 420, "height": 400, "x": -1, "y": 50, "font_face": "Microsoft JhengHei", "font_size": 15, "spacing": 8, "content_gap": 2, "message_ttl": 15, "fade_speed": 2, "ad_overlay_duration": 10, "ad_overlay_font_size": 16, "ad_avatar_size": 40, "ad_show_avatar": True, "ad_avatar_offset": 3, "ad_bg_color": "#1E1E2E", "ad_accent_color": "#4C9EFF", "ad_user_color": "#8AB4FF", "ad_text_color": "#FFFFFF", "ad_bg_opacity": 88, "hotkey": "Ctrl+Alt+F9", "auto_hide_on_anticheat": False}
     merged.update(data)
     os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
@@ -121,6 +123,106 @@ class _ColorButton(QPushButton):
             self.colorChanged.emit(c)
 
 
+# Virtual-Key codes of modifier keys themselves (ignored while recording).
+_MODIFIER_VKS = {0x10, 0x11, 0x12, 0x5B, 0x5C, 0x5D, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5}
+
+_MOD_CTRL = 0x0002
+_MOD_ALT = 0x0001
+_MOD_SHIFT = 0x0004
+_MOD_WIN = 0x0008
+
+
+class _HotkeyButton(QPushButton):
+    """Click, then press a combo (Ctrl/Alt/Shift/Win + key) to record it."""
+
+    hotkeyChanged = pyqtSignal(str)
+
+    def __init__(self, text="", parent=None):
+        super().__init__(parent)
+        self._hotkey = text or ""
+        self._recording = False
+        self._refresh()
+        self.clicked.connect(self._start_recording)
+
+    def hotkey(self) -> str:
+        return self._hotkey
+
+    def set_hotkey(self, text):
+        self._hotkey = text or ""
+        self._recording = False
+        self.releaseKeyboard()
+        self._refresh()
+
+    def _refresh(self):
+        if self._recording:
+            self.setText("請按組合鍵… (Esc 取消 / Del 清除)")
+            self.setStyleSheet("background:#445; color:#fff;")
+        elif self._hotkey:
+            self.setText(self._hotkey)
+            self.setStyleSheet("")
+        else:
+            self.setText("（未設定，點擊以錄製）")
+            self.setStyleSheet("color:#888;")
+
+    def _start_recording(self):
+        self._recording = True
+        self._refresh()
+        self.setFocus()
+        self.grabKeyboard()
+
+    def _stop_recording(self):
+        self._recording = False
+        self.releaseKeyboard()
+        self._refresh()
+
+    def keyPressEvent(self, event):
+        if not self._recording:
+            super().keyPressEvent(event)
+            return
+
+        key = event.key()
+        if key == Qt.Key.Key_Escape:
+            self._stop_recording()
+            return
+        if key in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            self._hotkey = ""
+            self._stop_recording()
+            self.hotkeyChanged.emit("")
+            return
+
+        vk = event.nativeVirtualKey()
+        if not vk or vk in _MODIFIER_VKS:
+            return  # still waiting for the main key
+
+        mods = 0
+        m = event.modifiers()
+        if m & Qt.KeyboardModifier.ControlModifier:
+            mods |= _MOD_CTRL
+        if m & Qt.KeyboardModifier.AltModifier:
+            mods |= _MOD_ALT
+        if m & Qt.KeyboardModifier.ShiftModifier:
+            mods |= _MOD_SHIFT
+        if m & Qt.KeyboardModifier.MetaModifier:
+            mods |= _MOD_WIN
+
+        if mods == 0:
+            self.setText("需搭配 Ctrl / Alt / Shift / Win")
+            QTimer.singleShot(1200, self._refresh)
+            return
+
+        text = format_hotkey(mods, vk)
+        if not text:
+            return
+        self._hotkey = text
+        self._stop_recording()
+        self.hotkeyChanged.emit(text)
+
+    def keyReleaseEvent(self, event):
+        if self._recording:
+            return
+        super().keyReleaseEvent(event)
+
+
 class OverlaySettingsWindow(QWidget):
     def __init__(self, overlay=None, engine=None, on_open_tts=None):
         super().__init__()
@@ -184,6 +286,20 @@ class OverlaySettingsWindow(QWidget):
         self._font_size_spin.setSuffix(" px")
         self._font_size_spin.valueChanged.connect(self._on_font_size_changed)
         form.addRow("字體大小:", self._font_size_spin)
+
+        self._hotkey_btn = _HotkeyButton()
+        self._hotkey_btn.hotkeyChanged.connect(self._on_hotkey_changed)
+        form.addRow("全域快捷鍵:", self._hotkey_btn)
+        form.addRow(
+            QLabel("點擊按鈕後按下組合鍵（需含 Ctrl/Alt/Shift/Win；Esc 取消、Del 清除）")
+        )
+
+        self._auto_hide_cb = QCheckBox("偵測到防作弊程式時，自動隱藏疊層並停用全域熱鍵")
+        self._auto_hide_cb.setToolTip(
+            "僅讀取行程清單偵測 ACE / EasyAntiCheat / Vanguard 等；不裝鉤子、不碰遊戲。"
+        )
+        self._auto_hide_cb.stateChanged.connect(self._on_auto_hide_toggled)
+        form.addRow(self._auto_hide_cb)
 
         form.addRow(" ", QWidget())
         tts_btn = QPushButton("開啟 TTS 朗讀設定")
@@ -484,6 +600,22 @@ class OverlaySettingsWindow(QWidget):
             self._overlay.resize_overlay(self._width_spin.value(), self._height_spin.value())
         self._save_timer.start(500)
 
+    def _on_hotkey_changed(self, text):
+        if self._overlay:
+            ok = self._overlay.apply_hotkey(text)
+            if not ok:
+                QMessageBox.warning(
+                    self, "快捷鍵無法註冊",
+                    f"無法註冊「{text}」。\n"
+                    "可能與其他程式衝突或格式不合法，請換一組。",
+                )
+        self._save_timer.start(300)
+
+    def _on_auto_hide_toggled(self, state):
+        if self._overlay:
+            self._overlay.set_auto_game_mode(bool(state))
+        self._save_timer.start(300)
+
     def _save_async(self):
         data = {
             "width": self._width_spin.value(),
@@ -504,6 +636,8 @@ class OverlaySettingsWindow(QWidget):
             "ad_user_color": self._ad_user_color_btn.color().name(),
             "ad_text_color": self._ad_text_color_btn.color().name(),
             "ad_bg_opacity": self._ad_bg_opacity_spin.value(),
+            "hotkey": self._hotkey_btn.hotkey(),
+            "auto_hide_on_anticheat": self._auto_hide_cb.isChecked(),
         }
         existing = load_overlay_config()
         data["x"] = existing.get("x", -1)
@@ -530,6 +664,10 @@ class OverlaySettingsWindow(QWidget):
         self._ad_user_color_btn.set_color(cfg.get("ad_user_color", "#8AB4FF"))
         self._ad_text_color_btn.set_color(cfg.get("ad_text_color", "#FFFFFF"))
         self._ad_bg_opacity_spin.setValue(cfg.get("ad_bg_opacity", 88))
+        self._hotkey_btn.set_hotkey(cfg.get("hotkey", "Ctrl+Alt+F9"))
+        self._auto_hide_cb.blockSignals(True)
+        self._auto_hide_cb.setChecked(cfg.get("auto_hide_on_anticheat", False))
+        self._auto_hide_cb.blockSignals(False)
         self._update_pos_label(cfg.get("x", -1), cfg.get("y", 50))
 
     def _update_pos_label(self, x, y):
@@ -586,6 +724,8 @@ class OverlaySettingsWindow(QWidget):
         data = {
             "width": self._width_spin.value(),
             "height": self._height_spin.value(),
+            "hotkey": self._hotkey_btn.hotkey(),
+            "auto_hide_on_anticheat": self._auto_hide_cb.isChecked(),
         }
         existing = load_overlay_config()
         data["x"] = existing.get("x", -1)

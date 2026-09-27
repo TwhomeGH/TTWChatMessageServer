@@ -44,7 +44,7 @@ from PyQt6.QtGui import QColor, QPainter, QPen
 from PyQt6 import QtCore, QtWidgets
 from PyQt6.QtCore import QPoint
 
-from core.debug_log import log, log_error
+from core.debug_log import log, log_error, log_warn
 from core.hotkey import GlobalHotkey
 
 from gui.overlay_settings import load_overlay_config, save_overlay_config
@@ -53,6 +53,7 @@ from gui.overlay_settings import load_overlay_config, save_overlay_config
 class Overlay(QOpenGLWidget):
 
     hotkey_triggered = pyqtSignal()
+    game_mode_changed = pyqtSignal(bool, str)
 
     def __init__(self, on_open_tts=None):
         super().__init__()
@@ -96,9 +97,66 @@ class Overlay(QOpenGLWidget):
 
         self._setup_global_hotkey()
 
+        self._game_mode = False
+        self._game_guard = None
+        self._visible_before_game_mode = True
+        if load_overlay_config().get("auto_hide_on_anticheat", False):
+            QTimer.singleShot(0, lambda: self.set_auto_game_mode(True))
+
+    def set_auto_game_mode(self, enabled):
+        """Enable/disable auto hide+hotkey-off while anti-cheat is running."""
+        enabled = bool(enabled)
+        if enabled:
+            if self._game_guard is None:
+                from core.game_guard import GameGuard
+                self._game_guard = GameGuard()
+                self._game_guard.active_changed.connect(self.set_game_mode)
+                self._game_guard.start()
+                log("Overlay: anti-cheat auto-hide enabled")
+        else:
+            if self._game_guard is not None:
+                self._game_guard.active_changed.disconnect(self.set_game_mode)
+                self._game_guard.stop()
+                self._game_guard = None
+                log("Overlay: anti-cheat auto-hide disabled")
+            self.set_game_mode(False, "")
+
+    def set_game_mode(self, active, name=""):
+        """Hide the overlay + disable the hotkey while a game is protected."""
+        active = bool(active)
+        if active == self._game_mode:
+            return
+        self._game_mode = active
+        if active:
+            self._visible_before_game_mode = self.isVisible()
+            self.hide()
+            self._hotkey.unregister()
+            log(f"Game mode ON (trigger={name or '?'}): overlay hidden, hotkey disabled")
+        else:
+            if getattr(self, "_visible_before_game_mode", True):
+                self.show()
+            combo = load_overlay_config().get("hotkey", "Ctrl+Alt+F9")
+            if combo:
+                self.apply_hotkey(combo)
+            log("Game mode OFF: overlay/hotkey restored")
+        self.game_mode_changed.emit(active, name)
+
+    def is_game_mode(self) -> bool:
+        return self._game_mode
+
     def _setup_global_hotkey(self):
-        self._hotkey = GlobalHotkey(on_trigger=self.hotkey_triggered.emit)
+        self._hotkey = GlobalHotkey(widget=self, on_trigger=self.hotkey_triggered.emit)
         self.hotkey_triggered.connect(self._open_tts_settings)
+        combo = load_overlay_config().get("hotkey", "Ctrl+Alt+F9")
+        if combo and not self._hotkey.set_hotkey(combo):
+            log_warn(f"Overlay: global hotkey '{combo}' could not be registered")
+
+    def apply_hotkey(self, text):
+        """Register a new global hotkey (empty string disables it)."""
+        ok = self._hotkey.set_hotkey(text)
+        if not ok:
+            log_warn(f"Overlay: failed to register global hotkey '{text}'")
+        return ok
 
     def _open_tts_settings(self):
         if self._on_open_tts is not None:
@@ -206,7 +264,7 @@ class Overlay(QOpenGLWidget):
 
     
     def initializeGL(self):
-        print("🔥 initializeGL triggered")
+        log("initializeGL triggered")
 
         
         glViewport(0, 0, self.width(), self.height())
@@ -240,8 +298,8 @@ class Overlay(QOpenGLWidget):
 
         sdf_frag_path = os.path.abspath(sdf_frag_path)
 
-        print("VERT",sdf_frag_path)
-        print("FRAG",sdf_vert_path)
+        log("VERT", sdf_frag_path)
+        log("FRAG", sdf_vert_path)
 
 
         # shader
@@ -467,7 +525,7 @@ class Overlay(QOpenGLWidget):
                         current_x += emoji_size + 1
                     else:
                         if not hasattr(n, '_emoji_logged'):
-                            print(f"emoji not cached: {seg['url'][-40:]}")
+                            log(f"emoji not cached: {seg['url'][-40:]}")
                             n._emoji_logged = True
 
             gift_size = 28

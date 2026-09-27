@@ -15,7 +15,15 @@ def log(*args, **kwargs):
     msg = " ".join(str(a) for a in args)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     line = f"[{timestamp}] {msg}"
-    print(line, **kwargs)
+    # Never let console encoding issues (e.g. cp950 vs emoji) raise: log() may
+    # be called from Qt paint/native callbacks where an exception is fatal.
+    try:
+        print(line, **kwargs)
+    except Exception:
+        try:
+            print(line.encode("ascii", "replace").decode("ascii"), **kwargs)
+        except Exception:
+            pass
     try:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(line + "\n")
