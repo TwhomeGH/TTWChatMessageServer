@@ -83,6 +83,7 @@ fetchSignedWebSocketFromProvider(roomId)
 ```
 
 **特點：**
+
 - CDP 只在 local 簽名失敗時才啟動，不影響正常連線速度
 - `setupWebsocket` 無 override，全部使用 library 原生 WebSocket
 - 當 TikTok 更新簽名演算法時，CDP 自動適應（瀏覽器處理一切）

@@ -264,6 +264,7 @@ GIFT_TRANSLATE_PREFILL_LIMIT=10
 啟動 Twitch 模式時，系統會自動檢查 `tokens.json` 內的 scope 是否包含 `user:read:subscriptions`（用於檢查聊天室的訂閱者身份）。
 
 若缺少 scope，系統會：
+
 1. 印出 Twitch OAuth 授權連結（包含所有必要 scope）
 2. 引導你在瀏覽器中授權
 3. 請你貼上授權後瀏覽器導向的完整網址
@@ -306,10 +307,12 @@ G#Ad <訊息> [tts] [icon=<網址>] [user=<名稱>] [interval=<分鐘>]
 
 > [!NOTE]
 > **頭像（icon）解析規則**
+>
 > - 有 `icon=<網址>` 時以該網址為頭像。
 > - 沒有 `icon=` 時，會**自動偵測訊息文字中結尾為圖片副檔名（`.png/.jpg/.jpeg/.gif/.webp/.avif/.bmp/.svg`）的網址**當作頭像，並從廣告文字中移除該網址。例如 `G#Ad 訂閱主播 哈基米 https://…/Neuro2.png?raw=true` → 頭像為該圖片、文字變為「訂閱主播 哈基米」。
 > - 兩者都沒有時使用贊助者的 Twitch 頭貼。
 > - **更新時未指定新的 icon/頭像網址，會保留原本的頭像**（不會被覆寫成空白）；已解析的頭像會存入廣告紀錄，即時發送、定時器與重啟恢復都會使用同一張圖。
+>
 
 ### 多廣告管理
 
@@ -375,12 +378,14 @@ G#Ad 快來參加抽獎！ tts icon=https://i.imgur.com/xyz.png user=抽獎活�
 | **手動審核** 🔴 | 標記為「待審核」，需管理員手動通過或拒絕 | 需要完全掌控廣告內容 |
 
 **過濾器模式流程：**
+
 1. 訂閱者發送 `G#Ad` 指令
 2. 系統跑 `processFilter()`（比對使用者名稱、訊息內容）
 3. **通過過濾器** → 自動通過，顯示 + 啟動定時器
 4. **被過濾器阻擋** → 標記為拒絕，發送 Bark 通知給管理員
 
 **手動模式流程：**
+
 1. 訂閱者發送 `G#Ad` 指令
 2. 標記為「待審核」，發送 Bark 通知（點擊可開啟管理頁面）
 3. 管理員前往 `/sponsor` 審核
@@ -460,7 +465,7 @@ G#clip 這波操作太秀了
 | 指令消耗 | 處理後即 `return`，`G#clip` 不會被當成一般聊天訊息轉發或送去翻譯 |
 
 > 權限檢查順序：主播本人 → 訂閱者（`checkUserSubscription`）→ 追隨者（`getChannelFollowers`，需 `moderator:read:followers` scope，授權範本已含）。任一通過即可建立剪輯。
-
+>
 > 剪輯內容是**指令發送時間點往前的一段直播畫面**（Twitch 剪輯機制），成功後由 Twitch 非同步處理，通常幾秒內即可在頻道的 Clips 頁面看到。
 
 ### 剪輯歷史頁面 `/clips`
@@ -478,10 +483,11 @@ G#clip 這波操作太秀了
 - 每 5 秒自動更新清單
 
 > **關於 Embed 的 `parent` 參數**：Twitch 只接受 `localhost`、`127.0.0.1` 或**真實網域**當 parent，**私人 IP（如 192.168.x.x、10.x）無論加不加 port 都會被拒絕**。`/clips` 頁面會自動判斷：目前主機是私人 IP 時改用 `localhost` 並顯示提示。因此：
+>
 > - 在本機請用 `http://localhost:3332/clips` 開啟，預覽與複製的 iframe 皆可直接使用
 > - 透過私人 IP（`192.168.0.102:3332`）開啟時預覽無法播放（Twitch 限制），頁面會顯示改用 localhost 的提示
 > - 若要嵌到**其他網站**，需手動把 `parent` 改成該網站的網域，否則 Twitch 會顯示「clips.twitch.tv 拒絕連線」
-
+>
 > 標題查詢透過 Twitch 公開的 Clip 資料 API（不需額外 scope）；查詢失敗時會退回首段 slug 名稱，不影響剪輯建立。
 
 ## 自動剪輯 (AutoClip)
@@ -625,6 +631,7 @@ Socket **不會主動因閒置斷線**，連線生命週期完全由 Server 端�
 重新連線成功後，系統會自動依序**補發**所有暫存訊息，再送出「已連線」通知。
 
 **好處：**
+
 - 減少無意義的斷線重連循環（之前閒置 2 分鐘斷線 → 15 秒重連 → 又閒置 2 分鐘斷線）
 - 降低 CPU 和網路消耗
 - 用戶端（如 iOS App）不需頻繁處理斷線重連狀態
@@ -795,6 +802,7 @@ http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickU
 ### kick-wss 修正版
 
 原版 `kick-wss` 有兩個問題導致無法正常連接 Kick 聊天室：
+
 1. `getChannelInfo` 缺少必要 HTTP headers（User-Agent、Referer、Origin），被 Cloudflare 阻擋（403）
 2. `LEGACY_EVENT_MAPPING` 將 Pusher 事件名 `App\Events\ChatMessageEvent` 錯誤轉換為短名，導致 switch 比對失敗
 
@@ -896,28 +904,33 @@ http://localhost:3332/config
 # Config Editor 認證流程
 
 ## 入口
+
 - 使用者訪問 `http://localhost:3332/config`
 - 如果尚未登入，系統會自動導向至 `login.html`
 
 ## 登入
+
 - 在 `login.html` 輸入密碼並送出
 - 後端驗證成功後，會產生一組隨機 **Token**
 - Token 透過 **Set-Cookie** 寫入瀏覽器 (`authToken`)
 - Token 有效期為 **14 天**
 
 ## 使用
+
 - 之後訪問 `/config` 時，瀏覽器會自動帶上 Cookie
 - 後端檢查 Cookie 中的 Token 是否有效：
   - **有效** → 顯示 `config.html` 並填入環境變數
   - **無效或過期** → 導向回 `login.html`
 
 ## 登出
+
 - 使用者在 `config.html` 點選「登出」按鈕
 - 前端呼叫 `/logout`
 - 後端回應 `Set-Cookie: authToken=; Max-Age=0`，清除 Cookie
 - 使用者被導回 `login.html`
 
 ## Token 有效期
+
 - 每次登入會生成一組新的 Token
 - Token 有效期為 **14 天**
 - 過期後需要重新登入
@@ -939,7 +952,7 @@ http://localhost:3332/config
 `MessageFilter.js` 是統一的訊息過濾與統計模組，同時被 `TikTok.js`（原生連線）與 `Server.js`（`/chat` 轉接）引用。支援四種動作：`block`（阻擋）、`replace`（取代）、`delete`（刪除）、`throttle`（**頻率控制**：洗頻與相似重複訊息）。
 
 > **完整說明見 [訊息過濾系統文件](Docs/MESSAGE_FILTER.md)**：所有模式與欄位、範例、預設規則、自訂規則檔（`FilterRules.custom.js`）、匯出／統計 API、`/keyword` 規則產生器與測試、過濾流程。
-
+>
 > [!IMPORTANT]
 > 規則在**兩個行程各跑一次**（原生在 `TikTok.js`、`/chat` 轉接在 `Server.js`）；`throttle` 的狀態因此每行程各一份。修改規則後需**重啟主服務**。
 

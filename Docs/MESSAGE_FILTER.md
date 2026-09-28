@@ -218,6 +218,7 @@ for (const summary of takeThrottleSummaries()) {
 ## 四、預設規則（模組啟動即載入）
 
 **廣告帳號（`user`／`any`）**
+
 - `user:廣告帳號-加LINE/加瀨` — `加LINE` / `加瀨` / `加line`（含簡體 `濑`、異體 `頼/賴`、全形）
 - `any:廣告-混淆字元` — 圈號 `①-⑳`、數學粗體 `𝗔-𝟵`；用 `any` 是**預先**涵蓋「廣告改把帳號名塞進留言內容」的可能（尚未觀察到，目前是 emoji 洗頻）
 - `user:廣告帳號-特殊組合字` — 含 LINE/瀨 + Unicode 組合裝飾字元
@@ -225,11 +226,13 @@ for (const summary of takeThrottleSummaries()) {
 - `user:廣告帳號-過長中文比例異常` — 特殊字元數量 > 中文字數 2 倍
 
 **訊息（`message`）**
+
 - `msg:僅單一字元` — 單一符號如 `。` `？` `！`
 - `msg:大量 emoji` — 連續 5 個以上 emoji（門檻可調）
 - `msg:廣告-補幣/按我頭像` — 補幣類廣告直接阻擋
 
 **其他**
+
 - `user:刪除特殊符號`、`any:刪除控制字元`、`any:刪除過多空白`（delete/replace）
 - `msg:遮罩髒話`、`msg:刪除網址`、`msg:刪除色情詞彙`
 

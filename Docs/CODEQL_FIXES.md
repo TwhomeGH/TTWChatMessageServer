@@ -138,6 +138,7 @@ for (const b of cipher) sum = (sum + b) % mod;
 CodeQL 偵測到對 CSPRNG 輸出做 `% mod` 會產生偏斜。Rule ID：`js/biased-cryptographic-random`。
 
 **為什麼不能修**：
+
 - 這是決定金鑰插入位置的 **checksum**，不是安全隨機值，偏斜在此無安全影響。
 - X-Gnarly 演算法必須與 TikTok 位元組相容，改動會使簽名失效。
 
@@ -191,6 +192,7 @@ kick-wss、protobufjs、franc、@twurple/api、puppeteer-extra-plugin-stealth）
 由 `@puppeteer/browsers`（puppeteer 依賴）帶入，經 tiktok-signature 使用。
 
 **為什麼不能修**：
+
 - GHSA 標示 **Patched versions: None** — 最新版 2.0.1 仍受影響，無升級路徑。
 - puppeteer 是簽名核心，不能移除。
 - 實際風險極低：extract-zip 僅在 puppeteer 解壓**自己下載的官方瀏覽器**
