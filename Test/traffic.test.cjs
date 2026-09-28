@@ -465,3 +465,165 @@ test('清理預覽路由接受預設與指定頁碼', async()=>{
  }
  assert.deepEqual(pages,[1,2]);
 });
+
+// 真正執行前端繪圖函式，避免低觀看數貼邊或孤立樣本只 moveTo 而消失。
+test('觀看圖：零人、一人、孤立樣本可見，缺值仍斷線', () => {
+    const vm = require('node:vm');
+    const source = fs.readFileSync(path.join(__dirname, '../assets/traffic.js'), 'utf8');
+    const draw = source.slice(source.indexOf('    const rendered ='), source.indexOf('    let pollTimer;')) + source.slice(source.indexOf('    function draw('), source.indexOf('    /** 抓取即時視窗'));
+    const arcs = [], lines = [], labels = [];
+    const ctx = {
+        scale() {}, setTransform() {}, clearRect() {}, setLineDash() {}, fillRect() {}, strokeRect() {}, beginPath() {}, moveTo() {}, stroke() {}, fill() {},
+        arc(x,y) { arcs.push({x,y}); }, lineTo(x,y) { if (this.strokeStyle === '#60a5fa') lines.push({x,y}); },
+        fillText(text) { labels.push(text); }
+    };
+    const canvas = {clientWidth:500, clientHeight:200, getContext:() => ctx, setAttribute() {}};
+    const data = {buckets:[1,1,null,0,null,1,null].map((viewers,i) => ({time:i*60000,viewers,joins:0,chats:0}))};
+    const context = {el:() => canvas, window:{devicePixelRatio:1}, selected:null, hovered:null, locale:()=> 'zh-TW', timezone:()=> 'Asia/Taipei', t:key=>key, data, bucketLabel:() => 'time', renderDetails() {}};
+    vm.runInNewContext(draw + "\ndraw('viewers', ['viewers']);", context);
+    assert.equal(lines.length, 1, '不跨缺值連線');
+    assert.equal(arcs.length, 4, '連續段兩端、孤立 0 人與孤立 1 人均有標記');
+    assert.ok(arcs.every(p => p.y > 20 && p.y < 170), '所有觀看值均在邊框內');
+    assert.equal(new Set(labels.slice(0,3)).size, 3, '低觀看數的刻度不可重複');
+    lines.length = 0; arcs.length = 0;
+    data.buckets = [{time:0, viewers:0, joins:0, chats:0}];
+    context.draw('viewers', ['viewers']);
+    assert.deepEqual(lines, [{x:490,y:164}], '單一零值桶畫出完整區間水平線');
+    assert.deepEqual(arcs, [{x:264,y:164}], '單一桶標記放中央');
+    lines.length = 0; arcs.length = 0;
+    data.buckets = [{time:0, viewers:null, joins:0, chats:0}];
+    context.draw('viewers', ['viewers']);
+    assert.equal(lines.length, 0, '無觀看取樣不可補成零值線');
+    assert.equal(arcs.length, 0);
+});
+
+test('圖表互動：游標邊界與觀看區段跳轉（含零人及缺值）', () => {
+    const vm = require('node:vm');
+    const source = fs.readFileSync(path.join(__dirname, '../assets/traffic.js'), 'utf8');
+    const context = {};
+    vm.runInNewContext(source.slice(source.indexOf('    function chartIndex('), source.indexOf('    function renderCharts(')), context);
+    assert.equal(context.chartIndex(-20, 38, 490, 10), 0);
+    assert.equal(context.chartIndex(900, 38, 490, 10), 9);
+    assert.equal(context.chartIndex(264, 38, 490, 1), 0);
+    const rows = [null,0,1,null,1,1,null,2].map((viewers,time) => ({time,viewers}));
+    const jump = (time,dir) => context.sampleRunTarget(rows,time,dir);
+    assert.equal(jump(null,1),1, '0 人也是有效資料');
+    assert.equal(jump(null,-1),7, '初次向前直接定位最新時段');
+    assert.equal(jump(1,1),4, '跨過缺值到下一段');
+    assert.equal(jump(7,-1),4);
+    assert.equal(jump(4,-1),1);
+    assert.equal(jump(1,-1),null);
+    assert.equal(jump(7,1),null);
+    assert.equal(context.sampleRunTarget([],null,1),null);
+});
+
+test('全部總覽按分鐘切段；歷史細節重新查詢且保留小數與空白', () => {
+    const db = new TrafficDatabase(':memory:');
+    let now = Date.parse('2026-09-17T10:00:00Z');
+    const first = now;
+    const store = new TrafficStore(() => now, db);
+    store.record({platform:'Twitch',type:'audience',userNum:0});
+    now += 60000;
+    store.record({platform:'Twitch',type:'audience',userNum:2});
+    now = Date.parse('2026-09-25T10:00:00Z');
+    const latest = now;
+    store.record({platform:'Twitch',type:'audience',userNum:1});
+    store.record({platform:'Twitch',type:'audience',userNum:2});
+    now += 60000;
+    store.record({platform:'Twitch',type:'audience',userNum:2});
+    now += 60000;
+    store.record({platform:'TikTok',type:'audience',userNum:999});
+    store.record({platform:'Twitch',eventType:'chat',userId:'outside',message:'outside window'});
+    now += 86400000;
+    const overview = store.snapshot('Twitch','all');
+    assert.equal(overview.runs.length,2);
+    assert.equal(overview.runs[0].from,first);
+    assert.equal(overview.runs[1].from,latest);
+    assert.ok(overview.bucketMs > 60000);
+    const detail = store.snapshot('Twitch','30',now,{from:latest,to:latest+120000});
+    assert.equal(detail.bucketMs,60000);
+    assert.equal(detail.buckets.length,2);
+    assert.deepEqual(detail.buckets.map(row=>row.viewers),[1.5,2]);
+    assert.equal(detail.chartSummary.samples,3);
+    assert.equal(detail.activeUsers,0,'右側邊界的聊天不計入細節視窗');
+    assert.equal(detail.chartSummary.average,1.75);
+    assert.equal(detail.chartSummary.peak,2);
+    assert.equal(detail.currentViewers,null,'歷史視窗不冒充即時觀看');
+    const old = store.snapshot('Twitch','30',now,{from:first,to:first+120000});
+    assert.deepEqual(old.buckets.map(row=>row.viewers),[0,2],'早於記憶體 24 小時仍可放大');
+    const gap = store.snapshot('Twitch','30',now,{from:first+120000,to:first+240000});
+    assert.ok(gap.buckets.every(row=>row.viewers===null));
+    assert.equal(gap.chartSummary.samples,0);
+    assert.equal(gap.chartSummary.average,null);
+    for(const window of [{from:NaN,to:now},{from:now,to:now},{from:0,to:now},{from:latest,to:Infinity},{from:now,to:now+120000}]) {
+        assert.throws(()=>store.snapshot('Twitch','all',now,window),RangeError);
+    }
+    db.db.close();
+});
+
+test('指定區間按選取時區解析，拒絕夏令時間空洞與重複時間', () => {
+    const vm=require('node:vm');
+    const source=fs.readFileSync(path.join(__dirname,'../assets/traffic.js'),'utf8');
+    const context={};
+    vm.runInNewContext(source.slice(source.indexOf('    function zonedInput('),source.indexOf('    let segmentPage')),context);
+    assert.equal(context.parseZonedInput('2026-09-17T03:40','Asia/Taipei'),Date.parse('2026-09-16T19:40Z'));
+    assert.equal(context.parseZonedInput('2026-09-17T03:40','UTC'),Date.parse('2026-09-17T03:40Z'));
+    assert.equal(context.parseZonedInput('2026-03-08T02:30','America/New_York'),null);
+    assert.equal(context.parseZonedInput('2026-11-01T01:30','America/New_York'),null);
+});
+
+test('差異更新：文字與選單不重建，canvas 尺寸不變不重設', () => {
+    const vm = require('node:vm');
+    const source = fs.readFileSync(path.join(__dirname,'../assets/traffic.js'),'utf8');
+    const context = {Option:class {constructor(text,value){this.textContent=text;this.value=value;}}};
+    vm.runInNewContext(source.slice(source.indexOf('    const rendered ='),source.indexOf('    function chartIndex(')),context);
+    assert.equal(context.changed('viewers',[1,2]),true);
+    assert.equal(context.changed('viewers',[1,2]),false);
+    assert.equal(context.changed('viewers',[1,3]),true);
+    let writes=0, value='1';
+    const node={get textContent(){return value;},set textContent(next){writes++;value=next;}};
+    context.setText(node,1);assert.equal(writes,0);
+    context.setText(node,2);assert.equal(writes,1);
+    const select={options:[{value:'Twitch',textContent:'Twitch'}],replaceChildren(...options){this.options=options;writes++;}};
+    context.syncOptions(select,[['Twitch','Twitch']]);assert.equal(writes,1);
+    context.syncOptions(select,[['Twitch','Twitch'],['TikTok','TikTok']]);assert.equal(writes,2);
+    let width=1000,height=400,resizes=0,clears=0;
+    const canvas={get width(){return width;},set width(v){width=v;resizes++;},get height(){return height;},set height(v){height=v;resizes++;},getContext(){return {setTransform(){},clearRect(){clears++;},setLineDash(){}};}};
+    context.prepareCanvas(canvas,500,200,2);assert.equal(resizes,0);
+    context.prepareCanvas(canvas,600,200,2);assert.equal(resizes,1);assert.equal(clears,2);
+    assert.equal(context.pollDelay('all',{to:100000},300000),60000);
+    assert.equal(context.pollDelay('all',{to:290000},300000),5000);
+    assert.equal(context.pollDelay('30',null,300000),5000);
+});
+
+test('時間視窗平移縮放有邊界且不超過366天', () => {
+    const vm=require('node:vm');
+    const source=fs.readFileSync(path.join(__dirname,'../assets/traffic.js'),'utf8');
+    const context={};
+    vm.runInNewContext(source.slice(source.indexOf('    function boundedWindow('),source.indexOf('    function moveWindow(')),context);
+    assert.equal(context.boundedWindow(-60000,120000,0,600000).from,0);
+    assert.equal(context.boundedWindow(590000,120000,0,600000).from,480000);
+    assert.equal(context.boundedWindow(0,1,0,600000).to,60000);
+    assert.equal(context.boundedWindow(0,800*86400000,0,900*86400000).to,366*86400000);
+});
+
+test('長期平均按有效分鐘加權，不受同分鐘取樣次數與桶寬影響', () => {
+    const db=new TrafficDatabase(':memory:');
+    const start=Date.parse('2026-09-01T02:00:00Z');
+    let now=start;
+    const store=new TrafficStore(()=>now,db);
+    store.record({type:'audience',platform:'Twitch',userNum:10});
+    now+=30000;
+    store.record({type:'audience',platform:'Twitch',userNum:10});
+    now=start+60000;
+    store.record({type:'audience',platform:'Twitch',userNum:40});
+    const wide=db.series('Twitch',start,300000,start+299999)[0];
+    assert.equal(wide.viewers,25);
+    assert.equal(wide.observedMinutes,2);
+    assert.equal(wide.peak,40);
+    assert.equal(db.chartSummary('Twitch',start,start+300000).average,25);
+    const small=db.series('Twitch',start,60000,start+299999);
+    assert.equal(small[2].viewers,null);
+    assert.equal(small[2].observedMinutes,0);
+    db.close();
+});

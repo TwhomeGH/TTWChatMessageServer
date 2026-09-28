@@ -1,8 +1,38 @@
-(() => {
+(async () => {
+    await window.TTWI18n.ready;
+    const t = (key, params = {}) => window.TTWI18n.t('traffic.' + key, params);
     const el = id => document.getElementById(id);
     const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
-    let busy = false;
+    const weekday = index => new Intl.DateTimeFormat(window.TTWI18n.language, {weekday:'short', timeZone:'UTC'}).format(Date.UTC(2026, 0, 5 + index));
+    let busy = false, rerun = false, pollTimer, selectedCell = null;
+    const rendered = new Map();
+    function changed(key, value) {
+        const signature = JSON.stringify(value);
+        if (rendered.get(key) === signature) return false;
+        rendered.set(key, signature); return true;
+    }
+    function setText(node, value) {
+        const text = String(value);
+        if (node.textContent !== text) node.textContent = text;
+    }
+    function schedulePoll() {
+        clearTimeout(pollTimer);
+        if (!document.hidden) pollTimer = setTimeout(refresh,60000);
+    }
+    // 保留 table、列與儲存格；新增或刪除列時才調整 DOM。
+    function updateTable(id, rows) {
+        const box = el(id);
+        let table = box.querySelector('table');
+        if (!table) { box.append(buildTable(rows)); return; }
+        const header = table.tHead.rows[0];
+        rows[0].forEach((value,index)=>setText(header.cells[index],value));
+        const body = table.tBodies[0];
+        rows.slice(1).forEach((values,index)=>{
+            const row = body.rows[index] || body.insertRow();
+            values.forEach((value,column)=>setText(row.cells[column] || row.insertCell(),value));
+        });
+        while(body.rows.length > rows.length-1) body.deleteRow(body.rows.length-1);
+    }
 
     // 時區預設跟隨系統，可手動更正（有些環境系統時區是錯的），選擇存在 localStorage。
     const SYSTEM_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -17,7 +47,7 @@
         try { supported = Intl.supportedValuesOf('timeZone'); } catch { /* 舊瀏覽器沒有這個 API */ }
         // supportedValuesOf 不含 'UTC'，但那是常用選項，手動補在最前面並去重。
         const zones = [SYSTEM_TIMEZONE, 'UTC', ...supported].filter((zone, index, list) => list.indexOf(zone) === index);
-        select.replaceChildren(...zones.map(zone => new Option(zone === SYSTEM_TIMEZONE ? zone + '（系統）' : zone, zone)));
+        select.replaceChildren(...zones.map(zone => new Option(zone === SYSTEM_TIMEZONE ? zone + t('system') : zone, zone)));
         let saved = null;
         try { saved = localStorage.getItem(TIMEZONE_KEY); } catch { /* ignore */ }
         select.value = zones.includes(saved) ? saved : SYSTEM_TIMEZONE;
@@ -62,65 +92,53 @@
     function renderHeatmap(cells) {
         const byKey = new Map(cells.map(cell => [cell.key, cell]));
         const max = Math.max(1, ...cells.map(cell => cell.averageViewers || 0));
-
-        const table = document.createElement('table');
-        const thead = document.createElement('thead');
-        const head = document.createElement('tr');
-        for (const text of ['星期', ...Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0'))]) {
-            const th = document.createElement('th');
-            th.textContent = text;
-            head.append(th);
-        }
-        thead.append(head);
-        table.append(thead);
-
-        const tbody = document.createElement('tbody');
-        WEEKDAYS.forEach((day, index) => {
-            const row = document.createElement('tr');
-            const label = document.createElement('th');
-            label.textContent = WEEKDAY_LABELS[index];
-            row.append(label);
-
-            for (let hour = 0; hour < 24; hour++) {
-                const cell = byKey.get(day + ' ' + String(hour).padStart(2, '0'));
-                const td = document.createElement('td');
-                const button = document.createElement('button');
-                button.textContent = format(cell?.averageViewers);
-                if (cell?.averageViewers != null) {
-                    button.style.background = 'rgba(37,99,235,' + (0.15 + 0.85 * cell.averageViewers / max) + ')';
-                }
-                button.onclick = () => {
-                    el('history-detail').textContent = cell
-                        ? day + ' ' + hour + ':00 · ' + cell.observedMinutes + ' 個有取樣分鐘／' +
-                          cell.observedDays + ' 天 · 已記錄 ' + cell.joins + ' 次進房、' + cell.chats + ' 則聊天。'
-                        : '沒有資料';
-                };
-                td.append(button);
-                row.append(td);
+        let table = el('heatmap').querySelector('table');
+        if (!table) {
+            table = buildTable([[t('weekday'), ...Array.from({length:24},(_,hour)=>hour)],
+                ...WEEKDAYS.map((_,index)=>[weekday(index),...Array(24).fill('')])]);
+            for(const row of table.tBodies[0].rows) for(let hour=0;hour<24;hour++) {
+                row.cells[hour+1].append(document.createElement('button'));
             }
-            tbody.append(row);
+            el('heatmap').append(table);
+        }
+        setText(table.tHead.rows[0].cells[0],t('weekday'));
+        const describe = (index,hour) => {
+            const cell = byKey.get(WEEKDAYS[index] + ' ' + String(hour).padStart(2,'0'));
+            setText(el('history-detail'), cell ? t('history.cell', {
+                day:weekday(index), hour, minutes:cell.observedMinutes, days:cell.observedDays, joins:cell.joins, chats:cell.chats
+            }) : t('noData'));
+        };
+        WEEKDAYS.forEach((day,index)=>{
+            const row = table.tBodies[0].rows[index];
+            setText(row.cells[0],weekday(index));
+            for(let hour=0;hour<24;hour++) {
+                const cell = byKey.get(day+' '+String(hour).padStart(2,'0'));
+                const button = row.cells[hour+1].firstElementChild;
+                setText(button,format(cell?.averageViewers));
+                const color = cell?.averageViewers != null ? 'rgba(37,99,235,'+(0.15+0.85*cell.averageViewers/max)+')' : '';
+                if(button.dataset.color !== color) { button.style.background=color; button.dataset.color=color; }
+                button.onclick=()=>{selectedCell=[index,hour];describe(index,hour);};
+            }
         });
-        table.append(tbody);
-
-        el('heatmap').replaceChildren(table);
+        if(selectedCell) describe(...selectedCell);
     }
 
     /** 每日統計表。 */
     function renderDaily(daily) {
-        el('daily').replaceChildren(buildTable([
-            ['日期', '進房次數', '聊天事件', '有取樣分鐘', '平均觀看'],
+        updateTable('daily', [
+            [t('date'), t('joinCount'), t('chatCount'), t('observedMinutes'), t('averageViewers')],
             ...daily.map(row => [row.key, row.joins, row.chats, row.observedMinutes, format(row.averageViewers)])
-        ]));
+        ]);
     }
 
     /** 每日成效表：互動指標跨場次相加，累計觸及人數取最大。 */
     function renderMetrics(metrics) {
         if (!metrics) return;
 
-        el('metrics').replaceChildren(buildTable([
-            ['日期', '鑽石', '送禮者', '新粉絲', '獲讚', '累計觀眾'],
+        updateTable('metrics', [
+            [t('date'), t('diamonds'), t('gifters'), t('followers'), t('likes'), t('uniqueViewers')],
             ...metrics.daily.map(row => [row.key, row.diamonds, row.gifters, row.newFollowers, row.likes, row.uniqueViewers])
-        ]));
+        ]);
     }
 
     /**
@@ -131,7 +149,7 @@
         if (!rankings) return;
 
         const enough = rankings.cells.filter(cell => !cell.insufficient);
-        const rows = [['#', '時段', '場次', '中位數', '平均', '收縮平均']];
+        const rows = [['#', t('timeSlot'), t('sessions'), t('median'), t('mean'), t('shrunk')]];
 
         enough.forEach((cell, index) => {
             rows.push([
@@ -144,47 +162,59 @@
             ]);
         });
 
-        el('ranking').replaceChildren(buildTable(rows));
+        updateTable('ranking', rows);
 
-        el('ranking-note').textContent = enough.length
-            ? '共 ' + rankings.sessionCount + ' 個場次、' + rankings.cells.length + ' 個時段；每個時段至少 ' +
-              rankings.minSessions + ' 場且分布於至少 3 天才排名；需真實開播時間及開場 30 分鐘內至少 20 分鐘觀測。這是你的歷史觀察，不是平台推流規律。'
-            : '目前沒有時段達到 ' + rankings.minSessions + ' 場及 3 天門檻，且需真實開播時間與至少 20 分鐘開場觀測（共 ' + rankings.sessionCount + ' 個場次），暫不排名。';
+        setText(el('ranking-note'), t(enough.length ? 'ranking.note' : 'ranking.insufficient', {
+            sessions:rankings.sessionCount, cells:rankings.cells.length, minimum:rankings.minSessions
+        }));
     }
 
     /** 重新抓取歷史並更新熱圖、每日統計與時段排名。 */
     async function refresh() {
-        if (busy) return;
+        clearTimeout(pollTimer);
+        if (document.hidden) return;
+        if (busy) { rerun = true; return; }
         busy = true;
+        const requestedPlatform = el('platform').value, requestedDays = el('history-days').value, requestedTimezone = timezone();
         try {
             const res = await fetch(
-                '/api/traffic/history?platform=' + encodeURIComponent(el('platform').value) +
-                '&days=' + el('history-days').value +
-                '&timezone=' + encodeURIComponent(timezone()),
+                '/api/traffic/history?platform=' + encodeURIComponent(requestedPlatform) +
+                '&days=' + requestedDays +
+                '&timezone=' + encodeURIComponent(requestedTimezone),
                 { cache: 'no-store' }
             );
             if (!res.ok) throw Error();
             const data = await res.json();
+            if (document.hidden) return;
+            if (requestedPlatform !== el('platform').value || requestedDays !== el('history-days').value || requestedTimezone !== timezone()) { rerun = true; return; }
 
-            el('history-status').textContent = (data.storageError ? data.storageError + ' · ' : '') +
-                (data.platform || '尚無資料') + ' · ' + timezone() + ' · 自動保存 · ' +
-                (data.rankings?.sessionCount ?? 0) + ' 個觀測場次';
+            setText(el('history-status'), (data.storageError ? data.storageError + ' · ' : '') +
+                t('history.status', {platform:data.platform || t('noData'), timezone:timezone(), sessions:data.rankings?.sessionCount ?? 0}));
 
-            renderHeatmap(data.cells);
-            renderDaily(data.daily);
-            renderMetrics(data.metrics);
-            renderRanking(data.rankings);
+            const context = [data.platform, timezone(), window.TTWI18n.language];
+            if (changed('heatmap', [context, data.cells])) renderHeatmap(data.cells);
+            if (changed('daily', [context, data.daily])) renderDaily(data.daily);
+            if (changed('metrics', [context, data.metrics])) renderMetrics(data.metrics);
+            if (changed('ranking', [context, data.rankings])) renderRanking(data.rankings);
         } catch {
-            el('history-status').textContent = '歷史讀取失敗，保留畫面不是最新資料。';
+            setText(el('history-status'), t('history.error'));
         } finally {
             busy = false;
+            if (rerun) { rerun = false; refresh(); } else schedulePoll();
         }
     }
 
     el('history-days').addEventListener('change', refresh);
     el('platform').addEventListener('change', refresh);
     window.addEventListener('traffic-cleared', refresh);   // 清理統計後立刻重讀歷史
+    document.addEventListener('languagechange', () => {
+        for (const option of el('timezone').options) option.textContent = option.value === SYSTEM_TIMEZONE ? option.value + t('system') : option.value;
+        refresh();
+    });
     setupTimezone();
     refresh();
-    setInterval(refresh, 60000);
+    document.addEventListener('visibilitychange', () => {
+        clearTimeout(pollTimer);
+        if (!document.hidden) refresh();
+    });
 })();

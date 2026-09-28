@@ -120,10 +120,17 @@ function serveTraffic(req, res, authorized = false) {
 
     if (url.pathname === '/api/traffic') {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(JSON.stringify(traffic.snapshot(
-            url.searchParams.get('platform'),
-            url.searchParams.get('range') || '30'
-        )));
+        try {
+            const hasWindow = url.searchParams.has('from') || url.searchParams.has('to');
+            const window = hasWindow ? {
+                from: url.searchParams.get('from') ? Number(url.searchParams.get('from')) : NaN,
+                to: url.searchParams.get('to') ? Number(url.searchParams.get('to')) : NaN
+            } : null;
+            res.end(JSON.stringify(traffic.snapshot(url.searchParams.get('platform'), url.searchParams.get('range') || '30', Date.now(), window)));
+        } catch (error) {
+            res.writeHead(error instanceof RangeError ? 400 : 500);
+            res.end(JSON.stringify({error: error instanceof RangeError ? 'Invalid chart window' : 'Chart query failed'}));
+        }
         return true;
     }
 

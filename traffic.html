@@ -3,115 +3,154 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>人流分析</title>
+  <title data-i18n="traffic.title">人流分析</title>
   <link rel="stylesheet" href="/assets/app.css">
   <link rel="stylesheet" href="/assets/traffic.css">
 </head>
 <body class="bg-gray-900 text-gray-200">
   <main class="mx-auto max-w-6xl p-4 sm:p-6">
     <nav class="flex flex-wrap gap-2 text-sm">
-      <a href="/" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">🏠 主控台</a>
-      <a href="/autoclip" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">✂️ 自動剪輯</a>
-      <a href="/keyword" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">📊 關鍵字</a>
-      <a href="/clips" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">🎬 剪輯紀錄</a>
-      <a href="/config" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">⚙️ 設定</a>
-      <a href="/traffic" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg">📈 人流分析</a>
+      <a href="/" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition"><span data-i18n="traffic.nav.home">🏠 主控台</span></a>
+      <a href="/autoclip" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition"><span data-i18n="traffic.nav.autoclip">✂️ 自動剪輯</span></a>
+      <a href="/keyword" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition"><span data-i18n="traffic.nav.keyword">📊 關鍵字</span></a>
+      <a href="/clips" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition"><span data-i18n="traffic.nav.clips">🎬 剪輯紀錄</span></a>
+      <a href="/config" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition"><span data-i18n="traffic.nav.config">⚙️ 設定</span></a>
+      <a href="/traffic" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg"><span data-i18n="traffic.nav.traffic">📈 人流分析</span></a>
     </nav>
 
     <header>
-      <h1 class="text-2xl sm:text-3xl font-bold">📈 人流分析 · 觀察模式</h1>
-      <p class="text-gray-400 text-sm mt-1">進房事件不等於平台推薦曝光。資料僅涵蓋已接收到的事件；缺漏時段不代表沒有觀眾。</p>
+      <h1 class="text-2xl sm:text-3xl font-bold"><span data-i18n="traffic.heading">📈 人流分析 · 觀察模式</span></h1>
+      <p class="text-gray-400 text-sm mt-1"><span data-i18n="traffic.intro">進房事件不等於平台推薦曝光。資料僅涵蓋已接收到的事件；缺漏時段不代表沒有觀眾。</span></p>
     </header>
 
     <section class="toolbar">
-      <label>平台 <select id="platform"></select></label>
-      <label>時區 <select id="timezone" title="預設跟隨系統時區，可手動更正"></select></label>
-      <label>範圍 <select id="range">
-        <option value="10">10 分鐘</option>
-        <option value="30" selected>30 分鐘</option>
-        <option value="60">1 小時</option>
-        <option value="180">3 小時</option>
-        <option value="360">6 小時</option>
-        <option value="720">12 小時</option>
-        <option value="1440">24 小時</option>
-        <option value="all">全部</option>
-      </select></label>
+      <label><span data-i18n="common.language">語言</span> <select data-language-select></select></label>
+      <label><span data-i18n="traffic.platform">平台</span> <select id="platform"></select></label>
+      <label><span data-i18n="traffic.timezone">時區</span> <select id="timezone"></select></label>
     </section>
 
     <p id="status" role="status" class="text-gray-400 text-sm"></p>
     <p id="diagnostics" class="text-gray-500 text-xs"></p>
 
-    <section id="cards" class="cards"></section>
 
     <section class="panel">
-      <h2>即時圖表</h2>
-      <div class="charts">
+      <h2><span data-i18n="traffic.charts">所選範圍圖表</span></h2>
+      <div id="chart-overview">
+        <h3 data-i18n="traffic.design.records">選擇觀測區段</h3>
+        <p data-i18n="traffic.segments.hint"></p>
+        <div id="segment-browser">
+          <div id="segment-cards"></div>
+          <div class="chart-controls">
+            <button id="segments-newer" data-i18n="traffic.segments.newer">較新紀錄</button>
+            <span id="segments-page" role="status"></span>
+            <button id="segments-older" data-i18n="traffic.segments.older">較舊紀錄</button>
+            <button id="chart-latest" data-i18n="traffic.overview.latest">最近一段</button>
+          </div>
+        </div>
+      </div>
+      <details id="date-selection">
+        <summary data-i18n="traffic.design.dates">指定起訖時間（跨日分析）</summary>
+        <p id="date-zone"></p>
+        <form id="date-form" class="chart-controls">
+          <label><span data-i18n="traffic.design.from">開始</span><input id="window-from" type="datetime-local" required step="60"></label>
+          <label><span data-i18n="traffic.design.to">結束</span><input id="window-to" type="datetime-local" required step="60"></label>
+          <button type="submit" data-i18n="traffic.design.apply">套用區間</button>
+        </form>
+        <p id="date-draft" role="status"></p>
+        <p id="date-error" role="alert"></p>
+      </details>
+      <div class="chart-controls" id="analysis-controls">
+        <button id="window-left" data-i18n="traffic.window.left">← 平移</button>
+        <button id="window-right" data-i18n="traffic.window.right">平移 →</button>
+        <button id="window-in" data-i18n="traffic.window.in">放大</button>
+        <button id="window-out" data-i18n="traffic.window.out">縮小</button>
+        <button id="window-reset" data-i18n="traffic.design.reset">回到所選區段</button>
+      </div>
+      <p id="analysis-status" role="status"></p>
+      <div id="analysis-results" hidden>
+      <p id="chart-window" role="status"></p>
+      <p id="chart-quality" role="status"></p>
+      <section id="cards" class="cards"></section>
+      <div id="chart-empty" hidden>
+        <p role="status" data-i18n="traffic.browse.empty">此區間無紀錄。無法據此判斷是否未開播。</p>
+        <div class="chart-controls"><button id="empty-prev" data-i18n="traffic.browse.previous">← 前一筆紀錄</button><button id="empty-next" data-i18n="traffic.browse.next">後一筆紀錄 →</button></div>
+      </div>
+      <div class="chart-controls">
+        <button type="button" id="chart-clear" data-i18n="traffic.chart.clear">清除選取</button>
+      </div>
+      <label><span data-i18n="traffic.window.units">互動圖單位</span> <select id="chart-units"><option value="total" data-i18n="traffic.window.total">每桶總筆數</option><option value="rate" data-i18n="traffic.window.rate">每分鐘筆數</option></select></label>
+      <p id="chart-readout" role="status" aria-live="polite"></p>
+      <div class="charts" id="detail-charts">
         <figure class="chart">
-          <figcaption>觀看數（依範圍自動分桶，缺值斷線）
-            <span class="legend"><i style="background:#60a5fa"></i>觀看數</span>
+          <figcaption><span data-i18n="traffic.chart.viewers">觀看數（依範圍自動分桶，缺值斷線）</span>
+            <span class="legend"><i style="background:#60a5fa"></i><span data-i18n="traffic.viewers">觀看數</span></span>
+            <span class="legend"><i style="background:#34d399"></i><span data-i18n="traffic.window.peak">最高分鐘平均</span></span>
           </figcaption>
-          <canvas id="viewers"></canvas>
+          <canvas id="viewers" tabindex="0" aria-describedby="chart-readout"></canvas>
+          <p id="viewer-summary" class="text-gray-400 text-xs" role="status"></p>
         </figure>
         <figure class="chart">
-          <figcaption>進房與聊天（依範圍自動分桶；進房僅部分平台提供）
-            <span class="legend"><i style="background:#60a5fa"></i>進房</span>
-            <span class="legend"><i style="background:#34d399"></i>聊天</span>
-            <span class="legend"><i style="background:#fbbf24"></i>活躍發言人數</span>
+          <figcaption><span data-i18n="traffic.chart.arrivals">進房與聊天（依範圍自動分桶；進房僅部分平台提供）</span>
+            <span class="legend"><i style="background:#60a5fa"></i><span data-i18n="traffic.joins">進房</span></span>
+            <span class="legend"><i style="background:#34d399"></i><span data-i18n="traffic.chats">聊天</span></span>
+            <span class="legend"><i style="background:#fbbf24"></i><span data-i18n="traffic.activeUsers">活躍發言人數</span></span>
           </figcaption>
-          <canvas id="arrivals"></canvas>
+          <canvas id="arrivals" tabindex="0" aria-describedby="chart-readout"></canvas>
         </figure>
       </div>
-      <p>點選圖表查看該時間區間的進房明細；兩張圖共用時間軸。<strong>淡色區塊＝該區間沒有資料</strong>（未在線或沒收到樣本），與「線掉到 0」不同。聊天數尚未套用剪輯過濾規則。</p>
+      <p><span data-i18n="traffic.chart.description">點選圖表查看該時間區間的進房明細；兩張圖共用時間軸。</span><strong><span data-i18n="traffic.chart.gaps">淡色區塊＝該區間沒有資料</span></strong><span data-i18n="traffic.chart.gapsNote">（未在線或沒收到樣本），與「線掉到 0」不同。聊天數尚未套用剪輯過濾規則。</span></p>
+      </div>
     </section>
 
     <section class="panel">
-      <h2>長期時段分布</h2>
-      <label>範圍 <select id="history-days"><option value="7">最近 7 天</option><option value="30" selected>最近 30 天</option></select></label>
+      <h2><span data-i18n="traffic.history.title">長期時段分布</span></h2>
+      <label><span data-i18n="traffic.range">範圍</span> <select id="history-days"><option value="7" data-i18n="traffic.history.7">最近 7 天</option><option value="30" selected data-i18n="traffic.history.30">最近 30 天</option></select></label>
       <p id="history-status" role="status"></p>
-      <p>顏色越亮代表有取樣分鐘的平均觀看數越高；— 表示無觀看取樣。點時段查看樣本。這是歷史觀察，不代表平台推流規律。</p>
+      <p><span data-i18n="traffic.history.description">顏色越亮代表有取樣分鐘的平均觀看數越高；— 表示無觀看取樣。點時段查看樣本。這是歷史觀察，不代表平台推流規律。</span></p>
       <div id="heatmap" class="table-wrap"></div>
       <p id="history-detail"></p>
 
-      <h3>每日統計</h3>
+      <h3><span data-i18n="traffic.history.daily">每日統計</span></h3>
       <div id="daily" class="table-wrap"></div>
 
-      <h3>每日成效</h3>
-      <p>互動指標跨場次相加；累計觸及人數取最大值（同一批觀眾可能橫跨多場）。</p>
+      <h3><span data-i18n="traffic.history.metrics">每日成效</span></h3>
+      <p><span data-i18n="traffic.history.metricsNote">互動指標跨場次相加；累計觸及人數取最大值（同一批觀眾可能橫跨多場）。</span></p>
       <div id="metrics" class="table-wrap"></div>
 
-      <h3>最佳開播時段（歷史參考）</h3>
+      <h3><span data-i18n="traffic.ranking.title">最佳開播時段（歷史參考）</span></h3>
       <p id="ranking-note"></p>
       <div id="ranking" class="table-wrap"></div>
     </section>
 
     <section class="panel">
-      <h2 id="detail-title">最近進房事件（最多 200 筆）</h2>
-      <p class="text-gray-500 text-xs">進房事件不是每個平台都提供：原生目前只有 TikTok 的 MEMBER 事件；Twitch／Kick／Odysee／YouTube 沒有「觀眾進房」事件，因此這裡可能是空的。</p>
+      <h2 id="detail-title"><span data-i18n="traffic.detail.recent">最近進房事件（最多 200 筆）</span></h2>
+      <p class="text-gray-500 text-xs"><span data-i18n="traffic.detail.note">進房事件不是每個平台都提供：原生目前只有 TikTok 的 MEMBER 事件；Twitch／Kick／Odysee／YouTube 沒有「觀眾進房」事件，因此這裡可能是空的。</span></p>
       <div id="details" class="table-wrap"></div>
     </section>
 
     <details class="panel" id="cleanup">
-      <summary>🧹 清理統計（清掉誤收的髒資料，不必整庫重來）</summary>
-      <p class="text-gray-400 text-sm mt-2">可以只清「某一天」、「某天的某段時間（幾點到幾點）」或「最近 N 小時」；刪除後圖表與歷史會立即反映。場次以「開始時間落在範圍內」為準，心跳不會刪。</p>
+      <summary><span data-i18n="traffic.clean.title">🧹 清理統計（清掉誤收的髒資料，不必整庫重來）</span></summary>
+      <p class="text-gray-400 text-sm mt-2"><span data-i18n="traffic.clean.description">可以只清「某一天」、「某天的某段時間（幾點到幾點）」或「最近 N 小時」；刪除後圖表與歷史會立即反映。場次以「開始時間落在範圍內」為準，心跳不會刪。</span></p>
       <div class="cleanup-form">
-        <label>平台 <select id="clean-platform"><option value="all">全部</option></select></label>
-        <label>方式 <select id="clean-mode">
-          <option value="day">某一天（整天）</option>
-          <option value="slot">某天的某段時間</option>
-          <option value="hours">最近 N 小時</option>
+        <label><span data-i18n="traffic.platform">平台</span> <select id="clean-platform"><option value="all" data-i18n="traffic.range.all">全部</option></select></label>
+        <label><span data-i18n="traffic.clean.mode">方式</span> <select id="clean-mode">
+          <option value="day" data-i18n="traffic.clean.day">某一天（整天）</option>
+          <option value="slot" data-i18n="traffic.clean.slot">某天的某段時間</option>
+          <option value="hours" data-i18n="traffic.clean.hours">最近 N 小時</option>
         </select></label>
-        <label id="clean-day-label">日期 <input type="date" id="clean-day"></label>
-        <label id="clean-slot-label" hidden>起訖時間 <span class="clean-times"><input type="time" id="clean-start"> ～ <input type="time" id="clean-end"></span></label>
-        <label id="clean-hours-label" hidden>小時 <input type="number" id="clean-hours" min="1" max="720" value="6"></label>
-        <button id="clean-preview">預覽範圍內完整資料</button>
-        <button id="clean-run" disabled>確定刪除</button>
+        <label id="clean-day-label"><span data-i18n="traffic.date">日期</span> <input type="date" id="clean-day"></label>
+        <label id="clean-slot-label" hidden><span data-i18n="traffic.clean.times">起訖時間</span> <span class="clean-times"><input type="time" id="clean-start"> ～ <input type="time" id="clean-end"></span></label>
+        <label id="clean-hours-label" hidden><span data-i18n="traffic.clean.hourLabel">小時</span> <input type="number" id="clean-hours" min="1" max="720" value="6"></label>
+        <button id="clean-preview"><span data-i18n="traffic.clean.preview">預覽範圍內完整資料</span></button>
+        <button id="clean-run" disabled><span data-i18n="traffic.clean.confirm">確定刪除</span></button>
       </div>
       <p id="clean-status" class="muted" role="status"></p>
       <div id="clean-preview-data"></div>
     </details>
 
-    <p class="text-gray-500 text-xs">資料自動保存於本機 SQLite，重啟保留。即時圖僅顯示最近 24 小時／20,000 筆；週月統計使用完整分鐘彙總。原生進房／聊天先支援 TikTok，原生觀看數支援 TikTok、Twitch；其他來源需明確上報。</p>
+    <p class="text-gray-500 text-xs"><span data-i18n="traffic.storageNote">資料自動保存於本機 SQLite，重啟保留。圖表與週月統計使用完整分鐘彙總；即時狀態與進房明細保留最近 24 小時／20,000 筆。原生進房／聊天先支援 TikTok，原生觀看數支援 TikTok、Twitch；其他來源需明確上報。</span></p>
   </main>
+  <script src="/assets/i18n.js"></script>
   <script src="/assets/traffic.js"></script>
   <script src="/assets/traffic-history.js"></script>
 </body>

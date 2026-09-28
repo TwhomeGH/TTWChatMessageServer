@@ -34,7 +34,7 @@ test('locale tables use supported keys and compatible placeholders', () => {
         assert.ok(Object.hasOwn(zh, key), key);
         if (typeof value === 'string' && value.trim()) assert.deepEqual(tokens(value), tokens(zh[key]), key);
     }
-    for (const file of ['runtime.html', 'OtherTool/browser/index.html', 'log.html']) {
+    for (const file of ['runtime.html', 'OtherTool/browser/index.html', 'log.html', 'traffic.html']) {
         const html = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
         for (const match of html.matchAll(/data-i18n="([^"]+)"/g)) assert.ok(Object.hasOwn(zh, match[1]), match[1]);
         for (const match of html.matchAll(/<script[^>]*>([\s\S]*?)<\/script[^>]*>/gi)) new vm.Script(match[1], { filename: file });
@@ -96,4 +96,22 @@ test('manifest rejects invalid paths, duplicate locales and blank labels', () =>
     assert.equal(result.default, 'zh-TW');
     assert.equal(normalizeManifest({ default: 'en', languages: [{ code: 'en', label: 'English' }] }).default, 'en');
     assert.deepEqual(normalizeManifest(null).languages, [{ code: 'zh-TW', label: '繁體中文' }]);
+});
+
+test('traffic static and dynamic translation keys exist in both locales', () => {
+    for (const file of ['assets/traffic.js','assets/traffic-history.js']) {
+        const script = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+        new vm.Script(script);
+        for (const match of script.matchAll(/(?<![\w.])t\('([^']+)'/g)) {
+            const key = 'traffic.' + match[1];
+            assert.ok(zh[key], key);
+            assert.ok(en[key], key);
+        }
+    }
+    const html = fs.readFileSync(path.join(__dirname, '../traffic.html'), 'utf8');
+    assert.ok(html.indexOf('/assets/i18n.js') < html.indexOf('/assets/traffic.js'));
+    for (const match of html.matchAll(/data-i18n="([^"]+)"/g)) assert.ok(en[match[1]], match[1]);
+    const parameters = {state:'Pinned',from:'start',to:'end',viewers:0,joins:0,chats:0,active:0};
+    assert.match(translate(en,zh,'traffic.chart.readout',parameters), /Average viewers 0/);
+    assert.match(translate(en,zh,'traffic.chart.readout',{...parameters,viewers:en['traffic.noData']}), /Average viewers No data/);
 });

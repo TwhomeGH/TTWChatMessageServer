@@ -354,6 +354,25 @@ class TrafficDatabase {
         return !!this.db.prepare('SELECT 1 FROM heartbeats WHERE time>? AND time<? LIMIT 1').get(from, to);
     }
 
+    /** 以有觀看或互動的分鐘切出觀測時段；超過兩分鐘沒資料才分段。 */
+    observationRuns(platform) {
+        return this.db.prepare(`WITH observed AS (
+            SELECT time, LAG(time) OVER (ORDER BY time) AS previous
+            FROM minutes WHERE platform=? AND (viewerCount>0 OR joins>0 OR chats>0)
+        ), grouped AS (
+            SELECT time, SUM(CASE WHEN previous IS NULL OR time-previous>120000 THEN 1 ELSE 0 END)
+                OVER (ORDER BY time) AS segment FROM observed
+        ) SELECT MIN(time) AS "from", MAX(time)+60000 AS "to", COUNT(*) AS minutes
+          FROM grouped GROUP BY segment ORDER BY "from"`).all(platform || '');
+    }
+
+    /** 以分鐘平均計算摘要；峰值明確指分鐘平均最高值，不冒充原始瞬間峰值。 */
+    chartSummary(platform, from, to) {
+        return this.db.prepare(`SELECT COUNT(*) AS minutes, COALESCE(SUM(viewerCount),0) AS samples,
+            AVG(viewerSum / viewerCount) AS average, MAX(viewerSum / viewerCount) AS peak
+            FROM minutes WHERE platform=? AND time>=? AND time<? AND viewerCount>0`).get(platform || '', from, to);
+    }
+
     /** 曾出現過的任何平台。 */
     platforms() {
         return this.db.prepare('SELECT DISTINCT platform FROM minutes ORDER BY platform').all().map(row => row.platform);
@@ -490,7 +509,7 @@ class TrafficDatabase {
         const totals = new Map();
         for (const row of rows) {
             const time = Math.floor(row.time / bucketMs) * bucketMs;
-            if (!totals.has(time)) totals.set(time, { joins: 0, chats: 0, blocked: 0, adBlocked: 0, viewerSum: 0, viewerCount: 0 });
+            if (!totals.has(time)) totals.set(time, { joins: 0, chats: 0, blocked: 0, adBlocked: 0, viewerSum: 0, viewerCount: 0, observedMinutes: 0, minuteSum: 0, peak: null });
             const bucket = totals.get(time);
             bucket.joins += row.joins ?? 0;
             bucket.chats += row.chats ?? 0;
@@ -498,6 +517,12 @@ class TrafficDatabase {
             bucket.adBlocked += row.adBlocked ?? 0;
             bucket.viewerSum += row.viewerSum ?? 0;
             bucket.viewerCount += row.viewerCount ?? 0;
+            if(row.viewerCount) {
+                const average=row.viewerSum/row.viewerCount;
+                bucket.observedMinutes++;
+                bucket.minuteSum+=average;
+                bucket.peak=Math.max(bucket.peak??0,average);
+            }
         }
 
         // 活躍發言人數：每個桶裡「不同的發言者」，用 COUNT(DISTINCT) 才不會被同一個人跨分鐘重複計算。
@@ -518,7 +543,9 @@ class TrafficDatabase {
                 chats: bucket?.chats ?? 0,
                 blocked: bucket?.blocked ?? 0,
                 adBlocked: bucket?.adBlocked ?? 0,
-                viewers: bucket?.viewerCount ? Math.round(bucket.viewerSum / bucket.viewerCount) : null,
+                viewers: bucket?.observedMinutes ? bucket.minuteSum / bucket.observedMinutes : null,
+                observedMinutes: bucket?.observedMinutes ?? 0,
+                peak: bucket?.peak ?? null,
                 activeUsers: activeByBucket.get(time) ?? 0
             });
         }

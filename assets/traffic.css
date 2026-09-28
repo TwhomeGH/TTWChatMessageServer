@@ -127,3 +127,44 @@ tbody tr:last-child th, tbody tr:last-child td { border-bottom: 0; }
  .clean-preview-summary {grid-template-columns:repeat(2,minmax(0,1fr));}
  #cleanup .clean-speakers td:nth-child(n+3) {text-align:left;}
 }
+
+/* 圖表互動：鍵盤焦點、觸控與共享數值列。 */
+.chart-controls {display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;}
+.chart-controls button {font:inherit;color:#e7edf7;background:#1b2940;border:1px solid #4b5563;border-radius:8px;padding:8px 12px;cursor:pointer;min-height:44px;}
+.chart-controls button:disabled {opacity:.45;cursor:default;}
+.chart-controls button:focus-visible,canvas:focus-visible {outline:2px solid #60a5fa;outline-offset:3px;}
+canvas {cursor:crosshair;}
+#chart-readout {min-height:3em;white-space:pre-line;line-height:1.6;font-variant-numeric:tabular-nums;}
+#viewer-summary {line-height:1.6;}
+
+#overview-canvas {height:110px;touch-action:auto;}
+#chart-run {max-width:100%;min-width:0;}
+#chart-overview .chart-controls label {min-width:0;max-width:100%;flex-wrap:wrap;}
+#chart-window {line-height:1.7;font-variant-numeric:tabular-nums;}
+
+
+#overview-scroll {overflow-x:auto;max-width:100%;}
+#overview-mode-note {color:#9ca3af;font-size:.8rem;line-height:1.6;}
+
+#overview-canvas, #viewers, #arrivals {touch-action:pan-y;}
+#chart-quality {color:#cbd5e1;font-size:.85rem;line-height:1.7;}
+
+#detail-charts[hidden], #chart-empty[hidden] {display:none;}
+#chart-empty {padding:16px;border:1px solid #475569;border-radius:8px;background:#111827;}
+
+#segment-browser[hidden], #overview-scroll[hidden] {display:none;}
+#segment-cards {display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin:12px 0;}
+.segment-card {display:flex;flex-direction:column;gap:8px;text-align:left;padding:16px;background:#111827;color:#e5e7eb;border:1px solid #475569;border-radius:10px;cursor:pointer;font:inherit;}
+.segment-card strong {font-size:1.1rem;}
+.segment-card span {font-size:.85rem;line-height:1.6;}
+.segment-card[aria-pressed="true"] {border:2px solid #34d399;background:#14312d;}
+.segment-card:hover {border-color:#60a5fa;}
+.segment-card:focus-visible {outline:2px solid #60a5fa;outline-offset:3px;}
+@media(max-width:400px){#segment-cards {grid-template-columns:1fr;}}
+
+#free-window-controls[hidden] {display:none;}
+
+#analysis-results[hidden] {display:none;}
+#date-selection {margin:16px 0;padding:12px;border:1px solid #475569;border-radius:8px;}
+#date-form input {color:#e5e7eb;background:#111827;padding:8px;border:1px solid #64748b;border-radius:6px;}
+#date-error {color:#fca5a5;}

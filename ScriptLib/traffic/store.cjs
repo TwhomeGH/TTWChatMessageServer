@@ -188,7 +188,10 @@ class TrafficStore {
      *
      * 缺少觀看數保持 null；不跨平台相加，避免把不同平台的人數誤認成去重人數。
      */
-    snapshot(platform, range = '30', now = this.now()) {
+    snapshot(platform, range = '30', now = this.now(), window = null) {
+        if (window && (!Number.isSafeInteger(window.from) || !Number.isSafeInteger(window.to) || window.from < 0 || window.from >= now || window.to <= window.from || window.to > now + 60000 || window.to - window.from > 366 * 86400000)) {
+            throw new RangeError('Invalid chart window');
+        }
         this.events = this.events.filter(e => e.time >= now - 86400000);
 
         const platforms = this.database
@@ -199,13 +202,14 @@ class TrafficStore {
         // 圖表序列：取自資料庫的 minutes（含全部歷史、不受 24 小時／20,000 筆上限影響），
         // 桶寬依範圍自適應，長範圍才不會擠成上千個點。
         const minutes = Object.hasOwn(RANGES, range) ? RANGES[range] : 30;
-        const since = minutes === null
+        const until = window ? Math.min(window.to, now) : now;
+        const since = window ? window.from : minutes === null
             ? (this.database?.earliest(platform) ?? now - 60000)
             : now - minutes * 60000;
-        const bucketMs = bucketSize(Math.max(60000, now - since));
-        const buckets = this.database ? this.database.series(platform, since, bucketMs, now) : [];
-        const activeUsers = this.database ? this.database.activeUsers(platform, since, now) : 0;
-        const adUsers = this.database ? this.database.adUsers(platform, since, now) : 0;
+        const bucketMs = bucketSize(Math.max(60000, until - since));
+        const buckets = this.database ? this.database.series(platform, since, bucketMs, window ? until - 1 : until) : [];
+        const activeUsers = this.database ? this.database.activeUsers(platform, since, window ? until - 1 : until) : 0;
+        const adUsers = this.database ? this.database.adUsers(platform, since, window ? until - 1 : until) : 0;
 
         // 卡片與進房明細本質是「現在／近期」，維持用記憶體中的事件。
         const events = this.events
@@ -240,6 +244,9 @@ class TrafficStore {
             platforms,
             range,
             since,
+            chartUntil: until,
+            runs: range === 'all' && !window && this.database ? this.database.observationRuns(platform) : [],
+            chartSummary: window && this.database ? this.database.chartSummary(platform, since, until) : null,
             bucketMs,
             buckets,
             activeUsers,
