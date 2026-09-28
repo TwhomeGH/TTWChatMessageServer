@@ -27,7 +27,7 @@ API＋Userscript 是同一個平台的兩個入口，不拆成兩份平台分數
 ## 已更新版本
 
 | 檔案 | 新版 |
-|---|---|
+| --- | --- |
 | TikTokChat.user.js | 2.7 |
 | liveCenter.user.js | 1.10 |
 | youtube-chat-userscript.user.js | 1.1 |
@@ -45,7 +45,6 @@ WS relay 統一使用 `UserScript/ws-relay.user.js`，保留 URL、二進位與�
 舊 `ws-relay.js` 已移除；若瀏覽器仍安裝舊副本，請改裝統一版本並停用重複副本。
 本機修改尚未發布到 GitHub，遠端自動更新需等新版發布後才可取得。
 自動剪輯預設為影子模式；正式執行條件見 [自動剪輯說明](KEYWORD_AUTOCLIP_V2.md)。
-
 
 ## Restream 自動開啟 TikTok Live Monitor
 
