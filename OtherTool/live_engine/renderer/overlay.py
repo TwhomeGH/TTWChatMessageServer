@@ -54,6 +54,7 @@ class Overlay(QOpenGLWidget):
 
     hotkey_triggered = pyqtSignal()
     game_mode_changed = pyqtSignal(bool, str)
+    drag_mode_changed = pyqtSignal(bool, str)
 
     def __init__(self, on_open_tts=None):
         super().__init__()
@@ -79,6 +80,10 @@ class Overlay(QOpenGLWidget):
         )
 
         self._drag_mode = False
+        self.drag_block_reason = ""
+        self._drag_guard_timer = QTimer(self)
+        self._drag_guard_timer.setInterval(1000)
+        self._drag_guard_timer.timeout.connect(self._check_drag_safety)
         self._drag_start_pos = QPoint(0, 0)
         self._drag_window_start = QPoint(0, 0)
 
@@ -128,6 +133,8 @@ class Overlay(QOpenGLWidget):
             return
         self._game_mode = active
         if active:
+            if self._drag_mode:
+                self.stop_drag_mode("遊戲模式啟用，已停止拖曳")
             self._visible_before_game_mode = self.isVisible()
             self.hide()
             self._hotkey.unregister()
@@ -210,33 +217,74 @@ class Overlay(QOpenGLWidget):
         self.engine.update()
         log(f"Overlay resized to {w}x{h}")
 
+    def _check_drag_safety(self):
+        from core.game_guard import detect_drag_risk
+        reason = detect_drag_risk()
+        if reason and self._drag_mode:
+            self.stop_drag_mode(reason)
+        return reason
+
     def start_drag_mode(self):
+        reason = self._check_drag_safety()
+        if self._game_mode:
+            reason = reason or "遊戲保護模式啟用中"
+        if reason:
+            self.drag_block_reason = reason
+            self.drag_mode_changed.emit(False, reason)
+            log_warn("Drag mode blocked:", reason)
+            return False
+        if not self._apply_click_through(False):
+            self.drag_block_reason = "無法切換視窗點擊穿透，已取消拖曳"
+            self.drag_mode_changed.emit(False, self.drag_block_reason)
+            return False
+        self.drag_block_reason = ""
         self._drag_mode = True
         self.setMouseTracking(True)
         self.setCursor(QtCore.Qt.CursorShape.OpenHandCursor)
-        self._apply_click_through(False)
+        self._drag_guard_timer.start()
+        self.drag_mode_changed.emit(True, "")
         log("Drag mode started")
+        return True
 
-    def stop_drag_mode(self):
+    def stop_drag_mode(self, reason=""):
         self._drag_mode = False
+        self._drag_guard_timer.stop()
+        self.drag_block_reason = reason
         self.setMouseTracking(False)
         self.setCursor(QtCore.Qt.CursorShape.ArrowCursor)
-        self._apply_click_through(True)
-        log("Drag mode stopped")
+        if not self._apply_click_through(True):
+            # Do not leave a failed interactive topmost overlay in front of a game.
+            self.hide()
+            self.drag_block_reason = "恢復點擊穿透失敗，已隱藏疊層"
+        self.drag_mode_changed.emit(False, self.drag_block_reason)
+        log("Drag mode stopped", self.drag_block_reason)
 
     def _apply_click_through(self, enabled):
         try:
-            hwnd = int(self.winId())
-            GWL_EXSTYLE = -20
-            WS_EX_TRANSPARENT = 0x00000020
-            current = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-            if enabled:
-                new_style = current | WS_EX_TRANSPARENT
-            else:
-                new_style = current & ~WS_EX_TRANSPARENT
-            ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, new_style)
-        except Exception:
-            pass
+            from ctypes import wintypes
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+            pointer_sized = ctypes.sizeof(ctypes.c_void_p) == 8
+            get_style = user32.GetWindowLongPtrW if pointer_sized else user32.GetWindowLongW
+            set_style = user32.SetWindowLongPtrW if pointer_sized else user32.SetWindowLongW
+            get_style.argtypes = [wintypes.HWND, ctypes.c_int]
+            get_style.restype = ctypes.c_ssize_t
+            set_style.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
+            set_style.restype = ctypes.c_ssize_t
+            hwnd = int(self.winId())  # only our own Qt window
+            ctypes.set_last_error(0)
+            current = get_style(hwnd, -20)
+            if current == 0 and ctypes.get_last_error():
+                raise ctypes.WinError(ctypes.get_last_error())
+            new_style = current | 0x20 if enabled else current & ~0x20
+            if new_style != current:
+                ctypes.set_last_error(0)
+                previous = set_style(hwnd, -20, new_style)
+                if previous == 0 and ctypes.get_last_error():
+                    raise ctypes.WinError(ctypes.get_last_error())
+            return True
+        except Exception as exc:
+            log_warn("Overlay click-through failed:", exc)
+            return False
 
     def showEvent(self, event):
         super().showEvent(event)

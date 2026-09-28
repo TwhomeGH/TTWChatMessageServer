@@ -2,7 +2,7 @@
 
 This module only *reads the process list* and the foreground window — it
 installs no hooks, injects nothing, touches no game handles, and does not open
-the protected process. That keeps it harmless to anti-cheat while letting the
+the protected process. This avoids invasive inspection while letting the
 UI step out of the way when a protected game starts.
 
 Game mode only turns on when a known anti-cheat is present **and** the
@@ -71,15 +71,17 @@ def _iter_process_names():
 
     snap = k32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
     if not snap or snap == _INVALID_HANDLE:
-        return
+        raise OSError("process snapshot failed")
     try:
         entry = _PROCESSENTRY32W()
         entry.dwSize = ctypes.sizeof(_PROCESSENTRY32W)
         if not k32.Process32FirstW(snap, ctypes.byref(entry)):
-            return
+            raise OSError("process enumeration failed")
         while True:
             yield entry.szExeFile
             if not k32.Process32NextW(snap, ctypes.byref(entry)):
+                if k32.GetLastError() != 18:  # ERROR_NO_MORE_FILES
+                    raise OSError("process enumeration interrupted")
                 break
     finally:
         k32.CloseHandle(snap)
@@ -96,6 +98,25 @@ def detect_anticheat():
     return None
 
 
+# Process-name matching only; keep this list extensible when game binaries change.
+GAME_PROCESSES = {"endfield.exe", "arknightsendfield.exe"}
+
+
+def detect_drag_risk():
+    """Stricter than auto-hide: background anti-cheat also blocks editing.
+
+    Unknown scan state is not permission to enter drag mode.
+    """
+    try:
+        for name in _iter_process_names():
+            if name and name.lower() in ANTICHEAT_PROCESSES | GAME_PROCESSES:
+                return f"偵測到遊戲／反作弊程序：{name}"
+    except Exception as exc:
+        log_warn("Drag guard: process scan failed:", exc)
+        return "無法確認遊戲／反作弊狀態，暫停拖曳"
+    return ""
+
+
 class _MONITORINFO(ctypes.Structure):
     _fields_ = [
         ("cbSize", wintypes.DWORD),
@@ -109,6 +130,14 @@ def _foreground_covers_monitor():
     """True when the foreground window spans its whole monitor (a game)."""
     try:
         user32 = ctypes.windll.user32
+        user32.GetForegroundWindow.argtypes = []
+        user32.GetForegroundWindow.restype = wintypes.HWND
+        user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+        user32.GetWindowRect.restype = wintypes.BOOL
+        user32.MonitorFromWindow.argtypes = [wintypes.HWND, wintypes.DWORD]
+        user32.MonitorFromWindow.restype = wintypes.HANDLE
+        user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_MONITORINFO)]
+        user32.GetMonitorInfoW.restype = wintypes.BOOL
         hwnd = user32.GetForegroundWindow()
         if not hwnd:
             return False
