@@ -33,7 +33,7 @@
 改進前後差異：
 
 | 情境 | 改進前 | 改進後 |
-|------|--------|--------|
+| ------ | -------- | -------- |
 | 訊息文字內貼圖片網址（如 `…/Neuro2.png?raw=true`） | 該網址只當廣告文字，頭像仍是 Twitch 頭貼 | **自動偵測為頭像**，並從文字中移除該網址 |
 | 更新廣告時沒帶 `icon=` | `targetAd.iconURL = iconURL` 把頭像**覆寫成空白**，回退成 Twitch 頭貼 | **保留原本頭像**，不會被洗掉 |
 | 定時器 / 重啟恢復發送 | 用 `ad.iconURL \|\| ''`，iconURL 為空時**沒頭像**，與即時發送不一致 | 已解析的頭像（含 Twitch fallback）**存入廣告紀錄**，三條路徑用同一張圖 |
@@ -84,7 +84,7 @@
 - 移除 800ms 發送延遲，訊息凍結解凍後即時送出
 - 新增 `visibilitychange` 監聽，分頁回到前景時自動更新觀眾資料
 
-### TikTok 表情事件改進
+### TikTok 表情事件改進 - CHAT 事件不再跳過僅有表情無文字的訊息
 
 - CHAT 事件不再跳過僅有表情無文字的訊息，改取 `emotes` 陣列內容
 - EMOTE 事件新增 Socket 與 Bark 推送
@@ -108,7 +108,7 @@
 #### 支援的事件
 
 | 事件 | 類型 | 說明 |
-|------|------|------|
+| ------ | ------ | ------ |
 | 💬 一般聊天 | `textMessageEvent` | 即時聊天訊息，可翻譯與過濾 |
 | 💰 超級感謝 | `superChatEvent` | Super Chat 付費醒目訊息（含金額） |
 | 🖼️ 超級貼圖 | `superStickerEvent` | Super Sticker 付費貼圖（含金額） |
@@ -133,7 +133,7 @@
 新增了聊天室訊息翻譯功能
 如果語言不是中文會自動使用`env`裡的配置的翻譯API 進行翻譯
 暫時還提供設置 控制哪一種語言以外才翻譯
-不過你也可以透過更正**TranslateTest.js** 
+不過你也可以透過更正**TranslateTest.js**
 function isChinese() 的判斷條件 來更正那個你的母語
 
 未來版本 會去補充更正此環節 讓他可由手動配置 目前暫時未處理
@@ -213,7 +213,7 @@ GIFT_TRANSLATE_PREFILL_LIMIT=10
 **👉 如何取得 TIKTOK_COOKIES（方法A）：**
 
 | 方式 | 步驟 |
-|------|------|
+| ------ | ------ |
 | **DevTools Cookie 管理** | 在已登入的 TikTok 頁面按 `F12` → **Application** → 左側 **Cookies** → `tiktok.com` → 全選所有 Cookie 項目 → 複製 → 貼到 `TIKTOK_COOKIES=` |
 | **DevTools Network** | 在已登入的 TikTok 頁面按 `F12` → **Network** → 重新整理 → 點任意請求 → 在 **Request Headers** 找到 `Cookie:` 整段複製 |
 | **Console 快速複製** | 在已登入的 TikTok 頁面按 `F12` → **Console** → 輸入 `copy(document.cookie)` → 直接貼到 `TIKTOK_COOKIES=` |
@@ -280,7 +280,7 @@ Twitch 訂閱者**或主播本人**可在聊天室輸入 `G#Ad` 指令投放自�
 ### 存取控制
 
 | 身份 | 能否使用 |
-|------|---------|
+| ------ | --------- |
 | 主播本人（`chatterId === tuser`） | ✅ 自動通過 |
 | Twitch 訂閱者 | ✅ 透過 `apiClient.subscriptions.checkUserSubscription()` 驗證 |
 | 非訂閱者 | ❌ 拒絕，僅在 Server 日誌記錄 |
@@ -296,7 +296,7 @@ G#Ad <訊息> [tts] [icon=<網址>] [user=<名稱>] [interval=<分鐘>]
 ### 參數一覽
 
 | 參數 | 必填 | 範例 | 說明 |
-|------|------|------|------|
+| ------ | ------ | ------ | ------ |
 | `G#Ad` | ✅ | `G#Ad` | 指令前綴 |
 | `<訊息>` | ✅ | `歡迎來我的頻道` | 廣告文字，支援 emoji shortcode（如 `:heart:`）及圖片網址 |
 | `tts` | ❌ | `tts` | 啟用文字轉語音（文字會送至 TTS 引擎） |
@@ -358,7 +358,7 @@ G#Ad 快來參加抽獎！ tts icon=https://i.imgur.com/xyz.png user=抽獎活�
 ### 間隔行為
 
 | interval 值 | 結果 |
-|-------------|------|
+| ------------- | ------ |
 | 不設定 或 `interval=0` | **單次發送**，不重複 |
 | `interval=30` | 每 30 分鐘自動重複發送一次 |
 | `interval=5` | **強制調整為 15 分鐘**，並發送 Bark + 疊加層通知告知贊助者 |
@@ -372,7 +372,7 @@ G#Ad 快來參加抽獎！ tts icon=https://i.imgur.com/xyz.png user=抽獎活�
 管理頁面 `http://localhost:3332/sponsor` 提供三種審核模式：
 
 | 模式 | 說明 | 適用情境 |
-|------|------|---------|
+| ------ | ------ | --------- |
 | **不需審核** 🟢（預設） | 送出即顯示，立即啟動定時器 | 信任的訂閱者群 |
 | **過濾器自動審核** 🟡 | 跑 `processFilter()`，通過過濾器才顯示 | 有廣告帳號騷擾時 |
 | **手動審核** 🔴 | 標記為「待審核」，需管理員手動通過或拒絕 | 需要完全掌控廣告內容 |
@@ -394,7 +394,7 @@ G#Ad 快來參加抽獎！ tts icon=https://i.imgur.com/xyz.png user=抽獎活�
 ### 管理頁面功能 (`/sponsor`)
 
 | 功能 | 說明 |
-|------|------|
+| ------ | ------ |
 | 📋 廣告列表 | 依贊助者分組，顯示狀態、間隔、最後發送時間 |
 | ➕ 手動新增 | 直接從管理頁面建立贊助廣告（免透過聊天室指令） |
 | 📤 發送 | 手動觸發既有廣告立即送到疊加層；定時廣告會同步更新最後發送時間並重新排程 |
@@ -407,7 +407,7 @@ G#Ad 快來參加抽獎！ tts icon=https://i.imgur.com/xyz.png user=抽獎活�
 ### 管理 API
 
 | API | 方法 | 說明 |
-|-----|------|------|
+| ----- | ------ | ------ |
 | `/api/sponsor-ads` | `GET` | 讀取廣告設定與所有贊助者廣告 |
 | `/api/sponsor-ads/create` | `POST` | 建立或更新廣告 |
 | `/api/sponsor-ads/trigger` | `POST` | 手動觸發指定 `adId` 立即發送，並更新 `lastSentAt` |
@@ -422,7 +422,7 @@ G#Ad 快來參加抽獎！ tts icon=https://i.imgur.com/xyz.png user=抽獎活�
 ### Bark 通知行為
 
 | 事件 | 通知內容 | 附帶 icon |
-|------|---------|-----------|
+| ------ | --------- | ----------- |
 | 廣告建立（不需審核） | `📢 贊助廣告 (使用者名) — [單次/每N分鐘] 訊息` | 優先取 `:emoji:` shortcode → 訊息內圖片網址 → Twitch 頭貼 |
 | 廣告建立（手動審核） | `📋 贊助廣告待審核 (使用者名) — 訊息` + 管理頁面連結 | 同上 |
 | 廣告被過濾器阻擋 | `🚫 贊助廣告被阻擋 (使用者名) — 原因` | 同上 |
@@ -458,7 +458,7 @@ G#clip 這波操作太秀了
 ```
 
 | 項目 | 說明 |
-|------|------|
+| ------ | ------ |
 | 權限 | 主播本人、**訂閱者或追隨者**（非追隨者會被拒絕） |
 | 剪輯長度 | 60 秒（`createAfterDelay`） |
 | 回饋 | 建立成功後推送 `🎬 剪輯已建立：https://clips.twitch.tv/<id>` 到疊加層與 Bark；失敗則顯示錯誤原因 |
@@ -562,7 +562,7 @@ G#clip 這波操作太秀了
 ## 啟動服務
 
 平常使用 `npm start`；調整樣式與排版使用 `npm run dev`（先建置 CSS，再監看變更）。
-開啟 http://localhost:3332 ，Ctrl+C 結束。兩種模式使用同一設定與連接埠，不要同時啟動。
+開啟 `http://localhost:3332` ，Ctrl+C 結束。兩種模式使用同一設定與連接埠，不要同時啟動。
 完整模式差異、CSS 指令與故障排查見 [啟動與開發模式](Docs/STARTUP.md)。
 
 ## 服務器預設運行在 Port 3332，提供 HTTP 控制介面
@@ -706,7 +706,7 @@ YOUTUBE_API_KEY=你的API金鑰
 YOUTUBE_CHANNEL_ID=你的Youtube頻道名稱或ID
 ```
 
-### 快速啟動
+### 快速啟動 - 示例
 
 ```bash
 http://localhost:3332/open?youtubeUser=你的頻道名&isYoutube=1&isSocket=1&isBark=1
@@ -718,10 +718,10 @@ http://localhost:3332/open?youtubeUser=你的頻道名&isYoutube=1&isSocket=1&is
 http://localhost:3332/open?isYoutube=1&isSocket=1
 ```
 
-### 支援的事件
+### 支援的事件 - YouTube
 
 | 事件 | 類型 | 說明 |
-|------|------|------|
+| ------ | ------ | ------ |
 | 💬 一般聊天 | `ChatMessage` | 即時聊天訊息，可翻譯與過濾 |
 | 💰 超級感謝 | `SuperChat` | 付費醒目訊息（含金額） |
 | 🖼️ 超級貼圖 | `SuperSticker` | 付費貼圖（含金額） |
@@ -729,7 +729,7 @@ http://localhost:3332/open?isYoutube=1&isSocket=1
 | 🎁 贈禮會員 | `GiftMembership` | 收到贈送的會員 |
 | ⭐ 會員里程碑 | `MemberMilestone` | 會員達到里程碑 |
 
-### 注意事項
+### 注意事項 - YouTube
 
 - 使用 **YouTube Data API v3** 輪詢方式，非 WebSocket
 - 免費配額每日 10,000 單位，每次輪詢約花 5 單位
@@ -759,10 +759,10 @@ Kick 公開聊天室可直接透過 WebSocket 讀取，不需任何授權：
 http://localhost:3332/open?kickUser=你的頻道名&isKick=1&isSocket=1&isBark=1
 ```
 
-### 支援的事件
+### 支援的事件 - Kick
 
 | 事件 | 說明 |
-|------|------|
+| ------ | ------ |
 | `ChatMessage` | 即時聊天訊息 |
 | `Subscription` | 新訂閱 |
 | `GiftedSubscriptions` | 贈送訂閱 |
@@ -793,7 +793,7 @@ http://localhost:3332/open?kickUser=你的頻道名&isKick=1&isBark=1&isSocket=1
 http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickUser=你的Kick名&odyseeUser=你的Odysee名&youtubeUser=你的Youtube名&isTK=1&isTwitch=1&isKick=1&isOdysee=1&isYoutube=1
 ```
 
-### 注意事項
+### 注意事項 - Kick
 
 - Kick 公開聊天不需 OAuth，直接填入頻道名稱即可
 - OAuth 僅用於發送訊息等進階功能
@@ -809,8 +809,9 @@ http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickU
 修正後的完整套件請參閱 `Docs/kick-wss.zip`，解壓後可取代 `node_modules/kick-wss/`。
 
 修改內容：
+
 | 檔案 | 修改 |
-|------|------|
+| ------ | ------ |
 | `dist/WebSocketManager.js` | 支援 `channelId` 選項，省略 API 呼叫 |
 | `dist/WebSocketManager.js` | `_channelIdExplicit` 旗標正確判斷是否跳過 API |
 | `dist/MessageParser.js` | 移除 `LEGACY_EVENT_MAPPING` 錯誤的正規化 |
@@ -820,7 +821,7 @@ http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickU
 表情對應可於登入後開啟 `/emoji` 管理，支援圖片預覽、增加、修改與刪除；
 映射更新約 1 秒後套用至新訊息，不需重啟聊天。詳見 [表情映射與熱載入](Docs/EMOJI_MAP.md)。
 
-### 分支文件功能說明 
+### 分支文件功能說明
 
 - [主服務器的其他功能說明 Service.md](./Service.md)
 
@@ -901,7 +902,7 @@ http://localhost:3332/config
 
 現在已添加配置頁存取密碼 對應env的`CONFIG_KEY`進行密碼設置
 
-# Config Editor 認證流程
+## Config Editor 認證流程
 
 ## 入口
 
@@ -935,13 +936,12 @@ http://localhost:3332/config
 - Token 有效期為 **14 天**
 - 過期後需要重新登入
 - 使用者也可以手動點選「登出」來清除 Cookie
-- 
 
 ## 日誌與錯誤
 
 所有運行日誌會在瀏覽器根目錄 SSE 頁面即時顯示，也會輸出到控制台
 
-## 注意事項
+## 注意事項 - TTWChat
 
 1. 修改 .env 後，需要重新 /open 才能讓新設定生效
 2. 本服務建議保持內網或私人環境使用
@@ -986,7 +986,6 @@ git update-index --assume-unchanged <file>
 git update-index --no-assume-unchanged <file>
 ```
 
-
 ### 其他工具 **OtherTool**
 
 這個資料夾是之前做的一些小工具
@@ -1000,7 +999,6 @@ git update-index --no-assume-unchanged <file>
 `Gift.html` TaiwndCSS 商品卡排版設計嘗試
 
 `Mask.py` 一個讓你用來擋不想讓觀眾看到的東西 黑框框可視化視頻編輯器
-
 
 ### live_engine 使用方式
 
@@ -1016,14 +1014,9 @@ pip install PyQt6 PyOpenGL numpy pillow requests
 
 運行會在本地部署一個Socket Server PORT跟ReplyKIT項目是一樣的 在PORT `9322`
 
-
-
 ## 新更新 部分日誌會採用 `writeLog` 進行本地日誌紀錄
 
 有一些訊息為了方便調試 確認參數 所以特別寫進 `Main_Log.log` `TikTokRun.log`
-
-
-
 
 模組拆分與維護責任請參閱 [模組說明](Docs/MODULES.md)。
 

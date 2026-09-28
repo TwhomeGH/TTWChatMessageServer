@@ -3,7 +3,7 @@
 ## 文件導覽
 
 | 文件 | 適合誰 | 內容 |
-|------|--------|------|
+| ------ | -------- | ------ |
 | 本文件 | 開發者/維護者 | 套件結構、修改流程、架構演進、CDP 設計說明 |
 | `PATCHES.md` | 所有人 | 最小差異 patch 系統（patch 清單、套用/還原/產生方式） |
 | `TEST_FILES_REFERENCE.md` | 測試者/除錯 | 開發測試腳本的用途與使用方式 |
@@ -14,7 +14,7 @@
 
 ## 修補套件目錄結構
 
-```
+```text
 Docs/
 ├── patches/                    ← 最小差異 patch（依版本命名）
 │   ├── tiktok-live-connector/2.4.0.patch
@@ -28,7 +28,7 @@ Docs/
 
 ## 使用流程
 
-**編輯 node_modules → 產生 patch → 套用/驗證**
+### 編輯 node_modules → 產生 patch → 套用/驗證
 
 ```bash
 # 1. 編輯 node_modules/<套件>/ 內的檔案
@@ -69,7 +69,7 @@ npm install tiktok-live-connector@latest
 
 當前版本。雙層解析器：
 
-```
+```text
 fetchSignedWebSocketFromProvider(roomId)
   ├─ [主] local im/fetch/ + X-Bogus（由 directSign 產生）
   │    ├─ 成功 → 回傳 pushServer（正確區域端點）
@@ -92,15 +92,19 @@ fetchSignedWebSocketFromProvider(roomId)
 ## 開發歷程
 
 ### 階段一：Euler Stream 依賴（原始問題）
+
 tiktok-live-connector v2.4.0 依賴 `tiktok.eulerstream.com` 第三方付費簽名伺服器取得 WebSocket 端點。當 Euler Stream 回傳 500 時系統完全無法連線，且需要付費 API key。
 
 ### 階段二：X-Bogus 直接簽名
+
 建立 `direct-signer.mjs`，注入 TikTok 官方 webmssdk 到 Puppeteer，在本機產生 X-Bogus。用於 HTTP API 簽名（room/info 等），成功繞過 Euler Stream。
 
 ### 階段三：CDP WebSocket Proxy（備用探索）
+
 讓瀏覽器自己管理 WebSocket，Node.js 只做訊息轉發。後發現 TikTok 已將 WS 基礎設施從 `webcast-ws.tiktok.com` 遷移到 `im-ws-sg.tiktok.com/ws/v2` 改用 `access_key`，原生 library 不需簽名也能連部分區域，CDP proxy 降為備用。
 
 ### 階段四（當前）：Hybrid 雙層解析器
+
 local X-Bogus 簽名為主，403 時自動啟動 CDP 捕捉瀏覽器產生的真實 WS URL（含 X-Dynosaur / access_key），兼顧速度與相容性。
 
 ## 改動記錄

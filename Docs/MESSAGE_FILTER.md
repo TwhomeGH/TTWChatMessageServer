@@ -13,7 +13,7 @@
 ## 一、四種動作總覽
 
 | 動作 | 判斷方式 | 有狀態 | 用途 | 需要呼叫端配合 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `block` | 單筆 `test(value) => boolean` | 否 | 廣告帳號、無意義內容 | 否 |
 | `replace` | 單筆 `match` 取代成 `replacement` | 否 | 遮罩髒話、改寫廣告詞 | 否 |
 | `delete` | 單筆 `match` 刪除（＝取代成空字串） | 否 | 移除網址、特定字詞 | 否 |
@@ -118,7 +118,7 @@ addFilterRule({
 ### `similarity`：怎麼算「相似」
 
 | 值 | 比對方式 |
-|---|---|
+| --- | --- |
 | `off` | 不看內容，**純頻率**（同一人在窗內送太多就處置） |
 | `exact` | 原文完全相同 |
 | `normalized` | 先**去掉 emoji、變體選擇符、ZWJ、膚色修飾、標點、符號、空白**再轉小寫，然後算編輯距離 ≤ `distance` |
@@ -132,7 +132,8 @@ addFilterRule({
 假設 `max: 3`，同一人連續送 5 則相似訊息：
 
 **`drop`（丟棄）** — 超量的完全不顯示
-```
+
+```text
 😌😌😌😌😉
 😌😌😌😌😌
 😌😌😌😌
@@ -140,17 +141,20 @@ addFilterRule({
 ```
 
 **`marker`（改寫）** — 超量的整串取代成模板（原文要不要留由模板決定）
-```
+
+```text
 😌😌😌😌😉
 😌😌😌😌😌
 😌😌😌😌
 （×4）
 （×5）
 ```
+
 若 `marker: '{text}（×{n}）'` 則會變成 `😌😌😌😌😉（×4）`、`😌😌😌😌😌（×5）`。
 
 **`summarize`（摘要）** — 超量的不顯示，**爆量結束後**補一則摘要（最多延遲 5 秒）
-```
+
+```text
 😌😌😌😌😉
 😌😌😌😌😌
 😌😌😌😌
@@ -158,7 +162,7 @@ addFilterRule({
 😌😌😌😌😌 連續 2 則相似訊息（已省略）：😌😌😌😌😌
 ```
 
-### 範例
+### 範例 - 同一人 10 秒內第 4 則「正規化後相同」就丟掉
 
 ```js
 // 同一人 10 秒內第 4 則「正規化後相同」就丟掉
@@ -231,7 +235,7 @@ for (const summary of takeThrottleSummaries()) {
 - `msg:大量 emoji` — 連續 5 個以上 emoji（門檻可調）
 - `msg:廣告-補幣/按我頭像` — 補幣類廣告直接阻擋
 
-**其他**
+**其他** - 過濾規則
 
 - `user:刪除特殊符號`、`any:刪除控制字元`、`any:刪除過多空白`（delete/replace）
 - `msg:遮罩髒話`、`msg:刪除網址`、`msg:刪除色情詞彙`
@@ -271,7 +275,7 @@ export default [
 ## 六、匯出 API
 
 | 函數 | 說明 |
-|------|------|
+| ------ | ------ |
 | `addFilterRule(rule)` | 新增一條規則 |
 | `addFilterRules(rules)` | 批量新增 |
 | `processFilter({ user, message }, now?, state?)` | 完整處理，回傳 `{ user, message, blocked, reason, field, modified }` |
@@ -285,7 +289,7 @@ export default [
 ## 七、統計 API（訊息次數統計）
 
 | 函數 | 說明 |
-|------|------|
+| ------ | ------ |
 | `recordMessageStat(message)` | 累加一則訊息的出現次數 |
 | `getTopMessages(limit)` | 取得出現次數最高的前 N 筆（預設 10） |
 | `getAllMessageStatsSorted()` | 取得全部統計，依次數由高到低排序 |
@@ -301,7 +305,7 @@ export default [
 
 ## 八、過濾流程
 
-```
+```text
 收到訊息(user, message)
        ↓
 processFilter({ user, message })
@@ -324,7 +328,7 @@ processFilter({ user, message })
 ## 九、相關檔案
 
 | 檔案 | 角色 |
-|---|---|
+| --- | --- |
 | `MessageFilter.js` | 規則引擎與統計 |
 | `FilterRules.custom.js` | 使用者自訂規則（不進版控，首次從範本複製） |
 | `FilterRules.custom.example.js` | 自訂規則範本 |

@@ -3,7 +3,7 @@
 ## 文件導覽
 
 | 文件 | 適合誰 | 內容 |
-|------|--------|------|
+| ------ | -------- | ------ |
 | 本文件 | 開發者/維護者 | CodeQL 告警清單、修復方式、哪些是誤報/無法修 |
 | `SIGN_SERVER_CHANGELOG.md` | 開發者/維護者 | 簽名伺服器套件結構與架構演進 |
 
@@ -68,14 +68,14 @@ def _build_emoji_pattern() -> str:
 驗證結果：
 
 | 輸入 | 輸出 |
-|------|------|
+| ------ | ------ |
 | `hi 😀` | `hi` |
 | `test☀more` | `testmore` |
 | `a❤b` | `ab` |
 | `🧠 test` | `test` |
-| `→ arrow` | `→ arrow`（保留）|
-| `price £ 5` | `price £ 5`（保留）|
-| `✓ check` | `✓ check`（保留）|
+| `→ arrow` | `→ arrow`（保留） |
+| `price £ 5` | `price £ 5`（保留） |
+| `✓ check` | `✓ check`（保留） |
 
 14 個 `test_speech_filter.py` 測試全數通過。
 
@@ -174,7 +174,7 @@ grep `require('update')` 無任何命中（搜到的都是 `updateEnv`、`update
 **修復**：`npm uninstall update` 一次移除，7 個漏洞套件全部消失：
 
 | 套件 | 嚴重度 | 漏洞 |
-|------|--------|------|
+| ------ | -------- | ------ |
 | set-value | Critical / High | Prototype Pollution |
 | defaults-deep | Critical | Prototype Pollution |
 | parse-git-config | High | Prototype Pollution |
@@ -208,7 +208,7 @@ kick-wss、protobufjs、franc、@twurple/api、puppeteer-extra-plugin-stealth）
 
 新增 advanced CodeQL workflow 並在 config 排除無法修改的檔案：
 
-```
+```text
 .github/
 ├── codeql/
 │   └── config.yml                ← paths-ignore 排除 webmssdk / xgnarly
@@ -233,7 +233,7 @@ paths-ignore:
 ## 總結
 
 | Alert | 嚴重度 | 性質 | 處理 |
-|-------|--------|------|------|
+| ------- | -------- | ------ | ------ |
 | #30 | High | 真實 XSS | 改 DOM API |
 | #19/#20 | Medium | 過度寬鬆正則 | 收窄 emoji 範圍 |
 | #1 | Medium | 綁定所有介面 | 改可設定 host |

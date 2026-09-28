@@ -6,7 +6,7 @@ Node.js 核心近年持續吸收第三方套件的主流功能，導致 `dotenv`
 「過去幾乎必裝」的套件，在 Node 20+ 的環境下變成可有可無：
 
 | 套件 | 用途 | Node 原生替代 | 進入核心的版本 |
-|------|------|---------------|----------------|
+| ------ | ------ | --------------- | ---------------- |
 | `dotenv` | 讀取 `.env` 檔案注入 `process.env` | `process.loadEnvFile()` | Node 20.6+ |
 | `axios` | HTTP client | `fetch()` | Node 18+ |
 
@@ -95,7 +95,7 @@ Node 18+ 的 `fetch()` 理論上可取代所有 axios 用法，但現階段 **�
 ### 差異與保留理由
 
 | 面向 | axios | 原生 `fetch()` |
-|------|-------|----------------|
+| ------ | ------- | ---------------- |
 | 請求逾時 | `{ timeout: 10000 }` 一行搞定 | 需自行 `AbortController` + `AbortSignal.timeout()` |
 | 查詢參數 | `params: {...}` 自動序列化 | 需自行 `URLSearchParams` |
 | 回應資料 | `resp.data` | 需自行 `await resp.json()` |
@@ -135,6 +135,6 @@ const text = data?.responseData?.translatedText;
 ## 參考
 
 - Node.js `process.loadEnvFile` 文件：
-  https://nodejs.org/api/process.html#processloadenvfilepath
+  [process.loadEnvFile 文件](https://nodejs.org/api/process.html#processloadenvfilepath)
 - Node.js 原生 `fetch`（undici）：
-  https://nodejs.org/api/globals.html#fetch
+  [https://nodejs.org/api/globals.html#fetch](https://nodejs.org/api/globals.html#fetch)

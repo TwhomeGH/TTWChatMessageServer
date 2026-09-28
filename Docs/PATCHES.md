@@ -5,7 +5,7 @@
 
 ## 目錄結構
 
-```
+```text
 Docs/
 ├── patches/
 │   ├── tiktok-live-connector/
@@ -27,7 +27,7 @@ node Docs/apply-patches.mjs --revert   # 還原為原廠
 ## 目前修補內容
 
 | 套件 | 版本 | 檔案 | 內容 |
-|------|------|------|------|
+| ------ | ------ | ------ | ------ |
 | `tiktok-live-connector` | 2.4.0 | `dist/lib-YL2P_UWg.js` | ① WebSocket `unexpected-response` 除錯 log（印出 HTTP status/body）② 將 `sessionId`/`ttTargetIdc` 帶入 Euler `fetchWebcastURL` 呼叫 |
 | `kick-wss` | 1.0.5 | `dist/MessageParser.js`、`dist/WebSocketManager.js`、`dist/types.d.ts` | 保留 Pusher `sender` 原始欄位（`...data.sender`）、可由外部指定 `channelId`、型別補充 |
 
@@ -54,12 +54,15 @@ node Docs/apply-patches.mjs --revert   # 還原為原廠
 1. 安裝對應版本：`npm install <套件>@<版本>`
 2. 直接編輯 `node_modules/<套件>/` 內的檔案
 3. 重新產生 patch：
+
    ```bash
    node Docs/make-patches.mjs
    ```
+
    腳本會從 npm 下載原廠 tarball，與 `node_modules` 內容做 diff，寫入
    `Docs/patches/<套件>/<版本>.patch`。
 4. 驗證：
+
    ```bash
    node Docs/apply-patches.mjs --check
    ```
