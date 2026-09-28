@@ -98,7 +98,7 @@ process.loadEnvFile(".env"); // 讀取 .env
 
 let tiktokProcess = null;
 const { RuntimeState } = require('./ScriptLib/runtime/state.cjs');
-const runtimeState = new RuntimeState();
+const runtimeState = new RuntimeState(Date.now, { stopTimeoutMs: 15000, logger: (...parts) => pushLog('[RUNTIME]', ...parts) });
 const { sendRuntimePage, serveRuntime } = require('./RuntimeRoutes.cjs');
 
 let logs = [];
@@ -580,7 +580,12 @@ const server = http.createServer((req, res) => {
     // /close
     // =======================
     else if (req.url === '/close') {
-        runtimeState.stop(tiktokProcess);
+        if (tiktokProcess) {
+            pushLog(`[SYSTEM] 停止要求：PID=${runtimeState.data.pid ?? '?'}，逾時 ${runtimeState.stopTimeoutMs}ms 後強制終止`);
+            runtimeState.stop(tiktokProcess);
+        } else {
+            pushLog('[SYSTEM] 停止要求：目前沒有執行中的程序');
+        }
         sendRuntimePage(res);
     }
 

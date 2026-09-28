@@ -480,35 +480,68 @@ function alreadySent(uniqueKey) {
 
 var isEnd=false
 
-async function handleExit() {
-    console.log("⏹️ 程式結束，儲存 send_messages...");
-    
-    clearInterval(twitchViewCache)
+const EXIT_TIMEOUT_MS = 8000;
 
-    isEnd=true
+async function handleExit() {
+    console.log("⏹️ 程式結束，開始收尾...");
+
+    // 收尾若卡住（網路 / Puppeteer），必須有硬性上限，否則行程永遠不退出，
+    // 主程式會一直停在 stopping 且之後無法重新啟動。
+    const forceTimer = setTimeout(() => {
+        console.error(`⏹️ 收尾逾時（${EXIT_TIMEOUT_MS}ms），強制退出`);
+        process.exit(0);
+    }, EXIT_TIMEOUT_MS);
+    forceTimer.unref?.();
+
+    isEnd = true;
+
+    clearInterval(twitchViewCache);
 
     if (tkReconnectTimer) { clearTimeout(tkReconnectTimer); tkReconnectTimer = null; }
     if (viewCacheInterval) { clearInterval(viewCacheInterval); viewCacheInterval = null; }
+    console.log("⏹️ 已停止重連／計時器");
 
     sendBarkNotification("系統通知", "TTW Chat Message Server 已關閉", "");
-    
-    await socketTransport.close({
-        type: 'StreamMessage', user: '系統', message: 'TTW Chat Message Server 已關閉',
-        img: '', giftImg: '', isMain: false
-    });
+
+    try {
+        await socketTransport.close({
+            type: 'StreamMessage', user: '系統', message: 'TTW Chat Message Server 已關閉',
+            img: '', giftImg: '', isMain: false
+        });
+        console.log("⏹️ Socket 已關閉");
+    } catch (err) {
+        console.error("⏹️ Socket 關閉失敗（仍繼續退出）:", err?.message || err);
+    }
 
     clearAllAdTimers();
     saveSponsorAds();
 
-    await saveSentMessages();
-    await closeDirectSigner();
+    try {
+        await saveSentMessages();
+        console.log("⏹️ send_messages 已儲存");
+    } catch (err) {
+        console.error("⏹️ 儲存 send_messages 失敗（仍繼續退出）:", err?.message || err);
+    }
 
-    // 統計統一由 Server.js 管理：此處把最終快照回傳，讓 Server.js 合併進它自己的統計
-    const allStats = getAllMessageStatsSorted();
-    process.stdout.write(JSON.stringify({ type: "all", data: allStats }) + '\n', () => {
-        console.log("✅ 優雅退出完成");
+    try {
+        await closeDirectSigner();
+        console.log("⏹️ direct signer 已關閉");
+    } catch (err) {
+        console.error("⏹️ 關閉 direct signer 失敗（仍繼續退出）:", err?.message || err);
+    }
+
+    // 統計統一由 Server.js 管理：此處把最終快照回傳，讓 Server.js 合併進它自己的統計。
+    // 若 stdout 一直不排空，交由 forceTimer 收尾。
+    try {
+        const allStats = getAllMessageStatsSorted();
+        process.stdout.write(JSON.stringify({ type: "all", data: allStats }) + '\n', () => {
+            console.log("✅ 優雅退出完成");
+            process.exit(0);
+        });
+    } catch (err) {
+        console.error("⏹️ 輸出最終統計失敗，強制退出:", err?.message || err);
         process.exit(0);
-    });
+    }
 }
 
 process.on('unhandledRejection', (reason) => {

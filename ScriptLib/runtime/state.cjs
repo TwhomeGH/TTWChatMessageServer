@@ -1,9 +1,15 @@
 /** 子程序生命週期快照；不將 spawn 成功誤認為平台登入或收訊成功。 */
 class RuntimeState {
-    constructor(now = Date.now) {
+    constructor(now = Date.now, options = {}) {
         this.now = now;
+        this.stopTimeoutMs = options.stopTimeoutMs ?? 15000;
+        this.logger = options.logger || null;
+        this._stopTimer = null;
         this.child = null;
         this.data = { state: 'stopped', pid: null, startedAt: null, stoppedAt: null, stopRequestedAt: null, exitCode: null, signal: null, error: null, platforms: [] };
+    }
+    _log(...parts) {
+        if (this.logger) this.logger(...parts);
     }
     /** 綁定本次程序，過去程序的遲到事件不可覆寫新狀態。 */
     attach(child, platforms = []) {
@@ -23,17 +29,49 @@ class RuntimeState {
         });
         child.once('error', error => {
             if (this.child !== child) return;
+            this.clearStopTimer();
             this.data.error = error.code || 'PROCESS_ERROR';
             this.data.state = 'failed';
             this.data.stoppedAt = this.now();
         });
         child.once('exit', (code, signal) => {
             if (this.child !== child) return;
+            this.clearStopTimer();
             const expected = this.data.state === 'stopping';
             this.data.state = this.data.error || (!expected && (code !== 0 || signal)) ? 'failed' : 'stopped';
             Object.assign(this.data, { pid: null, stoppedAt: this.now(), exitCode: code, signal });
             this.child = null;
         });
+    }
+    clearStopTimer() {
+        if (this._stopTimer) {
+            clearTimeout(this._stopTimer);
+            this._stopTimer = null;
+        }
+    }
+    /**
+     * 逾時強制終止：EXIT 只是請求，若子程序卡在收尾（網路／Puppeteer），
+     * 就必須在 stopTimeoutMs 後 SIGKILL，否則永遠停在 stopping 且無法重啟。
+     */
+    _armStopTimer(child) {
+        this.clearStopTimer();
+        if (!this.stopTimeoutMs) return;
+        this._stopTimer = setTimeout(() => {
+            this._stopTimer = null;
+            if (this.child !== child) return;
+            this._log(`[RUNTIME] 停止逾時 ${this.stopTimeoutMs}ms，強制終止 PID=${child.pid}`);
+            let killed = false;
+            try {
+                killed = child.kill('SIGKILL');
+            } catch (error) {
+                this._log('[RUNTIME] 強制終止失敗:', error.code || error.message);
+            }
+            if (!killed && this.child === child) {
+                this.data.error = 'STOP_KILL_FAILED';
+                this.data.state = 'failed';
+            }
+        }, this.stopTimeoutMs);
+        if (typeof this._stopTimer.unref === 'function') this._stopTimer.unref();
     }
     /** 重複停止不重送 EXIT；寫入失敗仍保留實際程序狀態。 */
     stop(child) {
@@ -43,12 +81,17 @@ class RuntimeState {
         this.data.stopRequestedAt = this.now();
         const failed = error => {
             if (error && this.child === child) {
+                this.clearStopTimer();
                 this.data.state = previous;
                 this.data.error = error.code || 'STOP_WRITE_FAILED';
                 this.data.stopRequestedAt = null;
             }
         };
-        try { child.stdin.write('EXIT\n', failed); } catch (error) { failed(error); }
+        const written = error => {
+            if (error) return failed(error);
+            this._armStopTimer(child);
+        };
+        try { child.stdin.write('EXIT\n', written); } catch (error) { failed(error); }
     }
     snapshot() {
         return { ...this.data, resources: this.child && ['running', 'stopping'].includes(this.data.state) && this.resources && this.now() - this.resources.sampledAt <= 10000 ? { ...this.resources } : null, platforms: [...this.data.platforms],
