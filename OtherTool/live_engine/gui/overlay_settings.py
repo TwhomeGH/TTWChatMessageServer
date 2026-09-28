@@ -21,21 +21,34 @@ CONFIG_PATH = os.path.join(_CONFIG_DIR, "overlay_settings.json")
 EXAMPLE_PATH = os.path.join(_CONFIG_DIR, "overlay_settings.example.json")
 
 
+# 預設值的唯一來源；load 與 save 共用，避免兩份字典各自漂移。
+DEFAULT_OVERLAY_CONFIG = {
+    "width": 420, "height": 400, "x": -1, "y": 50,
+    "font_face": "Microsoft JhengHei", "font_size": 15,
+    "spacing": 8, "content_gap": 2, "message_ttl": 15, "fade_speed": 2,
+    "ad_overlay_duration": 10, "ad_overlay_font_size": 16,
+    "ad_avatar_size": 40, "ad_show_avatar": True, "ad_avatar_offset": 3,
+    "ad_bg_color": "#1E1E2E", "ad_accent_color": "#4C9EFF",
+    "ad_user_color": "#8AB4FF", "ad_text_color": "#FFFFFF", "ad_bg_opacity": 88,
+    "hotkey": "Ctrl+Alt+F9", "auto_hide_on_anticheat": False,
+}
+
+
 def load_overlay_config() -> dict:
-    defaults = {"width": 420, "height": 400, "x": -1, "y": 50, "font_face": "Microsoft JhengHei", "font_size": 15, "spacing": 8, "content_gap": 2, "message_ttl": 15, "fade_speed": 2, "ad_overlay_duration": 10, "ad_overlay_font_size": 16, "ad_avatar_size": 40, "ad_show_avatar": True, "ad_avatar_offset": 3, "ad_bg_color": "#1E1E2E", "ad_accent_color": "#4C9EFF", "ad_user_color": "#8AB4FF", "ad_text_color": "#FFFFFF", "ad_bg_opacity": 88, "hotkey": "Ctrl+Alt+F9", "auto_hide_on_anticheat": False}
-    # 依序套用範本與實際設定：example 提供預設，overlay_settings.json 覆蓋。
+    # 依序套用範本與實際設定：example 可覆寫預設，overlay_settings.json 再覆寫。
+    merged = dict(DEFAULT_OVERLAY_CONFIG)
     for path in (EXAMPLE_PATH, CONFIG_PATH):
         try:
             if os.path.exists(path):
                 with open(path, "r", encoding="utf-8") as f:
-                    defaults.update(json.load(f))
+                    merged.update(json.load(f))
         except Exception:
             pass
-    return defaults
+    return merged
 
 
 def save_overlay_config(data: dict):
-    merged = {"width": 420, "height": 400, "x": -1, "y": 50, "font_face": "Microsoft JhengHei", "font_size": 15, "spacing": 8, "content_gap": 2, "message_ttl": 15, "fade_speed": 2, "ad_overlay_duration": 10, "ad_overlay_font_size": 16, "ad_avatar_size": 40, "ad_show_avatar": True, "ad_avatar_offset": 3, "ad_bg_color": "#1E1E2E", "ad_accent_color": "#4C9EFF", "ad_user_color": "#8AB4FF", "ad_text_color": "#FFFFFF", "ad_bg_opacity": 88, "hotkey": "Ctrl+Alt+F9", "auto_hide_on_anticheat": False}
+    merged = dict(DEFAULT_OVERLAY_CONFIG)
     merged.update(data)
     os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
@@ -352,6 +365,12 @@ class OverlaySettingsWindow(QWidget):
         self._drag_cb = QCheckBox("啟用拖曳調整位置（關閉點擊穿透）")
         self._drag_cb.stateChanged.connect(self._on_drag_toggled)
         layout.addWidget(self._drag_cb)
+        self._drag_warning = QLabel("請勿在遊戲運行中移動視窗；偵測到已知遊戲／反作弊時會停止拖曳。")
+        self._drag_warning.setWordWrap(True)
+        self._drag_warning.setStyleSheet("color: #ff6666; font-size: 11px;")
+        layout.addWidget(self._drag_warning)
+        if self._overlay:
+            self._overlay.drag_mode_changed.connect(self._sync_drag_state)
 
         self._pos_label = QLabel("尚未設定位置")
         self._pos_label.setStyleSheet("color: gray;")
@@ -683,18 +702,20 @@ class OverlaySettingsWindow(QWidget):
             pos = self._overlay.pos()
             self._update_pos_label(pos.x(), pos.y())
 
-    def toggle_drag_mode(self, enabled: bool):
-        if not self._overlay:
-            return
+    def _sync_drag_state(self, enabled, reason=""):
         self._drag_cb.blockSignals(True)
         self._drag_cb.setChecked(enabled)
         self._drag_cb.blockSignals(False)
+        self._drag_warning.setText(reason or "請勿在遊戲運行中移動視窗；偵測到已知遊戲／反作弊時會停止拖曳。")
+
+    def toggle_drag_mode(self, enabled: bool):
+        if not self._overlay:
+            self._sync_drag_state(False, "疊層尚未連接，無法調整位置")
+            return
         if enabled:
             self._overlay.start_drag_mode()
-            log("Drag mode enabled via overlay settings")
         else:
             self._overlay.stop_drag_mode()
-            log("Drag mode disabled via overlay settings")
 
     def _save_current_position(self):
         if self._overlay:

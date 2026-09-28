@@ -4,6 +4,7 @@ from core.scene import ChatNode
 from core.ad_overlay import AdOverlayNode
 from core.tts import tts_service
 from core.emoji_parser import strip_image_urls
+from core.debug_log import log_error
 
 from PyQt6.QtGui import QColor
 from renderer.font_system import FontSystem
@@ -157,6 +158,8 @@ class Engine:
                     self._manual_control = False
                 elif event == "disconnected" and not self._manual_control:
                     self.stop_timer()
+                elif event == "socket_error":
+                    log_error(f"Socket server 無法啟動：{data.get('message', '未知錯誤')}")
                 continue
 
             if data.get("type") == "AdOverlay":

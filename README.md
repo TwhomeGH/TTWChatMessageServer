@@ -156,7 +156,7 @@ npm install
 執行期資料檔（`gift_map.json`、`gift_list.json`、`message_stats.json`、`autoclip_stats.json`、
 `send_messages.json`、`Main_Log.log`、`TikTokRun.log`、`OtherTool/live_engine/config/overlay_settings.json` 等）
 不納入版控，repo 內改以對應的 `*.example.json` 提供樣本。首次啟動時，缺少的 `gift_map.json`
-會由 `gift_map.example.json` 初始化，`overlay_settings.json` 的預設值也以範本為準，其餘檔案會自動建立。
+會由 `gift_map.example.json` 初始化，`overlay_settings.json` 的預設值也以 `overlay_settings.example.json` 為準（程式預設值的單一來源是 `live_engine/gui/overlay_settings.py` 的 `DEFAULT_OVERLAY_CONFIG`，範本與它一致），其餘檔案會自動建立。
 
 ### 2. 建立 .env 檔案
 
@@ -646,7 +646,7 @@ http://localhost:3332/open?kickUser=你的頻道名&isKick=1&isBark=1
 http://localhost:3332/close
 ```
 
-會嘗試優雅關閉子進程，並發送最後一條訊息。
+會嘗試優雅關閉子進程並發送最後一條訊息；若 15 秒未退出則強制終止（SIGKILL），子程序本身也在 8 秒後硬性退出，避免卡在停止中無法重啟。
 
 ## Odysee 聊天室整合
 
@@ -997,9 +997,7 @@ git update-index --no-assume-unchanged <file>
 pip install PyQt6 PyOpenGL numpy pillow requests
 ```
 
-疊加層配置 請從`live_engine/config.py` 處理
-
-寬高配置在這裡設置
+疊加層配置的預設值單一來源是 `live_engine/gui/overlay_settings.py` 的 `DEFAULT_OVERLAY_CONFIG`（`config/overlay_settings.example.json` 與它一致）；視窗起始寬高仍沿用 `config.py` 的 `WIDTH`/`HEIGHT`。
 
 運行請先進入 live_engine目錄下 在運行 `main.py`
 

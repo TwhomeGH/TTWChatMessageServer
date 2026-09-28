@@ -24,6 +24,15 @@
 Node.js `[Socket]` 日誌每 10 秒最多回報一次佇列筆數、位元組、淘汰數與重連數。
 淘汰數包含被更新狀態取代的資料。Python 佇列滿載日誌同樣節流。
 
+## Python 接收端（live_engine）
+
+`OtherTool/live_engine/network/socket_server.py` 是接收端，負責傾聽並把訊息交給疊加層：
+
+- 綁定使用 `SO_REUSEADDR`，方便重啟後快速重綁；若埠被佔用則寫入錯誤日誌、送出 `SystemEvent` `socket_error`（引擎會記錄），並每 5 秒重試，不會靜默失效。
+- 每 20 秒主動送出 `{"type":"keepalive"}`；Node 端 `SocketTransport` 收到後回覆 `heartbeat`。超過 60 秒未收到任何資料的連線會被主動關閉，避免半開連線讓連線計數與計時器卡住。
+- 同時最多接受 8 條連線，超出者直接拒絕並記錄；連線進出（含 peer 位址）都會寫入日誌。
+- 接收執行緒只將訊息放入上限 200 筆的佇列（滿載淘汰最舊），畫面更新端每幀最多處理 20 筆或約 4ms。
+
 ## 驗證
 
 ```sh
