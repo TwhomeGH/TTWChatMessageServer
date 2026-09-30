@@ -11,7 +11,12 @@ class RuntimeState {
     _log(...parts) {
         if (this.logger) this.logger(...parts);
     }
-    /** 綁定本次程序，過去程序的遲到事件不可覆寫新狀態。 */
+    /**
+     * 綁定本次子程序；過去程序的遲到事件不會覆寫新狀態。
+     * @param {import('node:child_process').ChildProcess} child
+     * @param {string[]} [platforms=[]] 本次啟用的平台。
+     * @returns {void}
+     */
     attach(child, platforms = []) {
         this.child = child;
         this.resources = null;
@@ -73,7 +78,11 @@ class RuntimeState {
         }, this.stopTimeoutMs);
         if (typeof this._stopTimer.unref === 'function') this._stopTimer.unref();
     }
-    /** 重複停止不重送 EXIT；寫入失敗仍保留實際程序狀態。 */
+    /**
+     * 送出 EXIT 請求停止子程序（重複呼叫不重送）；寫入失敗仍保留實際程序狀態。
+     * @param {import('node:child_process').ChildProcess} child
+     * @returns {void}
+     */
     stop(child) {
         if (!child || this.data.state === 'stopping') return;
         const previous = this.data.state;
@@ -93,6 +102,10 @@ class RuntimeState {
         };
         try { child.stdin.write('EXIT\n', written); } catch (error) { failed(error); }
     }
+    /**
+     * 取得目前狀態快照（含資源取樣、uptime 與停止延遲標記）。
+     * @returns {Object}
+     */
     snapshot() {
         return { ...this.data, resources: this.child && ['running', 'stopping'].includes(this.data.state) && this.resources && this.now() - this.resources.sampledAt <= 10000 ? { ...this.resources } : null, platforms: [...this.data.platforms],
             uptimeMs: this.data.startedAt === null ? 0 : Math.max(0, (this.data.stoppedAt ?? this.now()) - this.data.startedAt),

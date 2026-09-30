@@ -32,6 +32,9 @@ const SESSION_METRIC_COLUMNS = ['diamonds', 'gifters', 'newFollowers', 'likes', 
  * 每筆事件、分鐘彙總與場次更新都在同一個交易內提交，失敗整筆回滾。
  */
 class TrafficDatabase {
+    /**
+     * @param {string} filename SQLite 檔案路徑；傳 ':memory:' 建立記憶體資料庫。
+     */
     constructor(filename) {
         if (filename !== ':memory:') fs.mkdirSync(path.dirname(filename), { recursive: true });
         this.db = new DatabaseSync(filename);

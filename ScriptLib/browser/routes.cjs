@@ -2,7 +2,11 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { readJson, sendJson } = require('../emoji/http.cjs');
 
-/** 沿用主服務登入；寫入還須來自相同 Origin，避免跨站啟動瀏覽器。 */
+/**
+ * 建立瀏覽器管理頁與 API 的路由處理器；沿用主服務登入，寫入還須來自相同 Origin。
+ * @param {{status: Function, start: Function, show: Function}} controller
+ * @returns {(req: Object, res: Object, authorized?: boolean) => Promise<void>}
+ */
 function createHandler(controller) {
     return async (req, res, authorized = false) => {
         const pathname = req.url.split('?')[0];

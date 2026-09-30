@@ -32,7 +32,13 @@ function launchArgs(config) {
     ];
 }
 
-/** 對本機 CDP 的每個操作都有期限；錯誤不包含 Cookie 或完整頁面 URL。 */
+/**
+ * 建立對本機 CDP 的操作封裝（status／start／show）；每個操作都有逾時，
+ * 且錯誤訊息不含 Cookie 或完整頁面 URL。
+ * @param {ReturnType<typeof browserConfig>} [config] 由 browserConfig() 產生。
+ * @param {Object} [deps] 測試用注入（fetch、spawn、findBrowser、connect）。
+ * @returns {{status: Function, start: Function, show: Function}}
+ */
 function createController(config = browserConfig(), deps = {}) {
     const request = deps.fetch || fetch;
     const spawnBrowser = deps.spawn || spawn;

@@ -1,12 +1,26 @@
 import net from 'node:net';
 
 // Newline-delimited JSON. Decode only complete frames so UTF-8 may span chunks.
+/**
+ * 將 newline-delimited JSON 的位元組流解析成物件；不足一行的部分保留到後續 chunk，
+ * 因此可正確處理跨 chunk 的 UTF-8 多位元組字元。
+ */
 export class JsonLineReader {
+    /**
+     * @param {(value: Object) => void} onMessage 每解析出一則完整 JSON 物件時呼叫。
+     * @param {number} [maxBytes=262144] 單一 frame 上限，超過即丟出錯誤。
+     */
     constructor(onMessage, maxBytes = 256 * 1024) {
         this.onMessage = onMessage;
         this.maxBytes = maxBytes;
         this.buffer = Buffer.alloc(0);
     }
+    /**
+     * 餵入一段位元組；不足一行的部分會保留到後續呼叫。
+     * @param {Buffer} chunk
+     * @returns {void}
+     * @throws {Error} frame 超過 maxBytes 時
+     */
     push(chunk) {
         let start = 0;
         while (start < chunk.length) {
@@ -27,7 +41,24 @@ export class JsonLineReader {
     }
 }
 
+/**
+ * 具背壓與有界佇列的 newline-delimited JSON TCP 傳輸層，內建重連、TTL 與停滯逾時。
+ */
 export class SocketTransport {
+    /**
+     * @param {Object} options
+     * @param {string} options.host
+     * @param {number} options.port
+     * @param {boolean} [options.enabled=true]
+     * @param {() => void} [options.onConnect=()=>{}]
+     * @param {() => Object} [options.socketFactory] 建立 socket（預設 net.Socket）。
+     * @param {number} [options.maxPending=200] 佇列筆數上限。
+     * @param {number} [options.maxBytes=1048576] 佇列位元組上限。
+     * @param {number} [options.ttl=30000] 佇列項目存活時間（ms）。
+     * @param {number} [options.stallMs=15000] 連線／write 停滯逾時（ms）。
+     * @param {number} [options.retryMs=15000] 重連基礎間隔（ms）。
+     * @param {Console} [options.logger=console]
+     */
     constructor({ host, port, enabled = true, onConnect = () => {},
         socketFactory = () => new net.Socket(), maxPending = 200,
         maxBytes = 1024 * 1024, ttl = 30000, stallMs = 15000,
@@ -52,6 +83,12 @@ export class SocketTransport {
         this.lastLog = Date.now();
         this.logger.warn(`[Socket] queued=${this.queue.length} bytes=${this.bytes} dropped=${this.stats.dropped} reconnects=${this.stats.reconnects}`);
     }
+    /**
+     * 排入一則訊息；回傳 false 表示未啟用／已停止／單筆過大而被丟棄。
+     * `audience` 與 `heartbeat` 會取代佇列中同型別項目，只保留最新。
+     * @param {Object} payload
+     * @returns {boolean}
+     */
     send(payload) {
         if (!this.enabled || this.stopped) return false;
         const line = JSON.stringify(payload) + '\n';
@@ -93,6 +130,10 @@ export class SocketTransport {
             }
         }
     }
+    /**
+     * 建立連線；未啟用、已停止或已有連線時不做事。
+     * @returns {void}
+     */
     connect() {
         if (!this.enabled || this.stopped || (this.socket && !this.socket.destroyed)) return;
         clearTimeout(this.retryTimer);
@@ -140,6 +181,12 @@ export class SocketTransport {
         });
         socket.connect(this.port, this.host);
     }
+    /**
+     * 送出可選的最終訊息、排空佇列後關閉連線；受 timeoutMs 上限保護，不會永遠等待。
+     * @param {Object} [finalPayload]
+     * @param {number} [timeoutMs=2000]
+     * @returns {Promise<void>}
+     */
     async close(finalPayload, timeoutMs = 2000) {
         if (finalPayload && this.connected) this.send(finalPayload);
         this.stopped = true;

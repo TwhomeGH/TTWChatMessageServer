@@ -27,6 +27,10 @@ function bucketSize(rangeMs) {
  * 觀看取樣會一併帶上平台串流 ID，讓場次識別在平台有 ID 時跨重啟仍可靠。
  */
 class TrafficStore {
+    /**
+     * @param {() => number} [now=Date.now] 取時間的函式（方便測試）。
+     * @param {import('./database.cjs').TrafficDatabase|null} [database=null] 持久層；null 時僅用記憶體。
+     */
     constructor(now = Date.now, database = null) {
         this.now = now;
         this.startedAt = now();
