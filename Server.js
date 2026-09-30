@@ -962,8 +962,9 @@ const server = http.createServer((req, res) => {
                         cacheAutoClipStats = { config: data.config || {}, stats: data.stats || [] };
                     }
                 }
-            } catch {
+            } catch (err) {
                 // 檔案不存在或損壞就維持空
+                console.warn('讀取 AutoClip 統計失敗，維持空:', err?.message || err);
             }
         }
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });

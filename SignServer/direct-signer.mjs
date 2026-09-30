@@ -198,14 +198,14 @@ export async function signWebSocketForUser(username, timeoutMs = 20000) {
     console.log(`[DirectSigner] Navigating to ${username}'s LIVE page for WS URL capture...`);
 
     if (wsPage && !wsPage.isClosed()) {
-        try { await wsPage.close(); } catch { /* 忽略 */ }
+        try { await wsPage.close(); } catch (err) { console.warn('[DirectSigner] 關閉 wsPage 失敗:', err?.message || err); }
     }
     wsPage = await session.newPage();
 
     await setTikTokCookies(wsPage);
 
     const sdk513 = fs.readFileSync(path.join(SDK_DIR, 'webmssdk_5.1.3.js'), 'utf-8');
-    await wsPage.evaluateOnNewDocument((code) => { try { eval(code); } catch { /* 忽略 */ } }, sdk513);
+    await wsPage.evaluateOnNewDocument((code) => { try { eval(code); } catch (err) { console.error('[DirectSigner] 載入 SDK 失敗:', err); } }, sdk513);
 
     await wsPage.evaluateOnNewDocument(() => {
         window.__capturedWsUrls = [];
@@ -301,7 +301,7 @@ export async function signWebSocketForUser(username, timeoutMs = 20000) {
     console.log(`[DirectSigner] Captured WS URL - pushServer: ${capturedPushServer}`);
     // 不把簽名查詢參數或登入資料寫入日誌。
 
-    try { await wsPage.close(); } catch { /* 忽略 */ }
+    try { await wsPage.close(); } catch (err) { console.warn('[DirectSigner] 關閉 wsPage 失敗:', err?.message || err); }
 
     return {
         pushServer: capturedPushServer,
@@ -318,7 +318,7 @@ export function isLiveWsReady() {
 export async function initLivePage(username, timeoutMs = 20000) {
     if (!browser) throw new Error('Signer not initialized');
     if (livePage && !livePage.isClosed()) {
-        try { await livePage.close(); } catch { /* 忽略 */ }
+        try { await livePage.close(); } catch (err) { console.warn('[DirectSigner] 關閉 livePage 失敗:', err?.message || err); }
     }
     livePage = null;
     liveWsReady = false;
@@ -405,7 +405,7 @@ export async function initLivePage(username, timeoutMs = 20000) {
     }
 
     console.warn(`[DirectSigner] Live WS not ready within ${timeoutMs/1000}s`);
-    try { await page.close(); } catch { /* 忽略 */ }
+    try { await page.close(); } catch (err) { console.warn('[DirectSigner] 關閉 page 失敗:', err?.message || err); }
     return false;
 }
 
@@ -421,7 +421,8 @@ export async function pollLiveMessages() {
                 time: m.time
             }));
         });
-    } catch {
+    } catch (err) {
+        console.warn('[DirectSigner] 讀取頁面訊息失敗:', err?.message || err);
         return [];
     }
 }
@@ -447,7 +448,7 @@ export async function browserFetchSigned(params) {
     const now = Date.now();
     if (!fetchPage || fetchPage.isClosed() || (now - fetchPageCreated > 300000)) {
         if (fetchPage && !fetchPage.isClosed()) {
-            try { await fetchPage.close(); } catch { /* 忽略 */ }
+            try { await fetchPage.close(); } catch (err) { console.warn('[DirectSigner] 關閉 fetchPage 失敗:', err?.message || err); }
         }
         fetchPage = await session.newPage();
         await setTikTokCookies(fetchPage);
@@ -505,7 +506,9 @@ export async function browserFetchSigned(params) {
                 const ru = new URL(rawBytes.url);
                 const xd = ru.searchParams.get('X-Dynosaur') || '';
                 if (xd) console.log('[DirectSigner] X-Dynosaur:', xd.substring(0, 60));
-            } catch { /* 忽略 */ }
+            } catch (err) {
+                console.warn('[DirectSigner] 解析回應 URL 失敗:', err?.message || err);
+            }
         }
         return null;
     }
@@ -519,7 +522,8 @@ export async function sendLiveMessage(data) {
     try {
         const b64 = Buffer.from(data).toString('base64');
         return await livePage.evaluate((b) => window.__wsSend(b), b64);
-    } catch {
+    } catch (err) {
+        console.warn('[DirectSigner] 傳送訊息失敗:', err?.message || err);
         return false;
     }
 }
@@ -527,7 +531,7 @@ export async function sendLiveMessage(data) {
 export async function closeLivePage() {
     liveWsReady = false;
     if (livePage && !livePage.isClosed()) {
-        try { await livePage.close(); } catch { /* 忽略 */ }
+        try { await livePage.close(); } catch (err) { console.warn('[DirectSigner] 關閉 livePage 失敗:', err?.message || err); }
     }
     livePage = null;
 }

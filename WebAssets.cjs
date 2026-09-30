@@ -39,7 +39,7 @@ function createWebAssetHandler(root = __dirname) {
         if (locale) {
             fs.readFile(path.join(root, 'lang/index.json'), 'utf8', (error, text) => {
                 let data;
-                try { data = error ? null : JSON.parse(text); } catch { /* 解析失敗視為無 manifest */ }
+                try { data = error ? null : JSON.parse(text); } catch (err) { console.warn('lang/index.json 解析失敗，改用預設:', err?.message || err); }
                 const manifest = normalizeManifest(data);
                 if (locale === 'index') send(200, JSON.stringify(manifest));
                 else if (manifest.languages.some(entry => entry.code === locale)) read('lang/' + locale + '.json');

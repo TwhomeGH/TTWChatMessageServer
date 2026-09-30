@@ -2920,7 +2920,7 @@ async function getKickUserAvatar(username, userId) {
             kickAvatarCache.set(cacheKey, avatar);
             return avatar;
         }
-    } catch { /* 忽略 */ }
+    } catch (err) { console.warn('[Kick Avatar] 查詢 user 端點失敗:', err?.message || err); }
 
     try {
         const res = await axios.get(`${baseUrl}/channels`, {
@@ -2934,7 +2934,7 @@ async function getKickUserAvatar(username, userId) {
             kickAvatarCache.set(cacheKey, avatar);
             return avatar;
         }
-    } catch { /* 忽略 */ }
+    } catch (err) { console.warn('[Kick Avatar] 查詢 channel 端點失敗:', err?.message || err); }
 
     console.info(`[Kick Avatar] ❌ 無法取得頭像: ${username}`);
     return "";
@@ -3225,11 +3225,11 @@ const youtubeCacheFile = path.join(__dirname, 'youtube_cache.json')
 function loadYoutubeCache() {
     try {
         if (existsSync(youtubeCacheFile)) return JSON.parse(readFileSync(youtubeCacheFile, 'utf8'))
-    } catch { /* 忽略 */ }
+    } catch (err) { console.warn('[Youtube] 讀取快取失敗:', err?.message || err); }
     return null
 }
 function saveYoutubeCache(data) {
-    try { writeFileSync(youtubeCacheFile, JSON.stringify(data)) } catch { /* 忽略 */ }
+    try { writeFileSync(youtubeCacheFile, JSON.stringify(data)) } catch (err) { console.warn('[Youtube] 寫入快取失敗:', err?.message || err); }
 }
 
 function loadYoutubeTokens() {
