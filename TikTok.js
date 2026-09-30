@@ -2258,7 +2258,7 @@ async function resolveClipTitle(clipId, title) {
  * @param {string} source - 來源 ('manual'=G#clip 指令 / 'auto'=自動剪輯)
  */
 function craeteTwitchClip(title = null,icon="https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/Neuro2.png?raw=true", source = 'manual', context = null){
-
+    const requestedAt = Date.now();
 
     return apiClient.clips.createClip({
             channel:tuser,
@@ -2283,17 +2283,44 @@ function craeteTwitchClip(title = null,icon="https://github.com/TwhomeGH/TTWChat
 
             console.log("剪輯資訊", clipURL)
 
-            let timing = { peakAt: context?.peakAt ?? null, verified: false };
+            // 量測：peak 與剪輯實際片段的時間差。VOD 可能尚未就緒，有界重試幾次。
+            const timing = {
+                peakAt: context?.peakAt ?? null,
+                requestedAt,
+                requestLagMs: context?.peakAt != null ? requestedAt - context.peakAt : null,
+                verified: false
+            };
             if (context) {
-                try {
-                    const clip = confirmedClip;
-                    const [stream, video] = await Promise.all([apiClient.streams.getStreamByUserId(tuser), clip?.videoId ? apiClient.videos.getVideoById(clip.videoId) : null]);
-                    if (clip && stream && video?.streamId === stream.id && clip.vodOffset !== null) {
-                        const startAt = stream.startDate.getTime() + clip.vodOffset * 1000;
-                        const endAt = startAt + clip.duration * 1000;
-                        timing = { ...timing, startAt, endAt, verified: true, coversPeak: context.peakAt >= startAt && context.peakAt <= endAt };
+                for (let attempt = 1; attempt <= 3 && !timing.verified; attempt++) {
+                    try {
+                        const clip = confirmedClip;
+                        if (clip) {
+                            const [stream, video] = await Promise.all([
+                                apiClient.streams.getStreamByUserId(tuser),
+                                clip.videoId ? apiClient.videos.getVideoById(clip.videoId) : null
+                            ]);
+                            if (stream && video?.streamId === stream.id && clip.vodOffset != null && Number.isFinite(clip.duration)) {
+                                const startAt = stream.startDate.getTime() + clip.vodOffset * 1000;
+                                const endAt = startAt + clip.duration * 1000;
+                                Object.assign(timing, {
+                                    startAt, endAt, verified: true,
+                                    peakOffsetMs: context.peakAt != null ? context.peakAt - startAt : null,
+                                    coversPeak: context.peakAt >= startAt && context.peakAt <= endAt
+                                });
+                            }
+                        }
+                    } catch (err) {
+                        console.log(`[AutoClip] 時間核對第 ${attempt} 次失敗:`, err.message);
                     }
-                } catch (err) { console.log('[AutoClip] 時間核對暫不可用:', err.message); }
+                    if (!timing.verified) await new Promise(resolve => setTimeout(resolve, 4000));
+                }
+                const secs = ms => ms == null ? 'n/a' : (ms / 1000).toFixed(1) + 's';
+                const summary = timing.verified
+                    ? `peak→請求 ${secs(timing.requestLagMs)}｜peak 位於片段第 ${secs(timing.peakOffsetMs)}｜片段長 ${secs(timing.endAt - timing.startAt)}｜涵蓋=${timing.coversPeak ? '是' : '否'}`
+                    : `未驗證（VOD 未就緒或已關台）｜peak→請求 ${secs(timing.requestLagMs)}`;
+                console.log(`🎯 [AutoClip] 時間量測: ${summary}`);
+                writeLog("Default", `[AutoClip] 時間量測: ${summary}`, "Twitch AutoClip");
+                context.clipTiming = timing;
             }
             recordClipHistory({ id: clipId, url: clipURL, title: finalTitle, source, timing });
             console.log(`📜 剪輯歷史已記錄 (來源: ${source})`);

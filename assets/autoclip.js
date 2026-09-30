@@ -420,7 +420,11 @@ async function load() {
         for (const row of stats.filter(s=>s.triggered).slice(-20).reverse()) {
             const p=document.createElement('p');p.className='text-sm text-gray-300 my-2';
             const format=t=>t?new Date(t).toLocaleTimeString('zh-TW',{hour12:false}):'—';
-            const coverage=row.clip?.timing?.verified?(row.clip.timing.coversPeak?'涵蓋熱度峰值':'未涵蓋熱度峰值'):'尚未核對片段時間';
+            const timing=row.clip?.timing;
+            const secs=ms=>ms==null?'—':(ms/1000).toFixed(1)+'s';
+            const coverage=timing?.verified
+                ?(timing.coversPeak?'涵蓋熱度峰值':'未涵蓋熱度峰值')+'（峰值在片段第 '+secs(timing.peakOffsetMs)+'／片段長 '+secs(timing.endAt-timing.startAt)+'）'
+                :(timing?.requestLagMs!=null?'尚未核對片段時間（peak→請求 '+secs(timing.requestLagMs)+'）':'尚未核對片段時間');
             p.textContent='開始 '+format(row.heatStartedAt)+' · 峰值 '+format(row.peakAt)+' · 觸發 '+format(row.triggeredAt)+' · 請求 '+format(row.requestedAt)+' · 完成 '+format(row.completedAt)+' · '+({shadow:'影子紀錄',pending:'建立中',success:'成功',failed:'失敗'}[row.status]||row.status||'歷史紀錄')+' · '+coverage+(row.error?' · '+row.error:'');
             timing.append(p);
         }
