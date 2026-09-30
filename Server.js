@@ -5,6 +5,7 @@ const { URL } = require('url')
 const fs = require('fs');
 const path = require('path');
 const { isDeepStrictEqual } = require('node:util');
+const kickTokens = require('./ScriptLib/kick/tokens.cjs');
 
 // PKCE helpers for Kick OAuth
 function base64URLEncode(buffer) {
@@ -19,34 +20,6 @@ let pkceChallenge = null;
 let _twitchOAuthCode = null;
 let isBark = false;
 let isSocket = false;
-
-async function exchangeKickCode(code, verifier) {
-    const params = new URLSearchParams({
-        grant_type: 'authorization_code',
-        client_id: process.env.KICK_CLIENT_ID || '',
-        client_secret: process.env.KICK_CLIENT_SECRET || '',
-        code,
-        code_verifier: verifier,
-        redirect_uri: `http://localhost:3332/get-kick-token`,
-    });
-    const res = await fetch('https://id.kick.com/oauth/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params,
-    });
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Kick token exchange failed: ${res.status} ${errText}`);
-    }
-    return res.json();
-}
-
-// Kick token 的讀取／刷新在 TikTok.js（getValidKickToken）；此處只保留 OAuth callback 寫入用。
-const kickTokenFile = path.join(__dirname, 'kick_tokens.json');
-
-function saveKickTokens(tokens) {
-    fs.writeFileSync(kickTokenFile, JSON.stringify(tokens, null, 2));
-}
 
 let messageFilter = null;
 import('./MessageFilter.js').then(mod => {
@@ -1194,9 +1167,9 @@ const server = http.createServer((req, res) => {
 
         (async () => {
             try {
-                const tokens = await exchangeKickCode(code, pkceVerifier);
+                const tokens = await kickTokens.exchangeKickCode(code, pkceVerifier);
                 tokens.obtainmentTimestamp = Date.now();
-                saveKickTokens(tokens);
+                kickTokens.saveKickTokens(tokens);
                 pushLog('✅ Kick OAuth 成功，已儲存 token');
 
                 res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });

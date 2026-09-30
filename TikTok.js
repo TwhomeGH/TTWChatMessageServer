@@ -1,5 +1,6 @@
 import { reportTraffic } from './ScriptLib/traffic/report.mjs';
 import { closeDirectSigner } from './SignServer/direct-signer.mjs';
+import kickTokens from './ScriptLib/kick/tokens.cjs';
 import { normalizeSource } from './MessageSource.mjs';
 import { ApiClient } from '@twurple/api';
 import { RefreshingAuthProvider } from '@twurple/auth';
@@ -2805,60 +2806,6 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 let kickWS = null;
 const kickAvatarCache = new Map();
 
-const kickTokenFile = path.join(__dirname, 'kick_tokens.json');
-
-let kickAccessToken = null;
-
-function loadKickTokens() {
-    try {
-        if (existsSync(kickTokenFile)) {
-            return JSON.parse(readFileSync(kickTokenFile, 'utf8'));
-        }
-    } catch (err) {
-        console.error('⚠️ 讀取 kick_tokens.json 失敗:', err.message);
-    }
-    return null;
-}
-
-async function refreshKickToken(refreshToken) {
-    const params = new URLSearchParams({
-        grant_type: 'refresh_token',
-        client_id: process.env.KICK_CLIENT_ID || '',
-        client_secret: process.env.KICK_CLIENT_SECRET || '',
-        refresh_token: refreshToken,
-    });
-    const res = await fetch('https://id.kick.com/oauth/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params,
-    });
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Kick token refresh failed: ${res.status} ${errText}`);
-    }
-    return res.json();
-}
-
-async function getValidKickToken() {
-    if (kickAccessToken) return kickAccessToken;
-    const tokens = loadKickTokens();
-    if (!tokens?.access_token) return null;
-    const expiresAt = (tokens.obtainmentTimestamp || 0) + (tokens.expires_in || 3600) * 1000;
-    if (Date.now() >= expiresAt - 60000 && tokens.refresh_token) {
-        try {
-            const newTokens = await refreshKickToken(tokens.refresh_token);
-            newTokens.obtainmentTimestamp = Date.now();
-            writeFileSync(kickTokenFile, JSON.stringify(newTokens, null, 2));
-            kickAccessToken = newTokens.access_token;
-            return kickAccessToken;
-        } catch (e) {
-            console.error('⚠️ Kick token 刷新失敗:', e.message);
-            return null;
-        }
-    }
-    kickAccessToken = tokens.access_token;
-    return kickAccessToken;
-}
 
 function guessKickChannelId(channelName) {
     const knownChannels = {
@@ -2899,7 +2846,7 @@ async function getKickUserAvatar(username, userId) {
     const cached = kickAvatarCache.get(cacheKey);
     if (cached) return cached;
 
-    const token = await getValidKickToken();
+    const token = await kickTokens.getValidKickToken();
     if (!token) {
         console.info(`[Kick Avatar] ❌ 無 OAuth token，跳過: ${username}`);
         return "";
