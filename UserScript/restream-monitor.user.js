@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Restream → TikTok Live Monitor 助手
 // @namespace    ttw-restream-monitor
-// @version      1.1.0
+// @version      1.1.1
 // @description  觀察 Restream 的 TikTok Live Monitor 連結，出現後開啟監控分頁，避免重複開啟。
 // @match        https://app.restream.io/*
 // @run-at       document-idle
@@ -35,9 +35,6 @@
         if (state.url !== url || state.since == null) state.since = now;
         state.url = url;
         return !state.opened && now - state.since >= STABLE_MS;
-    }
-    if (typeof window === 'undefined' && typeof module !== 'undefined') {
-        module.exports = { monitorUrl, observe }; return;
     }
     if (window.top !== window.self || document.getElementById('ttw-restream-monitor')) return;
 

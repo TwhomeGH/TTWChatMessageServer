@@ -1,6 +1,15 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {monitorUrl, observe} = require('../UserScript/restream-monitor.user.js');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const source = fs.readFileSync(require.resolve('../UserScript/restream-monitor.user.js'), 'utf8');
+// 測試端擷取純函式；正式 UserScript 不混入 CommonJS 匯出或測試分支。
+const start = source.indexOf('    const STABLE_MS =');
+const end = source.indexOf('    if (window.top !== window.self', start);
+assert.ok(start >= 0 && end > start, '找不到純函式測試區段');
+const context = vm.createContext({ URL });
+vm.runInContext(source.slice(start, end), context);
+const { monitorUrl, observe } = context;
 const url='https://livecenter.tiktok.com/live_monitor?apply_mode=11';
 test('只接受官方 HTTPS live_monitor 連結，不綁 Restream 雜湊 class',()=>{
     assert.equal(monitorUrl(url),url);

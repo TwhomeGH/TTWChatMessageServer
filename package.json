@@ -18,6 +18,8 @@
     "tiktok-live-connector": "2.4.0"
   },
   "scripts": {
+    "lint": "eslint .",
+    "lint:restream": "eslint UserScript/restream-monitor.user.js Test/restream_monitor.test.cjs",
     "start": "node scripts/start.cjs",
     "dev": "node scripts/start.cjs --dev",
     "build:css": "node scripts/css-build.cjs",
@@ -28,7 +30,10 @@
     "test:ci": "npm run test:core && npm run test:startup && npm run check:css"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/cli": "4.3.3",
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0",
     "tailwindcss": "4.3.3"
   }
 }
