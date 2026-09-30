@@ -171,11 +171,14 @@ test('時段排名取開場平均並做收縮與樣本門檻', () => {
     }
     now=startOfWeek+16*86400000;
     store.record({type:'audience',platform:'TikTok',userNum:9999,streamId:'missing-start'});
+    now+=60000;
+    store.record({type:'audience',platform:'TikTok',userNum:9999,streamId:'missing-start'});
 
     const rankNow = startOfWeek + 20 * 86400000;
     const rankings = db.rankings('TikTok', 30, rankNow, 'Asia/Taipei');
 
     assert.equal(rankings.sessionCount, 6);
+    assert.equal(rankings.unstarted, 1);
     assert.equal(rankings.globalMean, 110);
     assert.deepEqual(rankings.cells.map(c => c.key), ['Mon 18', 'Tue 18']);
 
@@ -187,6 +190,22 @@ test('時段排名取開場平均並做收縮與樣本門檻', () => {
     assert.equal(monday.shrunk, 155); // (3·200 + 3·110) / 6
 
     assert.equal(rankings.cells[1].shrunk, 65); // (3·20 + 3·110) / 6
+    db.close();
+});
+
+// 場次先由沒有開播時間的事件開啟時，之後收到帶開播時間的取樣要補齊 actualStarted。
+test('續接場次補齊開播時間', () => {
+    let now = Date.parse('2026-09-07T10:00:00Z');
+    const db = new TrafficDatabase(':memory:');
+    const store = new TrafficStore(() => now, db);
+
+    store.record({ type: 'audience', platform: 'TikTok', userNum: 5, streamId: 'r1' });
+    now += 60000;
+    store.record({ type: 'audience', platform: 'TikTok', userNum: 6, streamId: 'r1', startedAt: new Date(now).toISOString() });
+
+    const row = db.db.prepare('SELECT actualStarted,sampleCount FROM sessions').get();
+    assert.equal(row.actualStarted, now);
+    assert.equal(row.sampleCount, 2);
     db.close();
 });
 

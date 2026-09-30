@@ -149,6 +149,7 @@
         if (!rankings) return;
 
         const enough = rankings.cells.filter(cell => !cell.insufficient);
+        const partial = rankings.cells.filter(cell => cell.insufficient);
         const rows = [['#', t('timeSlot'), t('sessions'), t('median'), t('mean'), t('shrunk')]];
 
         enough.forEach((cell, index) => {
@@ -164,9 +165,19 @@
 
         updateTable('ranking', rows);
 
-        setText(el('ranking-note'), t(enough.length ? 'ranking.note' : 'ranking.insufficient', {
+        const notes = [t(enough.length ? 'ranking.note' : 'ranking.insufficient', {
             sessions:rankings.sessionCount, cells:rankings.cells.length, minimum:rankings.minSessions
-        }));
+        })];
+        // 未達標的時段仍列出進度，讓使用者看到「已記錄幾場／幾天」。
+        if (partial.length) {
+            const list = partial
+                .map(cell => t('ranking.partialItem', { slot: cell.key, sessions: cell.n, days: cell.observedDays }))
+                .join('、');
+            notes.push(t('ranking.partial', { minimum: rankings.minSessions, list }));
+        }
+        // 完全沒有可用場次時，說清楚是「缺開播時間」而不是場次不夠。
+        if (rankings.unstarted) notes.push(t('ranking.unstarted', { count: rankings.unstarted }));
+        setText(el('ranking-note'), notes.join(' '));
     }
 
     /** 重新抓取歷史並更新熱圖、每日統計與時段排名。 */

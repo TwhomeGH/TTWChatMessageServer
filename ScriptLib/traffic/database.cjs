@@ -248,7 +248,11 @@ class TrafficDatabase {
         // 遲到事件保留原始／分鐘資料，不倒退即時場次累積指標。
         if(open && event.time < (open.lastEventAt ?? open.lastSampleAt)) return;
         if (open && this.isContinuous(open, event)) {
-            this.db.prepare('UPDATE sessions SET stream=COALESCE(stream,?), lastEventAt=? WHERE id=?').run(event.stream??null,event.time,open.id);
+            // 場次可能先由沒有開播時間的事件開啟，之後收到帶開播時間的取樣時補齊，
+            // 避免第一筆晚到就永遠缺 actualStarted。
+            if (open.actualStarted == null && event.actualStarted != null) open.actualStarted = event.actualStarted;
+            this.db.prepare('UPDATE sessions SET stream=COALESCE(stream,?), lastEventAt=?, actualStarted=COALESCE(actualStarted,?) WHERE id=?')
+                .run(event.stream??null,event.time,open.actualStarted??null,open.id);
             if (event.kind === 'metrics') this.applySessionMetrics(open.id, event);
             else this.extendSession(open, event);
             return;
@@ -684,11 +688,16 @@ class TrafficDatabase {
 
         cells.sort((a, b) => b.shrunk - a.shrunk);
 
+        // 有取樣但沒有開播時間的場次：無法歸入 weekday×hour，單獨回報讓 UI 說明原因。
+        const unstarted = this.db.prepare(`SELECT COUNT(*) AS count FROM sessions
+            WHERE platform=? AND started>=? AND started<=? AND actualStarted IS NULL AND sampleCount>=?`)
+            .get(platform || '', now - days * 86400000, now, MIN_SESSION_SAMPLES).count;
+
         return {
             platform, platforms, days, timezone,
             earlyMinutes: EARLY_WINDOW_MS / 60000,
             sessionCount: rows.length, globalMean,
-            minSessions: MIN_BUCKET_SESSIONS, cells
+            minSessions: MIN_BUCKET_SESSIONS, cells, unstarted
         };
     }
 
