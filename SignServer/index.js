@@ -5,7 +5,7 @@ import { EventEmitter } from 'events';
 let signerReady = false;
 let signerPromise = null;
 
-export function setStreamerName(name) {}
+export function setStreamerName(_name) {}
 
 async function ensureSigner() {
     if (signerPromise) return signerPromise;

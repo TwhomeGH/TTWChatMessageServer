@@ -12,7 +12,7 @@
         }
         return result;
     }
-    function save() { try { localStorage.setItem(key, JSON.stringify(values())); } catch {} }
+    function save() { try { localStorage.setItem(key, JSON.stringify(values())); } catch { /* 無法寫入儲存時忽略 */ } }
     function update(next) {
         state = next;
         const locked = busy || !state || !['stopped', 'failed'].includes(state.state) || !options.length;
@@ -27,7 +27,7 @@
             const response = await fetch('/api/runtime/options');
             if (!response.ok) throw Error(i18n.t('runtime.optionsError', {}, '無法載入啟動選項'));
             options = (await response.json()).options;
-            let saved = {}; try { saved = JSON.parse(localStorage.getItem(key)) || {}; } catch {}
+            let saved = {}; try { saved = JSON.parse(localStorage.getItem(key)) || {}; } catch { /* 解析失敗用預設 */ }
             for (const option of options) {
                 const row = document.createElement('div'), label = document.createElement('label');
                 const input = document.createElement('input'); input.type = 'checkbox'; input.id = 'option-' + option.key;

@@ -52,7 +52,7 @@ for (let i = 0; i < 120; i++) {
                     if (k === 'X-Bogus') console.log(`    ${k}: ${v}`);
                     else console.log(`    ${k}: ${v.substring(0, 60)}`);
                 }
-            } catch(e) {
+            } catch {
                 console.log('  URL:', w.url.substring(0, 300));
             }
         }

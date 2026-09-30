@@ -52,7 +52,7 @@ function createController(config = browserConfig(), deps = {}) {
             const pages = await tabs();
             return { connected: true, profile: config.profile, pages: pages.map(tab => {
                 let url = '';
-                try { const parsed = new URL(tab.url); url = parsed.origin + parsed.pathname; } catch {}
+                try { const parsed = new URL(tab.url); url = parsed.origin + parsed.pathname; } catch { /* 無法解析時 url 保持空字串 */ }
                 return { id: tab.id, title: tab.title, url };
             }) };
         } catch {

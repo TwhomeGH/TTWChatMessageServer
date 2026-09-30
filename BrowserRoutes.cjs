@@ -10,7 +10,7 @@ function serveBrowser(req, res, authorized) {
     try {
         handler ||= createHandler(createController());
         void handler(req, res, authorized);
-    } catch (error) {
+    } catch {
         sendJson(res, 500, { code: 'BROWSER_CONFIG_INVALID', error: '瀏覽器設定錯誤，請檢查 BROWSER_DEBUG_URL' });
     }
     return true;

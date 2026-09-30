@@ -2,7 +2,6 @@
 // with captured X-Bogus from live page navigation
 import puppeteer from 'puppeteer-core';
 import fs from 'fs';
-import { appendFile } from 'fs/promises';
 
 const sdk513 = fs.readFileSync('SignServer/sdk/webmssdk_5.1.3.js', 'utf-8');
 const sdk485 = fs.readFileSync('SignServer/sdk/webmssdk_2.0.0.485.js', 'utf-8');

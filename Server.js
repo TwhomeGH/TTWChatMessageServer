@@ -6,8 +6,6 @@ const fs = require('fs');
 const path = require('path');
 const { isDeepStrictEqual } = require('node:util');
 
-const { time } = require('console');
-
 // PKCE helpers for Kick OAuth
 function base64URLEncode(buffer) {
     return buffer.toString('base64')
@@ -43,6 +41,7 @@ async function exchangeKickCode(code, verifier) {
     return res.json();
 }
 
+// eslint-disable-next-line no-unused-vars -- Kick token 續期工具，目前尚未接上
 async function refreshKickToken(refreshToken) {
     const params = new URLSearchParams({
         grant_type: 'refresh_token',
@@ -64,6 +63,7 @@ async function refreshKickToken(refreshToken) {
 
 const kickTokenFile = path.join(__dirname, 'kick_tokens.json');
 
+// eslint-disable-next-line no-unused-vars -- Kick token 載入工具，目前尚未接上
 function loadKickTokens() {
     try {
         if (fs.existsSync(kickTokenFile)) {
@@ -123,10 +123,6 @@ function getTopMessages(limit = 10) {
 
 function getAllMessageStatsSorted() {
     return messageFilter ? messageFilter.getAllMessageStatsSorted() : [];
-}
-
-function isFiltered({ user, message } = {}) {
-    return messageFilter ? messageFilter.isFiltered({ user, message }) : false;
 }
 
 function processFilter({ user, message } = {}) {
@@ -242,7 +238,6 @@ function sendToTikTok(obj) {
 
 // server.js
 const crypto = require('crypto');
-const { text } = require('stream/consumers');
 
 
 const server_tokenFile = path.join(__dirname, 'server_tokens.json');
@@ -426,7 +421,7 @@ function startRuntime(url) {
                 }
 
                 try {
-                    const clean = line.replace(/^[^\{]*/, '').replace(/[^\}]*$/, ''); // 嘗試提取 JSON 部分
+                    const clean = line.replace(/^[^{]*/, '').replace(/[^}]*$/, ''); // 嘗試提取 JSON 部分
                     const json = JSON.parse(clean);
 
                     var PType = json.type;
@@ -718,7 +713,7 @@ const server = http.createServer((req, res) => {
                     data: stats
                 })}\n\n`);
 
-            } catch (err) {
+            } catch {
                 res.write(`data: ${JSON.stringify({
                     type: 'error',
                     message: '無法讀取關鍵字檔案'
@@ -967,7 +962,7 @@ const server = http.createServer((req, res) => {
                         cacheAutoClipStats = { config: data.config || {}, stats: data.stats || [] };
                     }
                 }
-            } catch (err) {
+            } catch {
                 // 檔案不存在或損壞就維持空
             }
         }
@@ -1220,7 +1215,6 @@ const server = http.createServer((req, res) => {
     else if (req.url.startsWith('/get-kick-token')) {
         const url = new URL(req.url, `http://${req.headers.host}`);
         const code = url.searchParams.get('code');
-        const state = url.searchParams.get('state');
 
         if (!code) {
             res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });

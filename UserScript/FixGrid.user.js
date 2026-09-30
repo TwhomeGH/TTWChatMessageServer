@@ -1196,6 +1196,7 @@
     // Shadow DOM 掃描
     // =========================================================
 
+    // eslint-disable-next-line no-unused-vars -- Shadow DOM 掃描預留，目前未接上
     function scanShadowRoots(root) {
 
         if (!root) {

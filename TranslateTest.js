@@ -1,11 +1,9 @@
 import axios from 'axios';
 
 import { existsSync } from 'fs';
-import { franc,francAll} from 'franc';
+import { franc } from 'franc';
 
-import {iso6393, iso6393To1, iso6393To2B, iso6393To2T} from 'iso-639-3'
-
-import langs from "langs";
+import { iso6393To1 } from 'iso-639-3'
 
 
 // 原生Node20+ Env (測試腳本可無 .env 執行)
@@ -19,13 +17,11 @@ function parseBool(val, defaultValue = false) {
 const TRANSLATE_DEBUG = parseBool(process.env.TRANSLATE_DEBUG) || false
 
 const TRANSLATE_API_URL = process.env.TRANSLATE_API_URL || "https://api.mymemory.translated.net/get";
-const TRANSLATE_SOURCE_LANG = process.env.TRANSLATE_SOURCE_LANG || "en";
 const TRANSLATE_TARGET_LANG = process.env.TRANSLATE_TARGET_LANG || "zh-TW";
 
 const TRANSLATE_MIN_LENGTH = process.env.TRANSLATE_MIN_LENGTH || 5;
 
 const BING_TRANSLATE_API_KEY = process.env.BING_TRANSLATE_API_KEY || '';
-const GOOGLE_TRANSLATE_API_KEY = process.env.GOOGLE_TRANSLATE_API_KEY || '';
 
 
 /**
@@ -155,7 +151,8 @@ async function translateByBing(Chat, sourceLang) {
 }
 
 const URL_REGEX = /https?:\/\/[^\s]+/g;
-// 原生 emoji（含 ZWJ 組合、膚色修飾、旗幟、variation selector、keycap）
+// 原生 emoji（含 ZWJ 組合、膚色修飾、旗幟、variation selector、keycap）；刻意逐 code point 比對。
+// eslint-disable-next-line no-misleading-character-class
 const EMOJI_REGEX = /[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\u200D\uFE0F\u20E3]/gu;
 
 /**

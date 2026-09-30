@@ -182,6 +182,8 @@ export function getFilterRules() {
 /** 正規化：去掉 emoji 與其修飾、標點、符號、空白，再轉小寫。 */
 function normalizeForCompare(text) {
     return text
+        // 刻意逐 code point 匹配 emoji 本體、變體選擇符、ZWJ 與膚色修飾，並非組合字。
+        // eslint-disable-next-line no-misleading-character-class
         .replace(/[\p{Extended_Pictographic}\uFE0F\u200D\u{1F3FB}-\u{1F3FF}]/gu, '')
         .replace(/[\p{P}\p{S}\s]/gu, '')
         .toLowerCase();
@@ -310,6 +312,8 @@ export function simulateSequence({ user = '', messages = [], stepMs = 1000, extr
 
 // ===== 預設規則 =====
 
+// 刻意用字元類列出組合記號的範圍，逐 code point 比對。
+// eslint-disable-next-line no-misleading-character-class
 const COMBINING_MARKS = /[\u{20D0}-\u{20FF}\u{FE00}-\u{FE0F}\u{0300}-\u{036F}]/u;
 
 addFilterRules([
@@ -334,6 +338,7 @@ addFilterRules([
         field: 'message',
         action: 'block',
         // 連續 5 個以上 emoji：廣告用 emoji 洗頻，或拿來墊在帳號名前面。門檻可調。
+        // eslint-disable-next-line no-misleading-character-class -- 逐 code point 收集 emoji 序列
         test: (m) => /(?:\p{Extended_Pictographic}[\uFE0F\u200D\u{1F3FB}-\u{1F3FF}]*){5,}/u.test(m),
     },
     {
@@ -346,6 +351,7 @@ addFilterRules([
         name: 'user:廣告帳號-臺幣/蚪幣',
         field: 'user',
         action: 'block',
+        // eslint-disable-next-line no-misleading-character-class -- 同時接受「幣」與其組合記號變體
         test: (u) => /[臺蚪].*[幣⃑]/.test(u),
     },
     {
@@ -359,6 +365,7 @@ addFilterRules([
             if (cjk === 0) return false;
             const other = codePoints.filter(c => !/[\u4e00-\u9fff\u3000-\u303f\w\s]/u.test(c)).length;
             if (other < 6) return false;
+            // eslint-disable-next-line no-misleading-character-class -- 逐 code point 偵測組合記號
             const hasCombining = /[\u0300-\u036f\u20d0-\u20ff\ufe00-\ufe0f]/.test(u);
             return hasCombining ? other > cjk * 4 : other > cjk * 6;
         },
@@ -386,6 +393,7 @@ addFilterRules([
         name: 'any:刪除控制字元',
         field: 'any',
         action: 'delete',
+        // eslint-disable-next-line no-control-regex -- 就是要刪除控制字元
         match: /[\x00-\x1F\x7F]/g,
     },
     {

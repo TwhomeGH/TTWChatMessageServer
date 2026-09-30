@@ -60,7 +60,6 @@ function createSandbox() {
 
         // DOM-like
         document: {
-            cookie: Object.entries(cookieStore).map(([k, v]) => `${k}=${v}`).join('; '),
             get cookie() {
                 return Object.entries(cookieStore).map(([k, v]) => `${k}=${v}`).join('; ');
             },
@@ -190,7 +189,6 @@ function createSandbox() {
         WeakSet: WeakSet,
         Proxy: Proxy,
         Reflect: Reflect,
-        Promise: Promise,
 
         // Typed arrays
         ArrayBuffer: ArrayBuffer,
@@ -244,7 +242,6 @@ export async function initSigner() {
 
     const sdk485Path = path.join(SDK_DIR, 'webmssdk_2.0.0.485.js');
     const sdk513Path = path.join(SDK_DIR, 'webmssdk_5.1.3.js');
-    const sdk368Path = path.join(SDK_DIR, 'webmssdk_1.0.0.368.js');
 
     console.log('[CoreSigner] Loading SDK files...');
 

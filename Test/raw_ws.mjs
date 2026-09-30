@@ -3,7 +3,6 @@
 import WebSocket from 'ws';
 
 const ROOM_ID = '7660050875841121045'; // eatpoopbro's room
-const USERNAME = 'eatpoopbro';
 
 // Build the WS URL manually matching the library's DEFAULT_WS_CLIENT_PARAMS
 const params = {

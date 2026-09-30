@@ -17,6 +17,8 @@ function startURL(body) {
         if (body[option.key]) { url.searchParams.set(option.key, '1'); enabled = true; }
         if (option.account && body[option.account] !== undefined) {
             const value = body[option.account];
+            // 刻意檢查控制字元，避免注入。
+            // eslint-disable-next-line no-control-regex
             if (typeof value !== 'string' || value.length > 200 || /[\x00-\x1f\x7f]/.test(value) || value.trim().startsWith('-')) invalid();
             if (body[option.key] && value.trim()) url.searchParams.set(option.account, value.trim());
         }

@@ -198,14 +198,14 @@ export async function signWebSocketForUser(username, timeoutMs = 20000) {
     console.log(`[DirectSigner] Navigating to ${username}'s LIVE page for WS URL capture...`);
 
     if (wsPage && !wsPage.isClosed()) {
-        try { await wsPage.close(); } catch (e) {}
+        try { await wsPage.close(); } catch { /* 忽略 */ }
     }
     wsPage = await session.newPage();
 
     await setTikTokCookies(wsPage);
 
     const sdk513 = fs.readFileSync(path.join(SDK_DIR, 'webmssdk_5.1.3.js'), 'utf-8');
-    await wsPage.evaluateOnNewDocument((code) => { try { eval(code); } catch(e) {} }, sdk513);
+    await wsPage.evaluateOnNewDocument((code) => { try { eval(code); } catch { /* 忽略 */ } }, sdk513);
 
     await wsPage.evaluateOnNewDocument(() => {
         window.__capturedWsUrls = [];
@@ -301,7 +301,7 @@ export async function signWebSocketForUser(username, timeoutMs = 20000) {
     console.log(`[DirectSigner] Captured WS URL - pushServer: ${capturedPushServer}`);
     // 不把簽名查詢參數或登入資料寫入日誌。
 
-    try { await wsPage.close(); } catch (e) {}
+    try { await wsPage.close(); } catch { /* 忽略 */ }
 
     return {
         pushServer: capturedPushServer,
@@ -318,7 +318,7 @@ export function isLiveWsReady() {
 export async function initLivePage(username, timeoutMs = 20000) {
     if (!browser) throw new Error('Signer not initialized');
     if (livePage && !livePage.isClosed()) {
-        try { await livePage.close(); } catch (e) {}
+        try { await livePage.close(); } catch { /* 忽略 */ }
     }
     livePage = null;
     liveWsReady = false;
@@ -405,7 +405,7 @@ export async function initLivePage(username, timeoutMs = 20000) {
     }
 
     console.warn(`[DirectSigner] Live WS not ready within ${timeoutMs/1000}s`);
-    try { await page.close(); } catch(e) {}
+    try { await page.close(); } catch { /* 忽略 */ }
     return false;
 }
 
@@ -414,7 +414,6 @@ export async function pollLiveMessages() {
     try {
         return await livePage.evaluate(() => {
             const q = window.__wsMessageQueue || [];
-            const len = q.length;
             window.__wsMessageQueue = [];
             return q.map(m => ({
                 type: m.type,
@@ -422,7 +421,7 @@ export async function pollLiveMessages() {
                 time: m.time
             }));
         });
-    } catch (e) {
+    } catch {
         return [];
     }
 }
@@ -448,7 +447,7 @@ export async function browserFetchSigned(params) {
     const now = Date.now();
     if (!fetchPage || fetchPage.isClosed() || (now - fetchPageCreated > 300000)) {
         if (fetchPage && !fetchPage.isClosed()) {
-            try { await fetchPage.close(); } catch(e) {}
+            try { await fetchPage.close(); } catch { /* 忽略 */ }
         }
         fetchPage = await session.newPage();
         await setTikTokCookies(fetchPage);
@@ -506,7 +505,7 @@ export async function browserFetchSigned(params) {
                 const ru = new URL(rawBytes.url);
                 const xd = ru.searchParams.get('X-Dynosaur') || '';
                 if (xd) console.log('[DirectSigner] X-Dynosaur:', xd.substring(0, 60));
-            } catch(e) {}
+            } catch { /* 忽略 */ }
         }
         return null;
     }
@@ -520,7 +519,7 @@ export async function sendLiveMessage(data) {
     try {
         const b64 = Buffer.from(data).toString('base64');
         return await livePage.evaluate((b) => window.__wsSend(b), b64);
-    } catch (e) {
+    } catch {
         return false;
     }
 }
@@ -528,7 +527,7 @@ export async function sendLiveMessage(data) {
 export async function closeLivePage() {
     liveWsReady = false;
     if (livePage && !livePage.isClosed()) {
-        try { await livePage.close(); } catch(e) {}
+        try { await livePage.close(); } catch { /* 忽略 */ }
     }
     livePage = null;
 }

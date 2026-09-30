@@ -51,12 +51,12 @@
         language = locale;
         if (Object.keys(tables[0]).length) fallback = tables[0];
         primary = tables[1] || fallback;
-        try { localStorage.setItem('ttw.language', language); } catch {}
+        try { localStorage.setItem('ttw.language', language); } catch { /* 無法寫入儲存時忽略 */ }
         apply();
         document.dispatchEvent(new CustomEvent('languagechange'));
     }
     let saved;
-    try { saved = localStorage.getItem('ttw.language'); } catch {}
+    try { saved = localStorage.getItem('ttw.language'); } catch { /* 無法讀取儲存時忽略 */ }
     const api = { t, setLanguage, apply, get language() { return language; } };
     root.TTWI18n = api;
     document.querySelectorAll('[data-language-select]').forEach(select => {

@@ -53,6 +53,7 @@
     function chartIndex(offset, left, right, count) {
         return Math.max(0, Math.min(count - 1, Math.round((offset - left) / Math.max(1, right - left) * (count - 1))));
     }
+    // eslint-disable-next-line no-unused-vars -- 預留取樣段跳轉用，目前未接上
     function sampleRunTarget(rows, current, direction) {
         const starts = rows.flatMap((row, i) => row.viewers != null && (i === 0 || rows[i - 1].viewers == null) ? [row.time] : []);
         return direction > 0 ? starts.find(time => current == null || time > current) ?? null

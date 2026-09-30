@@ -23,7 +23,6 @@ const sandbox = {
     DataView, Buffer, TextEncoder, TextDecoder,
     atob, btoa, encodeURI, encodeURIComponent, decodeURI, decodeURIComponent,
     document: {
-        cookie: '',
         get cookie() { return Object.entries(cookieStore).map(([k,v])=>k+'='+v).join('; '); },
         set cookie(val) { const m=val.match(/^([^=]+)=([^;]+)/); if(m) cookieStore[m[1]]=m[2]; },
         createElement: () => ({}), getElementById: () => null,

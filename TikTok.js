@@ -23,7 +23,6 @@ const __dirname = path.dirname(__filename);
 
 import { TikTokLiveConnection, WebcastEvent,ControlEvent,ControlAction } from 'tiktok-live-connector';
 import { setupCustomSignServer, waitForSigner, setStreamerName } from './SignServer/index.js';
-import { type } from 'os';
 import Translate from "./TranslateTest.js"
 import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFilter, clearStats, takeThrottleSummaries } from "./MessageFilter.js"
 import { replaceEmojis, loadEmojiMap, getEmojiMap } from "./EmojiMap.js"
@@ -73,7 +72,7 @@ const isDebugChild = process.env.DEBUG_CHILD === 'true';
 
 if (isDebugChild) {
 
-const child = fork('TikTok.js', [], {
+fork('TikTok.js', [], {
   execArgv: ['--inspect=9237'] // 指定子程序的 debug port
 });
 
@@ -189,7 +188,6 @@ let tkReconnectTimer = null;   // 重連計時器
 let viewCacheInterval = null;  // viewer 更新 interval handle（斷線時確實清除，避免重連後疊加）
 let viewCacheFailures = 0;     // 連續的 fetchRoomInfo 失敗次數，用來診斷觀看數為何沒更新
 let streamEnded = false;       // 直播真正結束（使用者主動結束 / 平台封鎖）→ 不再重連
-const TK_RETRY_MAX = 5;        // 最大重連次數（避免無限重試）
 const TK_RETRY_BASE = 15000;   // 重連基礎間隔 15 秒（指數退避 15s→30s→60s→120s→240s）
 
 const socketUrl = new URL((isSocket && process.env.SOCKET_API) || 'tcp://localhost:9322');
@@ -268,7 +266,7 @@ async function loadGiftNameMap() {
                 giftNameMap = JSON.parse(await fs.readFile(GIFT_MAP_EXAMPLE_FILE, "utf-8"));
                 await saveGiftNameMap();
                 console.log(`⚠️ gift_map.json 不存在，已由 gift_map.example.json 初始化 ${Object.keys(giftNameMap).length} 筆對應`);
-            } catch (seedErr) {
+            } catch {
                 giftNameMap = {};
                 await saveGiftNameMap();
                 console.log("⚠️ gift_map.json 與 gift_map.example.json 皆不存在，已初始化空對照表");
@@ -499,6 +497,7 @@ async function handleExit() {
 
     if (tkReconnectTimer) { clearTimeout(tkReconnectTimer); tkReconnectTimer = null; }
     if (viewCacheInterval) { clearInterval(viewCacheInterval); viewCacheInterval = null; }
+    disconnectYoutubeChat();
     console.log("⏹️ 已停止重連／計時器");
 
     sendBarkNotification("系統通知", "TTW Chat Message Server 已關閉", "");
@@ -660,8 +659,6 @@ process.stdin.on('data', async (chunk) => {
                 sendSocketMessage(json.user, json.message, json.img || '', json.giftImg || '', true, CacheUserNum, CacheUserList, origUser, origMsg);
 
                 addToSyncBuffer(origUser, origMsg);
-
-                // sendToTCP(json, origUser, origMsg);
 
                 let Gift = json.giftImg || ''
 
@@ -867,7 +864,7 @@ process.stdin.on('data', async (chunk) => {
                 return;
             }
 
-        } catch (e) {
+        } catch {
             console.error('stdin JSON 解析失敗:', msg);
         }
     }
@@ -991,49 +988,6 @@ async function sendBarkNotification(title = "Twitch", comment, icon, url) {
 
 
 
-function sendToTCP(payload, dedupUser, dedupMessage) {
-    if (!isSocket) return;
-
-    const checkUser = dedupUser ?? payload.user;
-    const checkMsg = dedupMessage ?? payload.message;
-    if (isDuplicate(checkUser.trim(), checkMsg.trim())) {
-        console.log('🚫 重複訊息跳過:', payload.user, payload.message);
-        return;
-    }
-
-    console.log('📤 發送 TCP 訊息:紀錄',payload.user,payload.message);
-    console.log('📤 發送 TCP 訊息Sync:', payload);
-
-    try {
-        var payload_bak = { ...payload }
-        payload_bak.message = replaceEmojis(payload.message)
-
-        var CHAT_RES = payload_bak.message
-
-        Translate.TranslateText(payload_bak.message).then(RES=>{
-            
-            if (payload_bak.message != RES) {
-                CHAT_RES += `\n${RES}`
-            }
-
-            payload_bak["message"] = CHAT_RES
-
-            socketTransport.send(payload_bak);
-        })
-
-
-        
-
-
-        
-
-        addToSyncBuffer((dedupUser ?? payload.user).trim(), (dedupMessage ?? payload.message).trim());
-
-    } catch (err) {
-        console.error('⚠️ 發送 TCP 訊息失敗:', err.message);
-    }
-
-}
 
 
 
@@ -1424,7 +1378,7 @@ if (isTK) {
 
 
 connection.on(ControlEvent.DISCONNECTED, (e) => {
-    console.log('Disconnected :( \(error code: ' + e.errorCode + ', reason: ' + e.reason + ')');
+    console.log('Disconnected :( (error code: ' + e.errorCode + ', reason: ' + e.reason + ')');
     
     sendBarkNotification("TikTok 直播間已斷線", `已從 ${tiktokName} 的直播間斷線`, "");
     sendSocketMessage("系統", `TikTok 直播間已斷線，已從 ${tiktokName} 的直播間斷線`, "", "", false,CacheUserNum,CacheUserList);
@@ -1861,7 +1815,6 @@ connection.on(WebcastEvent.LIKE, data => {
 
     let iconn = getTikTokProfilePic(data.user)
 
-    let totalLikeCount = parseInt(data.total) || 0
     let likeCount = likeUserCount(data.user.nickname, data.count || 0)
 
     let mess = `喜歡你 ${likeCount} 次`
@@ -2066,6 +2019,11 @@ console.log(JSON.stringify({ action },"",4))
 });
 
 
+
+
+// 由於 EulerStream 禮物清單需付費 API，改為收到禮物事件時即時翻譯；保留此函式與其同步
+// 工具供未來啟用。
+// eslint-disable-next-line no-unused-vars
 function fetchAndSyncGifts() {
     writeLog("Default", "開始取得 TikTok禮物列表", "System")
     connection.fetchAvailableGifts().then(async (giftList) => {
@@ -2078,8 +2036,6 @@ function fetchAndSyncGifts() {
         console.error("取得禮物列表失敗:", err.message);
     })
 }
-
-
 
 // --- 1. Auth ---
 const clientId = process.env.CLIENT_ID;
@@ -2607,7 +2563,7 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
             let useTTS = event.messageText.toLowerCase().includes("tts")
             let iconURL = event.messageText.includes("icon=") ? event.messageText.split("icon=")[1].split(" ")[0] : null
-            let displayIcon = iconURL || icon
+            let displayIcon;
 
             // 自訂 user：若訊息含 user=xxx 則使用該值，否則用用戶名
             let overlayUser = event.chatterDisplayName;
@@ -2964,7 +2920,7 @@ async function getKickUserAvatar(username, userId) {
             kickAvatarCache.set(cacheKey, avatar);
             return avatar;
         }
-    } catch (e) {}
+    } catch { /* 忽略 */ }
 
     try {
         const res = await axios.get(`${baseUrl}/channels`, {
@@ -2978,7 +2934,7 @@ async function getKickUserAvatar(username, userId) {
             kickAvatarCache.set(cacheKey, avatar);
             return avatar;
         }
-    } catch (e) {}
+    } catch { /* 忽略 */ }
 
     console.info(`[Kick Avatar] ❌ 無法取得頭像: ${username}`);
     return "";
@@ -3269,11 +3225,11 @@ const youtubeCacheFile = path.join(__dirname, 'youtube_cache.json')
 function loadYoutubeCache() {
     try {
         if (existsSync(youtubeCacheFile)) return JSON.parse(readFileSync(youtubeCacheFile, 'utf8'))
-    } catch (_) {}
+    } catch { /* 忽略 */ }
     return null
 }
 function saveYoutubeCache(data) {
-    try { writeFileSync(youtubeCacheFile, JSON.stringify(data)) } catch (_) {}
+    try { writeFileSync(youtubeCacheFile, JSON.stringify(data)) } catch { /* 忽略 */ }
 }
 
 function loadYoutubeTokens() {
@@ -3593,9 +3549,9 @@ function connectYoutubeChat(liveChatId, videoId, channelName) {
                 youtubePollInterval = setTimeout(poll, 10000)
             })
     })
+    }
 
     poll()
-}
 }
 
 function disconnectYoutubeChat() {

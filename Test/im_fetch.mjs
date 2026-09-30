@@ -1,6 +1,5 @@
-import { WebSocketConfigDefaults, getWebSocketConfigDefaults } from 'tiktok-live-connector';
+import { getWebSocketConfigDefaults } from 'tiktok-live-connector';
 import { getRandomPresets } from 'tiktok-live-connector';
-import axios from 'axios';
 
 const presets = getRandomPresets();
 const wsConfig = getWebSocketConfigDefaults(presets);
