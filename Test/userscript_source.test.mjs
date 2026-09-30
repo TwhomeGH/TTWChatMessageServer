@@ -123,3 +123,16 @@ for (const [label, newline] of [['LF', '\n'], ['CRLF', '\r\n']]) {
         assert.equal(sent[0].audienceKind, 'top-fans');
     });
 }
+
+
+test('Live Center 缺少統計欄位不回報零值，真實零值仍保留', () => {
+    const {ctx}=contextFor('liveCenter.user.js','function readMetrics()', '/** 每 30 秒');
+    ctx.document={querySelectorAll:()=>[]};
+    assert.ok(Object.values(ctx.readMetrics()).every(value=>value===null));
+    ctx.document={querySelectorAll:()=>['鑽石數量','觀眾總數','送禮者','新粉絲','獲讚'].map((label,i)=>({
+        childElementCount:0,textContent:label,parentElement:{querySelector:()=>({textContent:['6','0','—','1,234','1.2K'][i]})}
+    }))};
+    const data=ctx.readMetrics();
+    assert.equal(data.diamonds,6);assert.equal(data.uniqueViewers,0);
+    assert.equal(data.gifters,null);assert.equal(data.newFollowers,1234);assert.equal(data.likes,null);
+});

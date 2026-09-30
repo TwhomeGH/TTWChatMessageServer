@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat → Socket Bridge
 // @namespace    pip-chat-bridge
-// @version      1.12
+// @version      1.13
 // @description  Listen TikTok live chat and forward to socket server
 // @author       Nuclear0709
 // @match        https://livecenter.tiktok.com/*
@@ -56,7 +56,10 @@ function readMetrics() {
         const node = [...document.querySelectorAll('div')]
             .find(el => el.childElementCount === 0 && el.textContent.trim() === label);
         const text = node?.parentElement?.querySelector('span')?.textContent ?? '';
-        const value = Number(text.replace(/[^\d.]/g, ''));
+        const normalized = text.trim().replace(/,/g, '');
+        // 缺欄位、破折號或尚未辨識的縮寫不能當作零值／猜測數量。
+        if (!/^\d+(?:\.\d+)?$/.test(normalized)) return null;
+        const value = Number(normalized);
         return Number.isFinite(value) ? value : null;
     };
     return {

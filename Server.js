@@ -440,17 +440,25 @@ function startRuntime(url) {
                         const last = cacheAutoClipStats.stats[cacheAutoClipStats.stats.length - 1];
                         pushLog(`📈 [AutoClip] 統計更新 (${cacheAutoClipStats.stats.length} 筆, 門檻=${cacheAutoClipStats.config.scoreThreshold}, 最近: 觀眾=${last?.viewers} 基準=${last?.baseViewers} 訊息=${last?.msgRate}/min 分數=${last?.score})`);
                     } else {
-                        if (PType == "top10") {
-                            cacheKeywordDataTop = json.data;
-                        } else if (PType == "all") {
-                            cacheKeywordDataAll = json.data;
-                            if (messageFilter) messageFilter.mergeStats(json.data);
+                        if (PType === "top10" || PType === "all") {
+                            if (!Array.isArray(json.data)) {
+                                pushLog(`[OUT] 關鍵字統計格式錯誤 (${PType}): data 必須為陣列`);
+                                continue;
+                            }
+                            if (PType === "top10") {
+                                cacheKeywordDataTop = json.data;
+                            } else {
+                                cacheKeywordDataAll = json.data;
+                                if (messageFilter) messageFilter.mergeStats(json.data);
+                            }
+                            // 完整快照用於快取／保存，不將聊天與 recent 明細複製進診斷日誌。
+                            pushLog(`[OUT] 關鍵字統計已同步 (${PType === "all" ? "完整快照" : "Top 10"}，${json.data.length} 種留言)`);
+                        } else {
+                            pushLog(`[OUT] ${line}`);
                         }
-                        pushLog(`[OUT] ${line}`);
-                        pushLog('📈 TikTok.js 回傳解析後:', json);
                     }
                 } catch (err) {
-                    pushLog('[OUT] JSON 解析失敗:', err.message);
+                    pushLog('[OUT] JSON 解析或處理失敗（省略原始資料）:', String(err.message).slice(0, 160));
                 }
             }
         });
@@ -527,12 +535,19 @@ const server = http.createServer((req, res) => {
             try {
 
 
-                pushLog('Chat入口📩 收到訊息:', body);
 
                 const raw = JSON.parse(body);
                 const data = { ...raw, ...(messageFilter?.normalizeSource(raw, 'userscript') || { platform: 'Unknown', transport: 'userscript', isTest: raw.isTest === true, heatEligible: raw.isTest !== true }), receivedAt: Date.now() };
 
-                require('./TrafficRoutes.cjs').traffic.record(data);
+                const trafficRecorded = require('./TrafficRoutes.cjs').traffic.record(data);
+                // metrics 由主服務直接保存，與聊天及子程序生命週期無關。
+                if (data.type === 'metrics') {
+                    pushLog(`[METRICS] ${data.platform} 統計${trafficRecorded ? '已記錄' : '未納入（無有效欄位、測試或重複資料）'}`);
+                    res.writeHead(200);
+                    res.end('OK');
+                    return;
+                }
+                pushLog('Chat入口📩 收到訊息:', body);
                 const { user, message } = data;
 
                 if (data.type === 'audience') {

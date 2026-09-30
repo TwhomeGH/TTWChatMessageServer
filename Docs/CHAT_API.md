@@ -145,3 +145,9 @@ GM_xmlhttpRequest({
 | `400` | `Invalid JSON` | JSON 解析或此段處理發生例外；目前不提供細分錯誤碼。 |
 
 聊天子程序未啟動時，入口可記錄聊天統計，但不會透過子程序送往 Socket 或計算自動剪輯；觀眾更新也不會暫存等待稍後重送。HTTP 200 不能作為子程序健康檢查。更新程式後應重新啟動伺服器與聊天子程序，並更新瀏覽器已安裝的腳本。
+
+## 累計成效 metrics
+
+`type: "metrics"`（例如 diamonds、uniqueViewers、gifters、newFollowers、likes）由主服務直接記錄人流成效，不套用聊天過濾、不送往 TikTok.js，也不寫入關鍵字統計；TikTok.js 未啟動仍可接收。日誌只顯示 `[METRICS]` 摘要。HTTP 200 表示入口已處理，不代表資料一定納入統計，測試、重複或無有效欄位可能被略過。
+
+`liveCenter.user.js` 1.13 將缺少或無法辨識的統計欄位保留為 null，不再將空字串轉成 0；真正顯示的 0 仍會保留。更新後需在腳本管理器重新安裝並重新整理監控頁。

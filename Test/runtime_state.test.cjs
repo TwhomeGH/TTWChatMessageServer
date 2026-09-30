@@ -117,3 +117,60 @@ test('JSON 啟動入口驗證方法、來源與重複啟動，回報即時狀態
     assert.equal((await request('POST', 'http://localhost:3332', { isSocket: true })).status, 409);
     assert.equal(calls, 1);
 });
+
+
+test('子程序統計以摘要記錄，完整快照仍更新快取且分段輸出不遺失', () => {
+    const fs = require('node:fs');
+    const vm = require('node:vm');
+    const source = fs.readFileSync(require.resolve('../Server.js'), 'utf8');
+    const start = source.indexOf("        tiktokProcess.stdout.on('data'");
+    const end = source.indexOf("        tiktokProcess.stderr.on('data'", start);
+    assert.ok(start >= 0 && end > start);
+    const logs = [], merged = [];
+    const stdout = new EventEmitter();
+    const context = {tiktokProcess:{stdout},stdoutBuffer:'',cacheKeywordDataTop:[],cacheKeywordDataAll:[],
+        cacheAutoClipStats:{}, messageFilter:{mergeStats:data=>merged.push(data)}, pushLog:(...args)=>logs.push(args.join(' '))};
+    vm.runInNewContext(source.slice(start,end),context);
+    const rows = Array.from({length:1000},(_,i)=>({message:'PRIVATE_MESSAGE_'+i,count:20,recent:[{user:'PRIVATE_USER'}]}));
+    const payload = JSON.stringify({type:'all',data:rows})+'\n';
+    stdout.emit('data',Buffer.from('⏹️ direct signer 已關閉\n'+payload.slice(0,700)));
+    stdout.emit('data',Buffer.from(payload.slice(700)+'✅ 優雅退出完成\n'));
+    assert.equal(context.cacheKeywordDataAll.length,1000);
+    assert.equal(merged[0],context.cacheKeywordDataAll);
+    assert.equal(logs.length,3);
+    assert.ok(logs[1].includes('完整快照，1000 種留言'));
+    assert.ok(logs.join('').length<200);
+    assert.ok(!logs.join('').includes('PRIVATE_'));
+    stdout.emit('data',Buffer.from(JSON.stringify({type:'top10',data:rows.slice(0,10)})+'\n'));
+    assert.equal(context.cacheKeywordDataTop.length,10);
+    assert.equal(merged.length,1);
+    stdout.emit('data',Buffer.from('{"type":"all","data":null}\n'));
+    assert.equal(context.cacheKeywordDataAll.length,1000);
+    assert.ok(logs.at(-1).includes('格式錯誤'));
+    stdout.emit('data',Buffer.from('{"type":"NOTICE","message":"diagnostic"}\n'));
+    assert.ok(logs.at(-1).includes('diagnostic'));
+});
+
+
+test('/chat metrics 由主服務記錄，不進聊天過濾、轉送或關鍵字統計', () => {
+    const fs=require('node:fs'), vm=require('node:vm');
+    const source=fs.readFileSync(require.resolve('../Server.js'),'utf8');
+    const start=source.indexOf("        let body = '';", source.indexOf("req.url === '/chat'"));
+    const end=source.indexOf("    // /close",start);
+    const code=source.slice(start,source.lastIndexOf('    }',end));
+    for(const running of [false,true]) {
+        const req=new EventEmitter(),logs=[],records=[];
+        let status, response;
+        const forbidden=()=>{throw Error('metrics entered chat path');};
+        const context={req,res:{writeHead:n=>status=n,end:v=>response=v},pushLog:(...v)=>logs.push(v.join(' ')),
+            console:{error:forbidden},messageFilter:{normalizeSource:()=>({platform:'TikTok',transport:'userscript'})},
+            require:()=>({traffic:{record:data=>{records.push(data);return true;}}}),
+            tiktokProcess:running?{}:null,sendToTikTok:forbidden,processFilter:forbidden,recordMessageStat:forbidden};
+        vm.runInNewContext(code,context);
+        req.emit('data',Buffer.from(JSON.stringify({type:'metrics',platform:'TikTok',diamonds:6})));
+        req.emit('end');
+        assert.equal(status,200);assert.equal(response,'OK');assert.equal(records.length,1);
+        assert.equal(records[0].diamonds,6);assert.equal(logs.length,1);
+        assert.ok(logs[0].includes('[METRICS]'));assert.ok(!logs[0].includes('undefined'));
+    }
+});
