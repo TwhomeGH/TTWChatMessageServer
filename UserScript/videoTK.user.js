@@ -59,7 +59,7 @@
 
 
 
-    // eslint-disable-next-line no-unused-vars -- 預留更新函式，目前未接上
+    // eslint-disable-next-line no-unused-vars -- 目前程式碼中無呼叫端；保留待用
     function updateInfo(video, container) {
         if (!infoDiv) {
             infoDiv = createInfoDiv();

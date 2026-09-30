@@ -41,39 +41,8 @@ async function exchangeKickCode(code, verifier) {
     return res.json();
 }
 
-// eslint-disable-next-line no-unused-vars -- Kick token 續期工具，目前尚未接上
-async function refreshKickToken(refreshToken) {
-    const params = new URLSearchParams({
-        grant_type: 'refresh_token',
-        client_id: process.env.KICK_CLIENT_ID || '',
-        client_secret: process.env.KICK_CLIENT_SECRET || '',
-        refresh_token: refreshToken,
-    });
-    const res = await fetch('https://id.kick.com/oauth/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params,
-    });
-    if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Kick token refresh failed: ${res.status} ${errText}`);
-    }
-    return res.json();
-}
-
+// Kick token 的讀取／刷新在 TikTok.js（getValidKickToken）；此處只保留 OAuth callback 寫入用。
 const kickTokenFile = path.join(__dirname, 'kick_tokens.json');
-
-// eslint-disable-next-line no-unused-vars -- Kick token 載入工具，目前尚未接上
-function loadKickTokens() {
-    try {
-        if (fs.existsSync(kickTokenFile)) {
-            return JSON.parse(fs.readFileSync(kickTokenFile, 'utf8'));
-        }
-    } catch (err) {
-        console.error('讀取 kick_tokens.json 失敗:', err);
-    }
-    return null;
-}
 
 function saveKickTokens(tokens) {
     fs.writeFileSync(kickTokenFile, JSON.stringify(tokens, null, 2));
