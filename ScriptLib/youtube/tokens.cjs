@@ -14,6 +14,10 @@ const youtubeTokenFile = path.resolve(__dirname, '..', '..', 'youtube_tokens.jso
 
 let youtubeAccessToken = null;
 
+/**
+ * 讀取 youtube_tokens.json。
+ * @returns {Object|null} token 物件；檔案不存在或解析失敗時為 null。
+ */
 function loadYoutubeTokens() {
     try {
         if (fs.existsSync(youtubeTokenFile)) {
@@ -25,10 +29,22 @@ function loadYoutubeTokens() {
     return null;
 }
 
+/**
+ * 將 token 寫入 youtube_tokens.json。
+ * @param {Object} tokens
+ * @returns {void}
+ */
 function saveYoutubeTokens(tokens) {
     fs.writeFileSync(youtubeTokenFile, JSON.stringify(tokens, null, 2));
 }
 
+/**
+ * 以 OAuth 授權碼交換 token（Server.js 的 /get-youtube-token callback 用）。
+ * 成功時會附加 obtainmentTimestamp。
+ * @param {string} code 授權碼
+ * @returns {Promise<Object>} token 物件
+ * @throws {Error} 交換失敗時
+ */
 async function exchangeYoutubeCode(code) {
     const params = new URLSearchParams({
         grant_type: 'authorization_code',
@@ -48,7 +64,12 @@ async function exchangeYoutubeCode(code) {
     return tokens;
 }
 
-// 回傳 { headers, params } 供 YouTube Data API 使用；無 OAuth token 時退回 API Key。
+/**
+ * 取得 YouTube Data API 認證參數：優先使用 OAuth Bearer token（記憶體→檔案，過期則刷新），
+ * 否則退回 API Key。
+ * @param {string} [apiKey] YOUTUBE_API_KEY
+ * @returns {Promise<{headers: Object, params: Object}|null>} 無任何可用認證時為 null
+ */
 async function getYoutubeAuthParams(apiKey) {
     if (youtubeAccessToken) {
         console.log('ℹ️ Youtube 使用 OAuth Bearer token（記憶體）');

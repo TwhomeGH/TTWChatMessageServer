@@ -14,6 +14,10 @@ const kickTokenFile = path.resolve(__dirname, '..', '..', 'kick_tokens.json');
 
 let cachedAccessToken = null;
 
+/**
+ * 讀取專案根目錄的 kick_tokens.json。
+ * @returns {Object|null} token 物件；不存在或解析失敗時為 null。
+ */
 function loadKickTokens() {
     try {
         if (fs.existsSync(kickTokenFile)) {
@@ -25,10 +29,22 @@ function loadKickTokens() {
     return null;
 }
 
+/**
+ * 將 token 寫入 kick_tokens.json。
+ * @param {Object} tokens
+ * @returns {void}
+ */
 function saveKickTokens(tokens) {
     fs.writeFileSync(kickTokenFile, JSON.stringify(tokens, null, 2));
 }
 
+/**
+ * 以 OAuth 授權碼交換 token（Server.js 的 /get-kick-token callback 用）。
+ * @param {string} code 授權碼
+ * @param {string} verifier PKCE code_verifier
+ * @returns {Promise<Object>} token 物件
+ * @throws {Error} 交換失敗時
+ */
 async function exchangeKickCode(code, verifier) {
     const params = new URLSearchParams({
         grant_type: 'authorization_code',
@@ -50,6 +66,12 @@ async function exchangeKickCode(code, verifier) {
     return res.json();
 }
 
+/**
+ * 以 refresh_token 換取新的 access token。
+ * @param {string} refreshToken
+ * @returns {Promise<Object>} 新 token 物件
+ * @throws {Error} 刷新失敗時
+ */
 async function refreshKickToken(refreshToken) {
     const params = new URLSearchParams({
         grant_type: 'refresh_token',
@@ -69,6 +91,10 @@ async function refreshKickToken(refreshToken) {
     return res.json();
 }
 
+/**
+ * 取得有效的 Kick access token（記憶體快取→檔案；過期前 60 秒自動刷新）。
+ * @returns {Promise<string|null>} access token；無可用 token 時為 null
+ */
 async function getValidKickToken() {
     if (cachedAccessToken) return cachedAccessToken;
 

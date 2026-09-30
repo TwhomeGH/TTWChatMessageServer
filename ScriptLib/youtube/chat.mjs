@@ -1,21 +1,25 @@
 // Youtube 直播聊天室整合：解析頻道、檢查開播，並輪詢 YouTube Data API v3 取得訊息。
 // 依賴由呼叫端以 deps 注入（DI），模組自己持有輪詢計時器與聊天室狀態。
 // OAuth token 的讀取／刷新在 ./tokens.cjs。
-//
-// deps = {
-//   axios, apiKey, pollIntervalS,
-//   writeLog(file, message, type),
-//   bark(title, comment, icon, url?),
-//   sendSystem(text),
-//   sendChat(user, message, img),
-//   reportTraffic(data),
-//   reportFiltered(fr, meta),
-//   filter(message),
-//   recordHeat(message, meta) -> boolean,
-//   replaceEmojis(text),
-//   translate(text) -> Promise<string>,
-//   onViewerCount(n),
-// }
+
+/**
+ * YouTube 聊天模組的依賴注入物件。
+ * @typedef {Object} YoutubeChatDeps
+ * @property {Object} axios axios 實例，用於 YouTube Data API v3。
+ * @property {string} apiKey YOUTUBE_API_KEY；無有效 OAuth token 時作為認證。
+ * @property {number} pollIntervalS 最小輪詢間隔（秒）；實際取 API 建議值與此值較大者。
+ * @property {(file: string, message: string, type?: string) => void} writeLog 寫入執行日誌。
+ * @property {(title: string, comment: string, icon?: string, url?: string) => void} bark 發送 Bark 通知。
+ * @property {(text: string) => void} sendSystem 送出系統訊息（呼叫端自行帶入目前觀眾數／清單）。
+ * @property {(user: string, message: string, img?: string) => void} sendChat 送出聊天訊息。
+ * @property {(data: Object) => void} reportTraffic 回報人流事件。
+ * @property {(fr: Object, meta: Object) => void} reportFiltered 回報被過濾的訊息。
+ * @property {(message: {user: string, message: string}) => Object} filter 套用訊息過濾規則，回傳 {blocked, modified, user, message, reason}。
+ * @property {(message: string, meta: Object) => boolean} recordHeat 記錄聊天熱度；回傳 false 表示略過此訊息。
+ * @property {(text: string) => string} replaceEmojis 將表情短碼替換成圖片網址。
+ * @property {(text: string) => Promise<string>} translate 翻譯文字。
+ * @property {(count: number) => void} onViewerCount 回報觀眾數。
+ */
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -297,6 +301,12 @@ function connect(liveChatId, videoId, channelName, deps) {
     poll();
 }
 
+/**
+ * 啟動 YouTube 聊天：解析頻道、檢查是否開播，開始輪詢 liveChat 訊息與觀眾數。
+ * @param {string} channelName YouTube 頻道名稱或 UC 開頭頻道 ID。
+ * @param {YoutubeChatDeps} deps
+ * @returns {Promise<void>}
+ */
 export async function startYoutubeChat(channelName, deps) {
     const { writeLog, sendSystem, bark, apiKey } = deps;
 
@@ -337,6 +347,10 @@ export async function startYoutubeChat(channelName, deps) {
     connect(liveInfo.liveChatId, liveInfo.videoId, info.channelName, deps);
 }
 
+/**
+ * 停止 YouTube 輪詢與觀眾數計時器，並清空聊天室狀態（可重複呼叫）。
+ * @returns {void}
+ */
 export function stopYoutubeChat() {
     clearTimeout(youtubePollInterval);
     clearInterval(youtubeViewerInterval);

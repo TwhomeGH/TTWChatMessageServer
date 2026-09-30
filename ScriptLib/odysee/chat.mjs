@@ -1,20 +1,22 @@
 // Odysee 直播聊天室整合：解析頻道 claim、檢查是否開播、透過 WebSocket 接收留言。
 // 依賴一律由呼叫端以 deps 注入（DI），模組自己持有連線狀態；不直接碰主程式的全域。
-//
-// deps = {
-//   axios,
-//   writeLog(file, message, type),
-//   bark(title, comment, icon, url?),
-//   sendSystem(text),
-//   sendChat(user, message, img),
-//   reportTraffic(data),
-//   reportFiltered(fr, meta),
-//   filter(message),
-//   recordHeat(message, meta) -> boolean,
-//   replaceEmojis(text),
-//   translate(text) -> Promise<string>,
-//   onViewerCount(n),
-// }
+
+/**
+ * Odysee 聊天模組的依賴注入物件。
+ * @typedef {Object} OdyseeChatDeps
+ * @property {Object} axios axios 實例，用於 Odysee REST API。
+ * @property {(file: string, message: string, type?: string) => void} writeLog 寫入執行日誌。
+ * @property {(title: string, comment: string, icon?: string, url?: string) => void} bark 發送 Bark 通知。
+ * @property {(text: string) => void} sendSystem 送出系統訊息（呼叫端自行帶入目前觀眾數／清單）。
+ * @property {(user: string, message: string, img?: string) => void} sendChat 送出聊天訊息。
+ * @property {(data: Object) => void} reportTraffic 回報人流事件。
+ * @property {(fr: Object, meta: Object) => void} reportFiltered 回報被過濾的訊息。
+ * @property {(message: {user: string, message: string}) => Object} filter 套用訊息過濾規則，回傳 {blocked, modified, user, message, reason}。
+ * @property {(message: string, meta: Object) => boolean} recordHeat 記錄聊天熱度；回傳 false 表示略過此訊息。
+ * @property {(text: string) => string} replaceEmojis 將表情短碼替換成圖片網址。
+ * @property {(text: string) => Promise<string>} translate 翻譯文字。
+ * @property {(count: number) => void} onViewerCount 回報觀眾數。
+ */
 
 const RESOLVE_URL = 'https://api.na-backend.odysee.com/api/v1/proxy?m=resolve';
 const IS_LIVE_URL = 'https://api.odysee.live/livestream/is_live';
@@ -152,6 +154,12 @@ function connect(claimId, channelName, deps) {
     };
 }
 
+/**
+ * 啟動 Odysee 聊天：解析頻道 claim、檢查是否開播，連上 WebSocket 接收留言。
+ * @param {string} channelName Odysee 頻道名稱（可帶或不帶開頭 @）。
+ * @param {OdyseeChatDeps} deps
+ * @returns {Promise<void>}
+ */
 export async function startOdyseeChat(channelName, deps) {
     const { writeLog, bark, sendSystem } = deps;
 
@@ -196,6 +204,11 @@ export async function startOdyseeChat(channelName, deps) {
     connect(streamId, info.channelName, deps);
 }
 
+/**
+ * 關閉目前的 Odysee WebSocket（未連線時不做事）。
+ * @param {{writeLog?: (file: string, message: string, type?: string) => void}} [deps] 可選；提供時用於記錄關閉失敗。
+ * @returns {void}
+ */
 export function stopOdyseeChat(deps) {
     if (!odyseeWs) return;
     const writeLog = deps?.writeLog;
