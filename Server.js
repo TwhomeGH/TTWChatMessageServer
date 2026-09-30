@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { isDeepStrictEqual } = require('node:util');
 const kickTokens = require('./ScriptLib/kick/tokens.cjs');
+const youtubeTokens = require('./ScriptLib/youtube/tokens.cjs');
 
 // PKCE helpers for Kick OAuth
 function base64URLEncode(buffer) {
@@ -1221,24 +1222,8 @@ const server = http.createServer((req, res) => {
 
         (async () => {
             try {
-                const params = new URLSearchParams({
-                    grant_type: 'authorization_code',
-                    client_id: process.env.YOUTUBE_CLIENT_ID || '',
-                    client_secret: process.env.YOUTUBE_CLIENT_SECRET || '',
-                    redirect_uri: 'http://localhost:3332/get-youtube-token',
-                    code: code,
-                });
-                const res2 = await fetch('https://oauth2.googleapis.com/token', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: params,
-                });
-                if (!res2.ok) throw new Error(`Token exchange failed: ${res2.status} ${await res2.text()}`);
-
-                const tokens = await res2.json();
-                tokens.obtainmentTimestamp = Date.now();
-                const tokenFile = path.join(__dirname, 'youtube_tokens.json');
-                fs.writeFileSync(tokenFile, JSON.stringify(tokens, null, 2));
+                const tokens = await youtubeTokens.exchangeYoutubeCode(code);
+                youtubeTokens.saveYoutubeTokens(tokens);
                 pushLog('✅ Youtube OAuth 成功，已儲存 token');
 
                 res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
