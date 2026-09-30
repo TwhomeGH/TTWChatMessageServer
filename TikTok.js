@@ -4,9 +4,7 @@ import kickTokens from './ScriptLib/kick/tokens.cjs';
 import { startOdyseeChat, stopOdyseeChat } from './ScriptLib/odysee/chat.mjs';
 import { startYoutubeChat, stopYoutubeChat } from './ScriptLib/youtube/chat.mjs';
 import { normalizeSource } from './MessageSource.mjs';
-import { ApiClient } from '@twurple/api';
-import { RefreshingAuthProvider } from '@twurple/auth';
-import { EventSubWsListener } from '@twurple/eventsub-ws';
+import { startTwitchClient, stopTwitchClient, getUserIcon, apiClient, tuser } from './ScriptLib/twitch/client.mjs';
 import { promises as fs, readFileSync, existsSync, writeFileSync } from 'fs';
 import axios from 'axios';
 
@@ -496,12 +494,11 @@ async function handleExit() {
 
     isEnd = true;
 
-    clearInterval(twitchViewCache);
-
     if (tkReconnectTimer) { clearTimeout(tkReconnectTimer); tkReconnectTimer = null; }
     if (viewCacheInterval) { clearInterval(viewCacheInterval); viewCacheInterval = null; }
     stopYoutubeChat();
     stopOdyseeChat();
+    stopTwitchClient();
     console.log("⏹️ 已停止重連／計時器");
 
     sendBarkNotification("系統通知", "TTW Chat Message Server 已關閉", "");
@@ -2041,199 +2038,20 @@ function fetchAndSyncGifts() {
     })
 }
 
-// --- 1. Auth ---
-const clientId = process.env.CLIENT_ID;
-const clientSecret = process.env.CLIENT_SECRET;
-
-
-const tokenPath = path.resolve('./tokens.json');
-
-// 定義空範本
-const emptyTokenTemplate = {
-    accessToken: "",
-    refreshToken: "",
-    scope: [
-        "bits:read",
-        "channel:read:goals",
-        "channel:read:redemptions",
-        "channel:read:subscriptions",
-        "chat:read",
-        "clips:edit",
-        "moderator:read:followers",
-        "user:read:chat",
-        "user:read:subscriptions"
-    ],
-    expiresIn: 0,
-    obtainmentTimestamp: Date.now()
-};
-// 檢查 tokens.json 是否存在且有效，否則建立空範本
-
-async function loadTokens() {
-    try {
-        const data = await fs.readFile(tokenPath, 'utf-8');
-        const raw = JSON.parse(data);
-        // 標準化：將 snake_case（Twitch API 原始格式）轉為 camelCase（twurple 格式）
-        if (raw.access_token && !raw.accessToken) {
-            raw.accessToken = raw.access_token;
-            raw.refreshToken = raw.refresh_token || raw.refreshToken;
-            raw.expiresIn = raw.expires_in ?? raw.expiresIn;
-            raw.obtainmentTimestamp = raw.obtainmentTimestamp || Date.now();
-        }
-        return raw;
-    } catch (err) {
-        if (err.code === 'ENOENT') {
-            // 檔案不存在 → 建立空範本
-            await fs.writeFile(tokenPath, JSON.stringify(emptyTokenTemplate, null, 4), 'utf-8');
-            return emptyTokenTemplate;
-        } else {
-            // 其他錯誤直接丟
-            throw err;
-        }
-    }
-}
-
-    const REQUIRED_TWITCH_SCOPES = ['user:read:subscriptions'];
-
-async function ensureTwitchScopes(tokenData, authProvider) {
-    const missing = REQUIRED_TWITCH_SCOPES.filter(s => !tokenData.scope?.includes(s));
-    if (missing.length === 0) {
-        console.log('✅ Twitch OAuth scope 完整');
-        return;
-    }
-
-    console.warn(`⚠️ Twitch token 缺少 scope:`, missing.join(', '));
-    console.log(`📋 目前 scope: ${(tokenData.scope || []).join(', ')}`);
-    console.log('需重新授權以取得完整權限。');
-
-    const SERVER_PORT = process.env.TWITCH_REDIRECT_URI
-        ? new URL(process.env.TWITCH_REDIRECT_URI).port || '3332'
-        : '3332';
-    const redirectUri = `http://localhost:${SERVER_PORT}/twitch-oauth-callback`;
-    console.log(`ℹ️ 回調網址: ${redirectUri}`);
-
-    const scopes = [...new Set([...(tokenData.scope || []), ...REQUIRED_TWITCH_SCOPES])].join(' ');
-    const authUrl = `https://id.twitch.tv/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}`;
-
-    console.log(`🔗 正在瀏覽器中開啟 Twitch 授權頁面…`);
-    try {
-        const { execSync } = await import('child_process');
-        execSync(`start "" "${authUrl}"`, { timeout: 5000 });
-    } catch (_) {
-        console.log(`若瀏覽器未自動開啟，請手動訪問授權連結`);
-    }
-
-    let code = null;
-    const pollUrl = `http://localhost:${SERVER_PORT}/twitch-oauth-poll`;
-    const deadline = Date.now() + 120000;
-    console.log(`⏳ 等待用戶授權中（最長 120 秒）...`);
-    while (Date.now() < deadline) {
-        try {
-            const res = await fetch(pollUrl);
-            if (res.ok) {
-                const data = await res.json();
-                if (data.code) {
-                    code = data.code;
-                    console.log(`✅ 收到授權碼，正在交換 token...`);
-                    break;
-                }
-            }
-        } catch (_) {
-            // Server.js not ready yet
-        }
-        await new Promise(r => setTimeout(r, 1000));
-    }
-
-    if (!code) {
-        console.error('❌ Twitch OAuth 逾時（2分鐘），請重啟程式再試');
-        console.warn('💡 也可透過 Config 頁面手動重新授權: http://localhost:3332/config');
-        return;
-    }
-
-    console.log(`🔄 正在交換 authorization code 為 access token...`);
-    const tokenRes = await fetch('https://id.twitch.tv/oauth2/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-            client_id: clientId,
-            client_secret: clientSecret,
-            code,
-            grant_type: 'authorization_code',
-            redirect_uri: redirectUri,
-        })
-    });
-
-    if (!tokenRes.ok) {
-        const errText = await tokenRes.text().catch(() => '');
-        console.error('❌ Token 交換失敗:', tokenRes.status, errText);
-        return;
-    }
-
-    const newToken = await tokenRes.json();
-    console.log(`📦 Token 回應: access_token=***${newToken.access_token?.slice(-6)}, expires_in=${newToken.expires_in}s, scope=${(newToken.scope || []).join(',')}`);
-
-    const normalizedToken = {
-        accessToken: newToken.access_token,
-        refreshToken: newToken.refresh_token,
-        expiresIn: newToken.expires_in,
-        scope: newToken.scope || scopes.split(' '),
-        obtainmentTimestamp: Date.now()
-    };
-
-    await fs.writeFile(tokenPath, JSON.stringify(normalizedToken, null, 4), 'utf-8');
-    console.log('✅ tokens.json 已更新');
-
-    console.log(`🔄 正在更新 authProvider...`);
-    try {
-        await authProvider.addUserForToken(normalizedToken);
-        console.log('✅ Twitch OAuth 完成，Token 已生效');
-    } catch (err) {
-        console.error('❌ authProvider 更新失敗:', err.message);
-    }
-}
-
-const tokenData = await loadTokens();
-
-const authProvider = new RefreshingAuthProvider({ clientId, clientSecret });
-authProvider.onRefresh(async (userId, newTokenData) => {
-    await fs.writeFile(`./tokens.json`, JSON.stringify(newTokenData, null, 4), 'utf-8');
+// --- Twitch SDK 生命週期（auth／apiClient／listener／viewer）交由 ScriptLib/twitch/client.mjs 管理 ---
+await startTwitchClient({
+    userName: process.env.TWITCH_USER_NAME || "coffeelatte0709",
+    enabled: isTwitch,
+    writeLog,
+    onError: onTwitchError,
+    onStreamOnline: onTwitchStreamOnline,
+    onStreamOffline: onTwitchStreamOffline,
+    onFollow: onTwitchFollow,
+    onCheer: onTwitchCheer,
+    onChat: onTwitchChat,
+    onSocketDisconnect: () => autoClip?.reset(),
+    onViewer: onTwitchViewer,
 });
-await authProvider.addUserForToken(tokenData).catch(err => {
-    console.warn('⚠️ Twitch token 無效，可透過 Config 頁面重新授權:', err.message);
-});
-if (isTwitch) await ensureTwitchScopes(tokenData, authProvider);
-
-let apiClient, listener, tuser;
-try {
-    apiClient = new ApiClient({ authProvider });
-
-    let TwitchUserName = process.env.TWITCH_USER_NAME || "coffeelatte0709"
-    const user = await apiClient.users.getUserByName(TwitchUserName);
-    tuser = user.id;
-
-    console.log("[Twitch] UserID", tuser);
-    writeLog("Default", `取得 Twitch UserID: ${tuser}`, "System")
-
-
-    // --- 2. EventSub WebSocket ---
-    listener = new EventSubWsListener({ apiClient, port: 0 });
-
-    if (isTwitch) {
-        console.log("啟用 Twitch 事件監聽");
-
-        writeLog("Default", "啟用 Twitch 事件監聽", "System")
-
-        listener.start();
-    }
-} catch (err) {
-    console.error('⚠️ Twitch 初始化失敗（token 無效或缺少權限），Twitch 功能已停用:', err.message);
-    console.warn('💡 可透過 Config 頁面重新授權: http://localhost:3332/config');
-}
-
-
-async function getUserIcon(id) {
-    const uss = await apiClient.users.getUserById(id);
-    return uss.profilePictureUrl;
-}
 
 
 
@@ -2246,7 +2064,6 @@ connectSocket();
 
 // ─── Twitch 自動剪輯 (AutoClip) ───
 
-listener.onUserSocketDisconnect(() => autoClip?.reset());
 if (isTwitch && process.env.AUTO_CLIP_ENABLED === '1') {
     autoClip = new AutoClipManager({
         onCreateClip: (title, context) => craeteTwitchClip(title, '', 'auto', context),
@@ -2294,32 +2111,21 @@ function pushAutoClipStats() {
     }
 }
 
-// Twitch 觀眾數定時更新
-function twitchViewCache() {
-    apiClient.streams.getStreamByUserId(tuser).then(stream => {
-        if (stream) {
-            TwitchViewerCount = stream.viewers;
-            reportTraffic({platform:'Twitch',type:'audience',userNum:stream.viewers,streamId:stream.id != null ? String(stream.id) : undefined,startedAt:stream.startDate?.toISOString()});
-            autoClip?.updateViewers(stream.viewers);
-            let DA = new Date()
-            console.log(`📊 Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`);
-            writeLog("Default", `Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`, "Twitch View");
-            updateCombinedViewerCount();
-        } else { autoClip?.reset(); }
-    }).catch(err => {
-        console.error("⚠️ Twitch 觀眾數取得失敗:", err.message);
-    });
-}
-
-if (isTwitch) {
-    console.log("啟用 Twitch 觀眾數定時更新 (30秒)");
-    twitchViewCache();
-    setInterval(twitchViewCache, 30000);
+// Twitch 觀眾數更新（輪詢由 ScriptLib/twitch/client.mjs 負責）
+function onTwitchViewer(stream) {
+    if (!stream) { autoClip?.reset(); return; }
+    TwitchViewerCount = stream.viewers;
+    reportTraffic({platform:'Twitch',type:'audience',userNum:stream.viewers,streamId:stream.id != null ? String(stream.id) : undefined,startedAt:stream.startDate?.toISOString()});
+    autoClip?.updateViewers(stream.viewers);
+    const DA = new Date();
+    console.log(`📊 Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`);
+    writeLog("Default", `Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`, "Twitch View");
+    updateCombinedViewerCount();
 }
 
 
 // 錯誤處理
-listener.on("error", (err) => {
+function onTwitchError(err) {
     autoClip?.reset();
     console.error('⚠️ Twitch EventSub Listener error:', err);
 
@@ -2327,13 +2133,12 @@ listener.on("error", (err) => {
 
     sendBarkNotification("Twitch 事件監聽錯誤", `Twitch EventSub Listener error: ${err.message || err}`, "");
     sendSocketMessage("系統", `Twitch 事件監聽錯誤: ${err.message || err}`, "", "", false,CacheUserNum,CacheUserList);
-    
-});
+}
 
 
 
 // --- 3. Twitch EventSub 直播開始/結束 ---
-listener.onStreamOnline(tuser, async (event) => {
+async function onTwitchStreamOnline(event) {
     const message = `直播開始啦！標題：${event.broadcasterName} ${event.type}`; 
 
     console.log(message);
@@ -2341,11 +2146,9 @@ listener.onStreamOnline(tuser, async (event) => {
     sendSocketMessage("系統", message, "", "", false,CacheUserNum,CacheUserList);
 
     writeLog("Default", message, "Twitch Stream Status")
+}
 
-    
-});
-
-listener.onStreamOffline(tuser, async (event) => {
+async function onTwitchStreamOffline(event) {
     autoClip?.reset();
     const message = `直播結束啦！標題：${event.broadcasterName}`;  
 
@@ -2355,12 +2158,11 @@ listener.onStreamOffline(tuser, async (event) => {
     sendSocketMessage("系統", message, "", "", false,CacheUserNum,CacheUserList);
 
     writeLog("Default", message, "Twitch Stream Status")
-
-}); 
+}
 
 
 // --- 5. Twitch EventSub ---
-listener.onChannelFollow(tuser, tuser, async (event) => {
+async function onTwitchFollow(event) {
     const icon = await getUserIcon(event.userId);
     const message = `關注了主播`;
 
@@ -2371,10 +2173,9 @@ listener.onChannelFollow(tuser, tuser, async (event) => {
     sendSocketMessage(event.userDisplayName, message, icon,"", false,CacheUserNum,CacheUserList);
 
     writeLog("Default", `${event.userDisplayName} ${message}`, "Twitch Follow")
+}
 
-});
-
-listener.onChannelCheer(tuser, tuser, async (event) => {
+async function onTwitchCheer(event) {
     const message = `送出 ${event.bits} 小奇點`;
     const icon = await getUserIcon(event.userId);
 
@@ -2384,9 +2185,7 @@ listener.onChannelCheer(tuser, tuser, async (event) => {
     sendSocketMessage(event.userDisplayName, message, icon,"", false,CacheUserNum,CacheUserList);
 
     writeLog("Default", `${event.userDisplayName} ${message}`, "Twitch Cheer")
-
-    
-});
+}
 
 
 // ─── 剪輯歷史 (clip_history.json) ───
@@ -2521,7 +2320,7 @@ function craeteTwitchClip(title = null,icon="https://github.com/TwhomeGH/TTWChat
 
 }
 
-listener.onChannelChatMessage(tuser, tuser, async (event) => {
+async function onTwitchChat(event) {
     const receivedAt = Date.now();
     const icon = await getUserIcon(event.chatterId);
     
@@ -2798,9 +2597,7 @@ listener.onChannelChatMessage(tuser, tuser, async (event) => {
 
             writeLog("Default", `${tUser} : ${RESCHAT}`, "Twitch Chat")
     })
-
-    
-});
+}
 
 // 其他事件同理可加 sendSocketMessage
 
