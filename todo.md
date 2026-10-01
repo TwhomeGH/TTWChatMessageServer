@@ -29,32 +29,42 @@
 - 暫停、手動開啟、開啟失敗、跨 show 導航和重新整理行為可預期。
 - 專用瀏覽器能對應正確帳號，並確認聊天／統計抵達本機服務，而非只確認分頁存在。
 
+## 程式碼整理：平台模組化與後續（2026-09-30 起）
 
----
+### 已完成
 
-# 程式碼整理：平台模組化與後續（2026-09-30 起）
+- [x] Kick token 抽出 `ScriptLib/kick/tokens.cjs`（Server.js 與
+  TikTok.js 共用）。
+- [x] Odysee 抽出 `ScriptLib/odysee/chat.mjs`。
+- [x] YouTube 抽出 `ScriptLib/youtube/tokens.cjs`（共用）與
+  `ScriptLib/youtube/chat.mjs`。
+- [x] Twitch SDK 生命週期抽出 `ScriptLib/twitch/client.mjs`。
+- [x] 平台與核心模組補齊 JSDoc（deps typedef 與匯出函式）。
+- [x] ESLint 導入並清乾淨（排除第三方 SDK／樣本、修 ESM
+  sourceType、補 catch 日誌）。
 
-## 已完成
-- [x] Kick token 抽出 `ScriptLib/kick/tokens.cjs`（Server.js 與 TikTok.js 共用）。
-- [x] Odysee 抽出 `ScriptLib/odysee/chat.mjs`（`startOdyseeChat(channelName, deps)`／`stopOdyseeChat`）。
-- [x] YouTube 抽出 `ScriptLib/youtube/tokens.cjs`（共用）與 `ScriptLib/youtube/chat.mjs`。
-- [x] Twitch SDK 生命週期抽出 `ScriptLib/twitch/client.mjs`（事件以 deps callbacks 回呼；`apiClient`／`tuser` 用 live binding）。
-- [x] 平台模組與核心模組補齊 JSDoc（deps typedef 與匯出函式）。
-- [x] ESLint 導入並清乾淨（排除第三方 SDK／樣本、修 ESM sourceType、補 catch 日誌）。
+### Twitch 後續（聊天與剪輯仍在 TikTok.js）
 
-## Twitch 後續（聊天與剪輯仍在 TikTok.js）
-- [ ] 把 Twitch 聊天事件處理（filter／翻譯／sendSocket／`G#Ad`／`G#clip` 指令）收進 `ScriptLib/twitch/chat.mjs`。
-- [ ] 決定 `handleGAd`（贊助廣告）歸屬：收進 `twitch/chat.mjs`，或留在 TikTok.js 由 deps 注入。
-- [ ] 剪輯（`craeteTwitchClip`／`resolveClipTitle`／`clip_history`）抽成 `ScriptLib/twitch/clips.mjs`。
-- [ ] Twitch OAuth 路由（Server.js 的 `/twitch-oauth-*`）是否也集中到模組。
+- [ ] Twitch 聊天事件處理（filter／翻譯／sendSocket／`G#Ad`／
+  `G#clip` 指令）收進 `ScriptLib/twitch/chat.mjs`。
+- [ ] 決定 `handleGAd`（贊助廣告）歸屬：收進 `twitch/chat.mjs`，
+  或留在 TikTok.js 由 deps 注入。
+- [ ] 剪輯（`craeteTwitchClip`／`resolveClipTitle`／`clip_history`）
+  抽成 `ScriptLib/twitch/clips.mjs`。
+- [ ] Twitch OAuth 路由（Server.js 的 `/twitch-oauth-*`）是否也集中。
 
-## 自動剪輯時間準確性
-- [ ] 實跑幾場直播，收集 `🎯 [AutoClip] 時間量測`（peak→請求延遲、峰值在片段第幾秒、涵蓋率）與 `/autoclip` 頁面數據。
-- [ ] 依量測結果決定是否改用 `createClipFromVod`（以 `peakAt` 指定 `vodOffset`）精準建成；必要時做「live 先建、VOD 就緒後核對並補精準版」。
+### 自動剪輯時間準確性
+
+- [ ] 實跑幾場直播，收集 `🎯 [AutoClip] 時間量測`（peak→請求延遲、
+  峰值在片段第幾秒、涵蓋率）與 `/autoclip` 頁面數據。
+- [ ] 依量測結果決定是否改用 `createClipFromVod`（以 `peakAt`
+  指定 `vodOffset`）精準建成。
 - [ ] 檢視 `createAfterDelay`（has_delay）只套用於手動剪輯是否合理。
 
-## 其他尚未模組化的大塊（逐一評估）
-- [ ] 贊助廣告系統（`handleGAd`／`sponsorAds`／`adTimers`）是否獨立成模組。
-- [ ] AutoClip 接線（`AutoClipManager` 建立、`pushAutoClipStats`、5 秒評估）是否集中。
+### 其他尚未模組化的大塊（逐一評估）
+
+- [ ] 贊助廣告系統（`handleGAd`／`sponsorAds`／`adTimers`）。
+- [ ] AutoClip 接線（`AutoClipManager`、`pushAutoClipStats`、5 秒評估）。
 - [ ] TikTok 原生連線（`connection`／事件處理）是否抽出。
-- [ ] ESLint 保留但未使用的函式（`fetchAndSyncGifts`、`scanShadowRoots`、`updateInfo`、`sampleRunTarget`）決定刪除或保留；之後再考慮 `--fix` 與加嚴規則。
+- [ ] ESLint 保留但未使用的函式（`fetchAndSyncGifts`、
+  `scanShadowRoots`、`updateInfo`、`sampleRunTarget`）處置。
