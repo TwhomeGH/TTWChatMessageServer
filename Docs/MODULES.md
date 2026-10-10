@@ -31,6 +31,11 @@ EmojiStore 與其 .js 輔助檔使用 CommonJS 的 require/module.exports；
 AutoClip 子模組使用 .mjs 的 import/export。不要只改全專案 type 設定，避免破壞既有混合模組。
 新功能依責任加入對應資料夾，避免把業務函數集中進通用 utils。
 
+ESM 模組若要 `await fs.readFile`／`fs.writeFile`，必須 `import { promises as fs } from 'fs'`。
+預設匯入的 `fs` 是回呼版，`await fs.readFile(path, 'utf-8')` 會把 `'utf-8'` 當成 callback，
+丟出 `The "cb" argument must be of type function`；若發生在頂層 `await`，會中止後續初始化（見 [運行狀態頁](RUNTIME.md)）。
+只用到同步函式時，預設 `fs` 搭配 `readFileSync`／`writeFileSync` 即可，不需改。
+
 ## 回歸驗證
 
 node --test Test/emoji_store.test.cjs Test/module_boundaries.test.cjs Test/autoclip_v2.test.mjs Test/message_source.test.mjs Test/message_stats.test.mjs
