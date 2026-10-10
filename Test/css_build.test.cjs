@@ -10,7 +10,7 @@ function setup(t,real=false){
     const root=fs.mkdtempSync(path.join(os.tmpdir(),'ttw-css-test-'));
     for(const dir of ['scripts','styles','assets'])fs.mkdirSync(path.join(root,dir),{recursive:true});
     fs.copyFileSync(path.join(__dirname,'../scripts/css-build.cjs'),path.join(root,'scripts/css-build.cjs'));
-    fs.writeFileSync(path.join(root,'styles/app.css'),'@import "tailwindcss" source(none);\n@source "../*.html";\n');
+    fs.writeFileSync(path.join(root,'styles/app.css'),'@import "tailwindcss" source(none);\n@source "../*.html";\n@source "../assets/*.js";\n');
     fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({devDependencies:{'@tailwindcss/cli':VERSION,tailwindcss:VERSION}}));
     if(real){
         fs.symlinkSync(path.join(__dirname,'../node_modules'),path.join(root,'node_modules'),'junction');
@@ -40,12 +40,17 @@ test('file additions, deletions, styles and versions affect fingerprints',t=>{
     }
     fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({devDependencies:{'@tailwindcss/cli':VERSION,tailwindcss:'4.3.4'}}));assert.notEqual(fingerprint(root),original);
 });
-test('front-end JS does not affect the CSS fingerprint (Tailwind scans HTML only)',t=>{
+test('front-end JS used for Tailwind classes affects the CSS fingerprint',t=>{
     const root=setup(t);const original=fingerprint(root);
-    fs.writeFileSync(path.join(root,'assets/traffic.js'),'console.log(1);');
-    assert.equal(fingerprint(root),original);
-    fs.writeFileSync(path.join(root,'assets/traffic.js'),'console.log(2);');
-    assert.equal(fingerprint(root),original);
+    fs.writeFileSync(path.join(root,'assets/traffic.js'),'el.className="text-red-500";');
+    assert.notEqual(fingerprint(root),original);
+    const changed=fingerprint(root);
+    fs.appendFileSync(path.join(root,'assets/traffic.js'),'\nel.className="grid-cols-2";');
+    assert.notEqual(fingerprint(root),changed);
+    const afterJs=fingerprint(root);
+    // 非 Tailwind 產物的前端樣式（assets/*.css）仍不列入指紋。
+    fs.writeFileSync(path.join(root,'assets/page.css'),'.x{}');
+    assert.equal(fingerprint(root),afterJs);
 });
 
 test('missing/corrupt manifest and modified output require a rebuild',t=>{

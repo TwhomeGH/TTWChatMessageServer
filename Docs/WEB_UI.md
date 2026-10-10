@@ -21,7 +21,9 @@ npm run watch:css
 不要使用 `bg-${color}-500` 這類拼接名稱；改用完整 class 對照表。
 建置輸出的 `assets/app.css` 與 `assets/app.css.build.json` 應與頁面一同交付；
 啟動時指紋一致就不需現場編譯，不一致才重建，詳見 [啟動說明](STARTUP.md)。
-指紋只涵蓋會影響 CSS 產出的來源：根目錄 HTML、`styles/`、建置腳本與建置版本；前端 `assets/*.js` 不影響 CSS，因此不列入（改前端 JS 不需重建）。
+指紋涵蓋會影響 CSS 產出的來源：根目錄 HTML、`assets/*.js`、`styles/`、建置腳本與建置版本。
+其中 `assets/*.js` 因 `styles/app.css` 有 `@source "../assets/*.js"`，其完整 class 字串會參與編譯，因此改前端 JS 的 class 也要重建。
+頁面專用的 `assets/*.css` 不是 Tailwind 產物，不列入指紋。
 本專案只用 npm：`yarn.lock` 已移除並列入 `.gitignore`，`package-lock.json` 是唯一鎖檔。
 
 各頁面專用的樣式放在 `assets/<page>.css`（`app.css`、`keyword.css`、`autoclip.css`、`pushdiag.css`、`sponsor.css`、`traffic.css`），由 `WebAssets.cjs` 白名單提供，HTML 只留結構、不再內嵌 `<style>`；這些獨立樣式表不是 Tailwind 產物，**不列入建置指紋**。

@@ -37,7 +37,14 @@ function fingerprint(root = ROOT) {
         }
     }
     walk('styles');
-    // 只收會影響 CSS 產出的來源：Tailwind v4 只掃 HTML（styles/app.css 的 @source），前端 JS 不影響 CSS。
+    // 只收會影響 CSS 產出的來源：Tailwind v4 依 styles/app.css 的 @source 掃描來源，
+    // 目前包含根目錄 HTML 與 assets/*.js（前端 JS 也有完整 class 字串），兩者都要列入指紋。
+    const assetsDir = path.join(root, 'assets');
+    if (fs.existsSync(assetsDir)) {
+        for (const name of fs.readdirSync(assetsDir)) {
+            if (name.endsWith('.js')) files.push('assets/' + name);
+        }
+    }
     files.push('scripts/css-build.cjs');
     if (fs.existsSync(path.join(root, 'package-lock.json'))) files.push('package-lock.json');
     const devDependencies = readJson(path.join(root, 'package.json')).devDependencies || {};
