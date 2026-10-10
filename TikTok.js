@@ -544,14 +544,43 @@ async function handleExit() {
     }
 }
 
+// 啟動是否已完成（頂層初始化全部跑完）。ESM 頂層 await 一旦 reject，後續頂層程式不會
+// 再執行；因此啟動期間的未捕捉例外代表程式處於半初始化狀態（例如 socket 從未 connect），
+// 必須直接結束，不能像執行期例外那樣吞掉後繼續跑。
+let startupComplete = false;
+
+/** 把任意被丟出的值轉成可讀字串（Error 附完整 stack）；非 Error 值也不會讓處理器自己爆掉。 */
+function describeError(value) {
+    if (value instanceof Error) return value.stack || `${value.name}: ${value.message}`;
+    if (value && typeof value === 'object') {
+        try { return JSON.stringify(value); } catch { return String(value); }
+    }
+    return String(value);
+}
+
 process.on('unhandledRejection', (reason) => {
-    console.error('未捕獲的 Promise 拒絕，防止崩潰:', reason instanceof Error ? reason.message : reason);
+    console.error('未捕獲的 Promise 拒絕，防止崩潰:\n' + describeError(reason));
 });
 
 process.on('uncaughtException', (err) => {
-    console.error('未捕獲的例外，防止崩潰:', err.message);
-    sendBarkNotification("TikTok.js 發生錯誤", err.message.substring(0, 100));
-    sendSocketMessage("系統", `TikTok.js 發生錯誤: ${err.message.substring(0, 100)}`, "", "", false, CacheUserNum, CacheUserList);
+    const detail = describeError(err);
+    console.error('未捕獲的例外，防止崩潰:\n' + detail);
+    const shortMsg = detail.split('\n')[0].substring(0, 100);
+
+    if (!startupComplete) {
+        console.error('❌ 啟動階段致命錯誤：頂層初始化已被中止，程式無法正常運作，即將結束 (exit 1)。');
+        console.error(`   診斷：socket connected=${socketTransport.connected} queued=${socketTransport.queue.length} reconnects=${socketTransport.stats.reconnects}`);
+        // Bark 非同步，先送出再結束；硬性逾時避免卡住結束流程。
+        const forceExit = setTimeout(() => process.exit(1), 5000);
+        Promise.resolve()
+            .then(() => sendBarkNotification("TikTok.js 啟動失敗", shortMsg))
+            .catch(() => {})
+            .finally(() => { clearTimeout(forceExit); process.exit(1); });
+        return;
+    }
+
+    sendBarkNotification("TikTok.js 發生錯誤", shortMsg);
+    sendSocketMessage("系統", `TikTok.js 發生錯誤: ${shortMsg}`, "", "", false, CacheUserNum, CacheUserList);
 });
 
 let stdinBuffer = '';
@@ -2097,6 +2126,10 @@ if (isTwitch && process.env.AUTO_CLIP_ENABLED === '1') {
 // 自動剪輯統計：執行中只透過 stdout 推送到 Server.js（存在記憶體），
 // 由 Server.js 在 TikTok.js 結束時才寫入 autoclip_stats.json
 const autoClipSession = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+// ─── 啟動完成標記 ───
+// 這行是頂層初始化最後的執行點；在此之前的未捕捉例外都視為啟動失敗（見上方 uncaughtException）。
+startupComplete = true;
 
 function pushAutoClipStats() {
     if (!autoClip) return;
