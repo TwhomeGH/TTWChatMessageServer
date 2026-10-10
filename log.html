@@ -10,7 +10,7 @@
 
   <div class="bg-gray-800 rounded-lg shadow-lg console-panel w-full flex flex-col">
     <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-      <h1 class="text-xl font-bold text-green-400">系統日誌 Console</h1>
+      <h1 class="text-xl font-bold text-green-400" data-i18n="console.title">系統日誌 Console</h1>
       <nav class="flex gap-2 flex-wrap text-sm">
         <a href="/runtime" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg" data-i18n="nav.runtime">▶ 運行狀態</a>
         <a href="/browser" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg" data-i18n="nav.browser">🌐 專用瀏覽器</a>
@@ -24,28 +24,31 @@
         <a href="/pushdiag" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition" data-i18n="nav.pushdiag">🔧 推流診斷</a>
       <label style="display:inline-flex;gap:8px;align-items:center"><span data-i18n="common.language">語言</span><select data-language-select style="background:#374151;color:#fff;border-radius:6px;padding:6px"><option value="zh-TW">繁體中文</option></select></label><a href="/traffic" class="bg-gray-700 rounded px-3 py-2" data-i18n="traffic.title">人流分析</a></nav>
     </div>
-    
-    <!-- 日誌區塊 -->
-    <div class="bg-black rounded-lg p-4 flex-1 overflow-auto w-full">
-      <pre id="log" 
-            class="whitespace-pre-wrap break-words text-sm w-full overflow-x-auto">
-      </pre>
+
+    <!-- 工具列：搜尋、類型篩選、自動捲動、清除 -->
+    <div class="flex flex-wrap items-center gap-2 mb-3 text-sm">
+      <input id="logSearch" type="search" autocomplete="off" spellcheck="false"
+             class="bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 flex-1 min-w-48"
+             placeholder="搜尋日誌…">
+      <div id="logFilters" class="flex flex-wrap gap-1.5" role="group" aria-label="類型篩選"></div>
+      <label class="inline-flex items-center gap-1.5 select-none cursor-pointer">
+        <input id="logAutoscroll" type="checkbox" class="accent-blue-500 w-4 h-4" checked>
+        <span data-i18n="console.autoscroll">自動捲動</span>
+      </label>
+      <button id="logClear" type="button"
+              class="bg-gray-700 hover:bg-gray-600 text-gray-200 px-3 py-1.5 rounded-lg transition"
+              data-i18n="console.clear">清除畫面</button>
+      <span id="logStatus" class="text-xs text-yellow-400"></span>
+      <span id="logCount" class="text-gray-400 text-xs"></span>
+    </div>
+
+    <!-- 日誌列：時間 / 類型 / 內容 -->
+    <div id="logScroll" class="bg-black rounded-lg flex-1 min-h-0 overflow-auto w-full">
+      <div id="logRows" class="text-sm min-h-full" role="log" aria-live="polite"></div>
     </div>
   </div>
 
   <script src="/assets/i18n.js"></script>
-<script>
-    const logEl = document.getElementById('log');
-    const es = new EventSource('/status/stream');
-
-    let DATE = new Date()
-
-    logEl.textContent = `${DATE.toLocaleString()} 初始化日誌\n`
-    es.onmessage = (e) => {
-      logEl.textContent += e.data + '\n';
-      // 自動滾到底
-      logEl.parentElement.scrollTop = logEl.parentElement.scrollHeight;
-    };
-  </script>
+  <script src="/assets/console.js"></script>
 </body>
 </html>

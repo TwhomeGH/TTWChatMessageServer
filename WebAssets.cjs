@@ -18,7 +18,8 @@ function createWebAssetHandler(root = __dirname) {
             '/assets/i18n.js': ['assets/i18n.js', 'text/javascript; charset=utf-8'],
             '/assets/autoclip.js': ['assets/autoclip.js', 'text/javascript; charset=utf-8'],
             '/assets/emoji.js': ['assets/emoji.js', 'text/javascript; charset=utf-8'],
-            '/assets/keyword.js': ['assets/keyword.js', 'text/javascript; charset=utf-8']
+            '/assets/keyword.js': ['assets/keyword.js', 'text/javascript; charset=utf-8'],
+            '/assets/console.js': ['assets/console.js', 'text/javascript; charset=utf-8']
         };
         const pathname = req.url.split('?')[0];
         const locale = /^\/lang\/([a-zA-Z0-9-]+)\.json$/.exec(pathname)?.[1];

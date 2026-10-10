@@ -137,27 +137,39 @@ function writeLog(filename="Main_Log.log", message) {
  * 日誌推送函數，會同時推送給所有 SSE client
  * @param  {...any} line 
  */
+/**
+ * 由日誌行開頭的 [TAG] 推斷類型，供日誌面板分類與上色。
+ * @param {string} text 已合併的日誌文字
+ * @returns {'error'|'out'|'system'|'metrics'|'info'}
+ */
+function classifyLogLevel(text) {
+    const tag = /^\[([A-Za-z]+)\]/.exec(text)?.[1]?.toLowerCase();
+    if (tag === 'err') return 'error';
+    if (tag === 'out') return 'out';
+    if (tag === 'system' || tag === 'runtime') return 'system';
+    if (tag === 'metrics') return 'metrics';
+    return 'info';
+}
+
 function pushLog(...line) {
 
 
     console.log(...line);
 
 
-    if (logs.length > MAX_LOG_LINES) {
-        logs.shift();
-    }
     const text = line.map(item =>
         typeof item === 'object' ? JSON.stringify(item) : String(item)
     ).join(' ');
+    const entry = { t: Date.now(), level: classifyLogLevel(text), text };
 
-    logs.push(text);
+    logs.push(entry);
     if (logs.length > MAX_LOG_LINES) logs.shift();
 
 
 
-    // 推送給所有 SSE client
+    // 推送給所有 SSE client：純文字端點沿用原格式；結構化端點收到 JSON。
     for (const client of sseClients) {
-        client.write(`data: ${text}\n\n`);
+        client.write(client.structured ? `data: ${JSON.stringify(entry)}\n\n` : `data: ${text}\n\n`);
     }
 
 }
@@ -554,7 +566,7 @@ const server = http.createServer((req, res) => {
     else if (req.url === '/status') {
         res.write(`Running: ${tiktokProcess ? 'YES' : 'NO'}\n`);
         res.write('-------------------------\n');
-        res.write(logs.join('\n'));
+        res.write(logs.map(entry => entry.text).join('\n'));
         res.write('\n');
         res.end();
     }
@@ -570,15 +582,38 @@ const server = http.createServer((req, res) => {
         res.write(`data: Running: ${tiktokProcess ? 'YES' : 'NO'}\n\n`);
         res.write(`data: -------------------------\n\n`);
 
-        logs.forEach(line => {
-            res.write(`data: ${line}\n\n`);
+        logs.forEach(entry => {
+            res.write(`data: ${entry.text}\n\n`);
         });
 
-        // 註冊 client
+        // 註冊純文字 client（沿用原格式）
         const client = res;
+        client.structured = false;
         sseClients.add(client);
 
         // client 中斷時清理
+        req.on('close', () => {
+            sseClients.delete(client);
+        });
+    }
+    // 結構化日誌串流：每筆為 { t, level, text } JSON，供系統日誌面板分類與顯示時間。
+    else if (req.url === '/status/stream/logs') {
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*'
+        });
+
+        // 先補上目前歷史（結構化），再接續即時推送
+        logs.forEach(entry => {
+            res.write(`data: ${JSON.stringify(entry)}\n\n`);
+        });
+
+        const client = res;
+        client.structured = true;
+        sseClients.add(client);
+
         req.on('close', () => {
             sseClients.delete(client);
         });
