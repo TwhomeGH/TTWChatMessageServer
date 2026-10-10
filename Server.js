@@ -53,6 +53,7 @@ var cacheKeywordDataTop = []
 var cacheKeywordDataAll = []
 // 自動剪輯分析歷史：執行時存記憶體（由 TikTok.js 透過 stdout 推播），僅在 TikTok.js 結束時寫入磁碟
 var cacheAutoClipStats = { config: {}, stats: [] }
+var lastAutoClipStatsLogAt = 0 // 自動剪輯統計心跳節流（避免每次推播洗版）
 var stdoutBuffer = ''
 
 function recordMessageStat(message, metadata = {}) {
@@ -374,9 +375,14 @@ function startRuntime(url) {
                             config: json.data?.config || {},
                             stats: (Array.isArray(json.data?.stats) ? json.data.stats : []).slice(-2000),
                         };
-                        // 巨大 JSON 不印原始內容，只印摘要，避免洗版
+                        // 巨大 JSON 不印原始內容，只印摘要，避免洗版。
+                        // 子程序已輸出節流後的狀態列；這裡只保留低頻心跳，確認統計有送達伺服器。
                         const last = cacheAutoClipStats.stats[cacheAutoClipStats.stats.length - 1];
-                        pushLog(`📈 [AutoClip] 統計更新 (${cacheAutoClipStats.stats.length} 筆, 門檻=${cacheAutoClipStats.config.scoreThreshold}, 最近: 觀眾=${last?.viewers} 基準=${last?.baseViewers} 訊息=${last?.msgRate}/min 分數=${last?.score})`);
+                        const nowMs = Date.now();
+                        if (last?.triggered === true || nowMs - lastAutoClipStatsLogAt >= 60000) {
+                            lastAutoClipStatsLogAt = nowMs;
+                            pushLog(`📈 [AutoClip] 統計更新 (${cacheAutoClipStats.stats.length} 筆, 門檻=${cacheAutoClipStats.config.scoreThreshold}, 最近: 觀眾=${last?.viewers} 基準=${last?.baseViewers} 訊息=${last?.msgRate}/min 分數=${last?.score})`);
+                        }
                     } else {
                         if (PType === "top10" || PType === "all") {
                             if (!Array.isArray(json.data)) {

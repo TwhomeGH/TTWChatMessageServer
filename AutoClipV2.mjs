@@ -13,10 +13,14 @@ export class AutoClipManager {
         scoreThreshold = 1.8, floorViewers = 2, floorMsgPerMin = 2,
         cooldownMin = 15, sustainMin = 0.167, warmupMs = 180000,
         minMessages = 6, minUsers = 3, minMessageRatio = 1.5, maxPerUser = 3, staleMs = 90000,
-        titlePrefix = '', log = console.log, now = Date.now, requestTimeoutMs = 60000 } = {}) {
+        titlePrefix = '', log = console.log, now = Date.now, requestTimeoutMs = 60000,
+        logIntervalMs = 60000 } = {}) {
         Object.assign(this, { onCreateClip, shadow, platform, delayOffsetsMs, wViewers, wMsg, scoreThreshold,
             floorViewers, floorMsgPerMin, warmupMs, minMessages, minUsers, minMessageRatio, maxPerUser,
-            staleMs, titlePrefix, log, now, requestTimeoutMs });
+            staleMs, titlePrefix, log, now, requestTimeoutMs, logIntervalMs });
+        // 狀態列只在狀態改變、觸發或達到心跳間隔時輸出，避免每次評估（5 秒）洗版。
+        this.lastLogReason = null;
+        this.lastLogAt = 0;
         this.rateMs = Math.max(5000, rateWindowMin * MINUTE);
         this.baselineMs = Math.max(this.rateMs * 2, baselineWindowMin * MINUTE);
         this.cooldownMs = cooldownMin * MINUTE;
@@ -181,7 +185,12 @@ export class AutoClipManager {
             }
             Object.assign(row, { totalTriggers: this.totalTriggers, shadowTriggers: this.shadowTriggers, pending: this.pending });
         }
-        this.log(`[AutoClip] ${reason} | 留言=${s.windowMsgs} 人數=${s.uniqueUsers} 分數=${s.score.toFixed(2)}`);
+        // 狀態列節流：狀態改變、觸發，或距上次輸出達 logIntervalMs 時才輸出。
+        if (reason !== this.lastLogReason || fire || now - this.lastLogAt >= this.logIntervalMs) {
+            this.log(`[AutoClip] ${reason} | 留言=${s.windowMsgs} 人數=${s.uniqueUsers} 分數=${s.score.toFixed(2)}`);
+            this.lastLogReason = reason;
+            this.lastLogAt = now;
+        }
         return { triggered: fire, reason, stats: row };
     }
 }
