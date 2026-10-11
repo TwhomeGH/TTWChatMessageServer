@@ -1,0 +1,7 @@
+# changelogkit 設定：變更歷史 + 開發索引。
+[tool.changelog]
+title = "TTW Chat Message Server"
+history = "Docs/ChangeHistory.md"
+
+# 保留 patched-plugins 的 .d.ts 與 index.js（可讀的 API），只排除真正的產物。
+exclude = ["**/*.min.js", "**/dist/**/chunk-*.js", "**/dist/**/lib-*.js"]
