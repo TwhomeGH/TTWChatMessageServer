@@ -40,3 +40,6 @@ cache/
 FilterRules.custom.js
 output/playwright/*
 .playwright-cli/*
+
+# changelogkit 匯出的唯讀靜態站（CI 部署 GitHub Pages 產物）。
+_site/
