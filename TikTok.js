@@ -11,6 +11,7 @@ import axios from 'axios';
 
 import { createHub } from './ScriptLib/socket/hub.mjs';
 import { MessageDedup } from './ScriptLib/socket/dedup.mjs';
+import { createGiftNameStore } from './ScriptLib/gift/names.mjs';
 import { TikTokChatGuard, chatMetadata } from './TikTokChatGuard.mjs';
 
 
@@ -239,9 +240,6 @@ const GIFT_MAP_EXAMPLE_FILE = path.resolve("./gift_map.example.json");
 const GIFT_LIST_FILE = path.resolve("./gift_list.json");
 let sentMessages = {}; // { uniqueKey: timestamp }
 let newSentMessages = {};    // 只保存這次新產生的訊息
-let giftNameMap = {};
-const missingGiftNames = new Set();
-const pendingGiftTranslations = new Map();
 
 
 const MESSAGE_TTL = 5 * 60 * 1000; // 5 分鐘
@@ -268,185 +266,6 @@ async function loadSentMessages() {
         }
     }
 }
-
-async function loadGiftNameMap() {
-    try {
-        const raw = await fs.readFile(GIFT_MAP_FILE, "utf-8");
-        giftNameMap = JSON.parse(raw);
-        console.log(`✅ 載入 ${Object.keys(giftNameMap).length} 筆 gift_map 對應`);
-    } catch (err) {
-        if (err.code === 'ENOENT') {
-            try {
-                giftNameMap = JSON.parse(await fs.readFile(GIFT_MAP_EXAMPLE_FILE, "utf-8"));
-                await saveGiftNameMap();
-                console.log(`⚠️ gift_map.json 不存在，已由 gift_map.example.json 初始化 ${Object.keys(giftNameMap).length} 筆對應`);
-            } catch {
-                giftNameMap = {};
-                await saveGiftNameMap();
-                console.log("⚠️ gift_map.json 與 gift_map.example.json 皆不存在，已初始化空對照表");
-            }
-        } else {
-            console.error("❌ 載入 gift_map.json 失敗:", err);
-            giftNameMap = {};
-        }
-    }
-}
-
-async function saveGiftNameMap() {
-    try {
-        const sortedMap = Object.fromEntries(
-            Object.entries(giftNameMap).sort(([a], [b]) => a.localeCompare(b))
-        );
-        await fs.writeFile(GIFT_MAP_FILE, JSON.stringify(sortedMap, null, 4), "utf-8");
-    } catch (err) {
-        console.error("❌ 儲存 gift_map.json 失敗:", err);
-    }
-}
-
-function getTranslatedGiftNameFromMap(giftName) {
-    if (!giftName || typeof giftName !== 'string') {
-        return giftName;
-    }
-
-    const translatedName = giftNameMap[giftName];
-    if (typeof translatedName === 'string' && translatedName.trim().length > 0) {
-        return translatedName;
-    }
-
-    if (!Object.prototype.hasOwnProperty.call(giftNameMap, giftName)) {
-        giftNameMap[giftName] = "";
-        if (!missingGiftNames.has(giftName)) {
-            missingGiftNames.add(giftName);
-            saveGiftNameMap();
-            console.log(`📝 發現未翻譯禮物: ${giftName}，已加入 gift_map.json`);
-        }
-    }
-
-    return "";
-}
-
-
-
-async function translateGiftNameByApi(giftName) {
-    try {
-        const response = await axios.get(TRANSLATE_API_URL, {
-            params: {
-                q: giftName,
-                langpair: `${TRANSLATE_SOURCE_LANG}|${TRANSLATE_TARGET_LANG}`
-            },
-            timeout: 10000
-        });
-
-        const translatedText = response?.data?.responseData?.translatedText?.trim();
-        if (!translatedText || translatedText.toLowerCase() === giftName.toLowerCase()) {
-            return "";
-        }
-
-        console.log(`🌐 禮物翻譯成功: ${giftName} -> ${translatedText}`);
-        return translatedText;
-    } catch (err) {
-        console.error(`❌ 禮物翻譯失敗 (${giftName}):`, err.message);
-        return "";
-    }
-}
-
-async function ensureGiftNameTranslation(giftName) {
-    if (!giftName || typeof giftName !== 'string') {
-        return giftName;
-    }
-
-    const translatedName = getTranslatedGiftNameFromMap(giftName);
-    if (translatedName) {
-        return translatedName;
-    }
-
-    if (pendingGiftTranslations.has(giftName)) {
-        return pendingGiftTranslations.get(giftName);
-    }
-
-    const translationPromise = (async () => {
-        if (!Object.prototype.hasOwnProperty.call(giftNameMap, giftName)) {
-            giftNameMap[giftName] = "";
-            if (!missingGiftNames.has(giftName)) {
-                missingGiftNames.add(giftName);
-                await saveGiftNameMap();
-                console.log(`📝 發現未翻譯禮物: ${giftName}，已加入 gift_map.json`);
-            }
-        }
-
-        const translatedByApi = await translateGiftNameByApi(giftName);
-        if (translatedByApi) {
-            giftNameMap[giftName] = translatedByApi;
-            await saveGiftNameMap();
-            return translatedByApi;
-        }
-
-        return giftName;
-    })();
-
-    pendingGiftTranslations.set(giftName, translationPromise);
-
-    try {
-        return await translationPromise;
-    } finally {
-        pendingGiftTranslations.delete(giftName);
-    }
-}
-
-async function saveGiftCatalog(giftList) {
-    try {
-        const normalizedGiftList = giftList.map(gift => ({
-            id: gift.id,
-            name: gift.name,
-            diamond_count: gift.diamond_count,
-            translatedName: giftNameMap[gift.name] || ""
-        }));
-
-        await fs.writeFile(GIFT_LIST_FILE, JSON.stringify(normalizedGiftList, null, 4), "utf-8");
-        console.log(`✅ 已儲存 gift_list.json，共 ${normalizedGiftList.length} 筆禮物資料`);
-    } catch (err) {
-        console.error("❌ 儲存 gift_list.json 失敗:", err);
-    }
-}
-
-async function syncGiftMapFromGiftList(giftList) {
-    let hasNewGift = false;
-
-    for (const gift of giftList) {
-        if (!gift?.name) {
-            continue;
-        }
-
-        if (!Object.prototype.hasOwnProperty.call(giftNameMap, gift.name)) {
-            giftNameMap[gift.name] = "";
-            hasNewGift = true;
-        }
-    }
-
-    if (hasNewGift) {
-        await saveGiftNameMap();
-        console.log("📝 已將 giftList 中尚未翻譯的禮物加入 gift_map.json");
-    }
-}
-
-async function backfillGiftTranslationsFromGiftList(giftList) {
-    const unresolvedGiftNames = giftList
-        .map(gift => gift?.name)
-        .filter(name => name && !getTranslatedGiftNameFromMap(name));
-
-    const namesToTranslate = unresolvedGiftNames.slice(0, Math.max(0, GIFT_TRANSLATE_PREFILL_LIMIT));
-    if (namesToTranslate.length === 0) {
-        return;
-    }
-
-    console.log(`🌐 準備自動翻譯 ${namesToTranslate.length} 個禮物名稱`);
-
-    for (const giftName of namesToTranslate) {
-        await ensureGiftNameTranslation(giftName);
-    }
-}
-
-
 
 async function saveSentMessages() {
     try {
@@ -923,7 +742,19 @@ process.on("SIGTERM", async () => {
 });
 
 loadSentMessages()
-const giftMapReady = loadGiftNameMap();
+// 禮物名稱翻譯／快取（gift_map.json、gift_list.json）在 ScriptLib/gift/。
+const giftNames = createGiftNameStore({
+    fs,
+    axios,
+    translateApiUrl: TRANSLATE_API_URL,
+    sourceLang: TRANSLATE_SOURCE_LANG,
+    targetLang: TRANSLATE_TARGET_LANG,
+    prefillLimit: GIFT_TRANSLATE_PREFILL_LIMIT,
+    giftMapFile: GIFT_MAP_FILE,
+    giftMapExampleFile: GIFT_MAP_EXAMPLE_FILE,
+    giftListFile: GIFT_LIST_FILE,
+});
+const giftMapReady = giftNames.ready;
 loadEmojiMap();
 loadSponsorAds();
 resumeAdTimers();
@@ -1840,7 +1671,7 @@ connection.on(WebcastEvent.GIFT, async data => {
     await giftMapReady;
     const giftInfo = data.gift;
     const originalGiftName = giftInfo?.name || "";
-    const translatedGiftName = await ensureGiftNameTranslation(originalGiftName);
+    const translatedGiftName = await giftNames.ensureGiftNameTranslation(originalGiftName);
     const giftNameForDisplay = translatedGiftName || originalGiftName;
     let iconn = getTikTokProfilePic(data.user)
     let giftImg = giftInfo?.icon?.urlList?.[0] || ""
@@ -1976,9 +1807,9 @@ function fetchAndSyncGifts() {
     connection.fetchAvailableGifts().then(async (giftList) => {
         await giftMapReady;
         console.log(tiktokName,"Tiktok giftList.length:", giftList.length);
-        await syncGiftMapFromGiftList(giftList);
-        await backfillGiftTranslationsFromGiftList(giftList);
-        await saveGiftCatalog(giftList);
+        await giftNames.syncGiftMapFromGiftList(giftList);
+        await giftNames.backfillGiftTranslationsFromGiftList(giftList);
+        await giftNames.saveGiftCatalog(giftList);
     }).catch(err => {
         console.error("取得禮物列表失敗:", err.message);
     })

@@ -1,5 +1,25 @@
 # ChangeHistory
 
+## 2026.10.12 00:19 禮物名稱翻譯抽出 ScriptLib/gift 模組
+
+**類型**: 重構 · **檔案**: `ScriptLib/gift/names.mjs`
+
+### 問題 - 禮物名稱翻譯／快取散在 TikTok.js
+
+`gift_map.json`／`gift_list.json` 的載入、翻譯、快取與目錄同步都寫在 TikTok.js（約 250 行），與其他平台事件混在一起。
+
+### 根因 - 缺少禮物領域的模組邊界
+
+這些函式只服務禮物名稱，卻和平台連線、聊天處理共用同一個檔案與作用域。
+
+### 修改 - 抽出 ScriptLib/gift
+
+- 新增 `ScriptLib/gift/names.mjs`（`createGiftNameStore(deps)`：檔案 I/O、翻譯 API、prefill 上限皆注入）。
+- TikTok.js 改以 `giftNames.*` 呼叫，移除舊的載入／翻譯／快取函式（-182 行）。
+- 新增 `Test/gift_names.test.mjs`（5 測試，假 fs／axios）並納入 `test:core`。
+
+---
+
 ## 2026.10.12 00:03 socket 輸出層抽出 ScriptLib/socket 模組
 
 **類型**: 重構 · **檔案**: `ScriptLib/socket/hub.mjs`
