@@ -3,13 +3,22 @@
 
 const IMG_URL_RE = /https?:\/\/[^\s]+?\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s]*)?/i;
 
-/** 移除內文裡的圖片網址（emoji 圖或使用者貼的圖）。 */
+/**
+ * 移除內文裡的圖片網址（emoji 圖或使用者貼的圖）。
+ * @param {string} text
+ * @returns {string}
+ */
 export function stripEmojiUrls(text) {
     if (!text || typeof text !== 'string') return text;
     return text.replace(/https?:\/\/[^\s]+(?:png|jpg|jpeg|gif|webp)[^\s]*/gi, '').trim();
 }
 
-/** 從內文挑一個出現過的 emoji 代碼；回傳 { code, url } 或 null。 */
+/**
+ * 從內文挑一個出現過的 emoji 代碼。
+ * @param {string} comment 原始訊息。
+ * @param {Object} [map={}] emoji code → 圖片網址。
+ * @returns {{code: string, url: string}|null}
+ */
 export function pickEmojiIcon(comment, map = {}) {
     if (!comment || typeof comment !== 'string') return null;
     const matched = Object.entries(map).filter(([code]) => comment.includes(code));
@@ -18,7 +27,13 @@ export function pickEmojiIcon(comment, map = {}) {
     return { code, url };
 }
 
-/** 移除內文裡的 emoji 代碼；keepCode 保留（出現多於一次時摘要為「code xN」）。 */
+/**
+ * 移除內文裡的 emoji 代碼；keepCode 保留（出現多於一次時摘要為「code xN」）。
+ * @param {string} text
+ * @param {(string|null)} [keepCode]
+ * @param {Object} [map={}] emoji code → 圖片網址。
+ * @returns {string}
+ */
 export function stripEmojiCodes(text, keepCode, map = {}) {
     if (!text || typeof text !== 'string') return text;
     let result = text;

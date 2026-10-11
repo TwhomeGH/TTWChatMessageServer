@@ -24,6 +24,13 @@ export function parseNtfyTarget(raw) {
 
 /** ntfy 推播通道（JSON publish）。與 Bark 平行、可獨立開關。 */
 export class NtfyChannel {
+    /**
+     * @param {Object} options
+     * @param {string} options.url NTFY_API 網址（https://ntfy.sh/<topic>）。
+     * @param {() => Object} [options.getEmojiMap] 取得 emoji 對照表的函式。
+     * @param {{post: Function}} options.axios
+     * @param {Console} [options.logger=console]
+     */
     constructor({ url, getEmojiMap = () => ({}), axios, logger = console } = {}) {
         this.name = 'ntfy';
         this.url = url;
@@ -32,10 +39,19 @@ export class NtfyChannel {
         this.logger = logger;
     }
 
+    /** @returns {boolean} 是否有可用的 NTFY_API 設定。 */
     get enabled() {
         return !!this.url && String(this.url).toLowerCase() !== 'none';
     }
 
+    /**
+     * @param {Object} notification
+     * @param {string} [notification.title]
+     * @param {string} notification.comment 訊息內文。
+     * @param {string} [notification.icon] 找不到 emoji 時沿用的圖示。
+     * @param {string} [notification.link] 點擊後開啟的網址。
+     * @returns {Promise<boolean>} 是否送出成功。
+     */
     async send({ title, comment, icon, link } = {}) {
         if (!this.enabled) return false;
         const target = parseNtfyTarget(this.url);

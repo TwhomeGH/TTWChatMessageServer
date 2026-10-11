@@ -1,5 +1,25 @@
 # ChangeHistory
 
+## 2026.10.12 00:26 為 notify／socket／gift 模組補齊 JSDoc
+
+**類型**: 文件 · **檔案**: `ScriptLib/gift/names.mjs`
+
+### 問題 - 新模組只有檔首註解，函式缺參數說明
+
+`ScriptLib/gift`／`notify`／`socket` 的函式多半只有單行或無註解，看不出參數與回傳值，與既有 `SocketTransport.mjs` 的風格不一致。
+
+### 根因 - 模組搬移時只搬了程式，未同步文件
+
+抽出模組時沿用原本（缺乏註解）的程式碼，未補上 API 文件。
+
+### 修改 - 補齊 JSDoc（@param／@returns）
+
+- `gift/names.mjs`：`createGiftNameStore` 的 `@typedef`（`GiftNameStoreDeps`／`GiftNameStore`）與每個內部函式的 `@param`／`@returns`。
+- `notify/format.mjs`、`channels/bark.mjs`、`channels/ntfy.mjs`：函式與 `send` 的參數說明。
+- `socket/endpoint.mjs`、`hub.mjs`、`dedup.mjs`：建構子、方法與 `normalizeFilter` 的參數／回傳說明。
+
+---
+
 ## 2026.10.12 00:19 禮物名稱翻譯抽出 ScriptLib/gift 模組
 
 **類型**: 重構 · **檔案**: `ScriptLib/gift/names.mjs`

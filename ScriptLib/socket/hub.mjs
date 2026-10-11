@@ -17,13 +17,23 @@ export class SocketHub {
     get primary() { return this.endpoints[0] || null; }
     get enabled() { return this.endpoints.length > 0; }
 
+    /** 建立所有端點連線。 */
     connect() { for (const endpoint of this.endpoints) endpoint.connect(); }
 
+    /**
+     * 關閉所有端點（受各端點的 timeoutMs 保護）。
+     * @param {Object} [finalPayload] 關閉前送出的最後一則訊息。
+     * @param {number} [timeoutMs=2000]
+     * @returns {Promise<void>}
+     */
     async close(finalPayload, timeoutMs = 2000) {
         await Promise.all(this.endpoints.map(endpoint => endpoint.close(finalPayload, timeoutMs)));
     }
 
-    /** 直接送出一則已組好的 payload（依 category 過濾）。 */
+    /**
+     * 直接送出一則已組好的 payload（依 category 過濾）。
+     * @param {Object} payload
+     */
     send(payload) {
         for (const endpoint of this.endpoints) {
             if (endpoint.accepts(payload.category)) endpoint.send(payload);
@@ -32,6 +42,17 @@ export class SocketHub {
 
     /**
      * 高階送訊息：去重 → 套用 emoji 取代 → 組 StreamMessage → 扇出。
+     * @param {string} user
+     * @param {string} message
+     * @param {Object} [options]
+     * @param {string} [options.img]
+     * @param {string} [options.giftImg]
+     * @param {boolean} [options.isMain=true]
+     * @param {number} [options.userNum]
+     * @param {Array} [options.userList]
+     * @param {string} [options.category] 訊息分類（供端點過濾）。
+     * @param {string} [options.dedupUser] 覆寫去重比對的使用者。
+     * @param {string} [options.dedupMessage] 覆寫去重比對的訊息。
      * @returns {boolean} 是否實際送出（false = 被去重擋下）。
      */
     sendMessage(user, message, { img = '', giftImg = '', isMain = true, userNum = 0, userList = [], category, dedupUser, dedupMessage } = {}) {
