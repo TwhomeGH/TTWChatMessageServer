@@ -1,6 +1,6 @@
 # Socket 收發與壅塞處理
 
-`TikTok.js` 的聊天、廣告、觀眾更新與心跳統一由 `SocketTransport.mjs` 發送。
+`TikTok.js` 的聊天、廣告、觀眾更新與心跳統一由 `ScriptLib/socket/transport.mjs`（`SocketTransport`）發送；訊息去重、端點與扇出在 `ScriptLib/socket/`（`MessageDedup`、`SocketEndpoint`、`SocketHub`）。
 通訊格式維持 UTF-8 JSON，每筆以換行結尾，不需修改既有接收端協定。
 
 ## 預設限制

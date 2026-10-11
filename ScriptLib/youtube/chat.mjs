@@ -9,7 +9,7 @@
  * @property {string} apiKey YOUTUBE_API_KEY；無有效 OAuth token 時作為認證。
  * @property {number} pollIntervalS 最小輪詢間隔（秒）；實際取 API 建議值與此值較大者。
  * @property {(file: string, message: string, type?: string) => void} writeLog 寫入執行日誌。
- * @property {(title: string, comment: string, icon?: string, url?: string) => void} bark 發送 Bark 通知。
+ * @property {(title: string, comment: string, icon?: string, url?: string) => void} notify 發送推播通知（Bark／ntfy 分派）。
  * @property {(text: string) => void} sendSystem 送出系統訊息（呼叫端自行帶入目前觀眾數／清單）。
  * @property {(user: string, message: string, img?: string) => void} sendChat 送出聊天訊息。
  * @property {(data: Object) => void} reportTraffic 回報人流事件。
@@ -147,14 +147,14 @@ async function checkIsLive(axios, apiKey, channelId) {
 }
 
 function connect(liveChatId, videoId, channelName, deps) {
-    const { axios, apiKey, pollIntervalS, writeLog, bark, sendSystem, sendChat, reportTraffic, reportFiltered, filter, recordHeat, replaceEmojis, translate, onViewerCount } = deps;
+    const { axios, apiKey, pollIntervalS, writeLog, notify, sendSystem, sendChat, reportTraffic, reportFiltered, filter, recordHeat, replaceEmojis, translate, onViewerCount } = deps;
     youtubeLiveChatId = liveChatId;
     youtubeNextPageToken = null;
 
     console.log(`🔌 Youtube 聊天室開始輪詢: liveChatId=${liveChatId}`);
     writeLog("Default", `Youtube 聊天室開始輪詢: ${liveChatId}`, "Youtube");
 
-    bark("Youtube 連線", `已連線 ${channelName}`, "");
+    notify("Youtube 連線", `已連線 ${channelName}`, "");
     sendSystem(`Youtube 已連線 ${channelName}`);
 
     youtubeVideoId = videoId; // 儲存 videoId 供 viewer count 更新用
@@ -225,7 +225,7 @@ function connect(liveChatId, videoId, channelName, deps) {
                             }
 
                             if (!recordHeat(tMsg, { platform: 'Youtube', id: item.id, userId: item.authorDetails?.channelId, user: userName, sentAt: item.snippet.publishedAt })) continue;
-                            bark(tUser, tMsg, avatar);
+                            notify(tUser, tMsg, avatar);
 
                             // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
                             tMsg = replaceEmojis(tMsg);
@@ -233,7 +233,7 @@ function connect(liveChatId, videoId, channelName, deps) {
                             translate(tMsg).then(RES => {
                                 let RESCHAT = `${tMsg}${tMsg == RES ? "" : `\n${RES}`}`;
                                 if (RES.toLowerCase() != tMsg.toLowerCase()) {
-                                    bark(tUser, RES, avatar);
+                                    notify(tUser, RES, avatar);
                                 }
                                 sendChat(tUser, RESCHAT, avatar);
                                 writeLog("Default", `${tUser} : ${RESCHAT}`, "Youtube Chat");
@@ -246,7 +246,7 @@ function connect(liveChatId, videoId, channelName, deps) {
                             const display = msg ? `${msg} (${amount})` : amount;
                             console.info(`💰[Youtube SuperChat] ${userName}: ${display}`);
                             writeLog("Default", `SuperChat ${userName}: ${display}`, "Youtube");
-                            bark(`💰 ${userName}`, display, avatar);
+                            notify(`💰 ${userName}`, display, avatar);
                             sendChat(userName, `💰 超級感謝 ${display}`, avatar);
 
                         } else if (type === 'superStickerEvent') {
@@ -255,13 +255,13 @@ function connect(liveChatId, videoId, channelName, deps) {
                             const sticker = details?.superStickerMetadata?.sticker?.localizedDescription || '貼圖';
                             console.info(`🖼️[Youtube SuperSticker] ${userName}: ${sticker} (${amount})`);
                             writeLog("Default", `SuperSticker ${userName}: ${sticker} (${amount})`, "Youtube");
-                            bark(`🖼️ ${userName}`, `${sticker} (${amount})`, avatar);
+                            notify(`🖼️ ${userName}`, `${sticker} (${amount})`, avatar);
                             sendChat(userName, `🖼️ 超級貼圖 ${sticker} (${amount})`, avatar);
 
                         } else if (type === 'newSponsorEvent') {
                             console.info(`🎉[Youtube 新會員] ${userName}`);
                             writeLog("Default", `新會員 ${userName}`, "Youtube");
-                            bark("🎉 新會員", userName, avatar);
+                            notify("🎉 新會員", userName, avatar);
                             sendChat(userName, "🎉 成為新會員", avatar);
 
                         } else if (type === 'giftMembershipReceivedEvent') {
@@ -269,7 +269,7 @@ function connect(liveChatId, videoId, channelName, deps) {
                             const gifter = details?.gifterChannelId || '未知';
                             console.info(`🎁[Youtube 收到贈禮] ${userName} 來自 ${gifter}`);
                             writeLog("Default", `收到贈禮會員 ${userName} 來自 ${gifter}`, "Youtube");
-                            bark("🎁 收到贈禮會員", `${userName} 來自 ${gifter}`, avatar);
+                            notify("🎁 收到贈禮會員", `${userName} 來自 ${gifter}`, avatar);
                             sendChat(userName, `🎁 收到贈送的會員`, avatar);
 
                         } else if (type === 'memberMilestoneChatEvent') {
@@ -280,7 +280,7 @@ function connect(liveChatId, videoId, channelName, deps) {
                             const display = `${tier}${months ? ` ${months}個月` : ''}${msg ? `: ${msg}` : ''}`;
                             console.info(`⭐[Youtube 會員里程碑] ${userName}: ${display}`);
                             writeLog("Default", `會員里程碑 ${userName}: ${display}`, "Youtube");
-                            bark(`⭐ ${userName}`, display, avatar);
+                            notify(`⭐ ${userName}`, display, avatar);
                             sendChat(userName, `⭐ 會員里程碑 ${display}`, avatar);
                         }
                     }
@@ -308,7 +308,7 @@ function connect(liveChatId, videoId, channelName, deps) {
  * @returns {Promise<void>}
  */
 export async function startYoutubeChat(channelName, deps) {
-    const { writeLog, sendSystem, bark, apiKey } = deps;
+    const { writeLog, sendSystem, notify, apiKey } = deps;
 
     if (!apiKey) {
         console.log('⚠️ 未設定 YOUTUBE_API_KEY，跳過');
@@ -336,7 +336,7 @@ export async function startYoutubeChat(channelName, deps) {
     if (!liveInfo.live) {
         console.log('📴 Youtube 頻道未開播，結束程序');
         writeLog("Default", "Youtube 頻道未開播", "Youtube");
-        bark("Youtube 未開播", `${info.channelName} 目前沒有直播`, "");
+        notify("Youtube 未開播", `${info.channelName} 目前沒有直播`, "");
         sendSystem(`Youtube ${info.channelName} 未開播`);
         return;
     }

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import net from 'node:net';
-import { SocketTransport, JsonLineReader } from '../SocketTransport.mjs';
+import { SocketTransport, JsonLineReader } from '../ScriptLib/socket/transport.mjs';
 
 const logger = { log() {}, warn() {} };
 class FakeSocket extends EventEmitter {

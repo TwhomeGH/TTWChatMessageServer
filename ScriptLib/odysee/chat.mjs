@@ -6,7 +6,7 @@
  * @typedef {Object} OdyseeChatDeps
  * @property {Object} axios axios 實例，用於 Odysee REST API。
  * @property {(file: string, message: string, type?: string) => void} writeLog 寫入執行日誌。
- * @property {(title: string, comment: string, icon?: string, url?: string) => void} bark 發送 Bark 通知。
+ * @property {(title: string, comment: string, icon?: string, url?: string) => void} notify 發送推播通知（Bark／ntfy 分派）。
  * @property {(text: string) => void} sendSystem 送出系統訊息（呼叫端自行帶入目前觀眾數／清單）。
  * @property {(user: string, message: string, img?: string) => void} sendChat 送出聊天訊息。
  * @property {(data: Object) => void} reportTraffic 回報人流事件。
@@ -70,7 +70,7 @@ async function checkIsLive(axios, claimId) {
 }
 
 function connect(claimId, channelName, deps) {
-    const { writeLog, bark, sendSystem, sendChat, reportTraffic, reportFiltered, filter, recordHeat, replaceEmojis, translate, onViewerCount } = deps;
+    const { writeLog, notify, sendSystem, sendChat, reportTraffic, reportFiltered, filter, recordHeat, replaceEmojis, translate, onViewerCount } = deps;
     const wsUrl = `wss://sockety.odysee.tv/ws/commentron?id=${claimId}&category=${encodeURIComponent(channelName)}&sub_category=viewer`;
     console.log(`🔌 Odysee WebSocket 連線: ${wsUrl}`);
     writeLog("Default", `Odysee WebSocket 連線: ${wsUrl}`, "Odysee");
@@ -85,7 +85,7 @@ function connect(claimId, channelName, deps) {
     odyseeWs.onopen = () => {
         console.log('✅ Odysee WebSocket 已連線');
         writeLog("Default", "Odysee WebSocket 已連線", "Odysee");
-        bark("Odysee 連線", `已連線 ${channelName}`, "");
+        notify("Odysee 連線", `已連線 ${channelName}`, "");
         sendSystem(`Odysee 已連線 ${channelName}`);
     };
 
@@ -120,7 +120,7 @@ function connect(claimId, channelName, deps) {
 
                 if (!recordHeat(tMsg, { platform: 'Odysee', user: userName })) return;
 
-                bark(tUser, tMsg, avatar);
+                notify(tUser, tMsg, avatar);
 
                 // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
                 tMsg = replaceEmojis(tMsg);
@@ -128,7 +128,7 @@ function connect(claimId, channelName, deps) {
                 translate(tMsg).then(RES => {
                     let RESCHAT = `${tMsg}${tMsg == RES ? "" : `\n${RES}`}`;
                     if (RES.toLowerCase() != tMsg.toLowerCase()) {
-                        bark(tUser, RES, avatar);
+                        notify(tUser, RES, avatar);
                     }
                     sendChat(tUser, RESCHAT, avatar);
                     writeLog("Default", `${tUser} : ${RESCHAT}`, "Odysee Chat");
@@ -161,7 +161,7 @@ function connect(claimId, channelName, deps) {
  * @returns {Promise<void>}
  */
 export async function startOdyseeChat(channelName, deps) {
-    const { writeLog, bark, sendSystem } = deps;
+    const { writeLog, notify, sendSystem } = deps;
 
     if (!channelName) {
         console.log('⚠️ 未指定 Odysee 頻道名稱，跳過');
@@ -184,7 +184,7 @@ export async function startOdyseeChat(channelName, deps) {
     if (!liveInfo.live) {
         console.log('📴 Odysee 頻道未開播，結束程序');
         writeLog("Default", "Odysee 頻道未開播", "Odysee");
-        bark("Odysee 未開播", `${channelName} 目前沒有直播`, "");
+        notify("Odysee 未開播", `${channelName} 目前沒有直播`, "");
         sendSystem(`Odysee ${channelName} 未開播`);
         return;
     }

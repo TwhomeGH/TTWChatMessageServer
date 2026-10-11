@@ -60,6 +60,7 @@ YOUTUBE_CLIENT_SECRET=Youtube OAuth ClientSecret (選填)
 
 # ─── 推送 ────────────────────────────────────────────
 BARK_API=你的Bark API
+NTFY_API=你的ntfy 主題網址 (格式: https://ntfy.sh/你的主題)
 SOCKET_API=你的Socket API (格式: http://主機:埠號)
 WEB_API=http://localhost:3001/sendSync
 

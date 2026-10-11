@@ -2,7 +2,7 @@
 const options = [
     ['isTK', 'TikTok', 'user'], ['isTwitch', 'Twitch', 'twitchUser'],
     ['isKick', 'Kick', 'kickUser'], ['isOdysee', 'Odysee', 'odyseeUser'],
-    ['isYouTube', 'YouTube', 'youtubeUser'], ['isSocket', 'Socket'], ['isBark', 'Bark']
+    ['isYouTube', 'YouTube', 'youtubeUser'], ['isSocket', 'Socket'], ['isBark', 'Bark'], ['isNtfy', 'ntfy']
 ].map(([key, label, account]) => ({ key, label, group: account ? 'platforms' : 'transport', ...(account ? { account } : {}), default: false }));
 /** 僅接受明確布林旗標與短帳號字串，不接受任意 CLI 或環境變數。 */
 function startURL(body) {

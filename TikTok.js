@@ -3,12 +3,14 @@ import { closeDirectSigner } from './SignServer/direct-signer.mjs';
 import kickTokens from './ScriptLib/kick/tokens.cjs';
 import { startOdyseeChat, stopOdyseeChat } from './ScriptLib/odysee/chat.mjs';
 import { startYoutubeChat, stopYoutubeChat } from './ScriptLib/youtube/chat.mjs';
+import { createNotifier } from './ScriptLib/notify/index.mjs';
 import { normalizeSource } from './MessageSource.mjs';
 import { startTwitchClient, stopTwitchClient, getUserIcon, apiClient, tuser } from './ScriptLib/twitch/client.mjs';
 import { promises as fs, readFileSync, existsSync, writeFileSync } from 'fs';
 import axios from 'axios';
 
-import { SocketTransport } from './SocketTransport.mjs';
+import { createHub } from './ScriptLib/socket/hub.mjs';
+import { MessageDedup } from './ScriptLib/socket/dedup.mjs';
 import { TikTokChatGuard, chatMetadata } from './TikTokChatGuard.mjs';
 
 
@@ -105,6 +107,9 @@ let isYoutube = args.includes('--youtube')
 let isBark = args.includes('--bark')
 
 
+let isNtfy = args.includes('--ntfy')
+
+
 let isSocket = args.includes('--socket')
 
 let isBoth = args.includes('--both')
@@ -126,7 +131,7 @@ if (platformsArg) {
 
 console.log('收到參數:', keyword, isTK ? '(TikTok)' : '', isTwitch ? '(Twitch)' : '', isKick ? '(Kick)' : '', isOdysee ? '(Odysee)' : '', isYoutube ? '(Youtube)' : '');
 
-console.log('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick, 'isOdysee=', isOdysee, 'isYoutube=', isYoutube);
+console.log('isBark=', isBark, 'isNtfy=', isNtfy, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick, 'isOdysee=', isOdysee, 'isYoutube=', isYoutube);
 console.log('isBoth=', isBoth, 'platforms=', platformsArg ? platformsArg.split('=')[1] : '');
 
 // TikTok 用戶名稱
@@ -191,11 +196,13 @@ let viewCacheFailures = 0;     // 連續的 fetchRoomInfo 失敗次數，用來�
 let streamEnded = false;       // 直播真正結束（使用者主動結束 / 平台封鎖）→ 不再重連
 const TK_RETRY_BASE = 15000;   // 重連基礎間隔 15 秒（指數退避 15s→30s→60s→120s→240s）
 
-const socketUrl = new URL((isSocket && process.env.SOCKET_API) || 'tcp://localhost:9322');
-const socketTransport = new SocketTransport({
-    host: socketUrl.hostname.replace(/^\[|\]$/g, ''),
-    port: Number(socketUrl.port || 9322),
+// Socket 輸出層：端點／去重／扇出皆在 ScriptLib/socket/。
+const dedup = new MessageDedup();
+const socketHub = createHub({
+    socketApi: process.env.SOCKET_API || 'tcp://localhost:9322',
     enabled: isSocket,
+    replaceEmojis,
+    dedup,
     onConnect: () => {
         if (isFirstSocketConnect) {
             sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false, CacheUserNum, CacheUserList);
@@ -205,6 +212,12 @@ const socketTransport = new SocketTransport({
 });
 
 const Bark = process.env.BARK_API;
+const Ntfy = process.env.NTFY_API;
+
+// 推播輸出層：Bark／ntfy 通道與分派器皆在 ScriptLib/notify/。
+// notify() 一次扇出到所有已啟用通道，事件點不必知道有哪些通道。
+const notifier = createNotifier({ isBark, isNtfy, barkApi: Bark, ntfyApi: Ntfy, getEmojiMap, axios });
+const notify = (title, comment, icon, url) => notifier.notify(title, comment, icon, url);
 
 const TRANSLATE_API_URL = process.env.TRANSLATE_API_URL || "https://api.mymemory.translated.net/get";
 const TRANSLATE_SOURCE_LANG = process.env.TRANSLATE_SOURCE_LANG || "en";
@@ -501,11 +514,11 @@ async function handleExit() {
     stopTwitchClient();
     console.log("⏹️ 已停止重連／計時器");
 
-    sendBarkNotification("系統通知", "TTW Chat Message Server 已關閉", "");
+    notify("系統通知", "TTW Chat Message Server 已關閉", "");
 
     try {
-        await socketTransport.close({
-            type: 'StreamMessage', user: '系統', message: 'TTW Chat Message Server 已關閉',
+        await socketHub.close({
+            type: 'StreamMessage', category: 'system', user: '系統', message: 'TTW Chat Message Server 已關閉',
             img: '', giftImg: '', isMain: false
         });
         console.log("⏹️ Socket 已關閉");
@@ -569,17 +582,17 @@ process.on('uncaughtException', (err) => {
 
     if (!startupComplete) {
         console.error('❌ 啟動階段致命錯誤：頂層初始化已被中止，程式無法正常運作，即將結束 (exit 1)。');
-        console.error(`   診斷：socket connected=${socketTransport.connected} queued=${socketTransport.queue.length} reconnects=${socketTransport.stats.reconnects}`);
+        console.error(`   診斷：socket connected=${socketHub.primary?.connected ?? false} queued=${socketHub.primary?.transport.queue.length ?? 0} reconnects=${socketHub.primary?.transport.stats.reconnects ?? 0}`);
         // Bark 非同步，先送出再結束；硬性逾時避免卡住結束流程。
         const forceExit = setTimeout(() => process.exit(1), 5000);
         Promise.resolve()
-            .then(() => sendBarkNotification("TikTok.js 啟動失敗", shortMsg))
+            .then(() => notify("TikTok.js 啟動失敗", shortMsg))
             .catch(() => {})
             .finally(() => { clearTimeout(forceExit); process.exit(1); });
         return;
     }
 
-    sendBarkNotification("TikTok.js 發生錯誤", shortMsg);
+    notify("TikTok.js 發生錯誤", shortMsg);
     sendSocketMessage("系統", `TikTok.js 發生錯誤: ${shortMsg}`, "", "", false, CacheUserNum, CacheUserList);
 });
 
@@ -688,11 +701,11 @@ process.stdin.on('data', async (chunk) => {
 
                 sendSocketMessage(json.user, json.message, json.img || '', json.giftImg || '', true, CacheUserNum, CacheUserList, origUser, origMsg);
 
-                addToSyncBuffer(origUser, origMsg);
+                dedup.add(origUser, origMsg);
 
                 let Gift = json.giftImg || ''
 
-                sendBarkNotification(json.user, json.message, json.img || Gift);
+                notify(json.user, json.message, json.img || Gift);
 
                 console.log('📥 收到 JSON 訊息:', json);
                 return;
@@ -796,7 +809,7 @@ process.stdin.on('data', async (chunk) => {
                         }
                         const now = json.sentAt || new Date().toISOString();
                         sendAdOverylayMessage(ad.overlayUser, ad.message, ad.iconURL || '', ad.useTTS);
-                        sendBarkNotification(`📢 手動發送贊助廣告 (${ad.overlayUser})`, ad.message, ad.iconURL || '', SPONSOR_MANAGE_URL);
+                        notify(`📢 手動發送贊助廣告 (${ad.overlayUser})`, ad.message, ad.iconURL || '', SPONSOR_MANAGE_URL);
                         ad.lastSentAt = now;
                         ad.updatedAt = now;
                         saveSponsorAds();
@@ -959,61 +972,6 @@ const connection = new TikTokLiveConnection(tiktokName, connOpts)
 
 
 
-function stripEmojiUrls(text) {
-    if (!text || typeof text !== 'string') return text;
-    return text.replace(/https?:\/\/[^\s]+(?:png|jpg|jpeg|gif|webp)[^\s]*/gi, '').trim();
-}
-
-function pickEmojiIcon(comment) {
-    if (!comment || typeof comment !== 'string') return null;
-    const map = getEmojiMap();
-    const matched = Object.entries(map).filter(([code]) => comment.includes(code));
-    if (matched.length === 0) return null;
-    const pick = matched[Math.floor(Math.random() * matched.length)];
-    return { code: pick[0], url: pick[1] };
-}
-
-function stripEmojiCodes(text, keepCode) {
-    if (!text || typeof text !== 'string') return text;
-    const map = getEmojiMap();
-    let result = text;
-    for (const code of Object.keys(map)) {
-        if (code === keepCode) continue;
-        result = result.split(code).join('');
-    }
-    if (keepCode) {
-        const count = (result.match(new RegExp(keepCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
-        if (count > 1) {
-            result = result.replace(new RegExp(keepCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '').trim();
-            result = keepCode + ' x' + count + (result ? ' ' + result : '');
-        }
-    }
-    return result.replace(/\s+/g, ' ').trim();
-}
-
-async function sendBarkNotification(title = "Twitch", comment, icon, url) {
-
-    if (!isBark) { return }
-    if (!Bark || Bark.toLowerCase() === "none") return;
-
-    try {
-        const pick = pickEmojiIcon(comment);
-        let finalIcon = pick ? pick.url : icon;
-        if (!pick) {
-            const imgMatch = comment.match(/https?:\/\/[^\s]+?\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s]*)?/i);
-            if (imgMatch) finalIcon = imgMatch[0];
-        }
-        const body = stripEmojiCodes(stripEmojiUrls(comment), pick ? pick.code : null);
-        const payload = { title, body, icon: finalIcon };
-        if (url) payload.url = url;
-        console.info(`📢 發送 Bark 通知: ${title} - ${body}`);
-        await axios.post(Bark, payload, { headers: { "Content-Type": "application/json; charset=utf-8" } });
-
-        console.info("✅ Bark 推送成功");
-    } catch (err) {
-        console.error("❌ Bark 推送錯誤:", err.message);
-    }
-}
 
 
 
@@ -1023,35 +981,16 @@ async function sendBarkNotification(title = "Twitch", comment, icon, url) {
 
 
 
-// ===== 暫存最多 10 筆 =====
-var syncBuffer = []; // [{ username, message, timestamp }]
-
-function addToSyncBuffer(username, message) {
-    syncBuffer.push({
-        username,
-        message,
-        timestamp: Date.now()
-    });
 
 
-    // 清理超過 60 秒的訊息
-    const now = Date.now();
-    syncBuffer = syncBuffer.filter(item => now - item.timestamp <= 60000);
-        
-    // 超過 500 筆就移除最舊的
-    if (syncBuffer.length > 500) {
-        syncBuffer.shift();
-    }
-}
 
-function isDuplicate(username, message) {
-    // 只比對第一行原始文字（翻譯會附加在 \n 之後）
-    const originalPart = message.split('\n')[0].trim();
-    return syncBuffer.some(item =>
-        item.username === username &&
-        item.message === originalPart
-    );
-}
+
+
+
+
+
+
+
 
 var CacheUserList = [] // 用於去重的用戶列表
 var CacheUserNum = 0 // 用於去重的用戶數量
@@ -1063,10 +1002,10 @@ var YoutubeViewerCount = 0
 
 function sendAdOverylayMessage(user,text,iconURL,useTTS){
 
-    const payload = { type: 'AdOverlay', user, text, iconURL, useTTS };
+    const payload = { type: 'AdOverlay', category: 'ad', user, text, iconURL, useTTS };
     
     console.log('📤 發送 AdOverlay 訊息:', payload);
-    socketTransport.send(payload);
+    socketHub.send(payload);
 }
 
 // ---- 贊助廣告持久化 ----
@@ -1122,7 +1061,7 @@ function scheduleAdTimer(adId, userId, intervalMinutes, adData) {
             const now = new Date().toISOString();
             console.log(`⏰ 贊助廣告定時觸發: ${adData.overlayUser} - ${adData.text}`);
             sendAdOverylayMessage(adData.overlayUser, adData.text, adData.iconURL, adData.useTTS);
-            sendBarkNotification(`⏰ 贊助廣告 (${adData.overlayUser})`, adData.text, adData.iconURL || '', SPONSOR_MANAGE_URL);
+            notify(`⏰ 贊助廣告 (${adData.overlayUser})`, adData.text, adData.iconURL || '', SPONSOR_MANAGE_URL);
             // 在定時器 callback 內更新 lastSentAt，確保寫入的是實際觸發時間
             const sponsor = sponsorAds.users[userId];
             if (sponsor) {
@@ -1180,7 +1119,7 @@ function resumeAdTimers() {
                 try {
                     console.log(`⏰ 贊助廣告定時觸發(恢復): ${ad.overlayUser} - ${ad.message}`);
                     sendAdOverylayMessage(ad.overlayUser, ad.message, ad.iconURL || '', ad.useTTS);
-                    sendBarkNotification(`⏰ 贊助廣告 (${ad.overlayUser})`, ad.message, ad.iconURL || '', SPONSOR_MANAGE_URL);
+                    notify(`⏰ 贊助廣告 (${ad.overlayUser})`, ad.message, ad.iconURL || '', SPONSOR_MANAGE_URL);
                     ad.lastSentAt = new Date().toISOString();
                     saveSponsorAds();
                     scheduleAdTimer(ad.id, uid, ad.intervalMinutes, {
@@ -1204,8 +1143,8 @@ function resumeAdTimers() {
  * @return {*} 
  */
 function sendAudienceUpdate() {
-    const payload = { type: 'audience', userNum: CacheUserNum, userList: CacheUserList };
-    socketTransport.send(payload);
+    const payload = { type: 'audience', category: 'audience', userNum: CacheUserNum, userList: CacheUserList };
+    socketHub.send(payload);
 }
 
 function updateCombinedViewerCount() {
@@ -1230,37 +1169,15 @@ function updateCombinedViewerCount() {
  * @param {*} userList 
  * @returns 
  */
-function sendSocketMessage(user, message, img, giftImg,isMain=true,userNum=0,userList=[], dedupUser, dedupMessage) {
-
-    const checkUser = dedupUser ?? user;
-    const checkMsg = dedupMessage ?? message;
-    if (isDuplicate(checkUser.trim(), checkMsg.trim())) {
-        console.log('🚫內部 重複訊息跳過:', user, message, `(原始: ${checkUser} : ${checkMsg})`);
-        return;
-    }
-
-    
-    const processedMessage = replaceEmojis(String(message));
-
-    const payload = {
-        type: 'StreamMessage',
-        user: String(user),
-        message: processedMessage,
-        img,
-        giftImg,
-        isMain: Boolean(isMain),
-        userNum: Number(userNum),
-        userList
-    };
-
-    socketTransport.send(payload);
+function sendSocketMessage(user, message, img, giftImg, isMain = true, userNum = 0, userList = [], dedupUser, dedupMessage, category) {
+    socketHub.sendMessage(user, message, { img, giftImg, isMain, userNum, userList, dedupUser, dedupMessage, category });
 }
 
 var TkRetryCount = 0
 let TkRetryMaxCount = 5
 
 function connectSocket() {
-    socketTransport.connect();
+    socketHub.connect();
 }
 
 
@@ -1330,7 +1247,7 @@ function onTikTokConnected(state) {
     let DisplayTitle = connection.state.roomInfo.data.title || "未知直播間";
     TikTokViewerCount = connection.state.roomInfo.data.user_count || 0;
     CacheUserNum = (isTK && isTwitch) ? TikTokViewerCount + TwitchViewerCount : TikTokViewerCount;
-    sendBarkNotification("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "");
+    notify("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "");
     sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false, CacheUserNum, CacheUserList);
     resumeAdTimers();
     if (!viewCacheInterval) {
@@ -1345,7 +1262,7 @@ function scheduleTikTokReconnect() {
     if (TkRetryCount >= TkRetryMaxCount) {
         console.error(`❌ TikTok 已達最大重連次數 (${TkRetryMaxCount})，停止重連並退出`);
         sendSocketMessage("系統", "TikTok 重連已達上限，程式停止，請手動重新啟動", "", "", false, CacheUserNum, CacheUserList);
-        sendBarkNotification("TikTok 重連失敗", "已達最大重連次數，程式停止", "");
+        notify("TikTok 重連失敗", "已達最大重連次數，程式停止", "");
         handleExit();
         return;
     }
@@ -1397,7 +1314,7 @@ if (isTK) {
             code: errDetail.code,
             type: errDetail.type,
         }, null, 2));
-        sendBarkNotification("TikTok 直播間連線失敗", (errDetail.message || "").substring(0, 100));
+        notify("TikTok 直播間連線失敗", (errDetail.message || "").substring(0, 100));
         sendSocketMessage("系統", `TikTok 直播間連線失敗: ${err.message}`, "", "", false, CacheUserNum, CacheUserList);
 
         // 初次連線失敗也進入有限次數自動重連（指數退避，用盡後退出）
@@ -1410,7 +1327,7 @@ if (isTK) {
 connection.on(ControlEvent.DISCONNECTED, (e) => {
     console.log('Disconnected :( (error code: ' + e.errorCode + ', reason: ' + e.reason + ')');
     
-    sendBarkNotification("TikTok 直播間已斷線", `已從 ${tiktokName} 的直播間斷線`, "");
+    notify("TikTok 直播間已斷線", `已從 ${tiktokName} 的直播間斷線`, "");
     sendSocketMessage("系統", `TikTok 直播間已斷線，已從 ${tiktokName} 的直播間斷線`, "", "", false,CacheUserNum,CacheUserList);
 
     if (viewCacheInterval) { clearInterval(viewCacheInterval); viewCacheInterval = null; }
@@ -1566,7 +1483,7 @@ function flushMemberBark() {
     const body = count > 5
         ? `${names.slice(0, 5).join('、')}⋯等${count}人`
         : names.join('、');
-    sendBarkNotification('👋 加入', body, randomAvatar);
+    notify('👋 加入', body, randomAvatar);
     memberBarkAccum = [];
     memberBarkTimer = null;
 }
@@ -1581,7 +1498,7 @@ connection.on(WebcastEvent.MEMBER,data => {
     console.log("STATE View",connection.state.roomInfo.data.user_count,CacheUserNum) 
 
     // 跨路徑去重：檢查是否已被 userscript 路徑送出（檢查 syncBuffer）
-    const isCrossPathDuplicate = isDuplicate(data.user.nickname.trim(), "加入了");
+    const isCrossPathDuplicate = dedup.isDuplicate(data.user.nickname.trim(), "加入了");
 
     if (isCrossPathDuplicate) {
         console.log('🚫 跨路徑重複(來自userscript):', data.user.nickname, "加入了");
@@ -1593,7 +1510,7 @@ connection.on(WebcastEvent.MEMBER,data => {
     if (fr.blocked) {
         console.log('🚫 過濾器阻擋:', data.user.nickname, "加入了", `(規則: ${fr.reason})`);
         writeLog("Default", `過濾器阻擋訊息: ${data.user.nickname} : 加入了 (規則: ${fr.reason})`, "FilterBlocked")
-        addToSyncBuffer(data.user.nickname.trim(), "加入了");
+        dedup.add(data.user.nickname.trim(), "加入了");
         return;
     }
 
@@ -1603,7 +1520,7 @@ connection.on(WebcastEvent.MEMBER,data => {
     if (!nickname || !message) {
         console.log('⚠️ 過濾後 nick/message 為空，跳過:', data.user.nickname, "加入了");
         writeLog("Default", `過濾後 nick/message 為空，跳過: ${data.user.nickname} : 加入了`, "FilterEmpty")
-        addToSyncBuffer(data.user.nickname.trim(), "加入了");
+        dedup.add(data.user.nickname.trim(), "加入了");
         return;
     }
 
@@ -1615,7 +1532,7 @@ connection.on(WebcastEvent.MEMBER,data => {
     if (memberBarkTimer) clearTimeout(memberBarkTimer);
     memberBarkTimer = setTimeout(flushMemberBark, 3000);
 
-    addToSyncBuffer(data.user.nickname.trim(), "加入了");
+    dedup.add(data.user.nickname.trim(), "加入了");
 
 })
 
@@ -1624,9 +1541,9 @@ connection.on(WebcastEvent.FOLLOW,data =>{
     let iconn = getTikTokProfilePic(data.user)
     console.log(data.user.nickname,"關注了主播")
 
-    sendBarkNotification(data.user.nickname, "關注了主播",iconn);
+    notify(data.user.nickname, "關注了主播",iconn);
     sendSocketMessage(data.user.nickname, "關注了主播",iconn,"",false,CacheUserNum,CacheUserList);
-    addToSyncBuffer(data.user.nickname.trim(), "關注了主播");
+    dedup.add(data.user.nickname.trim(), "關注了主播");
 
 })
 
@@ -1665,7 +1582,7 @@ connection.on(WebcastEvent.CHAT, data => {
         reportFiltered(fr, { platform: 'TikTok', id: data.msgId || data.common?.msgId, sentAt: data.createTime || data.common?.createTime, userId: data.user?.userId || data.user?.id, user: data.user.nickname, message: data.content });
         console.log('🚫 過濾器阻擋:', data.user.nickname, data.content, `(規則: ${fr.reason})`);
         writeLog("Default", `過濾器阻擋訊息: ${data.user.nickname} : ${data.content} (規則: ${fr.reason})`, "FilterBlocked")
-        addToSyncBuffer(data.user.nickname.trim(), data.content.trim());
+        dedup.add(data.user.nickname.trim(), data.content.trim());
         return;
     }
 
@@ -1680,7 +1597,7 @@ connection.on(WebcastEvent.CHAT, data => {
     if (!nickname || !comment) {
         console.log('⚠️ 過濾後 nick/comment 為空，跳過:', data.user.nickname, data.content);
         writeLog("Default", `過濾後 nick/comment 為空，跳過: ${data.user.nickname} : ${data.content}`, "FilterEmpty")
-        addToSyncBuffer(data.user.nickname.trim(), data.content.trim());
+        dedup.add(data.user.nickname.trim(), data.content.trim());
         return;
     }
 
@@ -1689,7 +1606,7 @@ connection.on(WebcastEvent.CHAT, data => {
 
     if (!recordChatHeat(comment, { platform: 'TikTok', ...{ id: chatMetadata(data).id, sentAt: chatMetadata(data).time }, userId: data.user?.id, user: data.user?.nickname })) return;
 
-    sendBarkNotification(nickname, comment,iconn);
+    notify(nickname, comment,iconn);
 
     Translate.TranslateText(comment).then(RES=>{
             var RESCHAT=`${comment}`
@@ -1700,14 +1617,14 @@ connection.on(WebcastEvent.CHAT, data => {
             writeLog("Default", `${nickname} : ${RESCHAT}`, "Chat")
 
             if (RES.toLowerCase() != comment.toLowerCase() ) {
-                sendBarkNotification(nickname + "[翻譯]", RES,iconn);
+                notify(nickname + "[翻譯]", RES,iconn);
             }
 
             sendSocketMessage(nickname, RESCHAT,iconn,"",true,CacheUserNum,CacheUserList, data.user.nickname, data.content);
 
             // 翻譯屬於同一則留言，不重複統計。
 
-            addToSyncBuffer(data.user.nickname.trim(), data.content.trim());
+            dedup.add(data.user.nickname.trim(), data.content.trim());
         
     })
 
@@ -1767,7 +1684,7 @@ connection.on(WebcastEvent.EMOTE, (data) => {
         LOG_R.push(`Emote id: ${emoteId}`);
         const mess = `發送了表情 ${emoteId}`;
         sendSocketMessage(nickname, mess, profilePic, "", true, CacheUserNum, CacheUserList);
-        sendBarkNotification(nickname, mess, profilePic);
+        notify(nickname, mess, profilePic);
         writeLog("Default",LOG_R.join("\n"), "Emote表情")
     }
     
@@ -1851,9 +1768,9 @@ connection.on(WebcastEvent.LIKE, data => {
 
     console.log(`${data.user.nickname} ${mess}`)
 
-    sendBarkNotification(data.user.nickname, mess,iconn);
+    notify(data.user.nickname, mess,iconn);
     sendSocketMessage(data.user.nickname, mess,iconn,"",false,CacheUserNum,CacheUserList);
-    addToSyncBuffer(data.user.nickname.trim(), mess);
+    dedup.add(data.user.nickname.trim(), mess);
 
     writeLog("Default", `${data.user.nickname} ${mess}`, "Like")
 
@@ -1932,9 +1849,9 @@ connection.on(WebcastEvent.GIFT, async data => {
         // 連擊進行中 → 只發連擊進度，不回到底部
         let mess = `連擊了 ${giftNameForDisplay} ${data.repeatCount} 個`
         console.log(`連擊了 ${data.user.nickname} : ${giftNameForDisplay} x${data.repeatCount}`)
-        sendBarkNotification(data.user.nickname, mess, giftImg);
+        notify(data.user.nickname, mess, giftImg);
         sendSocketMessage(data.user.nickname, mess, iconn, giftImg, true, CacheUserNum, CacheUserList);
-        addToSyncBuffer(data.user.nickname.trim(), mess);
+        dedup.add(data.user.nickname.trim(), mess);
         writeLog("Default", `${data.user.nickname} ${mess}`, "Gift連擊")
         return;
     }
@@ -1943,9 +1860,9 @@ connection.on(WebcastEvent.GIFT, async data => {
     let mess = `送出了 ${giftNameForDisplay} ${data.repeatCount} 個`
     console.log(`送出了 ${data.user.nickname} : ${giftNameForDisplay} ${data.repeatCount} 個`)
 
-    sendBarkNotification(data.user.nickname, mess, giftImg);
+    notify(data.user.nickname, mess, giftImg);
     sendSocketMessage(data.user.nickname, mess, iconn, giftImg, true, CacheUserNum, CacheUserList);
-    addToSyncBuffer(data.user.nickname.trim(), mess);
+    dedup.add(data.user.nickname.trim(), mess);
     writeLog("Default", `${data.user.nickname} ${mess}`, "Gift")
 
     // 累計送禮次數感謝（同一使用者 60 秒內送禮 >= 5 次）
@@ -1953,9 +1870,9 @@ connection.on(WebcastEvent.GIFT, async data => {
     if (count >= 5) {
         let thanks = `${data.user.nickname} 謝謝支持`
         console.log("5次送禮感謝", data.user.nickname, thanks)
-        sendBarkNotification(data.user.nickname, thanks, giftImg);
+        notify(data.user.nickname, thanks, giftImg);
         sendSocketMessage("感謝大哥的餽贈", thanks, iconn, giftImg, true, CacheUserNum, CacheUserList);
-        addToSyncBuffer(data.user.nickname.trim(), thanks);
+        dedup.add(data.user.nickname.trim(), thanks);
         writeLog("Default", thanks, "Gift感謝")
         UserGiftCount.set(data.user.displayId, { count: 0, lastGiftTimestamp: Date.now() });
     }
@@ -1968,9 +1885,9 @@ connection.on(WebcastEvent.SHARE, data =>{
     let iconn = getTikTokProfilePic(data.user)
     console.log(`${data.user.nickname} ${mess}`)
     
-    sendBarkNotification(data.user.nickname, mess,iconn);
+    notify(data.user.nickname, mess,iconn);
     sendSocketMessage(data.user.nickname, mess,iconn,"",false,CacheUserNum,CacheUserList);
-    addToSyncBuffer(data.user.nickname.trim(), mess);
+    dedup.add(data.user.nickname.trim(), mess);
 
     writeLog("Default", `${data.user.nickname} 分享了直播間！`, "Share")
 
@@ -1999,7 +1916,7 @@ connection.on(WebcastEvent.ENVELOPE, data => {
     let mess = `送出了寶箱，包含 ${envelope.diamondCount} 鑽石`
     const senderName = envelope.sendUserName || data.nickname || "未知用戶";
     const profilePic = getTikTokProfilePic(data.user) || envelope.sendUserAvatar?.urlList?.[0] || "";
-    sendBarkNotification(senderName, mess, profilePic);
+    notify(senderName, mess, profilePic);
     sendSocketMessage(senderName, mess, profilePic, "", true, CacheUserNum, CacheUserList);
 
     writeLog("Default", `${senderName} 送出了寶箱，包含 ${envelope.diamondCount} 鑽石`, "Envelope")
@@ -2013,7 +1930,7 @@ connection.on(WebcastEvent.SUPER_FAN, (data) => {
     const nickname = data.user?.nickname || "用戶"
     console.log(`${nickname} ${mess}`)
 
-    sendBarkNotification(nickname, mess, iconn);
+    notify(nickname, mess, iconn);
     sendSocketMessage(nickname, mess, iconn, "", true, CacheUserNum, CacheUserList);
 
     writeLog("Default", `${nickname} 成為了鐵粉！`, "SuperFan")
@@ -2031,13 +1948,13 @@ console.log(JSON.stringify({ action },"",4))
     if (action === ControlAction.CONTROL_ACTION_STREAM_ENDED) {
         writeLog("Default", "直播結束，用戶主動結束或推流斷線", "Stream Status")
         console.log('Stream ended by user');
-        sendBarkNotification(tiktokName, mess, IMG);
+        notify(tiktokName, mess, IMG);
         sendSocketMessage(tiktokName, mess, IMG, "", false);
 
     }
     if (action === ControlAction.CONTROL_ACTION_STREAM_SUSPENDED) {
         console.log('Stream ended by platform moderator (ban)');
-        sendBarkNotification(tiktokName, mess, IMG);
+        notify(tiktokName, mess, IMG);
         sendSocketMessage(tiktokName, mess, IMG, "", false);
 
         writeLog("Default", "直播被強行終止了 :(", "Stream Status")
@@ -2164,7 +2081,7 @@ function onTwitchError(err) {
 
     writeLog("Default", `Twitch EventSub Listener error: ${err.message || err}`, "Error")
 
-    sendBarkNotification("Twitch 事件監聽錯誤", `Twitch EventSub Listener error: ${err.message || err}`, "");
+    notify("Twitch 事件監聽錯誤", `Twitch EventSub Listener error: ${err.message || err}`, "");
     sendSocketMessage("系統", `Twitch 事件監聽錯誤: ${err.message || err}`, "", "", false,CacheUserNum,CacheUserList);
 }
 
@@ -2175,7 +2092,7 @@ async function onTwitchStreamOnline(event) {
     const message = `直播開始啦！標題：${event.broadcasterName} ${event.type}`; 
 
     console.log(message);
-    sendBarkNotification("直播開始啦！", `${event.broadcasterName} ${event.type}`, "");
+    notify("直播開始啦！", `${event.broadcasterName} ${event.type}`, "");
     sendSocketMessage("系統", message, "", "", false,CacheUserNum,CacheUserList);
 
     writeLog("Default", message, "Twitch Stream Status")
@@ -2187,7 +2104,7 @@ async function onTwitchStreamOffline(event) {
 
     console.log(message);
 
-    sendBarkNotification("直播結束啦！", `${event.broadcasterName}`, "");
+    notify("直播結束啦！", `${event.broadcasterName}`, "");
     sendSocketMessage("系統", message, "", "", false,CacheUserNum,CacheUserList);
 
     writeLog("Default", message, "Twitch Stream Status")
@@ -2201,7 +2118,7 @@ async function onTwitchFollow(event) {
 
     console.log(message);
 
-    sendBarkNotification(event.userDisplayName, "關注了主播", icon);
+    notify(event.userDisplayName, "關注了主播", icon);
 
     sendSocketMessage(event.userDisplayName, message, icon,"", false,CacheUserNum,CacheUserList);
 
@@ -2214,7 +2131,7 @@ async function onTwitchCheer(event) {
 
     console.log(`${event.userDisplayName} ${message}`);
 
-    sendBarkNotification(event.userDisplayName, message, icon);
+    notify(event.userDisplayName, message, icon);
     sendSocketMessage(event.userDisplayName, message, icon,"", false,CacheUserNum,CacheUserList);
 
     writeLog("Default", `${event.userDisplayName} ${message}`, "Twitch Cheer")
@@ -2359,7 +2276,7 @@ function craeteTwitchClip(title = null,icon="https://github.com/TwhomeGH/TTWChat
             console.log(`📜 剪輯歷史已記錄 (來源: ${source})`);
 
             writeLog("Default",`[剪輯建立] ${displayText}`)
-            sendBarkNotification("剪輯建立", displayText, icon)
+            notify("剪輯建立", displayText, icon)
             sendSocketMessage("剪輯建立", displayText, icon, '')
             return { id: clipId, url: clipURL, timing };
 
@@ -2372,7 +2289,7 @@ function craeteTwitchClip(title = null,icon="https://github.com/TwhomeGH/TTWChat
 
             writeLog("Default", `[${errMsg}]`, "Error")
             sendSocketMessage("剪輯建立", `❌ ${errMsg}`, icon, '')
-            sendBarkNotification("剪輯建立失敗", errMsg, icon)
+            notify("剪輯建立失敗", errMsg, icon)
             if (source === 'auto') throw err;
 
         })
@@ -2441,7 +2358,7 @@ async function onTwitchChat(event) {
                     intervalMinutes = 15;
                     const warnMsg = `${overlayUser}，您設定的廣告間隔為 ${rawInterval} 分鐘，最低不能低於 15 分鐘，已自動調整為 15 分鐘`;
                     console.warn(`⚠️ [G#Ad] ${warnMsg}`);
-                    sendBarkNotification(`⚠️ 贊助廣告間隔調整 (${overlayUser})`, warnMsg, icon);
+                    notify(`⚠️ 贊助廣告間隔調整 (${overlayUser})`, warnMsg, icon);
                     sendAdOverylayMessage(overlayUser, `⚠️ ${warnMsg}`, icon, false);
                     logRawEvent('G#Ad 間隔調整', { user: overlayUser, rawInterval, adjusted: 15 });
                 } else {
@@ -2502,19 +2419,19 @@ async function onTwitchChat(event) {
                     approved = false;
                     const rejectReason = `過濾器阻擋: ${fr.reason || '不符合規範'}`;
                     console.log(`🚫 [G#Ad] 贊助廣告被過濾器阻擋: ${overlayUser} - ${lastMsg}`);
-                    sendBarkNotification(`🚫 贊助廣告被阻擋 (${overlayUser})`, rejectReason, icon);
+                    notify(`🚫 贊助廣告被阻擋 (${overlayUser})`, rejectReason, icon);
                     sendAdOverylayMessage(overlayUser, `⚠️ ${rejectReason}`, icon, false);
                     logRawEvent('G#Ad 審核拒絕', { user: overlayUser, message: lastMsg, reason: fr.reason });
                 }
             } else if (reviewMode === 'manual') {
                 approved = null; // 待審核
                 console.log(`📋 [G#Ad] 贊助廣告待審核: ${overlayUser} - ${lastMsg}`);
-                sendBarkNotification(`📋 贊助廣告待審核 (${overlayUser})`, lastMsg, icon, SPONSOR_MANAGE_URL);
+                notify(`📋 贊助廣告待審核 (${overlayUser})`, lastMsg, icon, SPONSOR_MANAGE_URL);
                 sendAdOverylayMessage(overlayUser, `📋 贊助廣告已送審，待管理員審核`, icon, false);
                 logRawEvent('G#Ad 待審核', { user: overlayUser, message: lastMsg });
             } else {
                 const intervalText = intervalMinutes >= 15 ? `每${intervalMinutes}分鐘` : '單次';
-                sendBarkNotification(`📢 贊助廣告 (${overlayUser})`, `[${intervalText}] ${lastMsg}`, icon, SPONSOR_MANAGE_URL);
+                notify(`📢 贊助廣告 (${overlayUser})`, `[${intervalText}] ${lastMsg}`, icon, SPONSOR_MANAGE_URL);
             }
 
             if (targetAd) {
@@ -2640,7 +2557,7 @@ async function onTwitchChat(event) {
     if (!recordChatHeat(tMsg, { platform: 'Twitch', id: event.messageId, userId: event.chatterId, user: event.chatterDisplayName, receivedAt })) return;
 
 
-    sendBarkNotification(tUser, tMsg, icon);
+    notify(tUser, tMsg, icon);
 
     // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
     tMsg = replaceEmojis(tMsg);
@@ -2650,7 +2567,7 @@ async function onTwitchChat(event) {
             let RESCHAT=`${tMsg}${tMsg == RES ? "" :`\n${RES}`}`
 
             if (RES.toLowerCase() != tMsg.toLowerCase() ) {
-                sendBarkNotification(tUser + "[翻譯]", RES, icon);
+                notify(tUser + "[翻譯]", RES, icon);
             }
 
             sendSocketMessage(tUser, RESCHAT,icon,"",true,CacheUserNum,CacheUserList);
@@ -2769,7 +2686,7 @@ async function startKickChat() {
 
         writeLog("Default", `Kick WebSocket 已連線: ${kickChannel}`, "Kick");
 
-        sendBarkNotification("Kick 連線", `已連線 ${kickChannel}`, "");
+        notify("Kick 連線", `已連線 ${kickChannel}`, "");
         sendSocketMessage("系統", `Kick 已連線 ${kickChannel}`, "", "", false, CacheUserNum, CacheUserList);
     });
 
@@ -2806,7 +2723,7 @@ async function startKickChat() {
         if (!recordChatHeat(tMsg, { platform: 'Kick', id: data.id, userId: data.sender?.id, user: userName, sentAt: data.created_at })) return;
 
         console.info(`📢 發送 Bark 通知: ${tUser} - ${tMsg}`);
-        sendBarkNotification(tUser, tMsg, avatar);
+        notify(tUser, tMsg, avatar);
 
         // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
         tMsg = replaceEmojis(tMsg);
@@ -2815,7 +2732,7 @@ async function startKickChat() {
             let RESCHAT = `${tMsg}${tMsg == RES ? "" : `\n${RES}`}`;
             if (RES.toLowerCase() != tMsg.toLowerCase()) {
                 console.info(`📢 發送 Bark 通知: ${tUser} - ${RES}`);
-                sendBarkNotification(tUser, RES, avatar);
+                notify(tUser, RES, avatar);
             }
             sendSocketMessage(tUser, RESCHAT, avatar, "", true, CacheUserNum, CacheUserList);
             writeLog("Default", `${tUser} : ${RESCHAT}`, "Kick Chat");
@@ -2830,7 +2747,7 @@ async function startKickChat() {
         console.info(`[Kick Sub] ${username} ${message}`);
         writeLog("Default", `${username} ${message}`, "Kick Sub");
 
-        sendBarkNotification(username, message, avatar);
+        notify(username, message, avatar);
         sendSocketMessage(username, message, avatar, "", false, CacheUserNum, CacheUserList);
     });
 
@@ -2843,7 +2760,7 @@ async function startKickChat() {
         console.info(`[Kick GiftSub] ${gifter} ${message}`);
         writeLog("Default", `${gifter} ${message}`, "Kick GiftSub");
 
-        sendBarkNotification(gifter, message, avatar);
+        notify(gifter, message, avatar);
         sendSocketMessage(gifter, message, avatar, "", false, CacheUserNum, CacheUserList);
     });
 
@@ -2871,7 +2788,7 @@ async function startKickChat() {
     kickWS.connect(kickChannel).catch(err => {
         console.error('❌ Kick 連線失敗:', err.message);
         writeLog("Default", `Kick 連線失敗: ${err.message}`, "Error");
-        sendBarkNotification("Kick 連線失敗", err.message, "");
+        notify("Kick 連線失敗", err.message, "");
     });
 }
 
@@ -2880,7 +2797,7 @@ if (isOdysee) {
     startOdyseeChat(odyseeChannelName, {
         axios,
         writeLog,
-        bark: sendBarkNotification,
+        notify,
         sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList),
         sendChat: (user, message, img) => sendSocketMessage(user, message, img, "", true, CacheUserNum, CacheUserList),
         reportTraffic,
@@ -2903,7 +2820,7 @@ if (isYoutube) {
         apiKey: youtubeApiKey,
         pollIntervalS: youtubePollIntervalS,
         writeLog,
-        bark: sendBarkNotification,
+        notify,
         sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList),
         sendChat: (user, message, img) => sendSocketMessage(user, message, img, "", true, CacheUserNum, CacheUserList),
         reportTraffic,

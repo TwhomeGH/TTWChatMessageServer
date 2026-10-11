@@ -188,6 +188,7 @@ TT_TARGET_IDC=你的TikTok Target IDC
 
 # 推送設定
 BARK_API=https://api.day.app/你的BarkKey
+NTFY_API=https://ntfy.sh/你的主題
 SOCKET_API=http://192.168.0.195:9322
 
 # Kick 設定（OAuth 選填，閱讀公開聊天不需設定）
@@ -596,6 +597,7 @@ http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickU
 | platforms=tiktok,twitch,kick,odysee,youtube | 自由組合平台（逗號分隔），例如 `twitch,kick`、`tiktok,youtube` |
 | isBoth=1 | （已棄用，建議改用 `platforms=tiktok,twitch`） |
 | isBark=1 | 啟用 Bark 推送通知 |
+| isNtfy=1 | 啟用 ntfy 推送通知（設定 NTFY_API，如 `https://ntfy.sh/你的主題`） |
 | isSocket=1 | 啟用 Socket 訊息推送 |
 
 > [!WARNING]
@@ -892,7 +894,7 @@ http://localhost:3332/sponsor
 
 ### 2. 修改環境變數
 
-可快速修改 .env 的 BARK_API 與 SOCKET_API：
+可快速修改 .env 的 BARK_API、NTFY_API 與 SOCKET_API：
 
 ```bash
 http://localhost:3332/config

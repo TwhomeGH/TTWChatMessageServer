@@ -20,6 +20,7 @@ let pkceVerifier = null;
 let pkceChallenge = null;
 let _twitchOAuthCode = null;
 let isBark = false;
+let isNtfy = false;
 let isSocket = false;
 
 let messageFilter = null;
@@ -283,6 +284,7 @@ function startRuntime(url) {
         var isYoutube = url.searchParams.get('isYouTube') === '1'
 
         isBark = url.searchParams.get('isBark') === '1'
+        isNtfy = url.searchParams.get('isNtfy') === '1'
         isSocket = url.searchParams.get('isSocket') === '1'
         const isBoth = url.searchParams.get('isBoth') === '1'
         const platforms = url.searchParams.get('platforms')  // e.g. "tiktok,twitch,kick"
@@ -307,7 +309,7 @@ function startRuntime(url) {
         if (youtubeUser) process.env.YOUTUBE_CHANNEL_ID = youtubeUser;
 
         pushLog('Starting TikTok.js with user=', user, 'isTK=', isTK);
-        pushLog('isBark=', isBark, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick, 'isOdysee=', isOdysee, 'isYoutube=', isYoutube);
+        pushLog('isBark=', isBark, 'isNtfy=', isNtfy, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick, 'isOdysee=', isOdysee, 'isYoutube=', isYoutube);
         pushLog('isBoth=', isBoth, 'platforms=', platforms);
         if (twitchUser) pushLog('Twitch user=', twitchUser);
         if (kickUser) pushLog('Kick user=', kickUser);
@@ -334,6 +336,7 @@ function startRuntime(url) {
         }
 
         if (isBark) args.push('--bark')
+        if (isNtfy) args.push('--ntfy')
         if (isSocket) args.push('--socket')
         // 向後相容：仍保留個別旗標給舊版 TikTok.js
         if (isTK) args.push('--tiktok')
@@ -351,7 +354,7 @@ function startRuntime(url) {
             if (tiktokProcess === launchedProcess && event?.type === 'TRAFFIC_EVENT') require('./TrafficRoutes.cjs').traffic.record(event.data);
         });
         runtimeState.attach(launchedProcess, activePlatforms);
-        runtimeState.data.features = { isSocket, isBark };
+        runtimeState.data.features = { isSocket, isBark, isNtfy };
         launchedProcess.once('error', error => {
             pushLog('[SYSTEM] 程序啟動失敗:', error.code || 'PROCESS_ERROR');
             if (tiktokProcess === launchedProcess) tiktokProcess = null;
@@ -1034,6 +1037,7 @@ const server = http.createServer((req, res) => {
             // 在 HTML 裡替換佔位符
             let filledHtml = html
             .replace('${BARK_API}', process.env.BARK_API || '')
+            .replace('${NTFY_API}', process.env.NTFY_API || '')
             .replace('${SOCKET_API}', process.env.SOCKET_API || '')
             .replace('${BING_TRANSLATE_API_KEY}', process.env.BING_TRANSLATE_API_KEY || '')
             .replace('${KICK_CLIENT_ID}', process.env.KICK_CLIENT_ID || '')
@@ -1068,6 +1072,7 @@ const server = http.createServer((req, res) => {
         req.on('end', async () => {
             const params = new URLSearchParams(body);
             const newBark = params.get('BARK_API') || '';
+            const newNtfy = params.get('NTFY_API') || '';
             const newSocket = params.get('SOCKET_API') || '';
             const newBingKey = params.get('BING_TRANSLATE_API_KEY') || '';
             const newKickClientId = params.get('KICK_CLIENT_ID') || '';
@@ -1090,6 +1095,7 @@ const server = http.createServer((req, res) => {
 
             // 更新 process.env
             process.env.BARK_API = newBark;
+            process.env.NTFY_API = newNtfy;
             process.env.SOCKET_API = newSocket;
             process.env.BING_TRANSLATE_API_KEY = newBingKey;
             process.env.KICK_CLIENT_ID = newKickClientId;
@@ -1129,6 +1135,7 @@ const server = http.createServer((req, res) => {
             }
 
             updateEnv('BARK_API', newBark);
+            updateEnv('NTFY_API', newNtfy);
             updateEnv('SOCKET_API', newSocket);
             updateEnv('BING_TRANSLATE_API_KEY', newBingKey);
             updateEnv('KICK_CLIENT_ID', newKickClientId);
@@ -1152,7 +1159,7 @@ const server = http.createServer((req, res) => {
             fs.writeFileSync(envPath, envContent, 'utf-8');
 
             
-            pushLog(`[SYSTEM] Updated .env: SOCKET_API=${newSocket} , BARK_API=${maskKey(newBark)} , BING_TRANSLATE_API_KEY=${maskKey(newBingKey)}`);
+            pushLog(`[SYSTEM] Updated .env: SOCKET_API=${newSocket} , BARK_API=${maskKey(newBark)} , NTFY_API=${newNtfy} , BING_TRANSLATE_API_KEY=${maskKey(newBingKey)}`);
 
 
 

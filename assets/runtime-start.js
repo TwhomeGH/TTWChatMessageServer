@@ -18,8 +18,9 @@
         const locked = busy || !state || !['stopped', 'failed'].includes(state.state) || !options.length;
         box.disabled = locked; reset.disabled = locked;
         launch.disabled = locked || !options.some(o => document.getElementById('option-' + o.key).checked);
-        document.getElementById('active-features').textContent = state?.features
-            ? i18n.t('runtime.activeFeatures', {}, '本次功能：') + ['Socket', 'Bark'].filter((name, i) => state.features[i ? 'isBark' : 'isSocket']).join(', ') : '';
+        const active = state?.features ? options.filter(o => o.group === 'transport' && state.features[o.key]).map(o => o.label) : [];
+        document.getElementById('active-features').textContent = active.length
+            ? i18n.t('runtime.activeFeatures', {}, '本次功能：') + active.join(', ') : '';
     }
     /** 平台名稱與欄位由後端提供；所有文字使用 textContent。 */
     async function init() {
