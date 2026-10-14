@@ -1,5 +1,26 @@
 # ChangeHistory
 
+## 2026.10.15 01:11 核心測試改用 glob 自動探索，啟動測試移入 Test/startup/
+
+**類型**: 重構 · **檔案**: `package.json`
+
+### 問題 - test:core 手寫一長串測試清單，容易漏加
+
+`test:core` 把每個測試檔逐一列出，新增測試常忘記補進清單（例如本次新增 `twitch_clip.test.mjs` 就漏了），CI 與本機因此可能少跑測試。
+
+### 根因 - 清單靠人工維護
+
+沒有自動探索機制，只要有人新增檔案就得記得同步 `package.json` 與文件。
+
+### 修改 - 改用 glob，並以目錄區隔啟動測試
+
+- `test:core` 改為 `node --test --test-concurrency=1 "Test/*.test.cjs" "Test/*.test.mjs"`，符合命名的新測試自動納入（每個檔案仍在獨立行程執行）。
+- 啟動／CSS 建置測試（`start.test.cjs`、`css_build.test.cjs`）移入 `Test/startup/`，不匹配核心 glob；`test:startup` 改指新路徑，CI 步驟不變。
+- 移動後修正兩檔的相對路徑（`../` → `../../`）；`Test/README.md` 同步更新。
+- 註：`node --test` 的 glob 不支援 `!` 排除（實測無效），因此以子目錄而非排除樣式區隔。
+
+**相關文件**: [測試維護指南](../Test/README.md)
+
 ## 2026.10.15 01:10 Twitch 剪輯抽出 ScriptLib/twitch/clip.mjs
 
 **類型**: 重構 · **檔案**: `ScriptLib/twitch/clip.mjs`

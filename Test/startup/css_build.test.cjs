@@ -3,17 +3,17 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const os=require('node:os');
-const { fingerprint,inspect,build }=require('../scripts/css-build.cjs');
+const { fingerprint,inspect,build }=require('../../scripts/css-build.cjs');
 const VERSION='4.3.3';
 const FAKE_CLI="import fs from 'node:fs';\nfs.writeFileSync(process.argv[process.argv.indexOf('-o')+1],'.test{}');\n";
 function setup(t,real=false){
     const root=fs.mkdtempSync(path.join(os.tmpdir(),'ttw-css-test-'));
     for(const dir of ['scripts','styles','assets'])fs.mkdirSync(path.join(root,dir),{recursive:true});
-    fs.copyFileSync(path.join(__dirname,'../scripts/css-build.cjs'),path.join(root,'scripts/css-build.cjs'));
+    fs.copyFileSync(path.join(__dirname,'../../scripts/css-build.cjs'),path.join(root,'scripts/css-build.cjs'));
     fs.writeFileSync(path.join(root,'styles/app.css'),'@import "tailwindcss" source(none);\n@source "../*.html";\n@source "../assets/*.js";\n');
     fs.writeFileSync(path.join(root,'package.json'),JSON.stringify({devDependencies:{'@tailwindcss/cli':VERSION,tailwindcss:VERSION}}));
     if(real){
-        fs.symlinkSync(path.join(__dirname,'../node_modules'),path.join(root,'node_modules'),'junction');
+        fs.symlinkSync(path.join(__dirname,'../../node_modules'),path.join(root,'node_modules'),'junction');
     }else{
         for(const dir of ['node_modules/tailwindcss','node_modules/@tailwindcss/cli/dist'])fs.mkdirSync(path.join(root,dir),{recursive:true});
         fs.writeFileSync(path.join(root,'node_modules/tailwindcss/package.json'),JSON.stringify({version:VERSION}));
@@ -90,7 +90,7 @@ test('missing CLI package is reported as an installation problem',t=>{
 
 test('watch rebuilds changed sources and updates the fingerprint',async t=>{
     const root=setup(t);build(root);
-    const timer=require('../scripts/css-build.cjs').watch(root);
+    const timer=require('../../scripts/css-build.cjs').watch(root);
     t.after(()=>clearInterval(timer));
     fs.appendFileSync(path.join(root,'page.html'),'<p class="grid"></p>');
     const deadline=Date.now()+5000;
