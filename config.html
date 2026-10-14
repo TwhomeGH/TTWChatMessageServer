@@ -52,6 +52,18 @@
         </div>
 
         <div>
+          <label for="SOCKET_APIS" class="block text-gray-700 mb-2"
+            >SOCKET_APIS（選填，額外端點；一行一筆，可加 ?filter=類別，如 tcp://192.168.0.5:9322?filter=chat,gift）:</label
+          >
+          <textarea
+            name="SOCKET_APIS"
+            id="SOCKET_APIS"
+            rows="3"
+            class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >${SOCKET_APIS}</textarea>
+        </div>
+
+        <div>
           <label for="NTFY_API" class="block text-gray-700 mb-2"
             >NTFY_API（如 https://ntfy.sh/你的主題）:</label
           >

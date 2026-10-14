@@ -19,7 +19,7 @@
 
 按「啟動服務」透過 POST /api/runtime/start 送出 JSON，原頁顯示程序狀態。執行中或停止中鎖定選單；跨分頁重複啟動會回傳 409。GET /api/runtime/options 提供後端白名單。JSON 啟動要求必須來自相同 Origin。原 /open query 入口維持相容，共用同一程序啟動函數。
 
-Socket 使用既有 SOCKET_API 設定；Bark 與 ntfy 使用既有通知設定（BARK_API／NTFY_API）。「開啟設定」只導向設定頁。程序啟動成功不代表各平台已完成登入。
+Socket 使用既有 SOCKET_API 設定（可再用 SOCKET_APIS 加開多個端點，每端點可用 `?filter=類別` 只收指定分類）；Bark 與 ntfy 使用既有通知設定（BARK_API／NTFY_API）。「開啟設定」只導向設定頁。程序啟動成功不代表各平台已完成登入。
 
 ## 啟停日誌中的統計摘要
 

@@ -1,5 +1,30 @@
 # ChangeHistory
 
+## 2026.10.15 06:24 Socket 多端點（SOCKET_APIS）與訊息分類過濾
+
+**類型**: 功能 · **檔案**: `ScriptLib/socket/hub.mjs`
+
+### 問題 - socket 只能連一組、訊息無法分類
+
+原本只能設定單一 `SOCKET_API`，無法同時送往多台（例如 PC 與 iPad）；且所有訊息不分類，無法只把部分類型分送到某個端點。
+
+### 根因 - createHub 僅接受單一網址、payload 無 category
+
+`createHub` 只建立一個端點；`StreamMessage` 沒有可辨識的分類欄位（僅 ad/audience 有）。
+
+### 修改 - 多端點 + category 過濾
+
+- `createHub` 支援 `SOCKET_API`（單一）＋ `SOCKET_APIS`（多筆，分號／換行分隔；未含 `?` 時逗號亦可分隔）；相同網址合併，端點可帶 `?filter=類別`（空＝全收）。
+- 新增 `parseEndpointSpec`／`splitApis`（`ScriptLib/socket/hub.mjs`）。
+- 新增 `ScriptLib/messages/categories.cjs` 統一分類清單（system／chat／member／follow／like／gift／share／emote／envelope／superfan／subscribe／clip／ad／audience／summary／heartbeat）。
+- 所有 socket 送出點標上 category：TikTok 事件以 `sendCat`、Twitch／Kick／YouTube／Odysee 的 `sendChat／sendSystem／sendNotice` 包裝、剪輯 `clip`、`ad`／`audience`／頻率摘要。
+- 設定：`Server.js` 的 `/config` 讀寫 `SOCKET_APIS`（換行 ↔ 分號）、`config.html` 新增欄位、`.env.example`／`Docs/envExample`／`Docs/RUNTIME.md`／`README.md` 更新。
+- 測試：`Test/socket_hub.test.mjs` 新增多端點／過濾 4 測試。
+
+**相關文件**: [MODULES.md](MODULES.md)
+
+---
+
 ## 2026.10.15 06:13 修正 TikTok 直播結束事件註冊（ControlEvent.STREAM_END 未定義）
 
 **類型**: 修正 · **檔案**: `ScriptLib/tiktok/events.mjs`

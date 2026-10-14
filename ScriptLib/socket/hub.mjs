@@ -79,11 +79,80 @@ export class SocketHub {
 }
 
 /**
- * 依環境設定建立 hub。目前接受單一 SOCKET_API；多端點（SOCKET_APIS）於後續擴充。
+ * 解析單一端點設定字串：`tcp://host:port` 或 `tcp://host:port?filter=chat,gift`。
+ * @param {string} entry
+ * @returns {{url: string, filter: (string|undefined)}}
+ */
+export function parseEndpointSpec(entry) {
+    const text = String(entry || '').trim();
+    const qIndex = text.indexOf('?');
+    if (qIndex === -1) return { url: text, filter: undefined };
+    const url = text.slice(0, qIndex);
+    const filter = new URLSearchParams(text.slice(qIndex + 1)).get('filter') || undefined;
+    return { url, filter };
+}
+
+/**
+ * 把 SOCKET_APIS 輸入切成端點清單。
+ * 分隔：換行或分號一定分隔；逗號只在「該段不含 ?」時才分隔，
+ * 避免把 `?filter=chat,gift` 的逗號拆開。
+ * @param {(string|string[])} input
+ * @returns {string[]}
+ */
+export function splitApis(input) {
+    if (Array.isArray(input)) return input.map(value => String(value).trim()).filter(Boolean);
+    const parts = [];
+    for (const chunk of String(input || '').split(/[\n;]+/)) {
+        const trimmed = chunk.trim();
+        if (!trimmed) continue;
+        if (trimmed.includes('?')) parts.push(trimmed);
+        else for (const sub of trimmed.split(',')) { const s = sub.trim(); if (s) parts.push(s); }
+    }
+    return parts;
+}
+
+/**
+ * 依環境設定建立 hub。
+ * 端點來源：`socketApi`（單一）＋ `apis`（多筆，見 splitApis 的分隔規則）。
+ * 相同網址會合併；未帶 filter 者＝全收，帶 filter 者只收指定 category。
+ * @param {Object} [options]
+ * @param {string} [options.socketApi] 單一端點網址。
+ * @param {(string|string[])} [options.apis] 額外端點（可含 ?filter=）。
+ * @param {boolean} [options.enabled=true]
+ * @param {() => void} [options.onConnect]
+ * @param {(value: string) => string} [options.replaceEmojis]
+ * @param {import('./dedup.mjs').MessageDedup} [options.dedup]
+ * @param {Console} [options.logger=console]
  * @returns {SocketHub}
  */
-export function createHub({ socketApi = 'tcp://localhost:9322', enabled = true, onConnect, replaceEmojis, dedup, logger = console } = {}) {
+export function createHub({ socketApi, apis = [], enabled = true, onConnect, replaceEmojis, dedup, logger = console } = {}) {
+    const specs = [];
+    if (socketApi) specs.push(socketApi);
+    for (const api of splitApis(apis)) specs.push(api);
+
+    // 合併相同網址；收集各自的 filter（null 代表全收）。
+    const byUrl = new Map();
+    for (const spec of specs) {
+        const { url, filter } = parseEndpointSpec(spec);
+        if (!url) continue;
+        if (!byUrl.has(url)) byUrl.set(url, new Set());
+        const filters = byUrl.get(url);
+        if (filter === undefined) {
+            filters.add(null);
+        } else {
+            for (const name of String(filter).split(',')) {
+                const trimmed = name.trim();
+                if (trimmed) filters.add(trimmed);
+            }
+        }
+    }
+
     const endpoints = [];
-    if (enabled) endpoints.push(new SocketEndpoint({ url: socketApi, enabled, onConnect, logger }));
+    if (enabled) {
+        for (const [url, filters] of byUrl) {
+            const filter = filters.has(null) ? undefined : [...filters];
+            endpoints.push(new SocketEndpoint({ url, enabled, filter, onConnect, logger }));
+        }
+    }
     return new SocketHub({ endpoints, dedup, replaceEmojis, logger });
 }

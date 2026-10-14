@@ -1039,6 +1039,7 @@ const server = http.createServer((req, res) => {
             .replace('${BARK_API}', process.env.BARK_API || '')
             .replace('${NTFY_API}', process.env.NTFY_API || '')
             .replace('${SOCKET_API}', process.env.SOCKET_API || '')
+            .replace('${SOCKET_APIS}', (process.env.SOCKET_APIS || '').split(';').join('\n'))
             .replace('${BING_TRANSLATE_API_KEY}', process.env.BING_TRANSLATE_API_KEY || '')
             .replace('${KICK_CLIENT_ID}', process.env.KICK_CLIENT_ID || '')
             .replace('${KICK_CLIENT_SECRET}', process.env.KICK_CLIENT_SECRET || '')
@@ -1074,6 +1075,8 @@ const server = http.createServer((req, res) => {
             const newBark = params.get('BARK_API') || '';
             const newNtfy = params.get('NTFY_API') || '';
             const newSocket = params.get('SOCKET_API') || '';
+            // 多端點以換行輸入；寫入 .env 時轉成分號（單行），子程序兩種都支援。
+            const newSocketApis = (params.get('SOCKET_APIS') || '').replace(/\r?\n+/g, ';').trim();
             const newBingKey = params.get('BING_TRANSLATE_API_KEY') || '';
             const newKickClientId = params.get('KICK_CLIENT_ID') || '';
             const newKickClientSecret = params.get('KICK_CLIENT_SECRET') || '';
@@ -1097,6 +1100,7 @@ const server = http.createServer((req, res) => {
             process.env.BARK_API = newBark;
             process.env.NTFY_API = newNtfy;
             process.env.SOCKET_API = newSocket;
+            process.env.SOCKET_APIS = newSocketApis;
             process.env.BING_TRANSLATE_API_KEY = newBingKey;
             process.env.KICK_CLIENT_ID = newKickClientId;
             process.env.KICK_CLIENT_SECRET = newKickClientSecret;
@@ -1137,6 +1141,7 @@ const server = http.createServer((req, res) => {
             updateEnv('BARK_API', newBark);
             updateEnv('NTFY_API', newNtfy);
             updateEnv('SOCKET_API', newSocket);
+            updateEnv('SOCKET_APIS', newSocketApis);
             updateEnv('BING_TRANSLATE_API_KEY', newBingKey);
             updateEnv('KICK_CLIENT_ID', newKickClientId);
             updateEnv('KICK_CLIENT_SECRET', newKickClientSecret);
@@ -1159,7 +1164,7 @@ const server = http.createServer((req, res) => {
             fs.writeFileSync(envPath, envContent, 'utf-8');
 
             
-            pushLog(`[SYSTEM] Updated .env: SOCKET_API=${newSocket} , BARK_API=${maskKey(newBark)} , NTFY_API=${newNtfy} , BING_TRANSLATE_API_KEY=${maskKey(newBingKey)}`);
+            pushLog(`[SYSTEM] Updated .env: SOCKET_API=${newSocket} , SOCKET_APIS=${newSocketApis} , BARK_API=${maskKey(newBark)} , NTFY_API=${newNtfy} , BING_TRANSLATE_API_KEY=${maskKey(newBingKey)}`);
 
 
 

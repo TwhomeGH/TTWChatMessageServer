@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MessageDedup } from '../ScriptLib/socket/dedup.mjs';
 import { SocketEndpoint, parseSocketUrl } from '../ScriptLib/socket/endpoint.mjs';
-import { SocketHub, createHub } from '../ScriptLib/socket/hub.mjs';
+import { SocketHub, createHub, parseEndpointSpec, splitApis } from '../ScriptLib/socket/hub.mjs';
 
 test('MessageDedup 只比對第一行原始文字，並受 TTL 與上限約束', () => {
     const dedup = new MessageDedup({ ttlMs: 60000, max: 2 });
@@ -90,3 +90,37 @@ test('createHub：停用時無端點；啟用時建立單一端點', () => {
     assert.equal(hub.primary.enabled, true);
     assert.equal(hub.primary.accepts('chat'), true);
 });
+
+test('parseEndpointSpec：拆出 ?filter= 與網址', () => {
+    assert.deepEqual(parseEndpointSpec('tcp://localhost:9322'), { url: 'tcp://localhost:9322', filter: undefined });
+    assert.deepEqual(parseEndpointSpec('tcp://localhost:9322?filter=chat,gift'), { url: 'tcp://localhost:9322', filter: 'chat,gift' });
+    assert.deepEqual(parseEndpointSpec('  '), { url: '', filter: undefined });
+});
+
+test('splitApis：換行/分號分隔；逗號只在無 ? 時分隔', () => {
+    assert.deepEqual(splitApis('a;b\nc'), ['a', 'b', 'c']);
+    assert.deepEqual(splitApis('tcp://a:1,tcp://b:2'), ['tcp://a:1', 'tcp://b:2']);
+    assert.deepEqual(splitApis('tcp://a:1?filter=chat,gift'), ['tcp://a:1?filter=chat,gift']);
+    assert.deepEqual(splitApis(['x', ' y ']), ['x', 'y']);
+});
+
+test('createHub：SOCKET_API + SOCKET_APIS 多端點與過濾', () => {
+    const hub = createHub({
+        socketApi: 'tcp://localhost:9322',
+        apis: 'tcp://192.168.0.5:9322?filter=chat,gift;tcp://10.0.0.9:9322',
+        enabled: true
+    });
+    assert.equal(hub.endpoints.length, 3);
+    const filtered = hub.endpoints.find(e => !e.accepts('system'));
+    assert.ok(filtered);
+    assert.equal(filtered.accepts('chat'), true);
+    assert.equal(filtered.accepts('gift'), true);
+    assert.equal(filtered.accepts('system'), false);
+});
+
+test('createHub：相同網址合併、未帶 filter 者為全收', () => {
+    const hub = createHub({ socketApi: 'tcp://localhost:9322?filter=chat', apis: 'tcp://localhost:9322', enabled: true });
+    assert.equal(hub.endpoints.length, 1);
+    assert.equal(hub.endpoints[0].accepts('system'), true);
+});
+

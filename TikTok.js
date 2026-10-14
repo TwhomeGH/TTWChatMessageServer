@@ -180,7 +180,7 @@ setInterval(() => {
         for (const summary of takeThrottleSummaries()) {
             console.log('🗒️ 頻率摘要:', summary.user, summary.message);
             writeLog("Default", `頻率摘要: ${summary.user} : ${summary.message}`, "ThrottleSummary");
-            sendSocketMessage(summary.user || "系統", summary.message, "", "", false, CacheUserNum, CacheUserList);
+            sendSocketMessage(summary.user || "系統", summary.message, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'summary');
         }
     } catch (err) {
         console.error('⚠️ 頻率摘要送出失敗:', err.message);
@@ -204,12 +204,13 @@ let streamEnded = false;       // 直播真正結束（使用者主動結束 / �
 const dedup = new MessageDedup();
 const socketHub = createHub({
     socketApi: process.env.SOCKET_API || 'tcp://localhost:9322',
+    apis: process.env.SOCKET_APIS || '',
     enabled: isSocket,
     replaceEmojis,
     dedup,
     onConnect: () => {
         if (isFirstSocketConnect) {
-            sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false, CacheUserNum, CacheUserList);
+            sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system');
             isFirstSocketConnect = false;
         }
     }
@@ -258,9 +259,9 @@ const kickDeps = {
     channelName: process.env.KICK_USER_NAME || keyword || '',
     writeLog,
     notify,
-    sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList),
-    sendChat: (user, message, avatar) => sendSocketMessage(user, message, avatar, "", true, CacheUserNum, CacheUserList),
-    sendNotice: (user, message, avatar) => sendSocketMessage(user, message, avatar, "", false, CacheUserNum, CacheUserList),
+    sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system'),
+    sendChat: (user, message, avatar) => sendSocketMessage(user, message, avatar, "", true, CacheUserNum, CacheUserList, undefined, undefined, 'chat'),
+    sendNotice: (user, message, avatar) => sendSocketMessage(user, message, avatar, "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system'),
     reportTraffic,
     reportFiltered,
     filter: processFilter,
@@ -282,7 +283,7 @@ const tiktokConn = createTikTokConnectionManager({
     getCacheUserList: () => CacheUserList,
     updateCombinedViewerCount,
     notify,
-    sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList),
+    sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system'),
     writeLog,
     reportTraffic,
     getAutoClip: () => autoClip,
@@ -396,7 +397,7 @@ process.on('uncaughtException', (err) => {
     }
 
     notify("TikTok.js 發生錯誤", shortMsg);
-    sendSocketMessage("系統", `TikTok.js 發生錯誤: ${shortMsg}`, "", "", false, CacheUserNum, CacheUserList);
+    sendSocketMessage("系統", `TikTok.js 發生錯誤: ${shortMsg}`, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system');
 });
 
 let stdinBuffer = '';
@@ -479,7 +480,7 @@ process.stdin.on('data', async (chunk) => {
 
             // 由 Server.js 轉來的頻率摘要：直接顯示，不再過濾（避免摘要本身被同一條規則攔下）。
             if (json.type === 'ThrottleSummary') {
-                sendSocketMessage(json.user || '系統', json.message, '', '', false, CacheUserNum, CacheUserList);
+                sendSocketMessage(json.user || '系統', json.message, '', '', false, CacheUserNum, CacheUserList, undefined, undefined, 'summary');
                 return;
             }
 
@@ -502,7 +503,7 @@ process.stdin.on('data', async (chunk) => {
 
                 applyRelayAudience(json);
 
-                sendSocketMessage(json.user, json.message, json.img || '', json.giftImg || '', true, CacheUserNum, CacheUserList, origUser, origMsg);
+                sendSocketMessage(json.user, json.message, json.img || '', json.giftImg || '', true, CacheUserNum, CacheUserList, origUser, origMsg, 'chat');
 
                 dedup.add(origUser, origMsg);
 
@@ -813,16 +814,19 @@ function updateCombinedViewerCount() {
 }
 
 /**
- * 用於發送 Socket 訊息的統一函數，會先檢查是否重複，再格式化後發送
- * 
- * @param {*} user 
- * @param {*} message 
- * @param {*} img 
- * @param {*} giftImg 
- * @param {*} isMain 
- * @param {*} userNum 
- * @param {*} userList 
- * @returns 
+ * 發送 Socket 訊息的統一入口（去重 → emoji 取代 → 依 category 扇出）。
+ *
+ * @param {string} user 顯示名稱。
+ * @param {string} message 訊息內容。
+ * @param {string} [img] 頭像 URL。
+ * @param {string} [giftImg] 禮物圖 URL。
+ * @param {boolean} [isMain=true] 是否為主訊息（置底）。
+ * @param {number} [userNum=0] 當下觀眾數。
+ * @param {Array} [userList=[]] 頭號觀眾清單。
+ * @param {string} [dedupUser] 覆寫去重比對的使用者。
+ * @param {string} [dedupMessage] 覆寫去重比對的訊息。
+ * @param {string} [category] 訊息分類（供端點 ?filter= 過濾）。
+ * @returns {void}
  */
 function sendSocketMessage(user, message, img, giftImg, isMain = true, userNum = 0, userList = [], dedupUser, dedupMessage, category) {
     socketHub.sendMessage(user, message, { img, giftImg, isMain, userNum, userList, dedupUser, dedupMessage, category });
@@ -864,7 +868,7 @@ if (isTK) {
             type: errDetail.type,
         }, null, 2));
         notify("TikTok 直播間連線失敗", (errDetail.message || "").substring(0, 100));
-        sendSocketMessage("系統", `TikTok 直播間連線失敗: ${err.message}`, "", "", false, CacheUserNum, CacheUserList);
+        sendSocketMessage("系統", `TikTok 直播間連線失敗: ${err.message}`, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system');
 
         // 初次連線失敗也進入有限次數自動重連（指數退避，用盡後退出）
         tiktokConn.scheduleReconnect();
@@ -916,8 +920,8 @@ const twitchDeps = {
     reportTraffic,
     writeLog,
     notify,
-    sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList),
-    sendNotice: (user, text, icon) => sendSocketMessage(user, text, icon, "", false, CacheUserNum, CacheUserList),
+    sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system'),
+    sendNotice: (user, text, icon) => sendSocketMessage(user, text, icon, "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system'),
     setViewerCount: (count) => { TwitchViewerCount = count; },
     updateCombinedViewerCount,
     getUserIcon,
@@ -929,7 +933,7 @@ const twitchChatDeps = {
     getTuser: () => tuser,
     getUserIcon,
     notify,
-    sendChat: (user, message, icon) => sendSocketMessage(user, message, icon, "", true, CacheUserNum, CacheUserList),
+    sendChat: (user, message, icon) => sendSocketMessage(user, message, icon, "", true, CacheUserNum, CacheUserList, undefined, undefined, 'chat'),
     sendAd: (user, text, iconURL, useTTS) => sendAdOverylayMessage(user, text, iconURL, useTTS),
     writeLog,
     reportTraffic,
@@ -1033,8 +1037,8 @@ if (isOdysee) {
         axios,
         writeLog,
         notify,
-        sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList),
-        sendChat: (user, message, img) => sendSocketMessage(user, message, img, "", true, CacheUserNum, CacheUserList),
+        sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system'),
+        sendChat: (user, message, img) => sendSocketMessage(user, message, img, "", true, CacheUserNum, CacheUserList, undefined, undefined, 'chat'),
         reportTraffic,
         reportFiltered,
         filter: processFilter,
@@ -1056,8 +1060,8 @@ if (isYoutube) {
         pollIntervalS: youtubePollIntervalS,
         writeLog,
         notify,
-        sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList),
-        sendChat: (user, message, img) => sendSocketMessage(user, message, img, "", true, CacheUserNum, CacheUserList),
+        sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system'),
+        sendChat: (user, message, img) => sendSocketMessage(user, message, img, "", true, CacheUserNum, CacheUserList, undefined, undefined, 'chat'),
         reportTraffic,
         reportFiltered,
         filter: processFilter,

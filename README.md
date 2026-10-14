@@ -190,6 +190,7 @@ TT_TARGET_IDC=你的TikTok Target IDC
 BARK_API=https://api.day.app/你的BarkKey
 NTFY_API=https://ntfy.sh/你的主題
 SOCKET_API=http://192.168.0.195:9322
+# SOCKET_APIS=其他端點 (選填，多筆以分號分隔，可加 ?filter=類別)
 
 # Kick 設定（OAuth 選填，閱讀公開聊天不需設定）
 KICK_CLIENT_ID=你的Kick Client ID
@@ -894,7 +895,7 @@ http://localhost:3332/sponsor
 
 ### 2. 修改環境變數
 
-可快速修改 .env 的 BARK_API、NTFY_API 與 SOCKET_API：
+可快速修改 .env 的 BARK_API、NTFY_API、SOCKET_API 與 SOCKET_APIS：
 
 ```bash
 http://localhost:3332/config

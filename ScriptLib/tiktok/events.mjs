@@ -39,6 +39,10 @@ export function registerTikTokEvents(connection, deps) {
         logger = console,
     } = deps;
 
+    // 以固定 category 送 socket 訊息的便利包裝（自動補上目前觀眾數與清單）。
+    const sendCat = (category, user, message, img, giftImg, isMain = true, dedupUser, dedupMessage) =>
+        sendSocketMessage(user, message, img, giftImg, isMain, getCacheUserNum(), getCacheUserList(), dedupUser, dedupMessage, category);
+
     // 重播聊天過濾統計（僅本模組使用）。
     let lastTikTokReplayLog = 0;
     let tikTokReplayDropped = 0;
@@ -142,7 +146,7 @@ export function registerTikTokEvents(connection, deps) {
         logger.log('Disconnected :( (error code: ' + e.errorCode + ', reason: ' + e.reason + ')');
 
         notify("TikTok 直播間已斷線", `已從 ${tiktokName} 的直播間斷線`, "");
-        sendSocketMessage("系統", `TikTok 直播間已斷線，已從 ${tiktokName} 的直播間斷線`, "", "", false, getCacheUserNum(), getCacheUserList());
+        sendCat('system', "系統", `TikTok 直播間已斷線，已從 ${tiktokName} 的直播間斷線`, "", "", false);
 
         deps.stopViewCache?.();
 
@@ -162,7 +166,7 @@ export function registerTikTokEvents(connection, deps) {
         if (err && err.message === 'Unexpected server response: 200') {
             logger.error('[TikTok] WebSocket 200 錯誤 — 簽名可能無效或連線協定不符');
         }
-        sendSocketMessage("系統", `TikTok 連線錯誤: ${msg.substring(0, 100)}`, "", "", false, getCacheUserNum(), getCacheUserList());
+        sendCat('system', "系統", `TikTok 連線錯誤: ${msg.substring(0, 100)}`, "", "", false);
     });
 
     connection.on(WebcastEvent.CAPTION_MESSAGE, (data) => {
@@ -234,7 +238,7 @@ export function registerTikTokEvents(connection, deps) {
         }
 
         // socket：維持逐筆發送
-        sendSocketMessage(nickname, "來了", iconn, "", false, getCacheUserNum(), getCacheUserList(), data.user.nickname, "加入了");
+        sendCat('member', nickname, "來了", iconn, "", false, data.user.nickname, "加入了");
 
         // bark：累計後合併發送
         memberBarkAccum.push({ nickname, avatar: iconn });
@@ -250,7 +254,7 @@ export function registerTikTokEvents(connection, deps) {
         logger.log(data.user.nickname, "關注了主播");
 
         notify(data.user.nickname, "關注了主播", iconn);
-        sendSocketMessage(data.user.nickname, "關注了主播", iconn, "", false, getCacheUserNum(), getCacheUserList());
+        sendCat('follow', data.user.nickname, "關注了主播", iconn, "", false);
         dedup.add(data.user.nickname.trim(), "關注了主播");
     });
 
@@ -326,7 +330,7 @@ export function registerTikTokEvents(connection, deps) {
                 notify(nickname + "[翻譯]", RES, iconn);
             }
 
-            sendSocketMessage(nickname, RESCHAT, iconn, "", true, getCacheUserNum(), getCacheUserList(), data.user.nickname, data.content);
+            sendCat('chat', nickname, RESCHAT, iconn, "", true, data.user.nickname, data.content);
 
             // 翻譯屬於同一則留言，不重複統計。
 
@@ -365,7 +369,7 @@ export function registerTikTokEvents(connection, deps) {
         if (emoteId) {
             LOG_R.push(`Emote id: ${emoteId}`);
             const mess = `發送了表情 ${emoteId}`;
-            sendSocketMessage(nickname, mess, profilePic, "", true, getCacheUserNum(), getCacheUserList());
+            sendCat('emote', nickname, mess, profilePic, "", true);
             notify(nickname, mess, profilePic);
             writeLog("Default", LOG_R.join("\n"), "Emote表情");
         }
@@ -394,7 +398,7 @@ export function registerTikTokEvents(connection, deps) {
         logger.log(`${data.user.nickname} ${mess}`);
 
         notify(data.user.nickname, mess, iconn);
-        sendSocketMessage(data.user.nickname, mess, iconn, "", false, getCacheUserNum(), getCacheUserList());
+        sendCat('like', data.user.nickname, mess, iconn, "", false);
         dedup.add(data.user.nickname.trim(), mess);
 
         writeLog("Default", `${data.user.nickname} ${mess}`, "Like");
@@ -415,7 +419,7 @@ export function registerTikTokEvents(connection, deps) {
             let mess = `連擊了 ${giftNameForDisplay} ${data.repeatCount} 個`;
             logger.log(`連擊了 ${data.user.nickname} : ${giftNameForDisplay} x${data.repeatCount}`);
             notify(data.user.nickname, mess, giftImg);
-            sendSocketMessage(data.user.nickname, mess, iconn, giftImg, true, getCacheUserNum(), getCacheUserList());
+            sendCat('gift', data.user.nickname, mess, iconn, giftImg, true);
             dedup.add(data.user.nickname.trim(), mess);
             writeLog("Default", `${data.user.nickname} ${mess}`, "Gift連擊");
             return;
@@ -426,7 +430,7 @@ export function registerTikTokEvents(connection, deps) {
         logger.log(`送出了 ${data.user.nickname} : ${giftNameForDisplay} ${data.repeatCount} 個`);
 
         notify(data.user.nickname, mess, giftImg);
-        sendSocketMessage(data.user.nickname, mess, iconn, giftImg, true, getCacheUserNum(), getCacheUserList());
+        sendCat('gift', data.user.nickname, mess, iconn, giftImg, true);
         dedup.add(data.user.nickname.trim(), mess);
         writeLog("Default", `${data.user.nickname} ${mess}`, "Gift");
 
@@ -436,7 +440,7 @@ export function registerTikTokEvents(connection, deps) {
             let thanks = `${data.user.nickname} 謝謝支持`;
             logger.log("5次送禮感謝", data.user.nickname, thanks);
             notify(data.user.nickname, thanks, giftImg);
-            sendSocketMessage("感謝大哥的餽贈", thanks, iconn, giftImg, true, getCacheUserNum(), getCacheUserList());
+            sendCat('gift', "感謝大哥的餽贈", thanks, iconn, giftImg, true);
             dedup.add(data.user.nickname.trim(), thanks);
             writeLog("Default", thanks, "Gift感謝");
             UserGiftCount.set(data.user.displayId, { count: 0, lastGiftTimestamp: Date.now() });
@@ -450,7 +454,7 @@ export function registerTikTokEvents(connection, deps) {
         logger.log(`${data.user.nickname} ${mess}`);
 
         notify(data.user.nickname, mess, iconn);
-        sendSocketMessage(data.user.nickname, mess, iconn, "", false, getCacheUserNum(), getCacheUserList());
+        sendCat('share', data.user.nickname, mess, iconn, "", false);
         dedup.add(data.user.nickname.trim(), mess);
 
         writeLog("Default", `${data.user.nickname} 分享了直播間！`, "Share");
@@ -475,7 +479,7 @@ export function registerTikTokEvents(connection, deps) {
         const senderName = envelope.sendUserName || data.nickname || "未知用戶";
         const profilePic = getTikTokProfilePic(data.user) || envelope.sendUserAvatar?.urlList?.[0] || "";
         notify(senderName, mess, profilePic);
-        sendSocketMessage(senderName, mess, profilePic, "", true, getCacheUserNum(), getCacheUserList());
+        sendCat('envelope', senderName, mess, profilePic, "", true);
 
         writeLog("Default", `${senderName} 送出了寶箱，包含 ${envelope.diamondCount} 鑽石`, "Envelope");
     });
@@ -489,7 +493,7 @@ export function registerTikTokEvents(connection, deps) {
         logger.log(`${nickname} ${mess}`);
 
         notify(nickname, mess, iconn);
-        sendSocketMessage(nickname, mess, iconn, "", true, getCacheUserNum(), getCacheUserList());
+        sendCat('superfan', nickname, mess, iconn, "", true);
 
         writeLog("Default", `${nickname} 成為了鐵粉！`, "SuperFan");
     });
@@ -504,12 +508,12 @@ export function registerTikTokEvents(connection, deps) {
             writeLog("Default", "直播結束，用戶主動結束或推流斷線", "Stream Status");
             logger.log('Stream ended by user');
             notify(tiktokName, mess, IMG);
-            sendSocketMessage(tiktokName, mess, IMG, "", false);
+            sendSocketMessage(tiktokName, mess, IMG, "", false, 0, [], undefined, undefined, 'system');
         }
         if (action === ControlAction.CONTROL_ACTION_STREAM_SUSPENDED) {
             logger.log('Stream ended by platform moderator (ban)');
             notify(tiktokName, mess, IMG);
-            sendSocketMessage(tiktokName, mess, IMG, "", false);
+            sendSocketMessage(tiktokName, mess, IMG, "", false, 0, [], undefined, undefined, 'system');
 
             writeLog("Default", "直播被強行終止了 :(", "Stream Status");
         }
