@@ -36,6 +36,19 @@ ESM 模組若要 `await fs.readFile`／`fs.writeFile`，必須 `import { promise
 丟出 `The "cb" argument must be of type function`；若發生在頂層 `await`，會中止後續初始化（見 [運行狀態頁](RUNTIME.md)）。
 只用到同步函式時，預設 `fs` 搭配 `readFileSync`／`writeFileSync` 即可，不需改。
 
+## 平台聊天模組
+
+各平台以 `startX(deps)`／事件函式實作，副作用（推播、socket、過濾、統計、翻譯、日誌）由呼叫端以 deps 注入；啟動後才成立的 live binding（`apiClient`／`tuser`）以 getter 傳入。
+
+| 檔案 | 責任 |
+| --- | --- |
+| ScriptLib/youtube/chat.mjs | YouTube 聊天輪詢與事件 |
+| ScriptLib/odysee/chat.mjs | Odysee 聊天 |
+| ScriptLib/twitch/events.mjs | Twitch EventSub 事件（觀眾／開台／追蹤／小奇點） |
+| ScriptLib/twitch/clip.mjs | Twitch 剪輯建立與歷史 |
+| ScriptLib/twitch/chat.mjs | Twitch 聊天、G#Ad、G#clip |
+| ScriptLib/kick/chat.mjs | Kick WebSocket 聊天與訂閱事件（token 由同目錄 tokens.cjs 取得） |
+
 ## 輸出層與資料模組
 
 TikTok.js 只負責組裝這些模組（解析旗標、建立實例、接上平台事件）；I/O 皆以依賴注入，模組可單獨測試。

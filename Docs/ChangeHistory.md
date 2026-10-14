@@ -1,5 +1,25 @@
 # ChangeHistory
 
+## 2026.10.15 01:21 Kick 聊天抽出 ScriptLib/kick/chat.mjs
+
+**類型**: 重構 · **檔案**: `ScriptLib/kick/chat.mjs`
+
+### 問題 - Kick 聊天內嵌在 TikTok.js
+
+`startKickChat`（連同 `resolveKickChannelId`、`getKickUserAvatar`、`kickAvatarCache`）全寫在 TikTok.js，直接使用 `kickTokens`、`KickWebSocket` 與全域變數。
+
+### 根因 - 缺少 Kick 模組邊界
+
+Kick 是獨立平台，卻與其他平台邏輯混在一檔。
+
+### 修改 - 抽出 chat.mjs（deps 注入）
+
+- 匯出 `startKickChat(deps)`：推播、socket、過濾、統計、翻譯、日誌全由 `KickChatDeps` 注入；OAuth token 由同目錄 `tokens.cjs` 取得；socket 以 `createSocket` 可注入（測試用）。
+- TikTok.js 組 `kickDeps` 並改呼 `startKickChat(kickDeps)`；移除 Kick 區塊（−213 行，現 1481 行）與 `kickTokens`／`KickWebSocket` import。
+- 新增 `Test/kick_chat.test.mjs`（5 測試，假 socket／deps）。
+
+**相關文件**: [MODULES.md](MODULES.md)
+
 ## 2026.10.15 01:18 Twitch 聊天與 G#Ad 抽出 ScriptLib/twitch/chat.mjs
 
 **類型**: 重構 · **檔案**: `ScriptLib/twitch/chat.mjs`

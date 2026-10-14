@@ -1,6 +1,5 @@
 import { reportTraffic } from './ScriptLib/traffic/report.mjs';
 import { closeDirectSigner } from './SignServer/direct-signer.mjs';
-import kickTokens from './ScriptLib/kick/tokens.cjs';
 import { startOdyseeChat, stopOdyseeChat } from './ScriptLib/odysee/chat.mjs';
 import { startYoutubeChat, stopYoutubeChat } from './ScriptLib/youtube/chat.mjs';
 import { createNotifier } from './ScriptLib/notify/index.mjs';
@@ -36,7 +35,7 @@ import { setupCustomSignServer, waitForSigner, setStreamerName } from './SignSer
 import Translate from "./TranslateTest.js"
 import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFilter, clearStats, takeThrottleSummaries } from "./MessageFilter.js"
 import { replaceEmojis, loadEmojiMap, getEmojiMap } from "./EmojiMap.js"
-import { KickWebSocket } from 'kick-wss';
+import { startKickChat } from './ScriptLib/kick/chat.mjs';
 import console from 'console';
 import { AutoClipManager } from './AutoClip.js'
 
@@ -257,6 +256,23 @@ const clipService = createClipService({
     writeLog, notify, sendSocketMessage
 });
 
+const kickDeps = {
+    channelName: process.env.KICK_USER_NAME || keyword || '',
+    writeLog,
+    notify,
+    sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList),
+    sendChat: (user, message, avatar) => sendSocketMessage(user, message, avatar, "", true, CacheUserNum, CacheUserList),
+    sendNotice: (user, message, avatar) => sendSocketMessage(user, message, avatar, "", false, CacheUserNum, CacheUserList),
+    reportTraffic,
+    reportFiltered,
+    filter: processFilter,
+    recordHeat: recordChatHeat,
+    replaceEmojis,
+    translate: (text) => Translate.TranslateText(text),
+    axios,
+    logger: console,
+};
+
 
 var isEnd=false
 
@@ -430,7 +446,7 @@ process.stdin.on('data', async (chunk) => {
         if (msg === 'KICK_START') {
             if (!isKick) {
                 isKick = true;
-                startKickChat();
+                startKickChat(kickDeps);
             }
             return;
         }
@@ -1752,219 +1768,6 @@ function pushAutoClipStats() {
 
 // 其他事件同理可加 sendSocketMessage
 
-// ===== Kick WebSocket 整合 =====
-
-let kickWS = null;
-const kickAvatarCache = new Map();
-
-
-function guessKickChannelId(channelName) {
-    const knownChannels = {
-        'nuclear0709': 24640237,
-    };
-    return knownChannels[channelName.toLowerCase()] || 0;
-}
-
-async function resolveKickChannelId(channelName) {
-    const envId = parseInt(process.env.KICK_CHANNEL_ID, 10);
-    if (envId > 0) return envId;
-
-    const knownId = guessKickChannelId(channelName);
-    if (knownId > 0) return knownId;
-
-    try {
-        const res = await fetch(`https://kick.com/api/v2/channels/${channelName}`, {
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'application/json',
-                'Referer': 'https://kick.com/',
-                'Origin': 'https://kick.com',
-                'Accept-Encoding': 'gzip'
-            }
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        return data?.chatroom?.id || 0;
-    } catch (e) {
-        console.error('⚠️ 無法取得 Kick 頻道資訊:', e.message);
-        return 0;
-    }
-}
-
-async function getKickUserAvatar(username, userId) {
-    if (username === '未知' || (!username && !userId)) return "";
-    const cacheKey = (username || userId || "").toString().toLowerCase();
-    const cached = kickAvatarCache.get(cacheKey);
-    if (cached) return cached;
-
-    const token = await kickTokens.getValidKickToken();
-    if (!token) {
-        console.info(`[Kick Avatar] ❌ 無 OAuth token，跳過: ${username}`);
-        return "";
-    }
-    const authHeaders = { 'Authorization': `Bearer ${token}` };
-
-    const baseUrl = 'https://api.kick.com/public/v1';
-
-    try {
-        const res = await axios.get(`${baseUrl}/users`, {
-            params: { slug: username },
-            headers: { ...authHeaders, 'Accept': 'application/json' }
-        });
-        const user = Array.isArray(res.data?.data) ? res.data.data[0] : null;
-        const avatar = user?.profile_picture || user?.profile_pic || null;
-        if (avatar) {
-            console.info(`[Kick Avatar] ✅ 取得頭像(user): ${username}`);
-            kickAvatarCache.set(cacheKey, avatar);
-            return avatar;
-        }
-    } catch (err) { console.warn('[Kick Avatar] 查詢 user 端點失敗:', err?.message || err); }
-
-    try {
-        const res = await axios.get(`${baseUrl}/channels`, {
-            params: { slug: username },
-            headers: { ...authHeaders, 'Accept': 'application/json' }
-        });
-        const chan = Array.isArray(res.data?.data) ? res.data.data[0] : null;
-        const avatar = chan?.user?.profile_pic || null;
-        if (avatar) {
-            console.info(`[Kick Avatar] ✅ 取得頭像(channel): ${username}`);
-            kickAvatarCache.set(cacheKey, avatar);
-            return avatar;
-        }
-    } catch (err) { console.warn('[Kick Avatar] 查詢 channel 端點失敗:', err?.message || err); }
-
-    console.info(`[Kick Avatar] ❌ 無法取得頭像: ${username}`);
-    return "";
-}
-
-async function startKickChat() {
-    const kickChannel = process.env.KICK_USER_NAME || keyword || '';
-    if (!kickChannel) {
-        console.log('⚠️ 未指定 Kick 頻道名稱，跳過');
-        writeLog("Default", "未指定 Kick 頻道名稱", "Kick");
-        return;
-    }
-
-    console.info(`🎯 正在連接 Kick 頻道: ${kickChannel}`);
-    writeLog("Default", `正在連接 Kick 頻道: ${kickChannel}`, "Kick");
-
-    const channelId = await resolveKickChannelId(kickChannel);
-    console.info(`🔍 Kick 頻道 chatroom ID: ${channelId || '無法取得'}`);
-    writeLog("Default", `Kick 頻道 chatroom ID: ${channelId || '無法取得'}`, "Kick");
-
-    kickWS = new KickWebSocket({ debug: false, autoReconnect: true, ...(channelId > 0 && { channelId }) });
-    
-    kickWS.on('ready', () => {
-        console.info(`✅ Kick WebSocket 已連線: ${kickChannel}`);
-
-        writeLog("Default", `Kick WebSocket 已連線: ${kickChannel}`, "Kick");
-
-        notify("Kick 連線", `已連線 ${kickChannel}`, "");
-        sendSocketMessage("系統", `Kick 已連線 ${kickChannel}`, "", "", false, CacheUserNum, CacheUserList);
-    });
-
-    function getSenderAvatar(sender) {
-        return sender?.profile_picture || sender?.profile_pic || sender?.picture || sender?.avatar || "";
-    }
-
-    kickWS.on('ChatMessage', async (data) => {
-        const userName = data.sender?.username || '未知';
-        const message = data.content || '';
-        let avatar = getSenderAvatar(data.sender);
-        if (!avatar) avatar = await getKickUserAvatar(userName, data.sender?.id);
-
-        console.info(`[Kick Chat] ${userName} : ${message}`);
-        writeLog("Default", `${userName} : ${message}`, "Kick Chat Original");
-        reportTraffic({ platform: 'Kick', eventType: 'chat', id: data.id, userId: data.sender?.id, user: userName, sentAt: data.created_at, message });
-
-        const fr = processFilter({ user: userName, message });
-        if (fr.blocked) {
-            reportFiltered(fr, { platform: 'Kick', id: data.id, userId: data.sender?.id, user: userName, sentAt: data.created_at, message });
-            console.info('🚫 過濾器阻擋(Kick):', userName, message, `(規則: ${fr.reason})`);
-            writeLog("Default", `過濾器阻擋(Kick): ${userName} : ${message} (規則: ${fr.reason})`, "Filter");
-            return;
-        }
-
-        let tUser = fr.modified && fr.user ? fr.user : userName;
-        let tMsg = fr.modified && fr.message ? fr.message : message;
-
-        if (!tUser || !tMsg) {
-            console.info('⚠️ 過濾後(Kick) nick/msg 為空，跳過:', userName, message);
-            return;
-        }
-
-        if (!recordChatHeat(tMsg, { platform: 'Kick', id: data.id, userId: data.sender?.id, user: userName, sentAt: data.created_at })) return;
-
-        console.info(`📢 發送 Bark 通知: ${tUser} - ${tMsg}`);
-        notify(tUser, tMsg, avatar);
-
-        // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
-        tMsg = replaceEmojis(tMsg);
-
-        Translate.TranslateText(tMsg).then(RES => {
-            let RESCHAT = `${tMsg}${tMsg == RES ? "" : `\n${RES}`}`;
-            if (RES.toLowerCase() != tMsg.toLowerCase()) {
-                console.info(`📢 發送 Bark 通知: ${tUser} - ${RES}`);
-                notify(tUser, RES, avatar);
-            }
-            sendSocketMessage(tUser, RESCHAT, avatar, "", true, CacheUserNum, CacheUserList);
-            writeLog("Default", `${tUser} : ${RESCHAT}`, "Kick Chat");
-        });
-    });
-
-    kickWS.on('Subscription', async (data) => {
-        const username = data.username || '未知';
-        const message = `订阅了频道`;
-        const avatar = await getKickUserAvatar(username);
-
-        console.info(`[Kick Sub] ${username} ${message}`);
-        writeLog("Default", `${username} ${message}`, "Kick Sub");
-
-        notify(username, message, avatar);
-        sendSocketMessage(username, message, avatar, "", false, CacheUserNum, CacheUserList);
-    });
-
-    kickWS.on('GiftedSubscriptions', async (data) => {
-        const gifter = data.gifted_by || '未知';
-        const recipients = Array.isArray(data.recipients) ? data.recipients.join(', ') : '';
-        const message = `赠送了订阅给 ${recipients}`;
-        const avatar = await getKickUserAvatar(gifter);
-
-        console.info(`[Kick GiftSub] ${gifter} ${message}`);
-        writeLog("Default", `${gifter} ${message}`, "Kick GiftSub");
-
-        notify(gifter, message, avatar);
-        sendSocketMessage(gifter, message, avatar, "", false, CacheUserNum, CacheUserList);
-    });
-
-    kickWS.on('UserBanned', async (data) => {
-        const username = data.username || '未知';
-        const message = `已被封禁`;
-        const avatar = await getKickUserAvatar(username);
-
-        console.log(`[Kick Ban] ${username} ${message}`);
-        writeLog("Default", `${username} ${message}`, "Kick Ban");
-
-        sendSocketMessage(username, message, avatar, "", false, CacheUserNum, CacheUserList);
-    });
-
-    kickWS.on('error', (err) => {
-        console.error('⚠️ Kick WebSocket 錯誤:', err);
-        writeLog("Default", `Kick WebSocket 錯誤: ${err.message || err}`, "Error");
-    });
-
-    kickWS.on('disconnect', (data) => {
-        console.log('❌ Kick WebSocket 斷線:', data?.reason || '未知原因');
-        writeLog("Default", `Kick WebSocket 斷線: ${data?.reason || '未知原因'}`, "Kick");
-    });
-
-    kickWS.connect(kickChannel).catch(err => {
-        console.error('❌ Kick 連線失敗:', err.message);
-        writeLog("Default", `Kick 連線失敗: ${err.message}`, "Error");
-        notify("Kick 連線失敗", err.message, "");
-    });
-}
 
 
 if (isOdysee) {
@@ -2012,5 +1815,5 @@ if (isYoutube) {
 }
 
 if (isKick) {
-    startKickChat();
+    startKickChat(kickDeps);
 }
