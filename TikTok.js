@@ -12,6 +12,9 @@ import axios from 'axios';
 import { createHub } from './ScriptLib/socket/hub.mjs';
 import { MessageDedup } from './ScriptLib/socket/dedup.mjs';
 import { createGiftNameStore } from './ScriptLib/gift/names.mjs';
+import { createSponsorStore } from './ScriptLib/sponsor/store.mjs';
+import { createAdScheduler } from './ScriptLib/sponsor/scheduler.mjs';
+import { createSentCache } from './ScriptLib/sponsor/sent-cache.mjs';
 import { TikTokChatGuard, chatMetadata } from './TikTokChatGuard.mjs';
 
 
@@ -230,84 +233,19 @@ const GIFT_TRANSLATE_PREFILL_LIMIT = Number(process.env.GIFT_TRANSLATE_PREFILL_L
 // ---- 贊助廣告 (G#Ad) 持久化 ----
 const SPONSOR_ADS_FILE = path.join(__dirname, 'sponsor_ads.json');
 const SPONSOR_MANAGE_URL = process.env.SPONSOR_MANAGE_URL || 'http://localhost:3332/sponsor';
-let sponsorAds = {};
-let adTimers = {}; // { adId: setTimeout handle }
-
+const sponsorStore = createSponsorStore({ fs: { existsSync, readFileSync, writeFileSync }, file: SPONSOR_ADS_FILE });
+const sponsorAds = sponsorStore.state;
+const adScheduler = createAdScheduler({
+    deliver: (user, text, iconURL, useTTS) => sendAdOverylayMessage(user, text, iconURL, useTTS),
+    notify, store: sponsorStore, manageUrl: SPONSOR_MANAGE_URL
+});
 
 const CACHE_FILE = path.resolve("./send_messages.json");
 const GIFT_MAP_FILE = path.resolve("./gift_map.json");
 const GIFT_MAP_EXAMPLE_FILE = path.resolve("./gift_map.example.json");
 const GIFT_LIST_FILE = path.resolve("./gift_list.json");
-let sentMessages = {}; // { uniqueKey: timestamp }
-let newSentMessages = {};    // 只保存這次新產生的訊息
+const sentCache = createSentCache({ fs, file: CACHE_FILE });
 
-
-const MESSAGE_TTL = 5 * 60 * 1000; // 5 分鐘
-
-async function loadSentMessages() {
-    try {
-        const raw = await fs.readFile(CACHE_FILE, "utf-8");
-        if (!raw || raw.trim().length === 0) {
-            console.log("⚠️ send_messages.json 為空，初始化空物件");
-            sentMessages = {};
-            return;
-        }
-        const data = JSON.parse(raw);
-        sentMessages = Object.fromEntries(
-            Object.entries(data).map(([k, v]) => [k, new Date(v).getTime()])
-        );
-        console.log(`✅ 載入 ${Object.keys(sentMessages).length} 筆歷史訊息`);
-    } catch (err) {
-        if (err.code === 'ENOENT') {
-            console.log("⚠️ send_messages.json 不存在，初始化空物件");
-            sentMessages = {};
-        } else {
-            console.error("❌ 載入 send_messages 失敗:", err);
-        }
-    }
-}
-
-async function saveSentMessages() {
-    try {
-        const data = Object.fromEntries(
-            Object.entries(newSentMessages).map(([k, v]) => [k, new Date(v).toISOString()])
-        );
-        await fs.writeFile(CACHE_FILE, JSON.stringify(data, null, 2), "utf-8");
-        console.log(`✅ 已儲存 ${Object.keys(sentMessages).length} 筆 send_messages`);
-   
-    } catch (err) {
-        console.error("❌ 儲存 send_messages 失敗:", err);
-    }
-}
-
-function alreadySent(uniqueKey) {
-    const now = Date.now();
-
-    // 清理過期
-    for (const [key, ts] of Object.entries(sentMessages)) {
-        if (now - ts > MESSAGE_TTL) {
-            delete sentMessages[key];
-        }
-    }
-
-    if (sentMessages[uniqueKey]) return true;
-
-    // 記錄新訊息
-    sentMessages[uniqueKey] = now;
-    newSentMessages[uniqueKey] = now; // 只記錄本次新訊息
-
-    // 限制最大筆數
-    const maxSize = 1000;
-    if (Object.keys(sentMessages).length > maxSize) {
-        const sortedKeys = Object.entries(sentMessages)
-            .sort((a, b) => a[1] - b[1])
-            .slice(0, 100)
-            .map(([k]) => k);
-        sortedKeys.forEach(k => delete sentMessages[k]);
-    }
-
-    return false;
-}
 
 var isEnd=false
 
@@ -345,11 +283,11 @@ async function handleExit() {
         console.error("⏹️ Socket 關閉失敗（仍繼續退出）:", err?.message || err);
     }
 
-    clearAllAdTimers();
-    saveSponsorAds();
+    adScheduler.clearAll();
+    sponsorStore.save();
 
     try {
-        await saveSentMessages();
+        await sentCache.save();
         console.log("⏹️ send_messages 已儲存");
     } catch (err) {
         console.error("⏹️ 儲存 send_messages 失敗（仍繼續退出）:", err?.message || err);
@@ -533,7 +471,7 @@ process.stdin.on('data', async (chunk) => {
             // ---- 贊助廣告管理指令 ----
             if (json.type === 'SPONSOR_SETTINGS' && json.settings) {
                 sponsorAds.settings = { ...sponsorAds.settings, ...json.settings };
-                saveSponsorAds();
+                sponsorStore.save();
                 console.log('⚙️ 贊助廣告設定已更新:', sponsorAds.settings);
                 return;
             }
@@ -549,7 +487,7 @@ process.stdin.on('data', async (chunk) => {
                             sendAdOverylayMessage(ad.overlayUser, ad.message, ad.iconURL || '', ad.useTTS);
                             console.log(`✅ 已審核通過贊助廣告: ${ad.overlayUser} - ${ad.message}`);
                             if (ad.intervalMinutes >= 15) {
-                                scheduleAdTimer(ad.id, uid, ad.intervalMinutes, {
+                                adScheduler.schedule(ad.id, uid, ad.intervalMinutes, {
                                     overlayUser: ad.overlayUser,
                                     text: ad.message,
                                     iconURL: ad.iconURL || '',
@@ -557,11 +495,11 @@ process.stdin.on('data', async (chunk) => {
                                 });
                             }
                         } else {
-                            clearAdTimer(ad.id);
+                            adScheduler.clear(ad.id);
                             ad.enabled = false;
                             console.log(`❌ 已拒絕贊助廣告: ${ad.overlayUser} - ${ad.message}`);
                         }
-                        saveSponsorAds();
+                        sponsorStore.save();
                         process.stdout.write(JSON.stringify({ type: 'SPONSOR_UPDATED', adId: ad.id, approved: ad.approved }) + '\n');
                         return;
                     }
@@ -577,7 +515,7 @@ process.stdin.on('data', async (chunk) => {
                         ad.enabled = json.enabled;
                         ad.updatedAt = new Date().toISOString();
                         if (json.enabled && ad.approved !== false && ad.intervalMinutes >= 15) {
-                            scheduleAdTimer(ad.id, uid, ad.intervalMinutes, {
+                            adScheduler.schedule(ad.id, uid, ad.intervalMinutes, {
                                 overlayUser: ad.overlayUser,
                                 text: ad.message,
                                 iconURL: ad.iconURL || '',
@@ -588,9 +526,9 @@ process.stdin.on('data', async (chunk) => {
                                 ad.lastSentAt = new Date().toISOString();
                             }
                         } else {
-                            clearAdTimer(ad.id);
+                            adScheduler.clear(ad.id);
                         }
-                        saveSponsorAds();
+                        sponsorStore.save();
                         console.log(`🔁 贊助廣告已${json.enabled ? '啟用' : '停用'}: ${ad.overlayUser} - ${ad.message}`);
                         return;
                     }
@@ -603,12 +541,12 @@ process.stdin.on('data', async (chunk) => {
                 for (const uid of Object.keys(sponsorAds.users)) {
                     const idx = sponsorAds.users[uid].ads.findIndex(a => a.id === json.adId);
                     if (idx !== -1) {
-                        clearAdTimer(json.adId);
+                        adScheduler.clear(json.adId);
                         sponsorAds.users[uid].ads.splice(idx, 1);
                         if (sponsorAds.users[uid].ads.length === 0) {
                             delete sponsorAds.users[uid];
                         }
-                        saveSponsorAds();
+                        sponsorStore.save();
                         console.log(`🗑️ 已刪除贊助廣告: ${json.adId}`);
                         return;
                     }
@@ -618,7 +556,7 @@ process.stdin.on('data', async (chunk) => {
             }
 
             if (json.type === 'SPONSOR_TRIGGER' && json.adId) {
-                loadSponsorAds();
+                sponsorStore.load();
                 for (const uid of Object.keys(sponsorAds.users)) {
                     const ad = sponsorAds.users[uid].ads.find(a => a.id === json.adId);
                     if (ad) {
@@ -631,9 +569,9 @@ process.stdin.on('data', async (chunk) => {
                         notify(`📢 手動發送贊助廣告 (${ad.overlayUser})`, ad.message, ad.iconURL || '', SPONSOR_MANAGE_URL);
                         ad.lastSentAt = now;
                         ad.updatedAt = now;
-                        saveSponsorAds();
+                        sponsorStore.save();
                         if (ad.enabled && ad.intervalMinutes >= 15) {
-                            scheduleAdTimer(ad.id, uid, ad.intervalMinutes, {
+                            adScheduler.schedule(ad.id, uid, ad.intervalMinutes, {
                                 overlayUser: ad.overlayUser,
                                 text: ad.message,
                                 iconURL: ad.iconURL || '',
@@ -657,7 +595,7 @@ process.stdin.on('data', async (chunk) => {
                 }
                 // Server.js 已直接寫入 JSON → 重新載入後僅套用執行期效果（立即發送 + 定時器），避免重複建立
                 if (alreadyPersisted) {
-                    loadSponsorAds();
+                    sponsorStore.load();
                     const sponsor = sponsorAds.users[userId];
                     const ad = sponsor && sponsor.ads.find(a => a.id === persistedAdId);
                     if (!ad) {
@@ -666,7 +604,7 @@ process.stdin.on('data', async (chunk) => {
                     }
                     sendAdOverylayMessage(ad.overlayUser, ad.message, ad.iconURL || '', ad.useTTS);
                     if (ad.intervalMinutes >= 15) {
-                        scheduleAdTimer(ad.id, userId, ad.intervalMinutes, {
+                        adScheduler.schedule(ad.id, userId, ad.intervalMinutes, {
                             overlayUser: ad.overlayUser, text: ad.message, iconURL: ad.iconURL || '', useTTS: ad.useTTS
                         });
                     }
@@ -674,13 +612,13 @@ process.stdin.on('data', async (chunk) => {
                     process.stdout.write(JSON.stringify({ type: 'SPONSOR_CREATED', adId: ad.id }) + '\n');
                     return;
                 }
-                const sponsor = getOrCreateSponsor(userId, displayName || userId);
+                const sponsor = sponsorStore.getOrCreate(userId, displayName || userId);
                 const now = new Date().toISOString();
 
                 // 有指定 targetId 且存在 → 更新；否則新增（上限 5）
                 if (typeof targetId === 'number' && targetId >= 0 && targetId < sponsor.ads.length) {
                     const ad = sponsor.ads[targetId];
-                    clearAdTimer(ad.id);
+                    adScheduler.clear(ad.id);
                     ad.message = message;
                     ad.iconURL = iconURL || null;
                     ad.useTTS = !!useTTS;
@@ -691,11 +629,11 @@ process.stdin.on('data', async (chunk) => {
                     ad.lastSentAt = now;
                     sendAdOverylayMessage(ad.overlayUser, message, ad.iconURL || '', ad.useTTS);
                     if (intervalMinutes >= 15) {
-                        scheduleAdTimer(ad.id, userId, intervalMinutes, {
+                        adScheduler.schedule(ad.id, userId, intervalMinutes, {
                             overlayUser: ad.overlayUser, text: message, iconURL: ad.iconURL || '', useTTS: ad.useTTS
                         });
                     }
-                    saveSponsorAds();
+                    sponsorStore.save();
                     console.log(`🔄 手動更新贊助廣告 #${targetId}: ${ad.overlayUser} - ${message}`);
                     process.stdout.write(JSON.stringify({ type: 'SPONSOR_CREATED', adId: ad.id }) + '\n');
                     return;
@@ -714,10 +652,10 @@ process.stdin.on('data', async (chunk) => {
                     createdAt: now, updatedAt: now, lastSentAt: now
                 };
                 sponsor.ads.push(adRecord);
-                saveSponsorAds();
+                sponsorStore.save();
                 sendAdOverylayMessage(adRecord.overlayUser, message, adRecord.iconURL || '', adRecord.useTTS);
                 if (intervalMinutes >= 15) {
-                    scheduleAdTimer(adId, userId, intervalMinutes, {
+                    adScheduler.schedule(adId, userId, intervalMinutes, {
                         overlayUser: adRecord.overlayUser, text: message, iconURL: adRecord.iconURL || '', useTTS: adRecord.useTTS
                     });
                 }
@@ -741,7 +679,7 @@ process.on("SIGTERM", async () => {
     await handleExit();
 });
 
-loadSentMessages()
+sentCache.load()
 // 禮物名稱翻譯／快取（gift_map.json、gift_list.json）在 ScriptLib/gift/。
 const giftNames = createGiftNameStore({
     fs,
@@ -756,8 +694,8 @@ const giftNames = createGiftNameStore({
 });
 const giftMapReady = giftNames.ready;
 loadEmojiMap();
-loadSponsorAds();
-resumeAdTimers();
+sponsorStore.load();
+adScheduler.resume();
 
 
 console.log("TikTok 直播間名稱:", tiktokName);
@@ -839,134 +777,6 @@ function sendAdOverylayMessage(user,text,iconURL,useTTS){
     socketHub.send(payload);
 }
 
-// ---- 贊助廣告持久化 ----
-function loadSponsorAds() {
-    try {
-        if (existsSync(SPONSOR_ADS_FILE)) {
-            const data = JSON.parse(readFileSync(SPONSOR_ADS_FILE, 'utf-8'));
-            if (!data.settings && !data.users) {
-                sponsorAds = { settings: { reviewMode: 'none' }, users: data };
-                saveSponsorAds();
-            } else {
-                sponsorAds = data;
-            }
-            if (!sponsorAds.settings) sponsorAds.settings = { reviewMode: 'none' };
-            if (!sponsorAds.users) sponsorAds.users = {};
-            console.log(`📂 已載入贊助廣告資料 (${Object.keys(sponsorAds.users).length} 位贊助者)`);
-        } else {
-            sponsorAds = { settings: { reviewMode: 'none' }, users: {} };
-        }
-    } catch (err) {
-        console.error('⚠️ 載入贊助廣告資料失敗:', err.message);
-        sponsorAds = { settings: { reviewMode: 'none' }, users: {} };
-    }
-}
-
-function saveSponsorAds() {
-    try {
-        writeFileSync(SPONSOR_ADS_FILE, JSON.stringify(sponsorAds, null, 2), 'utf-8');
-    } catch (err) {
-        console.error('⚠️ 儲存贊助廣告資料失敗:', err.message);
-    }
-}
-
-function getOrCreateSponsor(userId, displayName) {
-    if (!sponsorAds.users[userId]) {
-        sponsorAds.users[userId] = {
-            userId,
-            displayName,
-            ads: []
-        };
-    } else {
-        sponsorAds.users[userId].displayName = displayName;
-    }
-    return sponsorAds.users[userId];
-}
-
-function scheduleAdTimer(adId, userId, intervalMinutes, adData) {
-    clearAdTimer(adId);
-    if (!intervalMinutes || intervalMinutes < 15) return;
-    const ms = intervalMinutes * 60 * 1000;
-    adTimers[adId] = setTimeout(() => {
-        try {
-            const now = new Date().toISOString();
-            console.log(`⏰ 贊助廣告定時觸發: ${adData.overlayUser} - ${adData.text}`);
-            sendAdOverylayMessage(adData.overlayUser, adData.text, adData.iconURL, adData.useTTS);
-            notify(`⏰ 贊助廣告 (${adData.overlayUser})`, adData.text, adData.iconURL || '', SPONSOR_MANAGE_URL);
-            // 在定時器 callback 內更新 lastSentAt，確保寫入的是實際觸發時間
-            const sponsor = sponsorAds.users[userId];
-            if (sponsor) {
-                const ad = sponsor.ads.find(a => a.id === adId);
-                if (ad) {
-                    ad.lastSentAt = now;
-                    ad.intervalMinutes = intervalMinutes;
-                    console.log(`📝 贊助廣告 lastSentAt 已更新: ${adId} -> ${now} (${new Date(now).toLocaleString()})`);
-                }
-                saveSponsorAds();
-            }
-            scheduleAdTimer(adId, userId, intervalMinutes, adData);
-        } catch (err) {
-            console.error(`❌ 贊助廣告定時器錯誤: ${err.message}`);
-        }
-    }, ms);
-    console.log(`⏰ 已設定贊助廣告定時器: ${adId} (${Math.round(ms/60000)} 分鐘後, 預計 ${new Date(Date.now()+ms).toLocaleString()} 發送)`);
-}
-
-function clearAdTimer(adId) {
-    if (adTimers[adId]) {
-        clearTimeout(adTimers[adId]);
-        delete adTimers[adId];
-    }
-}
-
-function clearAllAdTimers() {
-    for (const adId of Object.keys(adTimers)) {
-        clearTimeout(adTimers[adId]);
-    }
-    adTimers = {};
-}
-
-// 啟動時恢復有效廣告的定時器
-function resumeAdTimers() {
-    clearAllAdTimers();
-    let count = 0;
-    const now = Date.now();
-    for (const uid of Object.keys(sponsorAds.users)) {
-        for (const ad of sponsorAds.users[uid].ads) {
-            if (!ad.enabled || !ad.intervalMinutes || ad.intervalMinutes < 15 || ad.approved === false) continue;
-            let delayMs;
-            if (ad.lastSentAt) {
-                const nextMs = new Date(ad.lastSentAt).getTime() + ad.intervalMinutes * 60 * 1000;
-                delayMs = Math.max(0, nextMs - now);
-                if (delayMs === 0) {
-                    // 已錯過發送時間，從現在起算下個週期
-                    delayMs = ad.intervalMinutes * 60 * 1000;
-                }
-            } else {
-                delayMs = ad.intervalMinutes * 60 * 1000;
-            }
-            clearAdTimer(ad.id);
-            adTimers[ad.id] = setTimeout(() => {
-                try {
-                    console.log(`⏰ 贊助廣告定時觸發(恢復): ${ad.overlayUser} - ${ad.message}`);
-                    sendAdOverylayMessage(ad.overlayUser, ad.message, ad.iconURL || '', ad.useTTS);
-                    notify(`⏰ 贊助廣告 (${ad.overlayUser})`, ad.message, ad.iconURL || '', SPONSOR_MANAGE_URL);
-                    ad.lastSentAt = new Date().toISOString();
-                    saveSponsorAds();
-                    scheduleAdTimer(ad.id, uid, ad.intervalMinutes, {
-                        overlayUser: ad.overlayUser, text: ad.message, iconURL: ad.iconURL || '', useTTS: ad.useTTS
-                    });
-                } catch (err) {
-                    console.error(`❌ 贊助廣告恢復定時器錯誤: ${err.message}`);
-                }
-            }, delayMs);
-            count++;
-            const eta = new Date(Date.now() + delayMs);
-            console.log(`⏰ 已恢復贊助廣告定時器: ${ad.id} (${Math.round(delayMs/60000)} 分鐘後, 預計 ${eta.toLocaleString()} 發送)`);
-        }
-    }
-    if (count > 0) console.log(`⏰ 恢復了 ${count} 個贊助廣告定時器`);
-}
 
 /**
  * 觀眾人數更新
@@ -1080,7 +890,7 @@ function onTikTokConnected(state) {
     CacheUserNum = (isTK && isTwitch) ? TikTokViewerCount + TwitchViewerCount : TikTokViewerCount;
     notify("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "");
     sendSocketMessage("系統", `TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間 ${DisplayTitle}`, "", "", false, CacheUserNum, CacheUserList);
-    resumeAdTimers();
+    adScheduler.resume();
     if (!viewCacheInterval) {
         viewCacheInterval = setInterval(viewCache, 30000);
     }
@@ -1406,7 +1216,7 @@ connection.on(WebcastEvent.CHAT, data => {
     }
 
     const uniqueKey = `chat_${data.user.nickname}_${data.content}`;
-    if (alreadySent(uniqueKey)) return;
+    if (sentCache.alreadySent(uniqueKey)) return;
 
     const fr = processFilter({ user: data.user.nickname, message: data.content });
     if (fr.blocked) {
@@ -2227,7 +2037,7 @@ async function onTwitchChat(event) {
 
             let lastMsg=replaceEmojis(res.join(" "));
 
-            const sponsor = getOrCreateSponsor(event.chatterId, event.chatterDisplayName);
+            const sponsor = sponsorStore.getOrCreate(event.chatterId, event.chatterDisplayName);
             const now = new Date().toISOString();
 
             // ---- 判斷要更新還是新增 ----
@@ -2267,7 +2077,7 @@ async function onTwitchChat(event) {
 
             if (targetAd) {
                 // ---- 更新現有廣告 ----
-                clearAdTimer(targetAd.id);
+                adScheduler.clear(targetAd.id);
                 targetAd.message = lastMsg;
                 // A+C: 沒帶 icon= 時保留舊頭像，避免被覆寫成 null；有帶則存已解析值（含 Twitch fallback）
                 targetAd.iconURL = iconURL ? displayIcon : (targetAd.iconURL || icon);
@@ -2284,12 +2094,12 @@ async function onTwitchChat(event) {
                 if (approved === true) {
                     sendAdOverylayMessage(targetAd.overlayUser, lastMsg, targetAd.iconURL || '', useTTS);
                     if (intervalMinutes >= 15) {
-                        scheduleAdTimer(adId, event.chatterId, intervalMinutes, {
+                        adScheduler.schedule(adId, event.chatterId, intervalMinutes, {
                             overlayUser: targetAd.overlayUser, text: lastMsg, iconURL: targetAd.iconURL || '', useTTS
                         });
                     }
                 }
-                saveSponsorAds();
+                sponsorStore.save();
                 console.log(`🔄 ${event.chatterDisplayName} 更新 G#Ad #${targetIdx} 成功，user=${overlayUser}, 訊息: ${lastMsg}, TTS: ${useTTS}, 間隔: ${intervalMinutes > 0 ? intervalMinutes + ' 分鐘' : '單次'}`);
             } else {
                 // ---- 新增廣告 ----
@@ -2306,12 +2116,12 @@ async function onTwitchChat(event) {
                     lastSentAt: approved === true ? now : null
                 };
                 sponsor.ads.push(adRecord);
-                saveSponsorAds();
+                sponsorStore.save();
 
                 if (approved === true) {
                     sendAdOverylayMessage(overlayUser, lastMsg, displayIcon, useTTS);
                     if (intervalMinutes >= 15) {
-                        scheduleAdTimer(adId, event.chatterId, intervalMinutes, {
+                        adScheduler.schedule(adId, event.chatterId, intervalMinutes, {
                             overlayUser, text: lastMsg, iconURL: displayIcon, useTTS
                         });
                     }

@@ -1,5 +1,27 @@
 # ChangeHistory
 
+## 2026.10.15 01:01 贊助廣告與已送快取抽出 ScriptLib/sponsor 模組
+
+**類型**: 重構 · **檔案**: `ScriptLib/sponsor/store.mjs`
+
+### 問題 - 贊助廣告與已送快取散落在 TikTok.js
+
+贊助廣告的持久化、定時器與 `send_messages.json` 已送快取全寫在 TikTok.js 內，與聊天事件處理混在一起，難以定位與測試。
+
+### 根因 - 缺少獨立模組邊界
+
+這些都是可獨立於平台事件的職責，卻與 stdin 指令處理、Twitch G#Ad 交錯在同一檔。
+
+### 修改 - 抽成 ScriptLib/sponsor
+
+- `store.mjs`：`SponsorStore` 承接 `sponsor_ads.json` 載入（相容舊格式）、儲存與 `getOrCreate`；`state` 以單一物件維護，呼叫端持有參照即可就地修改。
+- `scheduler.mjs`：`createAdScheduler` 承接排程／清除／恢復定時器，`deliver`／`notify` 由外部注入。
+- `sent-cache.mjs`：`createSentCache` 承接 `send_messages.json` 的載入、TTL／上限清理與去重。
+- TikTok.js 改以 `sponsorStore.*`／`adScheduler.*`／`sentCache.*` 呼叫（−約 190 行，現 2024 行）。
+- 新增 `Test/sponsor.test.mjs`（7 測試，假 fs＋mock timers）納入 `test:core`。
+
+**相關文件**: [MODULES.md](MODULES.md)
+
 ## 2026.10.12 00:26 為 notify／socket／gift 模組補齊 JSDoc
 
 **類型**: 文件 · **檔案**: `ScriptLib/gift/names.mjs`

@@ -36,6 +36,25 @@ ESM 模組若要 `await fs.readFile`／`fs.writeFile`，必須 `import { promise
 丟出 `The "cb" argument must be of type function`；若發生在頂層 `await`，會中止後續初始化（見 [運行狀態頁](RUNTIME.md)）。
 只用到同步函式時，預設 `fs` 搭配 `readFileSync`／`writeFileSync` 即可，不需改。
 
+## 輸出層與資料模組
+
+TikTok.js 只負責組裝這些模組（解析旗標、建立實例、接上平台事件）；I/O 皆以依賴注入，模組可單獨測試。
+
+| 檔案 | 責任 |
+| --- | --- |
+| ScriptLib/notify/index.mjs | `Notifier`／`createNotifier`：把一則推播扇出到所有已啟用通道 |
+| ScriptLib/notify/channels/bark.mjs | Bark 通道（POST JSON） |
+| ScriptLib/notify/channels/ntfy.mjs | ntfy 通道（JSON publish；`parseNtfyTarget`） |
+| ScriptLib/notify/format.mjs | emoji 圖示挑選與內文格式化（Bark／ntfy 共用） |
+| ScriptLib/socket/transport.mjs | newline-delimited JSON TCP 傳輸（背壓、重連、TTL） |
+| ScriptLib/socket/endpoint.mjs | `SocketEndpoint`：包住 transport，依 category 過濾 |
+| ScriptLib/socket/hub.mjs | `SocketHub`：扇出、去重、組 StreamMessage |
+| ScriptLib/socket/dedup.mjs | `MessageDedup`：訊息去重緩衝 |
+| ScriptLib/gift/names.mjs | 禮物名稱翻譯與快取（gift_map／gift_list） |
+| ScriptLib/sponsor/store.mjs | 贊助廣告資料持久化（sponsor_ads.json） |
+| ScriptLib/sponsor/scheduler.mjs | 贊助廣告定時器（deliver／notify 注入） |
+| ScriptLib/sponsor/sent-cache.mjs | 已送訊息快取（send_messages.json） |
+
 ## 回歸驗證
 
 node --test Test/emoji_store.test.cjs Test/module_boundaries.test.cjs Test/autoclip_v2.test.mjs Test/message_source.test.mjs Test/message_stats.test.mjs
