@@ -33,15 +33,15 @@ export function registerTikTokEvents(connection, deps) {
         replaceEmojis, recordChatHeat, chatMetadata, translate,
         tikTokChatGuard,
         giftNames, getGiftMapReady,
-        getCacheUserNum, getCacheUserList, setCacheUserNum, setCacheUserList,
+        getCacheUserNum, setCacheUserNum, setCacheUserList,
         getAutoClip, sendAudienceUpdate,
         isEnd, setStreamEnded, cancelReconnect,
         logger = console,
     } = deps;
 
-    // 以固定 category 送 socket 訊息的便利包裝（自動補上目前觀眾數與清單）。
+    // 以固定 category／platform 送 socket 訊息的便利包裝。
     const sendCat = (category, user, message, img, giftImg, isMain = true, dedupUser, dedupMessage) =>
-        sendSocketMessage(user, message, img, giftImg, isMain, getCacheUserNum(), getCacheUserList(), dedupUser, dedupMessage, category);
+        sendSocketMessage(user, message, { img, giftImg, isMain, dedupUser, dedupMessage, category, platform: 'tiktok' });
 
     // 重播聊天過濾統計（僅本模組使用）。
     let lastTikTokReplayLog = 0;
@@ -508,12 +508,12 @@ export function registerTikTokEvents(connection, deps) {
             writeLog("Default", "直播結束，用戶主動結束或推流斷線", "Stream Status");
             logger.log('Stream ended by user');
             notify(tiktokName, mess, IMG);
-            sendSocketMessage(tiktokName, mess, IMG, "", false, 0, [], undefined, undefined, 'system');
+            sendCat('system', tiktokName, mess, IMG, '', false);
         }
         if (action === ControlAction.CONTROL_ACTION_STREAM_SUSPENDED) {
             logger.log('Stream ended by platform moderator (ban)');
             notify(tiktokName, mess, IMG);
-            sendSocketMessage(tiktokName, mess, IMG, "", false, 0, [], undefined, undefined, 'system');
+            sendCat('system', tiktokName, mess, IMG, '', false);
 
             writeLog("Default", "直播被強行終止了 :(", "Stream Status");
         }

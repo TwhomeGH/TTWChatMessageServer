@@ -1,5 +1,29 @@
 # ChangeHistory
 
+## 2026.10.15 06:35 WebUI 直播訊息監控面板（/monitor）
+
+**類型**: 功能 · **檔案**: `Server.js`
+
+### 問題 - 無法在網頁直接查看目前收到的訊息
+
+過去要在看板看訊息，必須另開一個 socket 消費者；且沒有 socket 端點時完全看不到。
+
+### 根因 - 子程序送出的訊息未回傳主服務、前端無對應頁面
+
+子程序把訊息送往 socket 端點後即結束，主服務與前端都拿不到。
+
+### 修改 - 子程序鏡像 + SSE + 監控頁
+
+- 子程序：`SocketHub` 新增 `onSend` 鉤子；每送出一則 payload 由 `ScriptLib/socket/monitor-relay.mjs` 以 IPC（`type:'STREAM_MESSAGE'`）鏡像回父程序（具背壓上限）。
+- payload 新增 `platform` 欄位；`sendSocketMessage` 改為 options 物件（`category`／`platform`），各平台以 `platformSenders(platform)` 綁定。
+- 主服務：有界環形緩衝 `streamMessages`（500）＋ SSE `/status/stream/messages` ＋ 分類 API `/api/message-categories` ＋ 頁面路由 `/monitor`（別名 `/messages`）。
+- 前端：`monitor.html` ＋ `assets/monitor.js`／`assets/monitor.css`（聊天室列、分類篩選、搜尋、自動捲動、清除、平台標示）；i18n `zh-TW`／`en`；`WebAssets.cjs` 白名單。
+- 測試：`Test/monitor_relay.test.mjs`（3 測試）。
+
+**相關文件**: [MODULES.md](MODULES.md)、[RUNTIME.md](RUNTIME.md)
+
+---
+
 ## 2026.10.15 06:24 Socket 多端點（SOCKET_APIS）與訊息分類過濾
 
 **類型**: 功能 · **檔案**: `ScriptLib/socket/hub.mjs`

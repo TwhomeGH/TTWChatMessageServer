@@ -1,0 +1,14 @@
+/* 直播訊息監控面板：頁面專屬樣式（其餘沿用 app.css 的 Tailwind 工具類）。 */
+.monitor-panel {
+    min-height: 80vh;
+    padding: 1rem;
+}
+
+.mon-avatar {
+    object-fit: cover;
+    vertical-align: -4px;
+}
+
+.mon-msg {
+    word-break: break-word;
+}

@@ -182,7 +182,7 @@ export function createClipService({ getApiClient, getTuser, fs, file, writeLog, 
 
             writeLog("Default", `[剪輯建立] ${displayText}`)
             notify("剪輯建立", displayText, icon)
-            sendSocketMessage("剪輯建立", displayText, icon, '', undefined, undefined, 'clip')
+            sendSocketMessage("剪輯建立", displayText, { img: icon, category: 'clip', platform: 'twitch' })
             return { id: clipId, url: clipURL, timing };
 
         }).catch(err => {
@@ -191,7 +191,7 @@ export function createClipService({ getApiClient, getTuser, fs, file, writeLog, 
             logger.error(`❌ [G#clip] ${errMsg}`)
 
             writeLog("Default", `[${errMsg}]`, "Error")
-            sendSocketMessage("剪輯建立", `❌ ${errMsg}`, icon, '', undefined, undefined, 'clip')
+            sendSocketMessage("剪輯建立", `❌ ${errMsg}`, { img: icon, category: 'clip', platform: 'twitch' })
             notify("剪輯建立失敗", errMsg, icon)
             if (source === 'auto') throw err;
 

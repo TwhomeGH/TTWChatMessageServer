@@ -6,10 +6,11 @@ import { MessageDedup } from './dedup.mjs';
  * 需要傳輸層、去重、emoji 取代與心跳，此處統一組裝，事件點不必知道有幾個端點。
  */
 export class SocketHub {
-    constructor({ endpoints = [], dedup = new MessageDedup(), replaceEmojis = (value) => value, logger = console } = {}) {
+    constructor({ endpoints = [], dedup = new MessageDedup(), replaceEmojis = (value) => value, onSend, logger = console } = {}) {
         this.endpoints = endpoints.filter(endpoint => endpoint && endpoint.enabled);
         this.dedup = dedup;
         this.replaceEmojis = replaceEmojis;
+        this.onSend = onSend;
         this.logger = logger;
     }
 
@@ -38,6 +39,7 @@ export class SocketHub {
         for (const endpoint of this.endpoints) {
             if (endpoint.accepts(payload.category)) endpoint.send(payload);
         }
+        this.onSend?.(payload);
     }
 
     /**
@@ -51,11 +53,12 @@ export class SocketHub {
      * @param {number} [options.userNum]
      * @param {Array} [options.userList]
      * @param {string} [options.category] 訊息分類（供端點過濾）。
+     * @param {string} [options.platform] 來源平台（tiktok／twitch／kick／youtube／odysee）。
      * @param {string} [options.dedupUser] 覆寫去重比對的使用者。
      * @param {string} [options.dedupMessage] 覆寫去重比對的訊息。
      * @returns {boolean} 是否實際送出（false = 被去重擋下）。
      */
-    sendMessage(user, message, { img = '', giftImg = '', isMain = true, userNum = 0, userList = [], category, dedupUser, dedupMessage } = {}) {
+    sendMessage(user, message, { img = '', giftImg = '', isMain = true, userNum = 0, userList = [], category, platform, dedupUser, dedupMessage } = {}) {
         const checkUser = String(dedupUser ?? user).trim();
         const checkMsg = String(dedupMessage ?? message).trim();
         if (this.dedup.isDuplicate(checkUser, checkMsg)) {
@@ -65,6 +68,7 @@ export class SocketHub {
         const payload = {
             type: 'StreamMessage',
             ...(category ? { category } : {}),
+            ...(platform ? { platform } : {}),
             user: String(user),
             message: this.replaceEmojis(String(message)),
             img,
@@ -120,12 +124,13 @@ export function splitApis(input) {
  * @param {(string|string[])} [options.apis] 額外端點（可含 ?filter=）。
  * @param {boolean} [options.enabled=true]
  * @param {() => void} [options.onConnect]
+ * @param {(payload: object) => void} [options.onSend] 每送出一則 payload 時的回呼（監控鏡像用）。
  * @param {(value: string) => string} [options.replaceEmojis]
  * @param {import('./dedup.mjs').MessageDedup} [options.dedup]
  * @param {Console} [options.logger=console]
  * @returns {SocketHub}
  */
-export function createHub({ socketApi, apis = [], enabled = true, onConnect, replaceEmojis, dedup, logger = console } = {}) {
+export function createHub({ socketApi, apis = [], enabled = true, onConnect, onSend, replaceEmojis, dedup, logger = console } = {}) {
     const specs = [];
     if (socketApi) specs.push(socketApi);
     for (const api of splitApis(apis)) specs.push(api);
@@ -154,5 +159,5 @@ export function createHub({ socketApi, apis = [], enabled = true, onConnect, rep
             endpoints.push(new SocketEndpoint({ url, enabled, filter, onConnect, logger }));
         }
     }
-    return new SocketHub({ endpoints, dedup, replaceEmojis, logger });
+    return new SocketHub({ endpoints, dedup, replaceEmojis, onSend, logger });
 }

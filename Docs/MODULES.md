@@ -68,6 +68,8 @@ TikTok.js 只負責組裝這些模組（解析旗標、建立實例、接上平�
 | ScriptLib/socket/endpoint.mjs | `SocketEndpoint`：包住 transport，依 category 過濾 |
 | ScriptLib/socket/hub.mjs | `SocketHub`：扇出、去重、組 StreamMessage |
 | ScriptLib/socket/dedup.mjs | `MessageDedup`：訊息去重緩衝 |
+| ScriptLib/socket/monitor-relay.mjs | `createMonitorRelay`：把送出的 payload 鏡像回父程序（WebUI 監控用） |
+| ScriptLib/messages/categories.cjs | 訊息分類清單（socket 過濾與監控頁共用；CJS） |
 | ScriptLib/gift/names.mjs | 禮物名稱翻譯與快取（gift_map／gift_list） |
 | ScriptLib/sponsor/store.mjs | 贊助廣告資料持久化（sponsor_ads.json） |
 | ScriptLib/sponsor/scheduler.mjs | 贊助廣告定時器（deliver／notify 注入） |

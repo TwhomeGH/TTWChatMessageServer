@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Monitor</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/monitor.css">
+</head>
+<body class="app-ui bg-gray-900 text-gray-200 font-mono min-h-screen p-4">
+
+  <div class="bg-gray-800 rounded-lg shadow-lg monitor-panel w-full flex flex-col">
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <h1 class="text-xl font-bold text-green-400" data-i18n="monitor.title">直播訊息監控</h1>
+      <nav class="flex gap-2 flex-wrap text-sm">
+        <a href="/runtime" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg" data-i18n="nav.runtime">▶ 運行狀態</a>
+        <a href="/log" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition" data-i18n="nav.console">🖥️ 系統日誌</a>
+        <a href="/traffic" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition" data-i18n="traffic.title">人流分析</a>
+        <a href="/config" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition" data-i18n="nav.config">⚙️ 設定</a>
+        <label style="display:inline-flex;gap:8px;align-items:center"><span data-i18n="common.language">語言</span><select data-language-select style="background:#374151;color:#fff;border-radius:6px;padding:6px"><option value="zh-TW">繁體中文</option></select></label>
+      </nav>
+    </div>
+
+    <!-- 工具列：搜尋、分類篩選、自動捲動、清除 -->
+    <div class="flex flex-wrap items-center gap-2 mb-3 text-sm">
+      <input id="monSearch" type="search" autocomplete="off" spellcheck="false"
+             class="bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 flex-1 min-w-48"
+             placeholder="搜尋訊息…">
+      <div id="monFilters" class="flex flex-wrap gap-1.5" role="group" aria-label="分類篩選"></div>
+      <label class="inline-flex items-center gap-1.5 select-none cursor-pointer">
+        <input id="monAutoscroll" type="checkbox" class="accent-blue-500 w-4 h-4" checked>
+        <span data-i18n="monitor.autoscroll">自動捲動</span>
+      </label>
+      <button id="monClear" type="button"
+              class="bg-gray-700 hover:bg-gray-600 text-gray-200 px-3 py-1.5 rounded-lg transition"
+              data-i18n="monitor.clear">清除畫面</button>
+      <span id="monStatus" class="text-xs text-yellow-400"></span>
+      <span id="monCount" class="text-gray-400 text-xs"></span>
+    </div>
+
+    <!-- 訊息列：時間 / 平台 / 分類 / 使用者 / 內容 -->
+    <div id="monScroll" class="bg-black rounded-lg flex-1 min-h-0 overflow-auto w-full">
+      <div id="monRows" class="text-sm min-h-full" role="log" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <script src="/assets/i18n.js"></script>
+  <script src="/assets/monitor.js"></script>
+</body>
+</html>

@@ -50,6 +50,27 @@ const MAX_LOG_LINES = 200; // 最多保留 200 行
 
 const sseClients = new Set();
 
+// 直播訊息監控：子程序以 IPC 鏡像回來的 socket payload（有界環形緩衝）＋監控頁 SSE client。
+const MAX_STREAM_MESSAGES = 500;
+const streamMessages = [];
+const messageClients = new Set();
+const MESSAGE_CATEGORIES = require('./ScriptLib/messages/categories.cjs').MESSAGE_CATEGORIES;
+
+/**
+ * 收到子程序鏡像的 socket 訊息：存入緩衝並推送給監控頁。
+ * @param {object} payload 已組好的 socket payload（含 category／platform）。
+ */
+function pushStreamMessage(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    const entry = { t: Date.now(), ...payload };
+    streamMessages.push(entry);
+    if (streamMessages.length > MAX_STREAM_MESSAGES) streamMessages.shift();
+    for (const client of messageClients) {
+        try { client.write(`data: ${JSON.stringify(entry)}\n\n`); }
+        catch { messageClients.delete(client); }
+    }
+}
+
 var cacheKeywordDataTop = []
 var cacheKeywordDataAll = []
 // 自動剪輯分析歷史：執行時存記憶體（由 TikTok.js 透過 stdout 推播），僅在 TikTok.js 結束時寫入磁碟
@@ -351,7 +372,9 @@ function startRuntime(url) {
         tiktokProcess = spawn(process.execPath, args, { stdio: ['pipe', 'pipe', 'pipe', 'ipc'] });
         const launchedProcess = tiktokProcess;
         launchedProcess.on('message', event => {
-            if (tiktokProcess === launchedProcess && event?.type === 'TRAFFIC_EVENT') require('./TrafficRoutes.cjs').traffic.record(event.data);
+            if (tiktokProcess !== launchedProcess) return;
+            if (event?.type === 'TRAFFIC_EVENT') require('./TrafficRoutes.cjs').traffic.record(event.data);
+            else if (event?.type === 'STREAM_MESSAGE') pushStreamMessage(event.data);
         });
         runtimeState.attach(launchedProcess, activePlatforms);
         runtimeState.data.features = { isSocket, isBark, isNtfy };
@@ -619,6 +642,37 @@ const server = http.createServer((req, res) => {
 
         req.on('close', () => {
             sseClients.delete(client);
+        });
+    }
+
+    // 直播訊息監控串流：先補歷史，再接續即時推送。
+    else if (req.url === '/status/stream/messages') {
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*'
+        });
+
+        streamMessages.forEach(entry => res.write(`data: ${JSON.stringify(entry)}\n\n`));
+
+        messageClients.add(res);
+        req.on('close', () => messageClients.delete(res));
+    }
+
+    // 供監控頁建立篩選按鈕的分類清單（單一來源：ScriptLib/messages/categories.cjs）。
+    else if (req.url === '/api/message-categories') {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache' });
+        res.end(JSON.stringify({ categories: MESSAGE_CATEGORIES }));
+    }
+
+    // 直播訊息監控面板頁面。
+    else if (req.url === '/monitor' || req.url === '/messages') {
+        const filePath = path.join(__dirname, 'monitor.html');
+        fs.readFile(filePath, 'utf8', (err, html) => {
+            if (err) { res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Error loading monitor.html'); return; }
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(html);
         });
     }
 

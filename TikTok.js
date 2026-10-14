@@ -12,6 +12,7 @@ import { promises as fs, readFileSync, existsSync, writeFileSync } from 'fs';
 import axios from 'axios';
 
 import { createHub } from './ScriptLib/socket/hub.mjs';
+import { createMonitorRelay } from './ScriptLib/socket/monitor-relay.mjs';
 import { MessageDedup } from './ScriptLib/socket/dedup.mjs';
 import { createGiftNameStore } from './ScriptLib/gift/names.mjs';
 import { logRawEvent } from './ScriptLib/tiktok/rawLog.mjs';
@@ -180,7 +181,7 @@ setInterval(() => {
         for (const summary of takeThrottleSummaries()) {
             console.log('🗒️ 頻率摘要:', summary.user, summary.message);
             writeLog("Default", `頻率摘要: ${summary.user} : ${summary.message}`, "ThrottleSummary");
-            sendSocketMessage(summary.user || "系統", summary.message, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'summary');
+            sendSocketMessage(summary.user || "系統", summary.message, { isMain: false, category: 'summary' });
         }
     } catch (err) {
         console.error('⚠️ 頻率摘要送出失敗:', err.message);
@@ -202,15 +203,17 @@ let streamEnded = false;       // 直播真正結束（使用者主動結束 / �
 
 // Socket 輸出層：端點／去重／扇出皆在 ScriptLib/socket/。
 const dedup = new MessageDedup();
+const monitorRelay = createMonitorRelay();
 const socketHub = createHub({
     socketApi: process.env.SOCKET_API || 'tcp://localhost:9322',
     apis: process.env.SOCKET_APIS || '',
     enabled: isSocket,
     replaceEmojis,
     dedup,
+    onSend: (payload) => monitorRelay.forward(payload),
     onConnect: () => {
         if (isFirstSocketConnect) {
-            sendSocketMessage("系統", "TTW Chat Message Server 已連線", "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system');
+            sendSocketMessage("系統", "TTW Chat Message Server 已連線", { isMain: false, category: 'system' });
             isFirstSocketConnect = false;
         }
     }
@@ -223,6 +226,24 @@ const Ntfy = process.env.NTFY_API;
 // notify() 一次扇出到所有已啟用通道，事件點不必知道有哪些通道。
 const notifier = createNotifier({ isBark, isNtfy, barkApi: Bark, ntfyApi: Ntfy, getEmojiMap, axios });
 const notify = (title, comment, icon, url) => notifier.notify(title, comment, icon, url);
+
+/**
+ * 產生一組平台綁定的 socket 送出器（固定 category 與 platform）。
+ * @param {string} platform 來源平台名稱。
+ * @returns {{system: (text: string) => void, chat: (user: string, message: string, img?: string) => void, notice: (user: string, message: string, img?: string) => void}}
+ */
+function platformSenders(platform) {
+    return {
+        system: (text) => sendSocketMessage("系統", text, { isMain: false, category: 'system', platform }),
+        chat: (user, message, img) => sendSocketMessage(user, message, { img, category: 'chat', platform }),
+        notice: (user, message, img) => sendSocketMessage(user, message, { img, isMain: false, category: 'system', platform }),
+    };
+}
+const kickSenders = platformSenders('kick');
+const twitchSenders = platformSenders('twitch');
+const youtubeSenders = platformSenders('youtube');
+const odyseeSenders = platformSenders('odysee');
+const tiktokSenders = platformSenders('tiktok');
 
 const TRANSLATE_API_URL = process.env.TRANSLATE_API_URL || "https://api.mymemory.translated.net/get";
 const TRANSLATE_SOURCE_LANG = process.env.TRANSLATE_SOURCE_LANG || "en";
@@ -259,9 +280,9 @@ const kickDeps = {
     channelName: process.env.KICK_USER_NAME || keyword || '',
     writeLog,
     notify,
-    sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system'),
-    sendChat: (user, message, avatar) => sendSocketMessage(user, message, avatar, "", true, CacheUserNum, CacheUserList, undefined, undefined, 'chat'),
-    sendNotice: (user, message, avatar) => sendSocketMessage(user, message, avatar, "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system'),
+    sendSystem: kickSenders.system,
+    sendChat: kickSenders.chat,
+    sendNotice: kickSenders.notice,
     reportTraffic,
     reportFiltered,
     filter: processFilter,
@@ -283,7 +304,7 @@ const tiktokConn = createTikTokConnectionManager({
     getCacheUserList: () => CacheUserList,
     updateCombinedViewerCount,
     notify,
-    sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system'),
+    sendSystem: tiktokSenders.system,
     writeLog,
     reportTraffic,
     getAutoClip: () => autoClip,
@@ -397,7 +418,7 @@ process.on('uncaughtException', (err) => {
     }
 
     notify("TikTok.js 發生錯誤", shortMsg);
-    sendSocketMessage("系統", `TikTok.js 發生錯誤: ${shortMsg}`, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system');
+    sendSocketMessage("系統", `TikTok.js 發生錯誤: ${shortMsg}`, { isMain: false, category: 'system' });
 });
 
 let stdinBuffer = '';
@@ -480,7 +501,7 @@ process.stdin.on('data', async (chunk) => {
 
             // 由 Server.js 轉來的頻率摘要：直接顯示，不再過濾（避免摘要本身被同一條規則攔下）。
             if (json.type === 'ThrottleSummary') {
-                sendSocketMessage(json.user || '系統', json.message, '', '', false, CacheUserNum, CacheUserList, undefined, undefined, 'summary');
+                sendSocketMessage(json.user || '系統', json.message, { isMain: false, category: 'summary' });
                 return;
             }
 
@@ -503,7 +524,7 @@ process.stdin.on('data', async (chunk) => {
 
                 applyRelayAudience(json);
 
-                sendSocketMessage(json.user, json.message, json.img || '', json.giftImg || '', true, CacheUserNum, CacheUserList, origUser, origMsg, 'chat');
+                sendSocketMessage(json.user, json.message, { img: json.img || '', giftImg: json.giftImg || '', category: 'chat', platform: 'tiktok', dedupUser: origUser, dedupMessage: origMsg });
 
                 dedup.add(origUser, origMsg);
 
@@ -815,21 +836,22 @@ function updateCombinedViewerCount() {
 
 /**
  * 發送 Socket 訊息的統一入口（去重 → emoji 取代 → 依 category 扇出）。
+ * 觀眾數與頭號觀眾清單一律取目前快取。
  *
  * @param {string} user 顯示名稱。
  * @param {string} message 訊息內容。
- * @param {string} [img] 頭像 URL。
- * @param {string} [giftImg] 禮物圖 URL。
- * @param {boolean} [isMain=true] 是否為主訊息（置底）。
- * @param {number} [userNum=0] 當下觀眾數。
- * @param {Array} [userList=[]] 頭號觀眾清單。
- * @param {string} [dedupUser] 覆寫去重比對的使用者。
- * @param {string} [dedupMessage] 覆寫去重比對的訊息。
- * @param {string} [category] 訊息分類（供端點 ?filter= 過濾）。
+ * @param {Object} [options]
+ * @param {string} [options.img] 頭像 URL。
+ * @param {string} [options.giftImg] 禮物圖 URL。
+ * @param {boolean} [options.isMain=true] 是否為主訊息（置底）。
+ * @param {string} [options.category] 訊息分類（供端點 ?filter= 過濾）。
+ * @param {string} [options.platform] 來源平台（tiktok／twitch／kick／youtube／odysee）。
+ * @param {string} [options.dedupUser] 覆寫去重比對的使用者。
+ * @param {string} [options.dedupMessage] 覆寫去重比對的訊息。
  * @returns {void}
  */
-function sendSocketMessage(user, message, img, giftImg, isMain = true, userNum = 0, userList = [], dedupUser, dedupMessage, category) {
-    socketHub.sendMessage(user, message, { img, giftImg, isMain, userNum, userList, dedupUser, dedupMessage, category });
+function sendSocketMessage(user, message, { img = '', giftImg = '', isMain = true, category, platform, dedupUser, dedupMessage } = {}) {
+    socketHub.sendMessage(user, message, { img, giftImg, isMain, userNum: CacheUserNum, userList: CacheUserList, category, platform, dedupUser, dedupMessage });
 }
 
 
@@ -868,7 +890,7 @@ if (isTK) {
             type: errDetail.type,
         }, null, 2));
         notify("TikTok 直播間連線失敗", (errDetail.message || "").substring(0, 100));
-        sendSocketMessage("系統", `TikTok 直播間連線失敗: ${err.message}`, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system');
+        sendSocketMessage("系統", `TikTok 直播間連線失敗: ${err.message}`, { isMain: false, category: 'system', platform: 'tiktok' });
 
         // 初次連線失敗也進入有限次數自動重連（指數退避，用盡後退出）
         tiktokConn.scheduleReconnect();
@@ -886,7 +908,7 @@ registerTikTokEvents(connection, {
     replaceEmojis, recordChatHeat, chatMetadata, translate: (text) => Translate.TranslateText(text),
     tikTokChatGuard,
     giftNames, getGiftMapReady: () => giftMapReady,
-    getCacheUserNum: () => CacheUserNum, getCacheUserList: () => CacheUserList,
+    getCacheUserNum: () => CacheUserNum,
     setCacheUserNum: (n) => { CacheUserNum = n; }, setCacheUserList: (n) => { CacheUserList = n; },
     getAutoClip: () => autoClip, sendAudienceUpdate,
     isEnd: () => isEnd, getStreamEnded: () => streamEnded, setStreamEnded: () => { streamEnded = true; },
@@ -920,8 +942,8 @@ const twitchDeps = {
     reportTraffic,
     writeLog,
     notify,
-    sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system'),
-    sendNotice: (user, text, icon) => sendSocketMessage(user, text, icon, "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system'),
+    sendSystem: twitchSenders.system,
+    sendNotice: twitchSenders.notice,
     setViewerCount: (count) => { TwitchViewerCount = count; },
     updateCombinedViewerCount,
     getUserIcon,
@@ -933,7 +955,7 @@ const twitchChatDeps = {
     getTuser: () => tuser,
     getUserIcon,
     notify,
-    sendChat: (user, message, icon) => sendSocketMessage(user, message, icon, "", true, CacheUserNum, CacheUserList, undefined, undefined, 'chat'),
+    sendChat: twitchSenders.chat,
     sendAd: (user, text, iconURL, useTTS) => sendAdOverylayMessage(user, text, iconURL, useTTS),
     writeLog,
     reportTraffic,
@@ -1037,8 +1059,8 @@ if (isOdysee) {
         axios,
         writeLog,
         notify,
-        sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system'),
-        sendChat: (user, message, img) => sendSocketMessage(user, message, img, "", true, CacheUserNum, CacheUserList, undefined, undefined, 'chat'),
+        sendSystem: odyseeSenders.system,
+        sendChat: odyseeSenders.chat,
         reportTraffic,
         reportFiltered,
         filter: processFilter,
@@ -1060,8 +1082,8 @@ if (isYoutube) {
         pollIntervalS: youtubePollIntervalS,
         writeLog,
         notify,
-        sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList, undefined, undefined, 'system'),
-        sendChat: (user, message, img) => sendSocketMessage(user, message, img, "", true, CacheUserNum, CacheUserList, undefined, undefined, 'chat'),
+        sendSystem: youtubeSenders.system,
+        sendChat: youtubeSenders.chat,
         reportTraffic,
         reportFiltered,
         filter: processFilter,

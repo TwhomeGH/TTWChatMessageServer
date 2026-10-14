@@ -21,6 +21,10 @@
 
 Socket 使用既有 SOCKET_API 設定（可再用 SOCKET_APIS 加開多個端點，每端點可用 `?filter=類別` 只收指定分類）；Bark 與 ntfy 使用既有通知設定（BARK_API／NTFY_API）。「開啟設定」只導向設定頁。程序啟動成功不代表各平台已完成登入。
 
+## 直播訊息監控面板
+
+`/monitor`（別名 `/messages`）以 SSE 訂閱 `/status/stream/messages`，顯示子程序鏡像回主服務的每則 socket 訊息（時間／平台／分類／使用者／內容），可依分類（清單來自 `/api/message-categories`）與關鍵字篩選。此頁**不需要連線任何 socket 端點**：子程序每送出一則訊息都會鏡像回主服務（`ScriptLib/socket/monitor-relay.mjs`，具背壓上限）。
+
 ## 啟停日誌中的統計摘要
 
 子程序在停止時仍回傳完整關鍵字快照供主服務快取與保存；主控台只顯示一行，例如 `[OUT] 關鍵字統計已同步 (完整快照，123 種留言)`。平時 `top10` 亦使用筆數摘要，不再重複列印原始 JSON 與解析後物件，也不將 `recent` 使用者／聊天明細複製進日誌。完整資料仍由關鍵字頁面使用，並未刪除統計。
