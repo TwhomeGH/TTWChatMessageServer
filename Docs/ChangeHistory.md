@@ -1,5 +1,25 @@
 # ChangeHistory
 
+## 2026.10.15 01:10 Twitch 剪輯抽出 ScriptLib/twitch/clip.mjs
+
+**類型**: 重構 · **檔案**: `ScriptLib/twitch/clip.mjs`
+
+### 問題 - 剪輯建立與歷史內嵌在 TikTok.js
+
+建立剪輯、解析標題、時間量測與 `clip_history.json` 記錄都寫在 TikTok.js，直接引用 `apiClient`／`tuser`，無法單獨測試。
+
+### 根因 - 缺少剪輯模組邊界
+
+剪輯是獨立的 Twitch 功能，卻與事件、聊天處理混在同一檔。
+
+### 修改 - 抽出 clip.mjs（getter 注入 live binding）
+
+- `createClipService({ getApiClient, getTuser, fs, file, writeLog, notify, sendSocketMessage })`：`apiClient`／`tuser` 因啟動後才設定，改以 getter 於呼叫當下取值。
+- TikTok.js 改以 `clipService.createClip(...)`（AutoClip 與 G#clip 兩處）；移除 `CLIP_HISTORY_FILE` 與 5 個函式（−158 行，現 1852 行）。
+- 新增 `Test/twitch_clip.test.mjs`（5 測試，假 apiClient／fs）。
+
+**相關文件**: [MODULES.md](MODULES.md)
+
 ## 2026.10.15 01:05 Twitch EventSub 事件抽出 ScriptLib/twitch/events.mjs
 
 **類型**: 重構 · **檔案**: `ScriptLib/twitch/events.mjs`

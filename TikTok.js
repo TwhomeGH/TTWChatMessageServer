@@ -7,6 +7,7 @@ import { createNotifier } from './ScriptLib/notify/index.mjs';
 import { normalizeSource } from './MessageSource.mjs';
 import { startTwitchClient, stopTwitchClient, getUserIcon, apiClient, tuser } from './ScriptLib/twitch/client.mjs';
 import { onViewer as twitchOnViewer, onError as twitchOnError, onStreamOnline as twitchOnStreamOnline, onStreamOffline as twitchOnStreamOffline, onFollow as twitchOnFollow, onCheer as twitchOnCheer } from './ScriptLib/twitch/events.mjs';
+import { createClipService } from './ScriptLib/twitch/clip.mjs';
 import { promises as fs, readFileSync, existsSync, writeFileSync } from 'fs';
 import axios from 'axios';
 
@@ -246,6 +247,14 @@ const GIFT_MAP_FILE = path.resolve("./gift_map.json");
 const GIFT_MAP_EXAMPLE_FILE = path.resolve("./gift_map.example.json");
 const GIFT_LIST_FILE = path.resolve("./gift_list.json");
 const sentCache = createSentCache({ fs, file: CACHE_FILE });
+
+const clipService = createClipService({
+    getApiClient: () => apiClient,
+    getTuser: () => tuser,
+    fs: { existsSync, readFileSync, writeFileSync },
+    file: path.join(__dirname, 'clip_history.json'),
+    writeLog, notify, sendSocketMessage
+});
 
 
 var isEnd=false
@@ -1667,7 +1676,7 @@ connectSocket();
 
 if (isTwitch && process.env.AUTO_CLIP_ENABLED === '1') {
     autoClip = new AutoClipManager({
-        onCreateClip: (title, context) => craeteTwitchClip(title, '', 'auto', context),
+        onCreateClip: (title, context) => clipService.createClip(title, '', 'auto', context),
         shadow: process.env.AUTO_CLIP_MODE !== 'live',
         delayOffsetsMs: (() => {
             try {
@@ -1716,164 +1725,6 @@ function pushAutoClipStats() {
     }
 }
 
-// ─── 剪輯歷史 (clip_history.json) ───
-const CLIP_HISTORY_FILE = path.join(__dirname, 'clip_history.json');
-
-function loadClipHistory() {
-    try {
-        if (existsSync(CLIP_HISTORY_FILE)) {
-            const raw = readFileSync(CLIP_HISTORY_FILE, 'utf-8');
-            const data = JSON.parse(raw);
-            if (Array.isArray(data)) return data;
-            if (data && Array.isArray(data.clips)) return data.clips;
-        }
-    } catch (err) {
-        console.error('⚠️ 讀取 clip_history.json 失敗:', err.message);
-    }
-    return [];
-}
-
-function saveClipHistory(clips) {
-    try {
-        writeFileSync(CLIP_HISTORY_FILE, JSON.stringify(clips, null, 2), 'utf-8');
-    } catch (err) {
-        console.error('⚠️ 儲存 clip_history.json 失敗:', err.message);
-    }
-}
-
-function recordClipHistory({ id, url, title = null, source = 'manual', timing = null }) {
-    const clips = loadClipHistory();
-    clips.unshift({
-        id,
-        url,
-        title: title || '',
-        source,
-        timing,
-        createdAt: new Date().toISOString()
-    });
-    saveClipHistory(clips.slice(0, 200)); // 保留最近 200 筆
-}
-
-/**
- * 解析剪輯的實際標題。
- * - 有指定 title 直接用
- * - 沒指定時透過 API 查詢（Twitch 會給自動生成的名稱），失敗則從網址 slug 擷取名稱
- * @param {string} clipId - 剪輯 ID / slug
- * @param {string|null} title - 呼叫時給定的標題
- */
-async function resolveClipTitle(clipId, title) {
-    if (title) return title;
-    for (let attempt = 1; attempt <= 5; attempt++) {
-        try {
-            const clip = await apiClient.clips.getClipById(clipId);
-            if (clip && clip.title) {
-                console.log(`🏷️ 剪輯實際標題: ${clip.title}`);
-                return clip.title;
-            }
-        } catch (err) {
-            console.log(`⚠️ [剪輯] 取得標題重試 ${attempt}/5: ${err.message}`);
-        }
-        await new Promise(r => setTimeout(r, 2000));
-    }
-    const slugName = String(clipId).split('-')[0];
-    return slugName && slugName !== String(clipId) ? slugName : '';
-}
-
-/**
- * @description 建立 Twitch 剪輯，並在成功或失敗時發送通知
- * @param {string|null} title - 剪輯標題，若為 null 則不指定標題使用當前直播標題
- * @param {string} icon - 用戶圖示 URL，用於通知
- * @param {string} source - 來源 ('manual'=G#clip 指令 / 'auto'=自動剪輯)
- */
-function craeteTwitchClip(title = null,icon="https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/Neuro2.png?raw=true", source = 'manual', context = null){
-    const requestedAt = Date.now();
-
-    return apiClient.clips.createClip({
-            channel:tuser,
-            duration:60,
-            createAfterDelay: source !== 'auto',
-            ...(title ? { title } : {})
-
-        }).then( async (clipId)=>{
-            let confirmedClip = null;
-            if (source === 'auto') {
-                // A creation response is only a request acknowledgement; verify availability.
-                for (let attempt = 0; attempt < 5; attempt++) {
-                    confirmedClip = await apiClient.clips.getClipById(clipId);
-                    if (confirmedClip) break;
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                }
-                if (!confirmedClip) throw new Error(`剪輯 ${clipId} 尚未確認可用，請人工核對；不自動重送`);
-            }
-            const clipURL = `https://clips.twitch.tv/${clipId}`
-            const finalTitle = await resolveClipTitle(clipId, title);
-            const displayText = finalTitle ? `🎬 剪輯已建立「${finalTitle}」：${clipURL}` : `🎬 剪輯已建立：${clipURL}`
-
-            console.log("剪輯資訊", clipURL)
-
-            // 量測：peak 與剪輯實際片段的時間差。VOD 可能尚未就緒，有界重試幾次。
-            const timing = {
-                peakAt: context?.peakAt ?? null,
-                requestedAt,
-                requestLagMs: context?.peakAt != null ? requestedAt - context.peakAt : null,
-                verified: false
-            };
-            if (context) {
-                for (let attempt = 1; attempt <= 3 && !timing.verified; attempt++) {
-                    try {
-                        const clip = confirmedClip;
-                        if (clip) {
-                            const [stream, video] = await Promise.all([
-                                apiClient.streams.getStreamByUserId(tuser),
-                                clip.videoId ? apiClient.videos.getVideoById(clip.videoId) : null
-                            ]);
-                            if (stream && video?.streamId === stream.id && clip.vodOffset != null && Number.isFinite(clip.duration)) {
-                                const startAt = stream.startDate.getTime() + clip.vodOffset * 1000;
-                                const endAt = startAt + clip.duration * 1000;
-                                Object.assign(timing, {
-                                    startAt, endAt, verified: true,
-                                    peakOffsetMs: context.peakAt != null ? context.peakAt - startAt : null,
-                                    coversPeak: context.peakAt >= startAt && context.peakAt <= endAt
-                                });
-                            }
-                        }
-                    } catch (err) {
-                        console.log(`[AutoClip] 時間核對第 ${attempt} 次失敗:`, err.message);
-                    }
-                    if (!timing.verified) await new Promise(resolve => setTimeout(resolve, 4000));
-                }
-                const secs = ms => ms == null ? 'n/a' : (ms / 1000).toFixed(1) + 's';
-                const summary = timing.verified
-                    ? `peak→請求 ${secs(timing.requestLagMs)}｜peak 位於片段第 ${secs(timing.peakOffsetMs)}｜片段長 ${secs(timing.endAt - timing.startAt)}｜涵蓋=${timing.coversPeak ? '是' : '否'}`
-                    : `未驗證（VOD 未就緒或已關台）｜peak→請求 ${secs(timing.requestLagMs)}`;
-                console.log(`🎯 [AutoClip] 時間量測: ${summary}`);
-                writeLog("Default", `[AutoClip] 時間量測: ${summary}`, "Twitch AutoClip");
-                context.clipTiming = timing;
-            }
-            recordClipHistory({ id: clipId, url: clipURL, title: finalTitle, source, timing });
-            console.log(`📜 剪輯歷史已記錄 (來源: ${source})`);
-
-            writeLog("Default",`[剪輯建立] ${displayText}`)
-            notify("剪輯建立", displayText, icon)
-            sendSocketMessage("剪輯建立", displayText, icon, '')
-            return { id: clipId, url: clipURL, timing };
-
-            
-        }).catch(err => {
-
-            const errMsg = `剪輯建立失敗: ${err.message} (status=${err.response?.status || 'N/A'})`
-
-            console.error(`❌ [G#clip] ${errMsg}`)
-
-            writeLog("Default", `[${errMsg}]`, "Error")
-            sendSocketMessage("剪輯建立", `❌ ${errMsg}`, icon, '')
-            notify("剪輯建立失敗", errMsg, icon)
-            if (source === 'auto') throw err;
-
-        })
-
-
-}
 
 async function onTwitchChat(event) {
     const receivedAt = Date.now();
@@ -2099,7 +1950,7 @@ async function onTwitchChat(event) {
 
         const title = res.length > 0 ? res.join(" ") : null
         
-        craeteTwitchClip(title, icon);
+        clipService.createClip(title, icon);
 
         return; // 指令已處理，不再當一般訊息轉發
         
