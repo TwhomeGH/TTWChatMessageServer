@@ -50,6 +50,7 @@ ESM 模組若要 `await fs.readFile`／`fs.writeFile`，必須 `import { promise
 | ScriptLib/kick/chat.mjs | Kick WebSocket 聊天與訂閱事件（token 由同目錄 tokens.cjs 取得） |
 | ScriptLib/tiktok/signing.mjs | TikTok 連線簽名設定（EulerStream／直連） |
 | ScriptLib/tiktok/connection.mjs | TikTok 連線生命週期（觀眾數輪詢、自動重連） |
+| ScriptLib/tiktok/events.mjs | TikTok 原生事件處理（16 事件；狀態封裝 + deps 注入） |
 | ScriptLib/tiktok/viewers.mjs | TikTok 開播時間解析與探測 |
 | ScriptLib/tiktok/rawLog.mjs | TikTok 原始事件摘要日誌 |
 

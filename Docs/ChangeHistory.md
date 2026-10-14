@@ -1,5 +1,49 @@
 # ChangeHistory
 
+## 2026.10.15 06:13 修正 TikTok 直播結束事件註冊（ControlEvent.STREAM_END 未定義）
+
+**類型**: 修正 · **檔案**: `ScriptLib/tiktok/events.mjs`
+
+### 問題 - TikTok 直播結束事件從未觸發
+
+`connection.on(ControlEvent.STREAM_END, ...)` 中的 `ControlEvent.STREAM_END` 未定義（該常數屬於 `WebcastEvent`），因此處理器被註冊在 `undefined` 事件名下、永遠不會被呼叫。
+
+### 根因 - 用錯事件列舉
+
+`ControlEvent` 只有 `CONNECTED／DISCONNECTED／ERROR／RAW_DATA／DECODED_DATA／WEBSOCKET_CONNECTED／WEBSOCKET_DATA／ENTER_ROOM`；`STREAM_END` 屬於 `WebcastEvent`。
+
+### 修改 - 改註冊 WebcastEvent.STREAM_END
+
+- 事件改以 `WebcastEvent.STREAM_END`（`'streamEnd'`）註冊。
+- 直播結束／被平台中止時的推播、`writeLog`、`streamEnded` 標記與 `cancelReconnect` 現在才會真正執行。
+- 於事件抽取模組化時一併修正（原缺陷已存在於 TikTok.js）。
+
+---
+
+## 2026.10.15 06:13 TikTok 原生事件抽出 ScriptLib/tiktok/events.mjs
+
+**類型**: 重構 · **檔案**: `ScriptLib/tiktok/events.mjs`
+
+### 問題 - TikTok 原生事件處理內嵌在 TikTok.js
+
+DISCONNECTED／ERROR／CAPTION／ROOM_USER／MEMBER／FOLLOW／CHAT／SOCIAL／EMOTE／ROOM_MESSAGE／LIKE／GIFT／SHARE／ENVELOPE／SUPER_FAN／STREAM_END 等 16 個 `connection.on(...)` 處理器，連同 `likeUserCount`／`recordGift`／`flushMemberBark`／`getTikTokProfilePic` 與其狀態（約 577 行）全部寫在 TikTok.js。
+
+### 根因 - 缺少事件模組邊界
+
+每個處理器都需要推播、socket、過濾、統計、翻譯、贊助、剪輯、去重等副作用，但卻散落且直接引用 TikTok.js 全域。
+
+### 修改 - 抽出 events.mjs（registrar + deps 注入）
+
+- `registerTikTokEvents(connection, deps)` 註冊所有事件；狀態（加入合併、點讚累加、送禮累加、重播統計）收進模組閉包。
+- 副作用與跨平台存取（`notify`／`sendSocketMessage`／`logRawEvent`／`writeLog`／`dedup`／`sentCache`／`processFilter`／`reportFiltered`／`reportTraffic`／`replaceEmojis`／`recordChatHeat`／`chatMetadata`／`translate`／`tikTokChatGuard`／`giftNames`／快取 getter-setter／`autoClip`／`sendAudienceUpdate`／`isEnd`／`streamEnded`／重連控制）皆由 deps 注入。
+- `getTikTokProfilePic` 一併移入並匯出。TikTok.js 移除約 577 行（現 1077 行）。
+- 新增 `Test/tiktok_events.test.mjs`（7 測試，假 connection + 記錄型 deps）。
+- 附帶修正 `STREAM_END` 註冊錯誤（見上一筆）。
+
+**相關文件**: [MODULES.md](MODULES.md)
+
+---
+
 ## 2026.10.15 01:35 TikTok 連線生命週期抽出 ScriptLib/tiktok/connection.mjs
 
 **類型**: 重構 · **檔案**: `ScriptLib/tiktok/connection.mjs`
