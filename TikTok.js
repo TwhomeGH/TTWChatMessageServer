@@ -8,6 +8,7 @@ import { normalizeSource } from './MessageSource.mjs';
 import { startTwitchClient, stopTwitchClient, getUserIcon, apiClient, tuser } from './ScriptLib/twitch/client.mjs';
 import { onViewer as twitchOnViewer, onError as twitchOnError, onStreamOnline as twitchOnStreamOnline, onStreamOffline as twitchOnStreamOffline, onFollow as twitchOnFollow, onCheer as twitchOnCheer } from './ScriptLib/twitch/events.mjs';
 import { createClipService } from './ScriptLib/twitch/clip.mjs';
+import { onChat as twitchOnChat } from './ScriptLib/twitch/chat.mjs';
 import { promises as fs, readFileSync, existsSync, writeFileSync } from 'fs';
 import axios from 'axios';
 
@@ -1649,6 +1650,28 @@ const twitchDeps = {
     logger: console,
 };
 
+const twitchChatDeps = {
+    getApiClient: () => apiClient,
+    getTuser: () => tuser,
+    getUserIcon,
+    notify,
+    sendChat: (user, message, icon) => sendSocketMessage(user, message, icon, "", true, CacheUserNum, CacheUserList),
+    sendAd: (user, text, iconURL, useTTS) => sendAdOverylayMessage(user, text, iconURL, useTTS),
+    writeLog,
+    reportTraffic,
+    reportFiltered,
+    processFilter,
+    recordChatHeat,
+    replaceEmojis,
+    translate: (text) => Translate.TranslateText(text),
+    sponsorStore,
+    adScheduler,
+    manageUrl: SPONSOR_MANAGE_URL,
+    clipService,
+    logRawEvent,
+    logger: console,
+};
+
 await startTwitchClient({
     userName: process.env.TWITCH_USER_NAME || "coffeelatte0709",
     enabled: isTwitch,
@@ -1658,7 +1681,7 @@ await startTwitchClient({
     onStreamOffline: (event) => twitchOnStreamOffline(event, twitchDeps),
     onFollow: (event) => twitchOnFollow(event, twitchDeps),
     onCheer: (event) => twitchOnCheer(event, twitchDeps),
-    onChat: onTwitchChat,
+    onChat: (event) => twitchOnChat(event, twitchChatDeps),
     onSocketDisconnect: () => autoClip?.reset(),
     onViewer: (stream) => twitchOnViewer(stream, twitchDeps),
 });
@@ -1726,284 +1749,6 @@ function pushAutoClipStats() {
 }
 
 
-async function onTwitchChat(event) {
-    const receivedAt = Date.now();
-    const icon = await getUserIcon(event.chatterId);
-    
-    
-    console.log(`${event.chatterDisplayName} : ${event.messageText}`);
-
-    // 需要先確認是不是Twitch訂閱者（或主播本人）才能使用 G#Ad
-    if (event.messageText.startsWith("G#Ad")) {
-
-        if (event.chatterId === tuser) {
-            console.log(`${event.chatterDisplayName} 是主播本人，視同訂閱者可以使用 G#Ad 指令`);
-            handleGAd(event);
-            return;
-        } else {
-            let subRes;
-            try {
-                subRes = await apiClient.subscriptions.checkUserSubscription(tuser, event.chatterId);
-            } catch (err) {
-                console.error(`⚠️ [訂閱檢查] ${event.chatterDisplayName} 查詢失敗: ${err.message} (status=${err.response?.status || 'N/A'})`);
-                if (err.response?.status === 404) {
-                    console.log(`   → 使用者 ${event.chatterDisplayName} 未訂閱此頻道（404）`);
-                } else if (err.message?.includes('scope')) {
-                    console.warn('   → 缺少 scope: user:read:subscriptions，可透過 Config 重新授權');
-                } else {
-                    console.log(`   → 完整錯誤:`, err.response?.data?.message || err.message);
-                }
-            }
-            if (subRes?.isSubscribed) {
-                console.log(`${event.chatterDisplayName} 是訂閱者（${subRes.tier || '?'} 方案, 累計 ${subRes.totalMonths || 0} 月），可以使用 G#Ad 指令`);
-                handleGAd(event);
-            } else {
-                console.log(`${event.chatterDisplayName} 不是訂閱者（API 回傳 isSubscribed=false），無法使用 G#Ad 指令`);
-            }
-            return;
-        }
-
-    }
-
-    function handleGAd(event) {
-        if (event.messageText.startsWith("G#Ad") ) {
-
-            var res = event.messageText.split(" ")
-
-            let useTTS = event.messageText.toLowerCase().includes("tts")
-            let iconURL = event.messageText.includes("icon=") ? event.messageText.split("icon=")[1].split(" ")[0] : null
-            let displayIcon;
-
-            // 自訂 user：若訊息含 user=xxx 則使用該值，否則用用戶名
-            let overlayUser = event.chatterDisplayName;
-            let userValue = event.messageText.includes("user=") ? event.messageText.split("user=")[1].split(" ")[0] : null;
-            if (userValue) overlayUser = userValue;
-
-            // 解析 interval=N（分鐘）
-            let intervalMinutes = 0;
-            let rawInterval = event.messageText.includes("interval=") ? parseInt(event.messageText.split("interval=")[1].split(" ")[0]) : 0;
-            if (!isNaN(rawInterval) && rawInterval > 0) {
-                if (rawInterval < 15) {
-                    intervalMinutes = 15;
-                    const warnMsg = `${overlayUser}，您設定的廣告間隔為 ${rawInterval} 分鐘，最低不能低於 15 分鐘，已自動調整為 15 分鐘`;
-                    console.warn(`⚠️ [G#Ad] ${warnMsg}`);
-                    notify(`⚠️ 贊助廣告間隔調整 (${overlayUser})`, warnMsg, icon);
-                    sendAdOverylayMessage(overlayUser, `⚠️ ${warnMsg}`, icon, false);
-                    logRawEvent('G#Ad 間隔調整', { user: overlayUser, rawInterval, adjusted: 15 });
-                } else {
-                    intervalMinutes = rawInterval;
-                }
-            }
-
-            res = res.filter(e => { const l = e.toLowerCase(); return l !== "tts" && l !== "usetts"; }) // 去掉 TTS / useTTS
-            const iconIdx = res.findIndex(e => e.startsWith("icon="));
-            if (iconIdx !== -1) res.splice(iconIdx, 1); // 去掉 icon=xxx
-            const userIdx = res.findIndex(e => e.startsWith("user="));
-            if (userIdx !== -1) res.splice(userIdx, 1); // 去掉 user=xxx
-            const intervalIdx = res.findIndex(e => e.startsWith("interval="));
-            if (intervalIdx !== -1) res.splice(intervalIdx, 1); // 去掉 interval=xxx
-            const idIdx = res.findIndex(e => e.startsWith("id="));
-            let targetId = -1;
-            if (idIdx !== -1) {
-                targetId = parseInt(res[idIdx].split("=")[1]);
-                if (isNaN(targetId) || targetId < 0) targetId = -1;
-                res.splice(idIdx, 1); // 去掉 id=xxx
-            }
-
-            res.shift() // 去掉 G#Ad
-
-            // B: 無 icon= 時自動偵測訊息文字中的圖片網址作為頭像，並從文字中移除
-            if (!iconURL) {
-                const IMG_URL_RE = /^https?:\/\/\S+\.(png|jpe?g|gif|webp|avif|bmp|svg)(\?[\w=&.,-]*)?$/i;
-                const imgIdx = res.findIndex(t => IMG_URL_RE.test(t));
-                if (imgIdx !== -1) {
-                    iconURL = res[imgIdx];
-                    res.splice(imgIdx, 1);
-                }
-            }
-            displayIcon = iconURL || icon
-
-            let lastMsg=replaceEmojis(res.join(" "));
-
-            const sponsor = sponsorStore.getOrCreate(event.chatterId, event.chatterDisplayName);
-            const now = new Date().toISOString();
-
-            // ---- 判斷要更新還是新增 ----
-            let targetAd = null;
-            let targetIdx = -1;
-            if (targetId >= 0 && targetId < sponsor.ads.length) {
-                targetIdx = targetId;
-                targetAd = sponsor.ads[targetIdx];
-            } else if (targetId < 0 && sponsor.ads.length > 0) {
-                targetIdx = 0;
-                targetAd = sponsor.ads[0];
-            }
-
-            // ---- 審核判定 ----
-            let approved = true;
-            const reviewMode = sponsorAds.settings.reviewMode || 'none';
-            if (reviewMode === 'filter') {
-                const fr = processFilter({ user: overlayUser, message: lastMsg });
-                if (fr.blocked) {
-                    approved = false;
-                    const rejectReason = `過濾器阻擋: ${fr.reason || '不符合規範'}`;
-                    console.log(`🚫 [G#Ad] 贊助廣告被過濾器阻擋: ${overlayUser} - ${lastMsg}`);
-                    notify(`🚫 贊助廣告被阻擋 (${overlayUser})`, rejectReason, icon);
-                    sendAdOverylayMessage(overlayUser, `⚠️ ${rejectReason}`, icon, false);
-                    logRawEvent('G#Ad 審核拒絕', { user: overlayUser, message: lastMsg, reason: fr.reason });
-                }
-            } else if (reviewMode === 'manual') {
-                approved = null; // 待審核
-                console.log(`📋 [G#Ad] 贊助廣告待審核: ${overlayUser} - ${lastMsg}`);
-                notify(`📋 贊助廣告待審核 (${overlayUser})`, lastMsg, icon, SPONSOR_MANAGE_URL);
-                sendAdOverylayMessage(overlayUser, `📋 贊助廣告已送審，待管理員審核`, icon, false);
-                logRawEvent('G#Ad 待審核', { user: overlayUser, message: lastMsg });
-            } else {
-                const intervalText = intervalMinutes >= 15 ? `每${intervalMinutes}分鐘` : '單次';
-                notify(`📢 贊助廣告 (${overlayUser})`, `[${intervalText}] ${lastMsg}`, icon, SPONSOR_MANAGE_URL);
-            }
-
-            if (targetAd) {
-                // ---- 更新現有廣告 ----
-                adScheduler.clear(targetAd.id);
-                targetAd.message = lastMsg;
-                // A+C: 沒帶 icon= 時保留舊頭像，避免被覆寫成 null；有帶則存已解析值（含 Twitch fallback）
-                targetAd.iconURL = iconURL ? displayIcon : (targetAd.iconURL || icon);
-                targetAd.useTTS = useTTS;
-                // 沒帶 user= 時保留原 overlayUser
-                targetAd.overlayUser = userValue ? overlayUser : (targetAd.overlayUser || overlayUser);
-                targetAd.intervalMinutes = intervalMinutes;
-                targetAd.approved = approved;
-                targetAd.enabled = approved !== false;
-                targetAd.updatedAt = now;
-                targetAd.lastSentAt = approved === true ? now : targetAd.lastSentAt;
-                const adId = targetAd.id;
-
-                if (approved === true) {
-                    sendAdOverylayMessage(targetAd.overlayUser, lastMsg, targetAd.iconURL || '', useTTS);
-                    if (intervalMinutes >= 15) {
-                        adScheduler.schedule(adId, event.chatterId, intervalMinutes, {
-                            overlayUser: targetAd.overlayUser, text: lastMsg, iconURL: targetAd.iconURL || '', useTTS
-                        });
-                    }
-                }
-                sponsorStore.save();
-                console.log(`🔄 ${event.chatterDisplayName} 更新 G#Ad #${targetIdx} 成功，user=${overlayUser}, 訊息: ${lastMsg}, TTS: ${useTTS}, 間隔: ${intervalMinutes > 0 ? intervalMinutes + ' 分鐘' : '單次'}`);
-            } else {
-                // ---- 新增廣告 ----
-                if (sponsor.ads.length >= 5) {
-                    console.warn(`⚠️ [G#Ad] ${event.chatterDisplayName} 已達 5 則廣告上限，無法新增`);
-                    sendAdOverylayMessage(overlayUser, `⚠️ 您已達到 5 則廣告上限，請先刪除舊的再新增`, icon, false);
-                    return;
-                }
-                const adId = `ad_${event.chatterId}_${Date.now()}`;
-                const adRecord = {
-                    id: adId, message: lastMsg, iconURL: displayIcon, useTTS, overlayUser,
-                    intervalMinutes, approved, enabled: approved !== false,
-                    createdAt: now, updatedAt: now,
-                    lastSentAt: approved === true ? now : null
-                };
-                sponsor.ads.push(adRecord);
-                sponsorStore.save();
-
-                if (approved === true) {
-                    sendAdOverylayMessage(overlayUser, lastMsg, displayIcon, useTTS);
-                    if (intervalMinutes >= 15) {
-                        adScheduler.schedule(adId, event.chatterId, intervalMinutes, {
-                            overlayUser, text: lastMsg, iconURL: displayIcon, useTTS
-                        });
-                    }
-                }
-                console.log(`✅ ${event.chatterDisplayName} 新增 G#Ad 成功，user=${overlayUser}, 訊息: ${lastMsg}, TTS: ${useTTS}, 間隔: ${intervalMinutes > 0 ? intervalMinutes + ' 分鐘' : '單次'}`);
-            }
-
-
-        }
-    }
-    
-
-    if (event.messageText.startsWith("G#clip")) {
-
-        // 權限檢查：主播本人、訂閱者或追隨者才能建剪輯
-        let authorized = event.chatterId === tuser;
-        if (!authorized) {
-            const subRes = await apiClient.subscriptions.checkUserSubscription(tuser, event.chatterId).catch(err => {
-                console.error(`⚠️ [G#clip] ${event.chatterDisplayName} 訂閱檢查失敗: ${err.message}`);
-                return { isSubscribed: false };
-            });
-            authorized = !!subRes?.isSubscribed;
-        }
-        if (!authorized) {
-            const follows = await apiClient.channels.getChannelFollowers(tuser, event.chatterId).catch(err => {
-                console.error(`⚠️ [G#clip] ${event.chatterDisplayName} 追隨檢查失敗: ${err.message}`);
-                return { data: [] };
-            });
-            authorized = follows.data.length > 0;
-        }
-        if (!authorized) {
-            console.log(`🚫 [G#clip] ${event.chatterDisplayName} 不是主播、訂閱者或追隨者，無法使用 G#clip 指令`);
-            return;
-        }
-
-        let res = event.messageText.split(" ")
-        res.shift() // 去掉 G#clip
-
-        const title = res.length > 0 ? res.join(" ") : null
-        
-        clipService.createClip(title, icon);
-
-        return; // 指令已處理，不再當一般訊息轉發
-        
-    }
-
-    reportTraffic({ platform: 'Twitch', eventType: 'chat', id: event.messageId, userId: event.chatterId, user: event.chatterDisplayName, message: event.messageText });
-
-    const fr = processFilter({ user: event.chatterDisplayName, message: event.messageText });
-    if (fr.blocked) {
-        reportFiltered(fr, { platform: 'Twitch', id: event.messageId, userId: event.chatterId, user: event.chatterDisplayName, message: event.messageText });
-        console.log('🚫 過濾器阻擋(Twitch):', event.chatterDisplayName, event.messageText, `(規則: ${fr.reason})`);
-        writeLog("Default", `過濾器阻擋(Twitch): ${event.chatterDisplayName} : ${event.messageText} (規則: ${fr.reason})`, "Filter")
-
-        return;
-    }
-
-    console.log(fr.modified ? `過濾器修改後的訊息(Twitch): ${fr.user} : ${fr.message}` : "過濾器未修改訊息(Twitch)")
-
-    writeLog("Default", fr.modified ? `過濾器修改後的訊息(Twitch): ${fr.user} : ${fr.message}` : "過濾器未修改訊息(Twitch)", "Filter")
-
-    console.log(event.chatterDisplayName, "說了:", event.messageText)
-
-    writeLog("Default", `${event.chatterDisplayName} 說了: ${event.messageText}`, "Twitch Chat Original")
-
-    let tUser = fr.modified && fr.user ? fr.user : event.chatterDisplayName;
-    let tMsg = fr.modified && fr.message ? fr.message : event.messageText;
-
-    if (!tUser || !tMsg) {
-        console.log('⚠️ 過濾後(Twitch) nick/msg 為空，跳過:', event.chatterDisplayName, event.messageText);
-        return;
-    }
-
-    if (!recordChatHeat(tMsg, { platform: 'Twitch', id: event.messageId, userId: event.chatterId, user: event.chatterDisplayName, receivedAt })) return;
-
-
-    notify(tUser, tMsg, icon);
-
-    // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
-    tMsg = replaceEmojis(tMsg);
-
-    Translate.TranslateText(tMsg).then(RES=>{
-
-            let RESCHAT=`${tMsg}${tMsg == RES ? "" :`\n${RES}`}`
-
-            if (RES.toLowerCase() != tMsg.toLowerCase() ) {
-                notify(tUser + "[翻譯]", RES, icon);
-            }
-
-            sendSocketMessage(tUser, RESCHAT,icon,"",true,CacheUserNum,CacheUserList);
-
-            writeLog("Default", `${tUser} : ${RESCHAT}`, "Twitch Chat")
-    })
-}
 
 // 其他事件同理可加 sendSocketMessage
 

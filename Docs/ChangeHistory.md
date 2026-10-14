@@ -1,5 +1,25 @@
 # ChangeHistory
 
+## 2026.10.15 01:18 Twitch 聊天與 G#Ad 抽出 ScriptLib/twitch/chat.mjs
+
+**類型**: 重構 · **檔案**: `ScriptLib/twitch/chat.mjs`
+
+### 問題 - onTwitchChat 與 G#Ad 內嵌在 TikTok.js
+
+一般聊天、G#Ad 贊助廣告指令與 G#clip 剪輯指令全都塞在 `onTwitchChat`（含巢狀 `handleGAd`，約 278 行），直接引用 `apiClient`／`tuser`／`sponsorStore`／`adScheduler`／`clipService` 等，難以單獨測試。
+
+### 根因 - 缺少聊天模組邊界
+
+聊天處理與其他平台邏輯混在一檔，副作用硬編碼。
+
+### 修改 - 抽出 chat.mjs（deps 注入）
+
+- 匯出 `onChat(event, deps)`；`handleGAd` 收為模組內部函式。所有副作用（推播、socket、過濾、統計、翻譯、贊助資料、剪輯、日誌）由 `TwitchChatDeps` 注入，`apiClient`／`tuser` 以 getter 取值。
+- TikTok.js 組 `twitchChatDeps` 並接上 `onChat`，移除 `onTwitchChat`（−278 行，現 1639 行）。
+- 新增 `Test/twitch_chat.test.mjs`（6 測試，假 deps）——因 test:core 已改 glob，自動納入。
+
+**相關文件**: [MODULES.md](MODULES.md)
+
 ## 2026.10.15 01:11 核心測試改用 glob 自動探索，啟動測試移入 Test/startup/
 
 **類型**: 重構 · **檔案**: `package.json`
