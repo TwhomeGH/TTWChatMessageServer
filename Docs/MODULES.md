@@ -48,6 +48,10 @@ ESM 模組若要 `await fs.readFile`／`fs.writeFile`，必須 `import { promise
 | ScriptLib/twitch/clip.mjs | Twitch 剪輯建立與歷史 |
 | ScriptLib/twitch/chat.mjs | Twitch 聊天、G#Ad、G#clip |
 | ScriptLib/kick/chat.mjs | Kick WebSocket 聊天與訂閱事件（token 由同目錄 tokens.cjs 取得） |
+| ScriptLib/tiktok/signing.mjs | TikTok 連線簽名設定（EulerStream／直連） |
+| ScriptLib/tiktok/connection.mjs | TikTok 連線生命週期（觀眾數輪詢、自動重連） |
+| ScriptLib/tiktok/viewers.mjs | TikTok 開播時間解析與探測 |
+| ScriptLib/tiktok/rawLog.mjs | TikTok 原始事件摘要日誌 |
 
 ## 輸出層與資料模組
 

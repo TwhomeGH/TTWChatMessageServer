@@ -1,5 +1,26 @@
 # ChangeHistory
 
+## 2026.10.15 01:35 TikTok 連線生命週期抽出 ScriptLib/tiktok/connection.mjs
+
+**類型**: 重構 · **檔案**: `ScriptLib/tiktok/connection.mjs`
+
+### 問題 - 連線生命週期與狀態內嵌在 TikTok.js
+
+`viewCache`／`onTikTokConnected`／`scheduleTikTokReconnect` 以及 `roomId`、重連次數、計時器、連續失敗次數等狀態全散在 TikTok.js，難以測試。
+
+### 根因 - 缺少連線模組邊界
+
+連線後的初始化、觀眾數輪詢與自動重連是同一組職責，卻與事件處理混在一起。
+
+### 修改 - 抽出 connection.mjs（狀態封裝 + deps 注入）
+
+- `createTikTokConnectionManager(deps)` 回傳 `{ onConnected, scheduleReconnect, cancelReconnect, stopViewCache, stop }`；`roomId`／重連次數／計時器等狀態收進實例。
+- 與全域互動（觀眾數、快取）與副作用（`notify`／`sendSystem`／`reportTraffic`／`adScheduler`／`handleExit`／`isEnd`／`streamEnded`）以 deps／getter 注入。
+- TikTok.js 改以 `tiktokConn.*` 呼叫；移除約 80 行與 4 個狀態宣告（現 1309 行）。
+- 新增 `Test/tiktok_connection.test.mjs`（5 測試，mock timers）。
+
+**相關文件**: [MODULES.md](MODULES.md)
+
 ## 2026.10.15 01:27 TikTok 簽名設定／開播時間／原始日誌抽出 ScriptLib/tiktok
 
 **類型**: 重構 · **檔案**: `ScriptLib/tiktok/signing.mjs`
