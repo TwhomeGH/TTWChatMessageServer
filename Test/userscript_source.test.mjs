@@ -136,3 +136,33 @@ test('Live Center 缺少統計欄位不回報零值，真實零值仍保留', ()
     assert.equal(data.diamonds,6);assert.equal(data.uniqueViewers,0);
     assert.equal(data.gifters,null);assert.equal(data.newFollowers,1234);assert.equal(data.likes,null);
 });
+
+test('Live Center 只在 live_monitor 頁面自動啟動，手動偏好可覆寫', () => {
+    const source = fs.readFileSync(new URL('../UserScript/liveCenter.user.js', import.meta.url), 'utf8');
+    const a = source.indexOf('const MONITOR_PATH');
+    const b = source.indexOf("const host = document.createElement('div')");
+    assert.ok(a >= 0 && b > a, '找不到啟動條件區塊');
+
+    /** 以指定的偏好與路徑跑一次啟動判定。 */
+    const load = (saved, pathname) => {
+        const ctx = vm.createContext({
+            GM_getValue: () => saved,
+            location: { pathname },
+            console: { log() {}, error() {} }
+        });
+        vm.runInContext(source.slice(a, b), ctx);
+        return ctx;
+    };
+
+    // 未指定偏好（'auto'）：只有官方監控頁會自動啟動。
+    assert.equal(load('auto', '/live_monitor').shouldRun(), true);
+    assert.equal(load('auto', '/live_monitor/sub').shouldRun(), true);
+    assert.equal(load('auto', '/replay/123').shouldRun(), false);
+    assert.equal(load(undefined, '/dashboard').shouldRun(), false);
+    // 手動指定可覆寫頁面判定。
+    assert.equal(load(true, '/replay/123').shouldRun(), true);
+    assert.equal(load(false, '/live_monitor').shouldRun(), false);
+    // 非布林值一律視為自動。
+    assert.equal(load('yes', '/replay/123').shouldRun(), false);
+    assert.equal(load('yes', '/live_monitor').shouldRun(), true);
+});
