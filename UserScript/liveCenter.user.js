@@ -1,10 +1,12 @@
 // ==UserScript==
 // @name         TikTok Live Chat → Socket Bridge
 // @namespace    pip-chat-bridge
-// @version      1.13
+// @version      1.14
 // @description  Listen TikTok live chat and forward to socket server
 // @author       Nuclear0709
 // @match        https://livecenter.tiktok.com/*
+// @exclude      https://livecenter.tiktok.com/replay*
+
 // @grant GM_xmlhttpRequest
 
 
