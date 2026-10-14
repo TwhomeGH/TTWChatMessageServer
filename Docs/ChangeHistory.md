@@ -1,5 +1,27 @@
 # ChangeHistory
 
+## 2026.10.15 01:27 TikTok 簽名設定／開播時間／原始日誌抽出 ScriptLib/tiktok
+
+**類型**: 重構 · **檔案**: `ScriptLib/tiktok/signing.mjs`
+
+### 問題 - TikTok 連線細節內嵌在 TikTok.js
+
+簽名設定（EulerStream／直連）、開播時間解析與探測、原始事件摘要日誌都寫在 TikTok.js，夾在平台事件處理之間。
+
+### 根因 - 缺少 TikTok 模組邊界
+
+這些是獨立、可測的小職責，卻與 900 行的原生事件區塊混在一起。
+
+### 修改 - 先抽出三個獨立小模組（第一步）
+
+- `ScriptLib/tiktok/signing.mjs`：`buildConnectionOptions(env, logger)` 回傳 `{ connOpts, mode }`。
+- `ScriptLib/tiktok/viewers.mjs`：`roomStartTime(roomInfo)` 與 `createStartTimeProbe(logger)`。
+- `ScriptLib/tiktok/rawLog.mjs`：`logRawEvent(eventName, data, logger)`。
+- TikTok.js 改 import 取用（−114 行，現 1367 行）；新增 `Test/tiktok_helpers.test.mjs`（4 測試）。
+- 後續再把連線生命週期（connect／viewCache／reconnect）與原生事件處理抽成更大的模組。
+
+**相關文件**: [MODULES.md](MODULES.md)
+
 ## 2026.10.15 01:21 Kick 聊天抽出 ScriptLib/kick/chat.mjs
 
 **類型**: 重構 · **檔案**: `ScriptLib/kick/chat.mjs`

@@ -14,6 +14,9 @@ import axios from 'axios';
 import { createHub } from './ScriptLib/socket/hub.mjs';
 import { MessageDedup } from './ScriptLib/socket/dedup.mjs';
 import { createGiftNameStore } from './ScriptLib/gift/names.mjs';
+import { logRawEvent } from './ScriptLib/tiktok/rawLog.mjs';
+import { roomStartTime, createStartTimeProbe } from './ScriptLib/tiktok/viewers.mjs';
+import { buildConnectionOptions } from './ScriptLib/tiktok/signing.mjs';
 import { createSponsorStore } from './ScriptLib/sponsor/store.mjs';
 import { createAdScheduler } from './ScriptLib/sponsor/scheduler.mjs';
 import { createSentCache } from './ScriptLib/sponsor/sent-cache.mjs';
@@ -728,39 +731,7 @@ adScheduler.resume();
 console.log("TikTok 直播間名稱:", tiktokName);
 setStreamerName(tiktokName);
 
-const eulerKey = process.env.SIGN_API_KEY || process.env.SIGN_API;
-const hasDirectCreds = process.env.DIRECT_SIGNER_ENABLED === '1' || !!(process.env.TIKTOK_COOKIES || process.env.SESSION_ID);
-const useDirect = hasDirectCreds && (!eulerKey || process.env.DIRECT_SIGNER_PRIORITY === '1');
-const connOpts = {};
-
-if (useDirect) {
-    connOpts.session = {
-        cookie: {
-            type: 'cookie',
-            value: {
-                sessionId: process.env.SESSION_ID || '',
-                ttTargetIdc: process.env.TT_TARGET_IDC || 'alisg'
-            }
-        }
-    };
-    console.log('[TikTok] Using persistent browser signer');
-} else if (eulerKey) {
-    connOpts.signApiKey = eulerKey;
-    console.log('[TikTok] Using EulerStream signer (SIGN_API_KEY)');
-} else if (hasDirectCreds) {
-    connOpts.session = {
-        cookie: {
-            type: 'cookie',
-            value: {
-                sessionId: process.env.SESSION_ID || '',
-                ttTargetIdc: process.env.TT_TARGET_IDC || 'alisg'
-            }
-        }
-    };
-    console.warn('[TikTok] Using direct signer (no EulerStream key available)');
-} else {
-    console.warn('[TikTok] No TIKTOK_COOKIES/SESSION_ID or SIGN_API_KEY — signing may fail');
-}
+const { connOpts } = buildConnectionOptions(process.env, console);
 
 const connection = new TikTokLiveConnection(tiktokName, connOpts)
 
@@ -853,31 +824,7 @@ var RoomID = ""
 var writeViewCount = 0
 var writeDebugView = false
 
-// 從房間資訊取真實開播時間；TikTok room/info 以秒為單位，找不到回 undefined，
-// 不用首次接收時間代替（traffic 的 actualStarted 規則）。
-function roomStartTime(roomInfo) {
-    const data = roomInfo?.data ?? roomInfo ?? {};
-    const candidates = [data.start_time, data.create_time, data.startTime, data.createTime, data.room_info?.start_time];
-    for (const value of candidates) {
-        let ms = Number(value);
-        if (!Number.isFinite(ms) || ms <= 0) continue;
-        if (ms < 1e11) ms *= 1000;              // 秒 → 毫秒
-        if (ms <= Date.now()) return new Date(ms).toISOString();
-    }
-    return undefined;
-}
-
-// 只印一次，用來確認房資實際提供哪些開播時間欄位（欄位名可能隨 TikTok 改版）。
-let startTimeProbeLogged = false;
-function probeStartTimeOnce(roomInfo, startedAt) {
-    if (startTimeProbeLogged) return;
-    startTimeProbeLogged = true;
-    const data = roomInfo?.data ?? {};
-    const sample = ['start_time', 'create_time', 'startTime', 'createTime', 'finish_time', 'status', 'id']
-        .map(key => `${key}=${data[key] ?? '∅'}`).join(' ');
-    console.log(`🕒 TikTok 開播時間探測：${startedAt ?? '未取得'}｜${sample}`);
-    if (!startedAt) console.log('🕒 TikTok 房資欄位：', Object.keys(data).join(','));
-}
+const startTimeProbe = createStartTimeProbe();
 
 function viewCache() {
     console.log("📊 CacheUserNum:", CacheUserNum)
@@ -895,7 +842,7 @@ function viewCache() {
 
         writeViewCount += 1
         const startedAt = roomStartTime(roomInfo);
-        probeStartTimeOnce(roomInfo, startedAt);
+        startTimeProbe.probe(roomInfo, startedAt);
         reportTraffic({platform:'TikTok',type:'audience',userNum:Number(Viewer),streamId:RoomID != null ? String(RoomID) : undefined,startedAt});
         autoClip?.updatePlatformViewers('TikTok', Number(Viewer));
         TikTokViewerCount = Viewer
@@ -1019,69 +966,6 @@ connection.on(ControlEvent.ERROR, (err) => {
     sendSocketMessage("系統", `TikTok 連線錯誤: ${msg.substring(0, 100)}`, "", "", false, CacheUserNum, CacheUserList);
 });
 
-// ====== 原始訊息 Debug 日誌 ======
-function logRawEvent(eventName, data) {
-    if (!data) { console.log(`[RAW] ${eventName}: (no data)`); return; }
-    const keys = Object.keys(data).filter(k => {
-        const v = data[k];
-        if (v === null || v === undefined) return false;
-        if (typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 0) return false;
-        return true;
-    });
-    const info = { event: eventName, keys };
-    if (data.user && typeof data.user === 'object') {
-        const u = data.user;
-        info.user = {};
-        if (u.displayId !== undefined) info.user.displayId = u.displayId;
-        if (u.nickname !== undefined) info.user.nickname = u.nickname;
-        if (u.id !== undefined) info.user.id = u.id;
-        if (u.uniqueId !== undefined) info.user.uniqueId = u.uniqueId;
-        if (u.role !== undefined) info.user.role = u.role;
-        if (u.level !== undefined) info.user.level = u.level;
-        if (u.badge !== undefined) info.user.badge = u.badge;
-        if (u.isModerator !== undefined) info.user.isModer = u.isModerator;
-        if (u.isSubscriber !== undefined) info.user.isSub = u.isSubscriber;
-        if (u.isNewGifter !== undefined) info.user.isNewGifter = u.isNewGifter;
-        if (Object.keys(info.user).length === 0) delete info.user;
-    }
-    if (data.gift && typeof data.gift === 'object') {
-        const g = data.gift;
-        info.gift = {};
-        if (g.name !== undefined) info.gift.name = g.name;
-        if (g.id !== undefined) info.gift.id = g.id;
-        if (g.diamondCount !== undefined) info.gift.cost = g.diamondCount;
-        if (g.repeatCount !== undefined) info.gift.repeat = g.repeatCount;
-        if (g.repeatEnd !== undefined) info.gift.repeatEnd = g.repeatEnd;
-        if (g.type !== undefined) info.gift.type = g.type;
-        if (g.streakable !== undefined) info.gift.streakable = g.streakable;
-        if (g.giftType !== undefined) info.gift.giftType = g.giftType;
-        if (Object.keys(info.gift).length === 0) delete info.gift;
-    }
-    // Common fields
-    if (data.content !== undefined) info.content = typeof data.content === 'string' ? data.content.substring(0, 120) : '[non-string]';
-    if (data.action !== undefined) info.action = data.action;
-    if (data.shareType !== undefined) info.shareType = data.shareType;
-    if (data.shareTarget !== undefined) info.shareTarget = data.shareTarget;
-    if (data.likeCount !== undefined) info.likeCount = data.likeCount;
-    if (data.total !== undefined) info.total = data.total;
-    if (data.count !== undefined) info.count = data.count;
-    if (data.describe !== undefined) info.describe = data.describe;
-    if (data.msgId !== undefined) info.msgId = data.msgId;
-    if (data.createTime !== undefined) info.createTime = data.createTime;
-    if (data.emoteId !== undefined) info.emoteId = data.emoteId;
-    if (data.followRole !== undefined) info.followRole = data.followRole;
-    if (data.memberCount !== undefined) info.memberCount = data.memberCount;
-    if (data.viewersCount !== undefined) info.viewersCount = data.viewersCount;
-    if (data.topViewers !== undefined) info.topViewers = data.topViewers;
-    if (data.roomId !== undefined) info.roomId = data.roomId;
-    if (data.subscribeType !== undefined) info.subscribeType = data.subscribeType;
-    if (data.timestampMs !== undefined) info.timestampMs = data.timestampMs;
-    if (data.currency !== undefined) info.currency = data.currency;
-    if (data.amount !== undefined) info.amount = data.amount;
-    if (data.multibuy !== undefined) info.multibuy = data.multibuy;
-    console.log(`[RAW] ${JSON.stringify(info)}`);
-}
-// =================================
 
 connection.on(WebcastEvent.CAPTION_MESSAGE, (data) => {
     logRawEvent('CAPTION_MESSAGE', data);
