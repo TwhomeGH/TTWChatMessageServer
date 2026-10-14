@@ -1,5 +1,26 @@
 # ChangeHistory
 
+## 2026.10.15 01:05 Twitch EventSub 事件抽出 ScriptLib/twitch/events.mjs
+
+**類型**: 重構 · **檔案**: `ScriptLib/twitch/events.mjs`
+
+### 問題 - Twitch 事件處理綁在 TikTok.js
+
+觀眾數、錯誤、開台／關台、追蹤、小奇點等 EventSub 事件處理常式都寫在 TikTok.js，直接引用全域狀態（`TwitchViewerCount`、`CacheUserNum`、`autoClip`），難以單獨測試。
+
+### 根因 - 缺少事件層模組，副作用硬編碼
+
+事件處理與推播、socket、日誌、合併觀眾數等副作用緊耦合，無法脫離 TikTok.js 執行。
+
+### 修改 - 抽出 events.mjs（deps 注入）
+
+- 新增 `onViewer`／`onError`／`onStreamOnline`／`onStreamOffline`／`onFollow`／`onCheer`，副作用全由 `TwitchEventDeps` 注入。
+- TikTok.js 在 `startTwitchClient` 前組 `twitchDeps`（`sendSystem`／`sendNotice` 封裝 `CacheUserNum/List`、`getAutoClip` 取 current、`setViewerCount`／`updateCombinedViewerCount`）。
+- 移除 6 個內嵌事件函式（−77 行），TikTok.js 現 1985 行。
+- 新增 `Test/twitch_events.test.mjs`（6 測試，假 deps）納入 `test:core`。
+
+**相關文件**: [MODULES.md](MODULES.md)
+
 ## 2026.10.15 01:01 贊助廣告與已送快取抽出 ScriptLib/sponsor 模組
 
 **類型**: 重構 · **檔案**: `ScriptLib/sponsor/store.mjs`

@@ -6,6 +6,7 @@ import { startYoutubeChat, stopYoutubeChat } from './ScriptLib/youtube/chat.mjs'
 import { createNotifier } from './ScriptLib/notify/index.mjs';
 import { normalizeSource } from './MessageSource.mjs';
 import { startTwitchClient, stopTwitchClient, getUserIcon, apiClient, tuser } from './ScriptLib/twitch/client.mjs';
+import { onViewer as twitchOnViewer, onError as twitchOnError, onStreamOnline as twitchOnStreamOnline, onStreamOffline as twitchOnStreamOffline, onFollow as twitchOnFollow, onCheer as twitchOnCheer } from './ScriptLib/twitch/events.mjs';
 import { promises as fs, readFileSync, existsSync, writeFileSync } from 'fs';
 import axios from 'axios';
 
@@ -1626,18 +1627,31 @@ function fetchAndSyncGifts() {
 }
 
 // --- Twitch SDK 生命週期（auth／apiClient／listener／viewer）交由 ScriptLib/twitch/client.mjs 管理 ---
+const twitchDeps = {
+    getAutoClip: () => autoClip,
+    reportTraffic,
+    writeLog,
+    notify,
+    sendSystem: (text) => sendSocketMessage("系統", text, "", "", false, CacheUserNum, CacheUserList),
+    sendNotice: (user, text, icon) => sendSocketMessage(user, text, icon, "", false, CacheUserNum, CacheUserList),
+    setViewerCount: (count) => { TwitchViewerCount = count; },
+    updateCombinedViewerCount,
+    getUserIcon,
+    logger: console,
+};
+
 await startTwitchClient({
     userName: process.env.TWITCH_USER_NAME || "coffeelatte0709",
     enabled: isTwitch,
     writeLog,
-    onError: onTwitchError,
-    onStreamOnline: onTwitchStreamOnline,
-    onStreamOffline: onTwitchStreamOffline,
-    onFollow: onTwitchFollow,
-    onCheer: onTwitchCheer,
+    onError: (err) => twitchOnError(err, twitchDeps),
+    onStreamOnline: (event) => twitchOnStreamOnline(event, twitchDeps),
+    onStreamOffline: (event) => twitchOnStreamOffline(event, twitchDeps),
+    onFollow: (event) => twitchOnFollow(event, twitchDeps),
+    onCheer: (event) => twitchOnCheer(event, twitchDeps),
     onChat: onTwitchChat,
     onSocketDisconnect: () => autoClip?.reset(),
-    onViewer: onTwitchViewer,
+    onViewer: (stream) => twitchOnViewer(stream, twitchDeps),
 });
 
 
@@ -1701,83 +1715,6 @@ function pushAutoClipStats() {
         console.error('⚠️ 推播自動剪輯統計失敗:', err.message);
     }
 }
-
-// Twitch 觀眾數更新（輪詢由 ScriptLib/twitch/client.mjs 負責）
-function onTwitchViewer(stream) {
-    if (!stream) { autoClip?.reset(); return; }
-    TwitchViewerCount = stream.viewers;
-    reportTraffic({platform:'Twitch',type:'audience',userNum:stream.viewers,streamId:stream.id != null ? String(stream.id) : undefined,startedAt:stream.startDate?.toISOString()});
-    autoClip?.updateViewers(stream.viewers);
-    const DA = new Date();
-    console.log(`📊 Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`);
-    writeLog("Default", `Twitch 觀眾數: ${TwitchViewerCount} ${DA.toLocaleString()}`, "Twitch View");
-    updateCombinedViewerCount();
-}
-
-
-// 錯誤處理
-function onTwitchError(err) {
-    autoClip?.reset();
-    console.error('⚠️ Twitch EventSub Listener error:', err);
-
-    writeLog("Default", `Twitch EventSub Listener error: ${err.message || err}`, "Error")
-
-    notify("Twitch 事件監聽錯誤", `Twitch EventSub Listener error: ${err.message || err}`, "");
-    sendSocketMessage("系統", `Twitch 事件監聽錯誤: ${err.message || err}`, "", "", false,CacheUserNum,CacheUserList);
-}
-
-
-
-// --- 3. Twitch EventSub 直播開始/結束 ---
-async function onTwitchStreamOnline(event) {
-    const message = `直播開始啦！標題：${event.broadcasterName} ${event.type}`; 
-
-    console.log(message);
-    notify("直播開始啦！", `${event.broadcasterName} ${event.type}`, "");
-    sendSocketMessage("系統", message, "", "", false,CacheUserNum,CacheUserList);
-
-    writeLog("Default", message, "Twitch Stream Status")
-}
-
-async function onTwitchStreamOffline(event) {
-    autoClip?.reset();
-    const message = `直播結束啦！標題：${event.broadcasterName}`;  
-
-    console.log(message);
-
-    notify("直播結束啦！", `${event.broadcasterName}`, "");
-    sendSocketMessage("系統", message, "", "", false,CacheUserNum,CacheUserList);
-
-    writeLog("Default", message, "Twitch Stream Status")
-}
-
-
-// --- 5. Twitch EventSub ---
-async function onTwitchFollow(event) {
-    const icon = await getUserIcon(event.userId);
-    const message = `關注了主播`;
-
-    console.log(message);
-
-    notify(event.userDisplayName, "關注了主播", icon);
-
-    sendSocketMessage(event.userDisplayName, message, icon,"", false,CacheUserNum,CacheUserList);
-
-    writeLog("Default", `${event.userDisplayName} ${message}`, "Twitch Follow")
-}
-
-async function onTwitchCheer(event) {
-    const message = `送出 ${event.bits} 小奇點`;
-    const icon = await getUserIcon(event.userId);
-
-    console.log(`${event.userDisplayName} ${message}`);
-
-    notify(event.userDisplayName, message, icon);
-    sendSocketMessage(event.userDisplayName, message, icon,"", false,CacheUserNum,CacheUserList);
-
-    writeLog("Default", `${event.userDisplayName} ${message}`, "Twitch Cheer")
-}
-
 
 // ─── 剪輯歷史 (clip_history.json) ───
 const CLIP_HISTORY_FILE = path.join(__dirname, 'clip_history.json');
