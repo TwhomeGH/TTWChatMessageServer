@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="audience.title">常客分析</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/audience.css">
+</head>
+<body class="app-ui bg-gray-900 text-gray-200 min-h-screen p-4">
+  <main class="mx-auto max-w-7xl">
+    <header class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <h1 class="text-xl font-bold text-green-400" data-i18n="audience.title">常客分析</h1>
+      <nav class="flex gap-2 flex-wrap text-sm">
+        <a href="/monitor" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition" data-i18n="nav.monitor">💬 直播訊息</a>
+        <a href="/traffic" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition" data-i18n="traffic.title">人流分析</a>
+        <a href="/config" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition" data-i18n="nav.config">⚙️ 設定</a>
+        <label style="display:inline-flex;gap:8px;align-items:center"><span data-i18n="common.language">語言</span><select data-language-select style="background:#374151;color:#fff;border-radius:6px;padding:6px"><option value="zh-TW">繁體中文</option></select></label>
+      </nav>
+    </header>
+
+    <p class="audience-note" data-i18n="audience.note">只統計實際互動過的觀眾；出席、連續、活躍天數、訊息與送禮都各有上限，避免洗頻或金額直接決定等級。</p>
+
+    <div class="audience-toolbar">
+      <input id="audience-search" type="search" autocomplete="off" spellcheck="false"
+             placeholder="搜尋觀眾…" aria-label="搜尋觀眾">
+      <select id="audience-platform" aria-label="平台">
+        <option value="" data-i18n="audience.allPlatforms">全部平台</option>
+        <option value="TikTok">TikTok</option>
+        <option value="Twitch">Twitch</option>
+        <option value="Kick">Kick</option>
+        <option value="Youtube">YouTube</option>
+        <option value="Odysee">Odysee</option>
+      </select>
+      <select id="audience-sort" aria-label="排序">
+        <option value="score" data-i18n="audience.sort.score">依分數</option>
+        <option value="sessions" data-i18n="audience.sort.sessions">依出席</option>
+        <option value="messages" data-i18n="audience.sort.messages">依訊息</option>
+        <option value="recent" data-i18n="audience.sort.recent">依最近出現</option>
+      </select>
+      <span id="audience-count" class="audience-count"></span>
+    </div>
+
+    <div class="table-wrap audience-table-wrap">
+      <table class="audience-table">
+        <thead>
+          <tr>
+            <th data-i18n="audience.col.user">觀眾</th>
+            <th data-i18n="audience.col.platform">平台</th>
+            <th data-i18n="audience.col.level">等級／分數</th>
+            <th data-i18n="audience.col.tenure">關係</th>
+            <th data-i18n="audience.col.attendance">出席／連續</th>
+            <th data-i18n="audience.col.days">活躍天數</th>
+            <th data-i18n="audience.col.interaction">訊息／送禮</th>
+            <th data-i18n="audience.col.lastSeen">最後出現</th>
+            <th data-i18n="audience.col.labels">標記</th>
+          </tr>
+        </thead>
+        <tbody id="audience-rows"></tbody>
+      </table>
+    </div>
+    <p id="audience-empty" class="audience-empty" hidden data-i18n="audience.empty">目前沒有符合的觀眾。</p>
+
+    <div class="audience-pager">
+      <button id="audience-prev" type="button" data-i18n="audience.prev">上一頁</button>
+      <span id="audience-page"></span>
+      <button id="audience-next" type="button" data-i18n="audience.nextPage">下一頁</button>
+    </div>
+
+    <section id="audience-detail" class="audience-detail" hidden>
+      <header class="audience-detail-head">
+        <h2 id="audience-detail-name"></h2>
+        <span id="audience-detail-level" class="audience-level"></span>
+      </header>
+      <p id="audience-detail-meta" class="audience-note"></p>
+      <div id="audience-detail-stats" class="audience-cards"></div>
+
+      <h3 data-i18n="audience.breakdown">分數組成</h3>
+      <div class="table-wrap">
+        <table class="audience-table">
+          <thead>
+            <tr>
+              <th data-i18n="audience.breakdown.col.component">分量</th>
+              <th data-i18n="audience.breakdown.col.value">數值</th>
+              <th data-i18n="audience.breakdown.col.cap">上限</th>
+              <th data-i18n="audience.breakdown.col.weight">權重</th>
+              <th data-i18n="audience.breakdown.col.points">得分</th>
+            </tr>
+          </thead>
+          <tbody id="audience-breakdown"></tbody>
+        </table>
+      </div>
+      <p id="audience-formula" class="audience-note"></p>
+
+      <h3 data-i18n="audience.levels">等級門檻</h3>
+      <div class="table-wrap">
+        <table class="audience-table">
+          <thead>
+            <tr>
+              <th data-i18n="audience.levels.col.level">等級</th>
+              <th data-i18n="audience.levels.col.score">最低分</th>
+              <th data-i18n="audience.levels.col.gate">額外條件</th>
+            </tr>
+          </thead>
+          <tbody id="audience-levels"></tbody>
+        </table>
+      </div>
+
+      <h3 data-i18n="audience.recent">最近場次</h3>
+      <div class="table-wrap">
+        <table class="audience-table">
+          <thead>
+            <tr>
+              <th data-i18n="audience.recent.col.session">場次</th>
+              <th data-i18n="audience.recent.col.day">日期</th>
+              <th data-i18n="audience.recent.col.messages">訊息</th>
+              <th data-i18n="audience.recent.col.gifts">送禮</th>
+              <th data-i18n="audience.recent.col.joins">進房</th>
+              <th data-i18n="audience.recent.col.lastSeen">最後活動</th>
+            </tr>
+          </thead>
+          <tbody id="audience-recent"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/assets/i18n.js"></script>
+  <script src="/assets/audience.js"></script>
+</body>
+</html>

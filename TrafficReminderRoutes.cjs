@@ -24,4 +24,4 @@ const timer = setInterval(tick, 60000);
 timer.unref();
 tick();
 
-module.exports = { servePlanner: createPlannerRoutes(planner) };
+module.exports = { servePlanner: createPlannerRoutes(planner), planner };

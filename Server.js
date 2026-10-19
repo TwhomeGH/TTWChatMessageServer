@@ -40,7 +40,28 @@ writeLog("Default",TEST_LOG.join("\n"))
 
 process.loadEnvFile(".env"); // 讀取 .env
 // 提醒由主服務啟動，不依賴聊天子程序或是否有人開啟人流頁。
-const { servePlanner } = require('./TrafficReminderRoutes.cjs');
+const { servePlanner, planner } = require('./TrafficReminderRoutes.cjs');
+const { database } = require('./TrafficRoutes.cjs');
+const { createAudienceTracker } = require('./ScriptLib/audience/tracker.cjs');
+const { createAudienceRoutes } = require('./AudienceRoutes.cjs');
+// 觀眾活躍度獨立存放；場次邊界只向 traffic 讀取，不參與分類。
+const audience = createAudienceTracker({
+    sessionFor(platform, time) {
+        const row = database.db.prepare(`SELECT id FROM sessions WHERE platform=? AND started<=?
+            AND (ended IS NULL OR ended>=?) ORDER BY started DESC LIMIT 1`).get(platform, time, time);
+        return row ? row.id : null;
+    },
+    recentSessions(platform, limit) {
+        return database.db.prepare('SELECT id FROM sessions WHERE platform=? ORDER BY started DESC LIMIT ?')
+            .all(platform, limit).map(row => row.id);
+    },
+    timezone: () => planner.settings().timezone
+});
+const serveAudience = createAudienceRoutes(audience);
+const audiencePrune = setInterval(() => {
+    try { audience.prune(180); } catch (error) { console.error('[Audience] 清理失敗:', error.message); }
+}, 24 * 3600000);
+audiencePrune.unref();
 
 let tiktokProcess = null;
 const { RuntimeState } = require('./ScriptLib/runtime/state.cjs');
@@ -65,6 +86,12 @@ const MESSAGE_CATEGORIES = require('./ScriptLib/messages/categories.cjs').MESSAG
 function pushStreamMessage(payload) {
     if (!payload || typeof payload !== 'object') return;
     const entry = { t: Date.now(), ...payload };
+    try {
+        const audienceInfo = audience.observe(entry);
+        if (audienceInfo) entry.audience = audienceInfo;
+    } catch (error) {
+        console.error('[Audience] 活躍度寫入失敗:', error.message);
+    }
     streamMessages.push(entry);
     if (streamMessages.length > MAX_STREAM_MESSAGES) streamMessages.shift();
     for (const client of messageClients) {
@@ -482,6 +509,7 @@ function startRuntime(url) {
 }
 
 const server = http.createServer((req, res) => {
+    if (serveAudience(req,res,isValidToken(parseCookies(req).authToken))) return;
     if (servePlanner(req,res)) return;
     if (require('./TrafficRoutes.cjs').serveTraffic(req,res,isValidToken(parseCookies(req).authToken))) return;
     if (serveRuntime(req, res, runtimeState, startRuntime)) return;

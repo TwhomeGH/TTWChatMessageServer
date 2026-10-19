@@ -1,0 +1,202 @@
+/* 常客分析頁：表格、等級與分數拆解；窄螢幕以水平捲動保留所有欄位。 */
+.audience-note {
+    color: #aebdce;
+    font-size: .875rem;
+    line-height: 1.7;
+    margin: 8px 0;
+}
+
+.audience-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0;
+}
+
+.audience-toolbar input,
+.audience-toolbar select {
+    background: #1e293b;
+    color: #e2e8f0;
+    border: 1px solid #64748b;
+    border-radius: 6px;
+    padding: 8px;
+    min-height: 40px;
+}
+
+.audience-toolbar input {
+    flex: 1 1 220px;
+    min-width: 180px;
+}
+
+.audience-count {
+    color: #94a3b8;
+    font-size: .85rem;
+}
+
+.table-wrap,
+.audience-table-wrap {
+    overflow: auto;
+    max-width: 100%;
+    border: 1px solid #374151;
+    border-radius: 10px;
+    max-height: 60vh;
+}
+
+.audience-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .875rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.audience-table th,
+.audience-table td {
+    padding: 8px 12px;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid #374151;
+}
+
+.audience-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #111827;
+    color: #d1d5db;
+    font-weight: 600;
+}
+
+.audience-table tbody tr {
+    cursor: pointer;
+}
+
+.audience-table tbody tr:hover {
+    background: #172033;
+}
+
+.audience-table tbody tr:focus-visible {
+    outline: 2px solid #60a5fa;
+    outline-offset: -2px;
+}
+
+.audience-table tbody tr.is-current {
+    background: #1e3a5f;
+}
+
+.audience-empty {
+    color: #fde68a;
+    margin: 12px 0;
+}
+
+.audience-pager {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 12px 0;
+}
+
+.audience-pager button {
+    background: #1e293b;
+    color: #e2e8f0;
+    border: 1px solid #64748b;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    min-height: 40px;
+}
+
+.audience-pager button:disabled {
+    opacity: .5;
+    cursor: default;
+}
+
+.audience-level {
+    display: inline-block;
+    padding: 2px 10px;
+    border: 1px solid;
+    border-radius: 999px;
+    font-size: .8rem;
+    font-weight: 600;
+    line-height: 1.6;
+}
+
+.audience-level.is-level-0 { color: #cbd5e1; border-color: #475569; background: #1e293b; }
+.audience-level.is-level-1 { color: #93c5fd; border-color: #1d4ed8; background: #172554; }
+.audience-level.is-level-2 { color: #67e8f9; border-color: #0e7490; background: #083344; }
+.audience-level.is-level-3 { color: #fcd34d; border-color: #b45309; background: #451a03; }
+.audience-level.is-level-4 { color: #f0abfc; border-color: #a21caf; background: #4a044e; }
+
+.audience-labels {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.audience-chip {
+    display: inline-block;
+    padding: 1px 8px;
+    border: 1px solid;
+    border-radius: 999px;
+    font-size: .75rem;
+    line-height: 1.6;
+}
+
+.audience-chip.is-giftRegular { color: #fcd34d; border-color: #92400e; background: #451a03; }
+.audience-chip.is-alwaysHere { color: #86efac; border-color: #166534; background: #052e16; }
+.audience-chip.is-frequentChatter { color: #93c5fd; border-color: #1d4ed8; background: #172554; }
+.audience-chip.is-newcomer { color: #f9a8d4; border-color: #9d174d; background: #500724; }
+
+.audience-detail {
+    margin-top: 24px;
+    padding: 16px;
+    background: #111827;
+    border: 1px solid #334155;
+    border-radius: 12px;
+}
+
+.audience-detail-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.audience-detail h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #bfdbfe;
+}
+
+.audience-detail h3 {
+    margin-top: 20px;
+    font-weight: 600;
+    color: #bfdbfe;
+}
+
+.audience-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin: 12px 0;
+}
+
+.audience-stat {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 12px;
+    background: #1e293b;
+    border-radius: 8px;
+}
+
+.audience-stat span {
+    color: #94a3b8;
+    font-size: .8rem;
+}
+
+.audience-stat strong {
+    color: #e2e8f0;
+}

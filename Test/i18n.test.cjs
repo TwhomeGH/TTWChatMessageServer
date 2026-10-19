@@ -98,6 +98,23 @@ test('manifest rejects invalid paths, duplicate locales and blank labels', () =>
     assert.deepEqual(normalizeManifest(null).languages, [{ code: 'zh-TW', label: '繁體中文' }]);
 });
 
+test('audience static and dynamic translation keys exist in both locales', () => {
+    const script = fs.readFileSync(path.join(__dirname, '../assets/audience.js'), 'utf8');
+    new vm.Script(script);
+    for (const match of script.matchAll(/(?<![\w.])t\('([^']+)'/g)) {
+        if (match[1].endsWith('.')) continue;
+        const key = 'audience.' + match[1];
+        assert.ok(zh[key], key);
+        assert.ok(en[key], key);
+    }
+    const html = fs.readFileSync(path.join(__dirname, '../audience.html'), 'utf8');
+    assert.ok(html.indexOf('/assets/i18n.js') < html.indexOf('/assets/audience.js'));
+    for (const match of html.matchAll(/data-i18n="([^"]+)"/g)) {
+        assert.ok(zh[match[1]], match[1]);
+        assert.ok(en[match[1]], match[1]);
+    }
+});
+
 test('traffic static and dynamic translation keys exist in both locales', () => {
     for (const file of ['assets/traffic.js','assets/traffic-history.js']) {
         const script = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');

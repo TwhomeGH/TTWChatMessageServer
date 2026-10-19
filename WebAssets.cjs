@@ -6,6 +6,8 @@ const { normalizeManifest } = require('./assets/i18n.js');
 function createWebAssetHandler(root = __dirname) {
     return function serveWebAsset(req, res) {
         const files = {
+            '/assets/audience.js': ['assets/audience.js', 'text/javascript; charset=utf-8'],
+            '/assets/audience.css': ['assets/audience.css', 'text/css; charset=utf-8'],
             '/assets/traffic-planner.js': ['assets/traffic-planner.js', 'text/javascript; charset=utf-8'],
             '/assets/traffic-history.js': ['assets/traffic-history.js', 'text/javascript; charset=utf-8'],
             '/assets/traffic.js': ['assets/traffic.js', 'text/javascript; charset=utf-8'],

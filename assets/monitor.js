@@ -3,9 +3,10 @@
  * 以聊天室列顯示時間／平台／分類／使用者／內容，提供分類篩選、搜尋、自動捲動與清除。
  * 分類清單由 /api/message-categories 取得（單一來源 ScriptLib/messages/categories.cjs）。
  */
-(function () {
+(async function () {
     'use strict';
     const i18n = window.TTWI18n;
+    if (i18n?.ready) await i18n.ready;
     const t = (key, params, fallback) => (i18n ? i18n.t(key, params, fallback) : (fallback ?? key));
 
     const MAX_ENTRIES = 1000;
@@ -96,10 +97,26 @@
         const user = document.createElement('span');
         user.className = 'mon-user font-semibold text-gray-100';
         user.textContent = `${entry.user ?? ''} `;
+        const tags = document.createElement('span');
+        tags.className = 'mon-tags';
+        for (const label of (entry.audience?.labels || []).slice(0, 2)) {
+            const tag = document.createElement('span');
+            tag.className = `mon-tag mon-tag-${label}`;
+            tag.textContent = t(`monitor.audience.${label}`, {}, label);
+            tags.append(tag);
+        }
+        if (entry.audience) {
+            tags.title = t('monitor.audience.tooltip', {
+                sessions: entry.audience.sessions, streak: entry.audience.streak,
+                messages: entry.audience.messages, gifts: entry.audience.gifts
+            }, '');
+        }
         const message = document.createElement('span');
         message.className = 'mon-msg text-gray-300 whitespace-pre-wrap break-words';
         message.textContent = String(entry.message ?? '');
-        body.append(user, message);
+        body.append(user);
+        if (tags.childElementCount) body.append(tags);
+        body.append(message);
 
         row.append(time, platform, chip, body);
         return row;
@@ -228,7 +245,8 @@
             platform: typeof entry.platform === 'string' ? entry.platform : undefined,
             user: typeof entry.user === 'string' ? entry.user : '',
             message: entry.message,
-            img: typeof entry.img === 'string' ? entry.img : ''
+            img: typeof entry.img === 'string' ? entry.img : '',
+            audience: entry.audience && typeof entry.audience === 'object' ? entry.audience : undefined
         });
     };
 })();

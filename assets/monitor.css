@@ -1,6 +1,37 @@
 /* 直播訊息監控面板：頁面專屬樣式（其餘沿用 app.css 的 Tailwind 工具類）。 */
+body.app-ui {
+    height: 100dvh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 常客標記：只佔一小段寬度，hover 由 title 顯示細部統計。 */
+.mon-tags {
+    display: inline-flex;
+    gap: 4px;
+    margin: 0 6px;
+    vertical-align: middle;
+}
+.mon-tag {
+    display: inline-block;
+    padding: 0 6px;
+    border: 1px solid;
+    border-radius: 999px;
+    font-size: 10px;
+    line-height: 1.7;
+}
+.mon-tag-giftRegular { color:#fcd34d; border-color:#92400e; background:#451a03; }
+.mon-tag-alwaysHere { color:#86efac; border-color:#166534; background:#052e16; }
+.mon-tag-frequentChatter { color:#93c5fd; border-color:#1d4ed8; background:#172554; }
+.mon-tag-newcomer { color:#f9a8d4; border-color:#9d174d; background:#500724; }
+
 .monitor-panel {
-    min-height: 80vh;
+    /* 依工具列實際換行高度分配空間，避免訊息將面板撐出視窗。 */
+    flex: 1;
+    display: grid;
+    grid-template-rows: auto auto minmax(8rem, 1fr);
+    min-height: min-content;
     padding: 1rem;
 }
 
