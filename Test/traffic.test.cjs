@@ -25,6 +25,27 @@ test('明確進房、時間與來源去重', () => {
 });
 
 // 觀看數有缺值、零值與過期之分，不跨平台或跨斷線算斜率。
+test('原生事件會記住主播識別，備用來源不覆寫', () => {
+    const now = 1700000000000;
+    const db = new TrafficDatabase(':memory:');
+    const store = new TrafficStore(() => now, db);
+    store.record({ type: 'audience', platform: 'Twitch', broadcasterId: '12345', userNum: 1, transport: 'native' });
+    store.record({ type: 'audience', platform: 'Twitch', broadcasterId: 'someone', userNum: 2, transport: 'userscript' });
+    const row = db.db.prepare("SELECT broadcaster,source FROM traffic_identities WHERE platform='Twitch'").get();
+    assert.equal(row.broadcaster, '12345');
+    assert.equal(row.source, 'native');
+    db.close();
+});
+
+test('主播識別的 @ 在寫入場次前就會去掉', () => {
+    const now = 1700000000000;
+    const db = new TrafficDatabase(':memory:');
+    const store = new TrafficStore(() => now, db);
+    store.record({ type: 'audience', platform: 'TikTok', broadcasterId: '@Self', userNum: 1 });
+    assert.equal(db.db.prepare('SELECT broadcaster FROM sessions').get().broadcaster, 'self');
+    db.close();
+});
+
 test('觀看數斜率、零值、缺漏與平台隔離', () => {
     let now = 1700000000000;
     const store = new TrafficStore(() => now);
@@ -190,6 +211,112 @@ test('時段排名取開場平均並做收縮與樣本門檻', () => {
     assert.equal(monday.shrunk, 155); // (3·200 + 3·110) / 6
 
     assert.equal(rankings.cells[1].shrunk, 65); // (3·20 + 3·110) / 6
+    db.close();
+});
+
+test('排名可只計自己的場次，且保留全來源模式', () => {
+    const base = Date.parse('2026-09-07T10:00:00Z');
+    let now = base;
+    const db = new TrafficDatabase(':memory:');
+    const store = new TrafficStore(() => now, db);
+    const seed = (broadcaster, value) => {
+        for (let week = 0; week < 3; week++) {
+            const start = base + week * 7 * 86400000;
+            for (let minute = 0; minute <= 20; minute++) {
+                now = start + minute * 60000;
+                store.record({ type: 'audience', platform: 'TikTok', broadcasterId: broadcaster,
+                    userNum: value, streamId: `${broadcaster}-${week}`, startedAt: new Date(start).toISOString() });
+            }
+        }
+    };
+    seed('self', 100);
+    seed('other', 10);
+    db.db.prepare("INSERT INTO traffic_profiles VALUES('TikTok','self','own'),('TikTok','other','reference')").run();
+
+    const rankNow = base + 20 * 86400000;
+    const own = db.rankings('TikTok', 30, rankNow, 'UTC', { purposes: ['own'] });
+    assert.equal(own.totalSessions, 3);
+    assert.equal(own.sessionCount, 3);
+    assert.equal(own.globalMean, 100);
+    assert.deepEqual(own.purposes, ['own']);
+
+    const reference = db.rankings('TikTok', 30, rankNow, 'UTC', { purposes: ['reference'] });
+    assert.equal(reference.totalSessions, 3);
+    assert.equal(reference.globalMean, 10);
+
+    const all = db.rankings('TikTok', 30, rankNow, 'UTC');
+    assert.equal(all.totalSessions, 6);
+    assert.equal(all.purposes, null);
+    db.close();
+});
+
+test('歷史排名 API 有 own 時只算自己，沒有時回退全來源並標示 scope', async () => {
+    const vm = require('node:vm');
+    const { EventEmitter } = require('node:events');
+    const history = ownTotal => {
+        class FakeDatabase {
+            prune() { return 0; }
+            distribution() { return { platform: 'TikTok', platforms: ['TikTok'], cells: [], daily: [] }; }
+            rankings(platform, days, now, timezone, selection) {
+                if (selection?.purposes) {
+                    return { purposes: selection.purposes, totalSessions: ownTotal, sessionCount: 0, cells: [], excluded: {} };
+                }
+                return { purposes: null, totalSessions: 6, sessionCount: 0, cells: [], excluded: {} };
+            }
+            metrics() { return { daily: [] }; }
+        }
+        class FakeStore { record() {} heartbeat() {} }
+        const context = { module: { exports: {} }, __dirname: path.resolve(__dirname, '..'), URL, console,
+            setInterval: () => ({ unref() {} }), require: name => {
+                if (name === './ScriptLib/traffic/database.cjs') return { TrafficDatabase: FakeDatabase };
+                if (name === './ScriptLib/traffic/store.cjs') return { TrafficStore: FakeStore };
+                return require(name);
+            } };
+        vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../TrafficRoutes.cjs'), 'utf8'), context);
+        return new Promise(resolve => {
+            const req = new EventEmitter();
+            Object.assign(req, { url: '/api/traffic/history?platform=TikTok&days=30&timezone=UTC', method: 'GET', headers: {} });
+            const res = { setHeader() {}, writeHead(status) { this.status = status; }, end(body) { resolve(JSON.parse(body)); } };
+            context.module.exports.serveTraffic(req, res, true);
+        });
+    };
+
+    const own = await history(3);
+    assert.equal(own.rankings.scope, 'own');
+    assert.deepEqual(own.rankings.purposes, ['own']);
+    const fallback = await history(0);
+    assert.equal(fallback.rankings.scope, 'all');
+    assert.equal(fallback.rankings.purposes, null);
+    assert.equal(fallback.rankings.totalSessions, 6);
+});
+
+test('排名回報互斥的排除原因與全部場次，包括只有一筆取樣的場次', () => {
+    const base = Date.parse('2026-09-07T10:00:00Z');
+    let now = base;
+    const db = new TrafficDatabase(':memory:');
+    const store = new TrafficStore(() => now, db);
+    const record = (streamId, startedAt) => store.record({
+        type: 'audience', platform: 'TikTok', userNum: 10, streamId, startedAt
+    });
+    for (let minute = 0; minute <= 20; minute++) {
+        now = base + minute * 60000;
+        record('usable', new Date(base).toISOString());
+    }
+    now = base + 3600000;
+    record('missing');
+    now += 3600000;
+    record('coverage', new Date(now).toISOString());
+    now += 3600000;
+    record('pending', new Date(now).toISOString());
+
+    const result = db.rankings('TikTok', 30, now, 'UTC');
+    assert.equal(result.totalSessions, 4);
+    assert.equal(result.sessionCount, 1);
+    assert.deepEqual(result.excluded, { missingStart: 1, pending: 1, insufficientCoverage: 1 });
+    assert.equal(result.totalSessions, result.sessionCount + Object.values(result.excluded).reduce((a, b) => a + b, 0));
+    const later = db.rankings('TikTok', 30, now + 30 * 60000, 'UTC');
+    assert.equal(later.excluded.pending, 0);
+    assert.equal(later.excluded.insufficientCoverage, 2);
     db.close();
 });
 

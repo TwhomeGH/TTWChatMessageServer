@@ -150,12 +150,17 @@
 
         const enough = rankings.cells.filter(cell => !cell.insufficient);
         const partial = rankings.cells.filter(cell => cell.insufficient);
+        const comparable = enough.length >= 2;
+        const slotLabel = key => {
+            const [day, hour] = key.split(' ');
+            return `${weekday(WEEKDAYS.indexOf(day))} ${hour}:00–${hour}:59`;
+        };
         const rows = [['#', t('timeSlot'), t('sessions'), t('median'), t('mean'), t('shrunk')]];
 
         enough.forEach((cell, index) => {
             rows.push([
-                index + 1,
-                cell.key,
+                comparable ? index + 1 : '—',
+                slotLabel(cell.key),
                 cell.n,
                 format(cell.median),
                 format(cell.mean),
@@ -164,20 +169,66 @@
         });
 
         updateTable('ranking', rows);
+        el('ranking').hidden = !enough.length;
 
-        const notes = [t(enough.length ? 'ranking.note' : 'ranking.insufficient', {
-            sessions:rankings.sessionCount, cells:rankings.cells.length, minimum:rankings.minSessions
-        })];
-        // 未達標的時段仍列出進度，讓使用者看到「已記錄幾場／幾天」。
-        if (partial.length) {
-            const list = partial
-                .map(cell => t('ranking.partialItem', { slot: cell.key, sessions: cell.n, days: cell.observedDays }))
-                .join('、');
-            notes.push(t('ranking.partial', { minimum: rankings.minSessions, list }));
+        const card = el('ranking-note');
+        card.replaceChildren();
+        const heading = document.createElement('strong');
+        heading.textContent = t(comparable ? 'ranking.ready' : 'ranking.collecting');
+        card.append(heading);
+        const addNote = (text, className = '') => {
+            const paragraph = document.createElement('p');
+            paragraph.textContent = text;
+            paragraph.className = className;
+            card.append(paragraph);
+        };
+        addNote(t('ranking.summary', {
+            total: rankings.totalSessions ?? rankings.sessionCount + (rankings.unstarted || 0),
+            usable: rankings.sessionCount, qualified: enough.length
+        }));
+        if (rankings.scope === 'own') addNote(t('ranking.scopeOwn'));
+        else if (rankings.scope === 'all') addNote(t('ranking.scopeAll'));
+        const criteria = document.createElement('ul');
+        criteria.className = 'ranking-criteria';
+        // 翻譯以換行分隔條件，保留語意清單與自然折行。
+        for (const line of t('ranking.criteria', {
+            minimum: rankings.minSessions, days: rankings.minDays ?? 3,
+            window: rankings.earlyMinutes, observed: rankings.minObservedMinutes ?? 20
+        }).split('\n')) {
+            if (!line.trim()) continue;
+            const item = document.createElement('li');
+            item.textContent = line;
+            criteria.append(item);
         }
-        // 完全沒有可用場次時，說清楚是「缺開播時間」而不是場次不夠。
-        if (rankings.unstarted) notes.push(t('ranking.unstarted', { count: rankings.unstarted }));
-        setText(el('ranking-note'), notes.join(' '));
+        card.append(criteria);
+        const excluded = rankings.excluded ?? { missingStart: rankings.unstarted };
+        const reasons = document.createElement('ul');
+        reasons.className = 'ranking-reasons';
+        for (const reason of ['missingStart', 'pending', 'insufficientCoverage']) {
+            if (!excluded[reason]) continue;
+            const item = document.createElement('li');
+            item.textContent = t(`ranking.${reason}`, { count: excluded[reason] });
+            reasons.append(item);
+        }
+        if (reasons.childElementCount) card.append(reasons);
+        if (partial.length) {
+            addNote(t('ranking.progress'), 'ranking-section-title');
+            const progress = document.createElement('ul');
+            // 未達標項目依時段排序，避免讓小樣本分數看起來像排名。
+            for (const cell of [...partial].sort((a, b) => a.key.localeCompare(b.key))) {
+                const item = document.createElement('li');
+                item.textContent = t('ranking.progressItem', {
+                    slot: slotLabel(cell.key), sessions: cell.n, days: cell.observedDays,
+                    missingSessions: Math.max(0, rankings.minSessions - cell.n),
+                    missingDays: Math.max(0, (rankings.minDays ?? 3) - cell.observedDays)
+                });
+                progress.append(item);
+            }
+            card.append(progress);
+        }
+        if (rankings.days < 15) addNote(t('ranking.shortRange'));
+        if (!comparable) addNote(t('ranking.comparison'));
+        addNote(t('ranking.caution'), 'ranking-caution');
     }
 
     /** 重新抓取歷史並更新熱圖、每日統計與時段排名。 */
@@ -200,7 +251,7 @@
             if (requestedPlatform !== el('platform').value || requestedDays !== el('history-days').value || requestedTimezone !== timezone()) { rerun = true; return; }
 
             setText(el('history-status'), (data.storageError ? data.storageError + ' · ' : '') +
-                t('history.status', {platform:data.platform || t('noData'), timezone:timezone(), sessions:data.rankings?.sessionCount ?? 0}));
+                t('history.status', {platform:data.platform || t('noData'), timezone:timezone(), sessions:data.rankings?.totalSessions ?? data.rankings?.sessionCount ?? 0}));
 
             const context = [data.platform, timezone(), window.TTWI18n.language];
             if (changed('heatmap', [context, data.cells])) renderHeatmap(data.cells);
@@ -218,6 +269,7 @@
     el('history-days').addEventListener('change', refresh);
     el('platform').addEventListener('change', refresh);
     window.addEventListener('traffic-cleared', refresh);   // 清理統計後立刻重讀歷史
+    window.addEventListener('traffic-classified', refresh);
     document.addEventListener('languagechange', () => {
         for (const option of el('timezone').options) option.textContent = option.value === SYSTEM_TIMEZONE ? option.value + t('system') : option.value;
         refresh();

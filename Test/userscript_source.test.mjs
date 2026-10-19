@@ -9,7 +9,10 @@ function contextFor(file, start, end, source = fs.readFileSync(new URL('../UserS
     const ctx = vm.createContext({ HTTP_HOST: 'localhost', HTTP_PORT: 3332, FailCount: 0, MaxFail: 5,
         sentIds: new Set(), sentNodes: new WeakSet(), console: { log() {}, error() {} },
         // 目標直播間鎖定與轉送提示是 sendSocketMessage 的外掛依賴，這裡 stub 掉以驗證 payload 本身。
-        canSend: () => true, logBlocked() {}, flashSent() {}, sentKind: () => '聊天',
+        canSend: () => true, logBlocked() {}, flashSent() {}, sentKind: () => '聊天', log() {},
+        // 主播歸屬：TikTokChat 由頁面 handle 取得，liveCenter／YouTube 由使用者設定取得。
+        currentHandle: () => 'target_handle', broadcasterId: () => 'anchor_id',
+        state: { enabled: true, broadcaster: 'yt_channel' }, SERVER_URL: 'http://localhost',
         GM_xmlhttpRequest: request => sent.push(JSON.parse(request.data)) });
     const a = source.indexOf(start), b = source.indexOf(end, a);
     assert.ok(a >= 0, file + ': 找不到起始標記 ' + start);
@@ -23,9 +26,19 @@ test('TikTok and Live Center bridges preserve real metadata and identify their p
         ctx.sendSocketMessage('user', 'hello', '', '', true, 10, [], { msgId: '123', sentAt: null });
         assert.equal(sent[0].platform, 'TikTok'); assert.equal(sent[0].transport, 'userscript');
         assert.equal(sent[0].msgId, '123'); assert.equal(sent[0].sentAt, null);
-        if (file === 'liveCenter.user.js') assert.equal(sent[0].audienceKind, 'top-fans');
+        if (file === 'TikTokChat.user.js') assert.equal(sent[0].broadcasterId, 'target_handle');
+        if (file === 'liveCenter.user.js') {
+            assert.equal(sent[0].audienceKind, 'top-fans');
+            assert.equal(sent[0].broadcasterId, 'anchor_id');
+        }
     }
 });
+test('YouTube bridge attaches the configured broadcaster to the payload', () => {
+    const { ctx, sent } = contextFor('youtube-chat-userscript.user.js', 'function send(data)', '// ─────');
+    ctx.send({ type: 'StreamMessage', platform: 'Youtube', transport: 'userscript', user: 'u', message: 'm' });
+    assert.equal(sent[0].broadcasterId, 'yt_channel');
+});
+
 test('YouTube bridge preserves DOM ID without fabricating a platform timestamp', () => {
     const { ctx } = contextFor('youtube-chat-userscript.user.js', 'function extractMsg(', 'function send(');
     const el = { getAttribute: name => name === 'id' ? 'youtube-id' : null,

@@ -104,7 +104,15 @@ class TrafficDatabase {
             CREATE INDEX IF NOT EXISTS sessions_open ON sessions(platform,ended);
 
             CREATE TABLE IF NOT EXISTS heartbeats (time INTEGER PRIMARY KEY);
+
+            -- 最近一次原生事件宣告的主播識別；供補分類表單帶入，避免 Twitch 的名稱／UserID 對不上。
+            CREATE TABLE IF NOT EXISTS traffic_identities (
+                platform TEXT PRIMARY KEY, broadcaster TEXT NOT NULL,
+                source TEXT NOT NULL, updatedAt INTEGER NOT NULL
+            );
         `);
+        this.lastIdentities = new Map(this.db.prepare('SELECT platform,broadcaster FROM traffic_identities')
+            .all().map(row => [row.platform, row.broadcaster]));
 
         // 舊資料庫補上成效欄位（SQLite 的 ADD COLUMN 沒有 IF NOT EXISTS）。
         const columns = new Set(this.db.prepare('PRAGMA table_info(sessions)').all().map(column => column.name));
@@ -112,10 +120,15 @@ class TrafficDatabase {
             if (!columns.has(column)) this.db.exec(`ALTER TABLE sessions ADD COLUMN ${column} REAL DEFAULT 0`);
         }
 
-        for (const [name,type] of [['actualStarted','INTEGER'],['lastEventAt','INTEGER']]) {
+        for (const [name,type] of [['actualStarted','INTEGER'],['lastEventAt','INTEGER'],['broadcaster','TEXT'],['purpose','TEXT']]) {
             if(!columns.has(name)) this.db.exec('ALTER TABLE sessions ADD COLUMN '+name+' '+type);
         }
         this.db.exec('UPDATE sessions SET lastEventAt=lastSampleAt WHERE lastEventAt IS NULL');
+        this.db.exec(`CREATE TABLE IF NOT EXISTS traffic_profiles (
+            platform TEXT NOT NULL, broadcaster TEXT NOT NULL, purpose TEXT NOT NULL,
+            PRIMARY KEY(platform,broadcaster)
+        )`);
+        this.db.exec('CREATE INDEX IF NOT EXISTS sessions_source ON sessions(platform,broadcaster,ended)');
 
         // minutes／chat_users 的廣告與攔截欄位也是後加的。
         const minuteColumns = new Set(this.db.prepare('PRAGMA table_info(minutes)').all().map(column => column.name));
@@ -201,12 +214,24 @@ class TrafficDatabase {
             }
 
             this.updateSession(event);
+            this.rememberNativeIdentity(event);
             db.exec('COMMIT');
             return true;
         } catch (error) {
             db.exec('ROLLBACK');
             throw error;
         }
+    }
+
+    /** 記住最近一次原生事件宣告的主播識別；備用來源不覆寫，避免把名稱混進 UserID。 */
+    rememberNativeIdentity(event) {
+        if (event.transport !== 'native' || !event.broadcaster) return;
+        if (this.lastIdentities.get(event.platform) === event.broadcaster) return;
+        this.lastIdentities.set(event.platform, event.broadcaster);
+        this.db.prepare(`INSERT INTO traffic_identities(platform,broadcaster,source,updatedAt)
+            VALUES(?,?,'native',?) ON CONFLICT(platform) DO UPDATE SET
+            broadcaster=excluded.broadcaster, source='native', updatedAt=excluded.updatedAt`)
+            .run(event.platform, event.broadcaster, event.receivedAt);
     }
 
     /**
@@ -221,7 +246,7 @@ class TrafficDatabase {
             return;
         }
         if (event.kind === 'join' || event.kind === 'chat') {
-            const open = this.openSession(event.platform);
+            const open = this.openSession(event.platform, event.broadcaster ?? null);
             if (!open) return;
             const column = event.kind === 'join' ? 'joins' : 'chats';
             this.db.prepare(`UPDATE sessions SET ${column}=${column}+1 WHERE id=?`).run(open.id);
@@ -229,7 +254,11 @@ class TrafficDatabase {
     }
 
     /** 取得某平台目前仍在進行（尚未收尾）的場次。 */
-    openSession(platform) {
+    openSession(platform, broadcaster) {
+        if (broadcaster !== undefined) {
+            return this.db.prepare('SELECT * FROM sessions WHERE platform=? AND broadcaster IS ? AND ended IS NULL ORDER BY id DESC LIMIT 1')
+                .get(platform, broadcaster);
+        }
         return this.db.prepare('SELECT * FROM sessions WHERE platform=? AND ended IS NULL ORDER BY id DESC LIMIT 1')
             .get(platform);
     }
@@ -246,7 +275,7 @@ class TrafficDatabase {
     }
 
     extendOrOpenSession(event) {
-        const open = this.openSession(event.platform);
+        const open = this.openSession(event.platform, event.broadcaster ?? null);
         // 遲到事件保留原始／分鐘資料，不倒退即時場次累積指標。
         if(open && event.time < (open.lastEventAt ?? open.lastSampleAt)) return;
         if (open && this.isContinuous(open, event)) {
@@ -270,7 +299,8 @@ class TrafficDatabase {
             VALUES(?,?,?,NULL,?,?,?,0,0,0,0,?,0,0)`)
             .run(event.platform, event.stream ?? null, event.time,
                 event.time, viewers, viewers, samples);
-        this.db.prepare('UPDATE sessions SET actualStarted=?,lastEventAt=? WHERE id=?').run(event.actualStarted??null,event.time,result.lastInsertRowid);
+        this.db.prepare('UPDATE sessions SET actualStarted=?,lastEventAt=?,broadcaster=? WHERE id=?')
+            .run(event.actualStarted??null,event.time,event.broadcaster??null,result.lastInsertRowid);
         if (event.kind === 'metrics') this.applySessionMetrics(result.lastInsertRowid, event);
     }
 
@@ -629,14 +659,45 @@ class TrafficDatabase {
      * 以「場次」而非「分鐘」為單位，避免長場次主宰排名；每桶取開場平均觀看，
      * 計算中位數、平均、標準差與收縮估計（往整體平均拉），樣本不足者標記 insufficient。
      */
-    rankings(platform, days, now, timezone) {
+    rankings(platform, days, now, timezone, selection = null) {
         const platforms = this.platforms();
         platform = platforms.includes(platform) ? platform : platforms[0];
 
-        const rows = this.db.prepare(`SELECT * FROM sessions
-            WHERE platform=? AND actualStarted>=? AND actualStarted<=? AND sampleCount>=? AND earlySpanMs>=?
+        let candidates = this.db.prepare(`SELECT * FROM sessions
+            WHERE platform=? AND COALESCE(actualStarted,started)>=? AND COALESCE(actualStarted,started)<=?
             ORDER BY started`)
-            .all(platform || '', now - days * 86400000, now - EARLY_WINDOW_MS, MIN_SESSION_SAMPLES, 20*60000);
+            .all(platform || '', now - days * 86400000, now);
+
+        if (selection?.purposes) {
+            const profiles = new Map(this.db.prepare('SELECT broadcaster,purpose FROM traffic_profiles WHERE platform=?')
+                .all(platform || '').map(profile => [profile.broadcaster, profile.purpose]));
+            candidates = candidates.filter(session => selection.purposes.includes(
+                session.purpose || profiles.get(session.broadcaster) || 'unknown'));
+        } else if (selection) {
+            const profile = this.db.prepare('SELECT purpose FROM traffic_profiles WHERE platform=? AND broadcaster=?')
+                .get(platform || '', selection.broadcaster);
+            candidates = candidates.filter(session => session.broadcaster === selection.broadcaster &&
+                (session.purpose || profile?.purpose || 'unknown') === selection.purpose);
+        } else {
+            const profiles = new Map(this.db.prepare('SELECT broadcaster,purpose FROM traffic_profiles WHERE platform=?')
+                .all(platform || '').map(profile => [profile.broadcaster, profile.purpose]));
+            candidates = candidates.filter(session => (session.purpose || profiles.get(session.broadcaster)) !== 'test');
+        }
+
+        // 每場只歸入一個原因，讓畫面上的總數與可用／未納入場次能核對。
+        const excluded = { missingStart: 0, pending: 0, insufficientCoverage: 0 };
+        const rows = candidates.filter(session => {
+            if (session.actualStarted == null) {
+                excluded.missingStart++;
+            } else if (session.actualStarted + EARLY_WINDOW_MS > now) {
+                excluded.pending++;
+            } else if (session.sampleCount < MIN_SESSION_SAMPLES || session.earlySpanMs < 20 * 60000) {
+                excluded.insufficientCoverage++;
+            } else {
+                return true;
+            }
+            return false;
+        });
 
         const formatter = new Intl.DateTimeFormat('en-US', {
             timeZone: timezone, weekday: 'short', hour: '2-digit', hourCycle: 'h23',
@@ -690,16 +751,14 @@ class TrafficDatabase {
 
         cells.sort((a, b) => b.shrunk - a.shrunk);
 
-        // 有取樣但沒有開播時間的場次：無法歸入 weekday×hour，單獨回報讓 UI 說明原因。
-        const unstarted = this.db.prepare(`SELECT COUNT(*) AS count FROM sessions
-            WHERE platform=? AND started>=? AND started<=? AND actualStarted IS NULL AND sampleCount>=?`)
-            .get(platform || '', now - days * 86400000, now, MIN_SESSION_SAMPLES).count;
-
         return {
             platform, platforms, days, timezone,
             earlyMinutes: EARLY_WINDOW_MS / 60000,
             sessionCount: rows.length, globalMean,
-            minSessions: MIN_BUCKET_SESSIONS, cells, unstarted
+            totalSessions: candidates.length, excluded,
+            purposes: selection?.purposes ?? null,
+            minSessions: MIN_BUCKET_SESSIONS, minDays: 3, minObservedMinutes: 20,
+            cells, unstarted: excluded.missingStart
         };
     }
 

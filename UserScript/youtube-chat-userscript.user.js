@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Chat to TTW Server
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  直接從 YouTube Studio 直播聊天室 DOM 抓訊息送到 TTW 伺服器（不耗 API quota；新增面板可手動開關轉接）
 // @author       TTW
 // @match        https://studio.youtube.com/live_chat*
@@ -37,9 +37,13 @@
     function loadState() {
         try {
             const saved = JSON.parse(localStorage.getItem(STATE_KEY) || '{}')
-            return { enabled: saved.enabled === true }
+            return {
+                enabled: saved.enabled === true,
+                // 主播帳號只用於人流歸屬；未填時不猜測，維持未分類。
+                broadcaster: typeof saved.broadcaster === 'string' ? saved.broadcaster.replace(/^@/, '').trim().toLowerCase() : '',
+            }
         } catch {
-            return { enabled: false }
+            return { enabled: false, broadcaster: '' }
         }
     }
 
@@ -112,11 +116,12 @@
             return
         }
         flashSent(data.user, data.message)
+        const payload = { ...data, broadcasterId: state.broadcaster || undefined }
         GM_xmlhttpRequest({
             method: 'POST',
             url: SERVER_URL,
             headers: { 'Content-Type': 'application/json' },
-            data: JSON.stringify(data),
+            data: JSON.stringify(payload),
             onload(r) {
                 if (r.status !== 200) log('伺服器回傳', r.status)
             },
@@ -143,6 +148,8 @@
 #ttw-yt-panel .ttw-switch input:checked + .ttw-track::after { transform: translateX(16px); background: #fff; }
 #ttw-yt-panel .ttw-switch input:focus-visible + .ttw-track { outline: 2px solid #60a5fa; outline-offset: 2px; }
 #ttw-yt-panel .ttw-switch-text { color: #cbd5e1; }
+#ttw-yt-panel .ttw-field { display: grid; gap: 4px; margin: 8px 0; color: #cbd5e1; }
+#ttw-yt-panel .ttw-field input { width: 100%; box-sizing: border-box; padding: 4px 6px; border: 1px solid #344663; border-radius: 6px; background: #0d1524; color: #e7edf7; }
 #ttw-yt-panel .ttw-state { margin-top: 6px; padding: 5px 8px; border-radius: 6px; background: #0d1524; overflow-wrap: anywhere; }
 #ttw-yt-panel .ttw-state.on { color: #86efac; }
 #ttw-yt-panel .ttw-state.off { color: #9ca3af; }
@@ -186,15 +193,25 @@
                     h('span', { class: 'ttw-track' }),
                     h('span', { class: 'ttw-switch-text', text: '啟用轉接' })
                 ]),
+                h('label', { class: 'ttw-field' }, [
+                    h('span', { text: '主播帳號（選填）' }),
+                    h('input', { type: 'text', id: 'ttw-yt-broadcaster', placeholder: '@頻道帳號' })
+                ]),
                 h('div', { class: 'ttw-state', id: 'ttw-yt-state' }),
                 h('div', { class: 'ttw-last', id: 'ttw-yt-last' }),
-                h('div', { class: 'ttw-hint', text: 'YouTube 無法自動判斷是不是目標直播主，請自己確認這一台再開啟。設定自動存在此瀏覽器。' })
+                h('div', { class: 'ttw-hint', text: 'YouTube 無法自動判斷是不是目標直播主，請自己確認這一台再開啟；填主播帳號可讓人流歸屬到正確主播，未填則記為未分類。設定自動存在此瀏覽器。' })
             ])
         ])
         document.body.append(box)
 
         const enabled = box.querySelector('#ttw-yt-enabled')
         enabled.checked = state.enabled
+        const broadcaster = box.querySelector('#ttw-yt-broadcaster')
+        broadcaster.value = state.broadcaster || ''
+        broadcaster.oninput = () => {
+            state.broadcaster = broadcaster.value.replace(/^@/, '').trim().toLowerCase()
+            saveState()
+        }
         box.querySelector('#ttw-yt-pill').onclick = () => {
             const body = box.querySelector('#ttw-yt-body')
             body.hidden = !body.hidden

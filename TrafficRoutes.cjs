@@ -104,11 +104,16 @@ function serveTraffic(req, res, authorized = false) {
             const platform = url.searchParams.get('platform');
             const days = Number(url.searchParams.get('days')) === 7 ? 7 : 30;
             const now = Date.now();
+            // 頁面排名回答「自己的開場表現」；尚未分類時才暫用全來源並由前端標示。
+            const own = database.rankings(platform, days, now, timezone, { purposes: ['own'] });
+            const rankings = own.totalSessions
+                ? { ...own, scope: 'own' }
+                : { ...database.rankings(platform, days, now, timezone), scope: 'all' };
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.end(JSON.stringify({
                 storageError,
                 ...database.distribution(platform, days, now, timezone),
-                rankings: database.rankings(platform, days, now, timezone),
+                rankings,
                 metrics: database.metrics(platform, days, now, timezone)
             }));
         } catch {
@@ -141,4 +146,4 @@ function serveTraffic(req, res, authorized = false) {
     return true;
 }
 
-module.exports = { traffic, serveTraffic };
+module.exports = { traffic, database, serveTraffic };

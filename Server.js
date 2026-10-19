@@ -39,6 +39,8 @@ var TEST_LOG = [
 writeLog("Default",TEST_LOG.join("\n"))
 
 process.loadEnvFile(".env"); // 讀取 .env
+// 提醒由主服務啟動，不依賴聊天子程序或是否有人開啟人流頁。
+const { servePlanner } = require('./TrafficReminderRoutes.cjs');
 
 let tiktokProcess = null;
 const { RuntimeState } = require('./ScriptLib/runtime/state.cjs');
@@ -480,6 +482,7 @@ function startRuntime(url) {
 }
 
 const server = http.createServer((req, res) => {
+    if (servePlanner(req,res)) return;
     if (require('./TrafficRoutes.cjs').serveTraffic(req,res,isValidToken(parseCookies(req).authToken))) return;
     if (serveRuntime(req, res, runtimeState, startRuntime)) return;
     if (require('./WebAssets.cjs').serveWebAsset(req, res)) return;

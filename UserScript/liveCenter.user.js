@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat → Socket Bridge
 // @namespace    pip-chat-bridge
-// @version      1.15
+// @version      1.16
 // @description  Listen TikTok live chat and forward to socket server
 // @author       Nuclear0709
 // @match        https://livecenter.tiktok.com/*
@@ -27,6 +27,21 @@
     const HTTP_HOST = "127.0.0.1";
     const HTTP_PORT = 3332;
 
+    // 主播識別：live_monitor 頁面沒有可靠的帳號來源，讓使用者明確填寫；
+    // 空值時不猜測，人流會留在「未分類」而不是被錯歸到別人身上。
+    const BROADCASTER_KEY = 'ttw-livecenter-broadcaster';
+    let broadcasterName = loadBroadcaster();
+
+    /** 讀取主播帳號設定；只保留帳號本體，去除 @ 與空白。 */
+    function loadBroadcaster() {
+        try {
+            return String(GM_getValue(BROADCASTER_KEY, '') || '').replace(/^@/, '').trim().toLowerCase();
+        } catch { return ''; }
+    }
+
+    /** 目前設定的主播識別；未設定時回傳 undefined。 */
+    function broadcasterId() { return broadcasterName || undefined; }
+
     // 已處理過的訊息集合
     const processedMessages = new WeakSet();
 
@@ -42,7 +57,7 @@
     }, 30000);
 
 function sendAudienceUpdate(userNum, userList) {
-    const payload = { type: 'audience', platform: 'TikTok', transport: 'userscript', audienceKind: 'top-fans', userNum, userList };
+    const payload = { type: 'audience', platform: 'TikTok', transport: 'userscript', broadcasterId: broadcasterId(), audienceKind: 'top-fans', userNum, userList };
     const sendURL = `http://${HTTP_HOST}:${HTTP_PORT}/chat`;
     GM_xmlhttpRequest({
         method: "POST", url: sendURL, data: JSON.stringify(payload),
@@ -82,7 +97,7 @@ function sendMetrics() {
     GM_xmlhttpRequest({
         method: "POST",
         url: `http://${HTTP_HOST}:${HTTP_PORT}/chat`,
-        data: JSON.stringify({ type: 'metrics', platform: 'TikTok', transport: 'userscript', observedAt: Date.now(), ...metrics }),
+        data: JSON.stringify({ type: 'metrics', platform: 'TikTok', transport: 'userscript', broadcasterId: broadcasterId(), observedAt: Date.now(), ...metrics }),
         headers: { "Content-Type": "application/json" },
         onerror: () => { /* ignore */ }
     });
@@ -91,7 +106,7 @@ function sendMetrics() {
 function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 0, userList = [], metadata = {}) {
 
     const payload = {
-        ...metadata, platform: 'TikTok', transport: 'userscript', observedAt: Date.now(), audienceKind: 'top-fans',
+        ...metadata, platform: 'TikTok', transport: 'userscript', broadcasterId: broadcasterId(), observedAt: Date.now(), audienceKind: 'top-fans',
         type: 'StreamMessage',
         user,
         message,
@@ -254,7 +269,7 @@ function getTopFanUsers() {
     host.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483646;max-width:calc(100vw - 32px)';
     const root = host.attachShadow({ mode: 'open' });
     const style = document.createElement('style');
-    style.textContent = ':host{font:13px/1.6 system-ui;color:#e5e7eb}section{background:#111827;border:1px solid #64748b;border-radius:10px;padding:12px;width:290px;max-width:calc(100vw - 58px);box-shadow:0 4px 20px #0006}strong{display:block}p{margin:6px 0}button{padding:6px 10px;background:#2563eb;border:0;border-radius:6px;color:white;cursor:pointer}button:disabled{opacity:.5;cursor:default}label{display:block;margin:8px 0}small{color:#cbd5e1}input{vertical-align:middle}';
+    style.textContent = ':host{font:13px/1.6 system-ui;color:#e5e7eb}section{background:#111827;border:1px solid #64748b;border-radius:10px;padding:12px;width:290px;max-width:calc(100vw - 58px);box-shadow:0 4px 20px #0006}strong{display:block}p{margin:6px 0}button{padding:6px 10px;background:#2563eb;border:0;border-radius:6px;color:white;cursor:pointer}button:disabled{opacity:.5;cursor:default}label{display:block;margin:8px 0}small{color:#cbd5e1}input{vertical-align:middle}input[type=text]{width:100%;box-sizing:border-box;margin-top:4px;padding:4px 6px;border:1px solid #475569;border-radius:6px;background:#0f172a;color:#e5e7eb}';
     const panel = document.createElement('section');
     const title = document.createElement('strong');
     title.textContent = 'TTW · TikTok 直播中控';
@@ -268,6 +283,17 @@ function getTopFanUsers() {
     const label = document.createElement('label');
     const toggle = document.createElement('input'); toggle.type = 'checkbox';
     label.append(toggle, document.createTextNode(' 啟用聊天轉接'));
+    const accountLabel = document.createElement('label');
+    const accountInput = document.createElement('input');
+    accountInput.type = 'text';
+    accountInput.placeholder = '@你的帳號（選填）';
+    accountInput.value = broadcasterName;
+    accountInput.setAttribute('aria-label', '主播帳號（用於人流歸屬）');
+    accountInput.oninput = () => {
+        broadcasterName = accountInput.value.replace(/^@/, '').trim().toLowerCase();
+        GM_setValue(BROADCASTER_KEY, broadcasterName);
+    };
+    accountLabel.append(document.createTextNode('主播帳號（選填） '), accountInput);
     const actions = document.createElement('div'); actions.className = 'actions';
     const autoBtn = document.createElement('button'); autoBtn.type = 'button'; autoBtn.textContent = '恢復自動';
     const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = '重設位置';
@@ -275,7 +301,7 @@ function getTopFanUsers() {
     note.textContent = '僅官方 live_monitor 頁面會自動啟動；其他頁面（如回放）預設不觀察，可用上方開關強制啟用。';
     header.append(title, collapse);
     actions.append(autoBtn, reset);
-    body.append(status, label, actions, note);
+    body.append(status, label, accountLabel, actions, note);
     panel.append(header, badge, body);
     style.textContent += 'header{display:flex;align-items:center;gap:8px}header strong{flex:1;cursor:grab;touch-action:none;user-select:none;font-size:13px}header strong:active{cursor:grabbing}header button{background:#1b2940;padding:3px 8px}button:focus-visible,strong:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}.badge{display:block;color:#93c5fd;font-size:12px;margin-top:4px}.actions{display:flex;gap:8px;margin:8px 0}.actions button{font-size:12px}.actions button:last-child{background:#334155}[hidden]{display:none!important}section{box-sizing:border-box;width:280px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto}';
     root.append(style, panel);

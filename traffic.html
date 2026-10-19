@@ -117,8 +117,8 @@
       <p><span data-i18n="traffic.history.metricsNote">互動指標跨場次相加；累計觸及人數取最大值（同一批觀眾可能橫跨多場）。</span></p>
       <div id="metrics" class="table-wrap"></div>
 
-      <h3><span data-i18n="traffic.ranking.title">最佳開播時段（歷史參考）</span></h3>
-      <p id="ranking-note"></p>
+      <h3><span data-i18n="traffic.ranking.title">開播時段比較（歷史參考）</span></h3>
+      <div id="ranking-note" class="ranking-note" role="status"></div>
       <div id="ranking" class="table-wrap"></div>
     </section>
 
@@ -126,6 +126,80 @@
       <h2 id="detail-title"><span data-i18n="traffic.detail.recent">最近進房事件（最多 200 筆）</span></h2>
       <p class="text-gray-500 text-xs"><span data-i18n="traffic.detail.note">進房事件不是每個平台都提供：原生目前只有 TikTok 的 MEMBER 事件；Twitch／Kick／Odysee／YouTube 沒有「觀眾進房」事件，因此這裡可能是空的。</span></p>
       <div id="details" class="table-wrap"></div>
+    </section>
+
+    <section class="panel" id="stream-planner">
+      <h2 data-i18n="traffic.plan.title">下次開播建議與提醒</h2>
+      <p data-i18n="traffic.plan.intro">只依自己的場次推薦；其他主播供比較，測試與未分類資料不納入。</p>
+      <p id="plan-status" role="status"></p>
+      <div id="plan-health" class="plan-cards" role="status"></div>
+      <form id="plan-settings" class="plan-form">
+        <label><input id="plan-enabled" type="checkbox"> <span data-i18n="traffic.plan.enabled">自動推薦並提醒</span></label>
+        <fieldset><legend data-i18n="traffic.plan.channels">通知管道（提前 30 分鐘）</legend>
+          <label><input id="plan-ntfy" type="checkbox"> ntfy <span id="plan-ntfy-state"></span></label>
+          <label><input id="plan-bark" type="checkbox"> Bark <span id="plan-bark-state"></span></label>
+          <a href="/config" data-i18n="traffic.plan.configure">設定通知網址</a>
+        </fieldset>
+        <div class="plan-fields">
+          <label><span data-i18n="traffic.timezone">時區</span><input id="plan-zone" required maxlength="100" placeholder="Asia/Taipei"></label>
+          <label><span data-i18n="traffic.plan.history">歷史天數</span><select id="plan-history"><option>30</option><option>90</option><option>180</option></select></label>
+          <label><span data-i18n="traffic.plan.limit">每個主播每週最多提醒次數</span><input id="plan-limit" type="number" min="1" max="7" required></label>
+        </div>
+        <fieldset><legend data-i18n="traffic.plan.days">可開播星期</legend><div id="plan-days" class="plan-options"></div></fieldset>
+        <fieldset><legend data-i18n="traffic.plan.hours">可開播整點（依上方時區）</legend><div id="plan-hours" class="plan-options"></div></fieldset>
+        <p class="plan-muted" data-i18n="traffic.plan.policy">同一主播至少兩個時段達標才推薦，每個時段需 3 場／3 個日期及足夠開場觀測。主服務須持續運行；錯過超過 5 分鐘不補發，失敗不自動重送。</p>
+        <button type="submit" data-i18n="traffic.plan.save">儲存提醒設定</button>
+      </form>
+      <h3 data-i18n="traffic.plan.next">建議與發送紀錄</h3>
+      <div id="plan-jobs" class="plan-cards"></div>
+      <h3 data-i18n="traffic.plan.compare">自己與參考主播的時段明細</h3>
+      <p class="plan-muted" data-i18n="traffic.plan.compareNote">依平台與主播分開比較開場觀看；不同主播的觀看人數不可直接視為優劣，也不代表避開對方就會更好。測試資料不參與本區。</p>
+      <div id="plan-analysis-table" class="table-wrap" hidden></div>
+      <p id="plan-analysis-empty" class="plan-muted" hidden></p>
+      <details id="plan-analysis-evidence">
+        <summary data-i18n="traffic.plan.analysis.evidence">詳細證據</summary>
+        <div id="plan-analysis" class="plan-cards"></div>
+      </details>
+      <details id="plan-classification">
+        <summary data-i18n="traffic.plan.classification">管理主播與場次用途</summary>
+        <p class="plan-muted" data-i18n="traffic.plan.classifyNote">舊資料不猜測主播身分。可手動指定主播，標為自己、參考或測試；清除設定即回到未分類。單場設定優先於帳號預設。清單預設只顯示待分類，可切換狀態查看已分類場次。標記可還原，不刪資料。上方既有平台總圖仍包含所有來源；刪除請使用下方清理預覽。</p>
+        <div id="plan-profiles" class="plan-cards"></div>
+        <div class="plan-card" id="plan-backfill">
+          <h4 class="plan-backfill-title" data-i18n="traffic.plan.backfill.title">補舊資料分類</h4>
+          <p class="plan-muted" data-i18n="traffic.plan.backfill.note">只會修改主播與用途，不會動觀看數、聊天數或場次時間。先預覽符合場次，再套用；可復原最近一次。</p>
+          <div class="plan-fields">
+            <label><span data-i18n="traffic.platform">平台</span><select id="plan-bf-platform"><option value="" data-i18n="traffic.plan.all">全部平台</option></select></label>
+            <label><span data-i18n="traffic.plan.status">狀態</span><select id="plan-bf-status"><option value="unclassified" selected data-i18n="traffic.plan.unknown">未分類</option><option value="own" data-i18n="traffic.plan.own">自己的直播</option><option value="reference" data-i18n="traffic.plan.reference">參考主播</option><option value="test" data-i18n="traffic.plan.test">測試資料</option><option value="all" data-i18n="traffic.plan.allStatus">全部狀態</option></select></label>
+            <label><span data-i18n="traffic.plan.backfill.range">時間範圍</span><select id="plan-bf-days"></select></label>
+            <label class="plan-check"><input id="plan-bf-complete" type="checkbox" checked> <span data-i18n="traffic.plan.backfill.complete">只含已有觀測資料的場次</span></label>
+          </div>
+          <div class="plan-fields">
+            <label class="plan-grow"><span data-i18n="traffic.plan.broadcaster">主播識別（TikTok 帳號／Twitch 使用者 ID）</span><input id="plan-bf-broadcaster" maxlength="100" list="plan-bf-broadcasters"></label>
+            <datalist id="plan-bf-broadcasters"></datalist>
+            <button id="plan-bf-use-env" type="button" class="plan-secondary" data-i18n="traffic.plan.backfill.useEnv">帶入 .env</button>
+            <label class="plan-purpose"><span data-i18n="traffic.plan.purpose">資料用途</span><select id="plan-bf-purpose"><option value="" selected data-i18n="traffic.plan.backfill.keep">不改用途</option><option value="own" data-i18n="traffic.plan.own">自己的直播</option><option value="reference" data-i18n="traffic.plan.reference">參考主播</option><option value="test" data-i18n="traffic.plan.test">測試資料</option><option value="clear" data-i18n="traffic.plan.backfill.clear">清除用途（沿用帳號預設）</option></select></label>
+          </div>
+          <div class="plan-fields plan-actions">
+            <button id="plan-bf-preview" type="button" class="plan-secondary" data-i18n="traffic.plan.backfill.preview">預覽符合場次</button>
+            <button id="plan-bf-apply" type="button" disabled data-i18n="traffic.plan.backfill.apply">確定套用</button>
+            <button id="plan-bf-clear" type="button" class="plan-secondary" hidden data-i18n="traffic.plan.backfill.clearSelection">取消全選</button>
+            <button id="plan-bf-undo" type="button" class="plan-secondary" hidden data-i18n="traffic.plan.backfill.undo">復原最近批次</button>
+          </div>
+          <p id="plan-bf-message" class="plan-muted plan-backfill-message" role="status"></p>
+          <div id="plan-bf-batch" class="plan-cards" hidden></div>
+          <div id="plan-bf-preview-data" class="plan-cards"></div>
+          <p id="plan-bf-last" class="plan-muted" role="status"></p>
+        </div>
+        <div class="plan-fields">
+          <label><span data-i18n="traffic.platform">平台</span><select id="plan-platform"><option value="" data-i18n="traffic.plan.all">全部平台</option></select></label>
+          <label><span data-i18n="traffic.plan.status">狀態</span><select id="plan-status-filter"><option value="unclassified" selected data-i18n="traffic.plan.unknown">未分類</option><option value="own" data-i18n="traffic.plan.own">自己的直播</option><option value="reference" data-i18n="traffic.plan.reference">參考主播</option><option value="test" data-i18n="traffic.plan.test">測試資料</option><option value="all" data-i18n="traffic.plan.allStatus">全部狀態</option></select></label>
+        </div>
+        <div class="plan-fields plan-list-actions">
+          <button id="plan-tests" type="button" data-i18n="traffic.plan.markTests">將本頁未分類場次標為測試</button>
+        </div>
+        <div id="plan-sessions" class="plan-cards"></div>
+        <div class="plan-fields"><button id="plan-prev" type="button" data-i18n="traffic.plan.prev">上一頁</button><span id="plan-page"></span><span id="plan-counts" class="plan-muted"></span><button id="plan-next" type="button" data-i18n="traffic.plan.nextPage">下一頁</button></div>
+      </details>
     </section>
 
     <details class="panel" id="cleanup">
@@ -153,5 +227,6 @@
   <script src="/assets/i18n.js"></script>
   <script src="/assets/traffic.js"></script>
   <script src="/assets/traffic-history.js"></script>
+  <script src="/assets/traffic-planner.js"></script>
 </body>
 </html>

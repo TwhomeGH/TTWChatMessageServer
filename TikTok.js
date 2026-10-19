@@ -1,4 +1,5 @@
-import { reportTraffic } from './ScriptLib/traffic/report.mjs';
+import { reportTraffic as sendTraffic } from './ScriptLib/traffic/report.mjs';
+import { broadcasterForPlatform } from './ScriptLib/traffic/attribution.mjs';
 import { closeDirectSigner } from './SignServer/direct-signer.mjs';
 import { startOdyseeChat, stopOdyseeChat } from './ScriptLib/odysee/chat.mjs';
 import { startYoutubeChat, stopYoutubeChat } from './ScriptLib/youtube/chat.mjs';
@@ -145,11 +146,24 @@ console.log('收到參數:', keyword, isTK ? '(TikTok)' : '', isTwitch ? '(Twitc
 console.log('isBark=', isBark, 'isNtfy=', isNtfy, 'isSocket=', isSocket, 'isTwitch=', isTwitch, 'isKick=', isKick, 'isOdysee=', isOdysee, 'isYoutube=', isYoutube);
 console.log('isBoth=', isBoth, 'platforms=', platformsArg ? platformsArg.split('=')[1] : '');
 
-// TikTok 用戶名稱
-
+// 各平台正在觀測的主播識別；留言者 ID 不能用作主播 ID。
 const tiktokName = keyword.length > 0 ? keyword : process.env.TIKTOK_NAME || "coffeelatte0709";
+const kickChannelName = process.env.KICK_USER_NAME || keyword || '';
 const odyseeChannelName = process.env.ODYSEE_CHANNEL_NAME || keyword || '';
 const youtubeChannelName = process.env.YOUTUBE_CHANNEL_ID || keyword || '';
+
+/**
+ * 將正在觀測的主播身分附於事件。
+ * tuser 是 ESM live binding，必須在事件發生時讀取，不能在模組載入時快取值。
+ * @param {Object} data 原生事件。
+ * @returns {void}
+ */
+function reportTraffic(data) {
+    sendTraffic({ ...data, broadcasterId: broadcasterForPlatform(data.platform, {
+        tiktokName, twitchUser: tuser, kickName: kickChannelName,
+        odyseeName: odyseeChannelName, youtubeName: youtubeChannelName
+    }) });
+}
 const youtubeApiKey = process.env.YOUTUBE_API_KEY || '';
 const youtubePollIntervalS = parseInt(process.env.YOUTUBE_POLL_INTERVAL_S) || 30
 
@@ -277,7 +291,7 @@ const clipService = createClipService({
 });
 
 const kickDeps = {
-    channelName: process.env.KICK_USER_NAME || keyword || '',
+    channelName: kickChannelName,
     writeLog,
     notify,
     sendSystem: kickSenders.system,

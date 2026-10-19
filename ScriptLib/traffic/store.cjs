@@ -41,8 +41,9 @@ class TrafficStore {
         this.lastNativeViewersAt = new Map();
         for (const event of this.events) {
             if (event.kind === 'viewers' && event.evidence === 'native') {
-                const previous = this.lastNativeViewersAt.get(event.platform) ?? 0;
-                if (event.receivedAt > previous) this.lastNativeViewersAt.set(event.platform, event.receivedAt);
+                const source = JSON.stringify([event.platform, event.broadcaster ?? null]);
+                const previous = this.lastNativeViewersAt.get(source) ?? 0;
+                if (event.receivedAt > previous) this.lastNativeViewersAt.set(source, event.receivedAt);
             }
         }
     }
@@ -77,6 +78,9 @@ class TrafficStore {
         const transport = typeof raw.transport === 'string' ? raw.transport.slice(0, 40) : 'unknown';
         const user = String(raw.userId || raw.user || '').slice(0, 100);
         const stream = this.streamOf(raw);
+        const broadcaster = typeof raw.broadcasterId === 'string' && raw.broadcasterId.trim()
+            ? raw.broadcasterId.trim().replace(/^@/, '').toLowerCase().slice(0, 100) : null;
+        const source = JSON.stringify([platform, broadcaster]);
 
         const id = raw.msgId || raw.id;
         this.expireSeen(receivedAt);
@@ -84,9 +88,9 @@ class TrafficStore {
         // 有事件 ID 用 ID 去重（保留 24 小時）；沒 ID 的 join／chat 用
         // 「同平台、同類型、同人、同文字」10 秒去重；觀看取樣不去重。
         const key = id
-            ? platform + ':' + kind + ':' + id
+            ? source + ':' + kind + ':' + id
             : kind !== 'viewers' && user
-                ? platform + ':' + kind + ':' + user + ':' + String(raw.message || '')
+                ? source + ':' + kind + ':' + user + ':' + String(raw.message || '')
                 : null;
         if (key && this.seen.has(key)) return false;
 
@@ -95,9 +99,9 @@ class TrafficStore {
         // 原生優先：原生樣本在線時，備用（userscript）觀看樣本不計入；原生靜默後備用才接手。
         if (kind === 'viewers') {
             if (transport === 'native') {
-                this.lastNativeViewersAt.set(platform, receivedAt);
+                this.lastNativeViewersAt.set(source, receivedAt);
             } else {
-                const lastNative = this.lastNativeViewersAt.get(platform);
+                const lastNative = this.lastNativeViewersAt.get(source);
                 if (lastNative != null && receivedAt - lastNative <= NATIVE_PRIORITY_MS) return false;
             }
         }
@@ -129,6 +133,7 @@ class TrafficStore {
             userId: String(raw.userId || ''),
             viewers: kind === 'viewers' ? raw.userNum : null,
             stream,
+            broadcaster,
             // 開播時間必須由來源明確提供，不可用首次接收時間代替。
             actualStarted: Number.isFinite(Date.parse(raw.startedAt)) && Date.parse(raw.startedAt) <= time ? Date.parse(raw.startedAt) : null,
             evidence: transport === 'native' ? 'native' : 'declared',
