@@ -30,11 +30,18 @@ function fixture(t) {
             }
         }
     };
+    const seedPartial = (broadcaster, start, platform = 'TikTok', value = 20) => {
+        for (let minute = 0; minute <= 20; minute++) {
+            now = start + minute * 60000;
+            store.record({ type: 'audience', platform, broadcasterId: broadcaster,
+                streamId: `partial-${broadcaster}-${start}`, startedAt: new Date(start).toISOString(), userNum: value });
+        }
+    };
     const enable = extra => planner.saveSettings({
         ...planner.settings(), enabled: true, channels: ['ntfy', 'bark'], timezone: 'UTC',
         hours: [10], ...extra
     });
-    return { database, planner, store, sent, options, seed, enable, setNow: value => { now = value; } };
+    return { database, planner, store, sent, options, seed, seedPartial, enable, setNow: value => { now = value; } };
 }
 
 test('同平台不同主播的場次及原生優先權隔離，未知來源不接到已知主播', t => {
@@ -70,6 +77,82 @@ test('分類可還原且排除測試場，參考主播不影響自己的平均�
     assert.ok(jobs.length > 0);
     assert.ok(jobs.every(job => job.broadcaster === 'self'));
     assert.equal(f.database.db.prepare('SELECT COUNT(*) AS n FROM sessions').get().n, 12);
+});
+
+test('資料不足時提供可開播時段的累積建議，依缺口與最近開播放序', t => {
+    const f = fixture(t);
+    f.setNow(MONDAY);
+    f.seedPartial('self', MONDAY);
+    f.seedPartial('self', MONDAY + DAY);
+    f.planner.classifyProfile({ platform: 'TikTok', broadcaster: 'self', purpose: 'own' });
+    f.setNow(MONDAY + 3 * DAY);
+    f.enable();
+    const snapshot = f.planner.snapshot();
+    assert.deepEqual(snapshot.collecting.map(row => row.slot), ['Tue 10', 'Mon 10']);
+    assert.ok(snapshot.collecting.every(row => row.need === 2 && row.minimum === 3));
+    assert.equal(snapshot.jobs.length, 0);
+    assert.throws(() => f.planner.addCollecting({ platform: 'TikTok', broadcaster: 'self', slot: 'Wed 10' }),
+        { message: 'collecting' });
+    f.enable({ hours: [18] });
+    assert.equal(f.planner.snapshot().collecting.length, 0);
+});
+
+test('累積目標建立每週提醒，移除後取消', t => {
+    const f = fixture(t);
+    f.setNow(MONDAY);
+    f.seedPartial('self', MONDAY);
+    f.seedPartial('self', MONDAY + DAY);
+    f.planner.classifyProfile({ platform: 'TikTok', broadcaster: 'self', purpose: 'own' });
+    f.setNow(MONDAY + 3 * DAY);
+    f.enable();
+    const target = f.planner.addCollecting({ platform: 'TikTok', broadcaster: 'self', slot: 'Mon 10' });
+    assert.equal(target.active, 1);
+    const snapshot = f.planner.snapshot();
+    assert.equal(snapshot.collectingTargets.length, 1);
+    assert.ok(snapshot.collectingTargets[0].nextAt > f.options.now());
+    const jobs = snapshot.jobs.filter(job => job.kind === 'collecting');
+    assert.ok(jobs.length >= 2);
+    assert.ok(jobs.every(job => job.slot === 'Mon 10'));
+    f.planner.removeCollecting({ id: target.id });
+    const after = f.planner.snapshot();
+    assert.equal(after.collectingTargets.length, 0);
+    assert.equal(after.jobs.filter(job => job.kind === 'collecting').length, 0);
+});
+
+test('累積時段達標後自動停用目標並取消提醒', t => {
+    const f = fixture(t);
+    f.setNow(MONDAY);
+    f.seedPartial('self', MONDAY);
+    f.seedPartial('self', MONDAY + DAY);
+    f.planner.classifyProfile({ platform: 'TikTok', broadcaster: 'self', purpose: 'own' });
+    f.setNow(MONDAY + 3 * DAY);
+    f.enable();
+    const target = f.planner.addCollecting({ platform: 'TikTok', broadcaster: 'self', slot: 'Mon 10' });
+    f.seedPartial('self', MONDAY + 7 * DAY);
+    f.seedPartial('self', MONDAY + 14 * DAY);
+    f.setNow(MONDAY + 16 * DAY);
+    const snapshot = f.planner.snapshot();
+    assert.equal(snapshot.collectingTargets.length, 0);
+    assert.equal(snapshot.jobs.filter(job => job.kind === 'collecting').length, 0);
+    assert.equal(f.database.db.prepare('SELECT active FROM traffic_collecting_targets WHERE id=?').get(target.id).active, 0);
+});
+
+test('累積提醒送出時使用獨立標題與進度內容', async t => {
+    const f = fixture(t);
+    f.setNow(MONDAY);
+    f.seedPartial('self', MONDAY);
+    f.seedPartial('self', MONDAY + DAY);
+    f.planner.classifyProfile({ platform: 'TikTok', broadcaster: 'self', purpose: 'own' });
+    f.setNow(MONDAY + 3 * DAY);
+    f.enable();
+    f.planner.addCollecting({ platform: 'TikTok', broadcaster: 'self', slot: 'Mon 10' });
+    const nextAt = f.planner.snapshot().collectingTargets[0].nextAt;
+    f.setNow(nextAt - 30 * 60000);
+    await f.planner.tick();
+    assert.ok(f.sent.length > 0);
+    assert.match(f.sent[0][1], /資料累積提醒/);
+    assert.match(f.sent[0][2], /Mon 10|週一/);
+    assert.match(f.sent[0][2], /1\/3/);
 });
 
 test('待分類是狀態而非可寫入用途，批次指定可清除', t => {

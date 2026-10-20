@@ -216,6 +216,14 @@ canvas {cursor:crosshair;}
 .plan-cards {display:grid;gap:12px;margin:16px 0;}
 .plan-card {padding:16px;background:#111827;border:1px solid #334155;border-radius:10px;overflow-wrap:anywhere;}
 .plan-card strong {color:#bfdbfe;}
+.plan-collecting {border-color:#1d4ed8;background:#0b1b3a;}
+.plan-collect-row {padding:10px 0;border-top:1px solid #1e3a5f;}
+.plan-collect-row:first-of-type {border-top:0;}
+.plan-collect-head {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;}
+.plan-collect-platform {display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;padding:4px 0;}
+.plan-collect-platform > span:first-child {min-width:64px;font-weight:600;color:#e2e8f0;}
+.plan-collecting .plan-badge {color:#bfdbfe;border:1px solid #1d4ed8;border-radius:999px;padding:1px 8px;font-size:.75rem;}
+.plan-collecting .plan-fields {margin-top:8px;}
 .plan-card p,.plan-card ul {margin:10px 0;line-height:1.7;}
 .plan-card ul {list-style:disc;padding-left:24px;}
 .plan-muted {color:#aebdce;font-size:.875rem;line-height:1.7;}

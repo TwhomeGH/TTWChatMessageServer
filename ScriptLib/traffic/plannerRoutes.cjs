@@ -46,6 +46,10 @@ function createPlannerRoutes(planner) {
                     case 'backfillBatch': result = planner.batchDetails(value?.id, value?.page); break;
                     case 'backfillUndo': result = planner.undoBackfill(value?.id); break;
                     case 'skip': planner.skip(value); break;
+                    case 'collectingAdd': result = { saved: true, target: planner.addCollecting(value) }; break;
+                    case 'collectingAddSlot': result = { saved: true, targets: planner.addCollectingSlot(value?.slot) }; break;
+                    case 'collectingRemove': result = { saved: true, target: planner.removeCollecting(value) }; break;
+                    case 'collectingRemoveSlot': result = { saved: true, targets: planner.removeCollectingSlot(value?.slot) }; break;
                     default: throw new RangeError('action');
                 }
                 respond(200, result ?? { saved: true });
@@ -57,7 +61,8 @@ function createPlannerRoutes(planner) {
                 }
                 const fields = ['enabled', 'channels', 'historyDays', 'maxPerWeek', 'weekdays', 'hours', 'timezone',
                     'channelNotConfigured', 'profile', 'session', 'sessions', 'purpose', 'startAt', 'action',
-                    'backfill', 'status', 'days', 'completeOnly', 'assignment', 'broadcaster', 'expected', 'tooMany', 'batch'];
+                    'backfill', 'status', 'days', 'completeOnly', 'assignment', 'broadcaster', 'expected', 'tooMany', 'batch',
+                    'collecting', 'target', 'slot'];
                 respond(400, { error: 'invalidSettings', field: error instanceof RangeError && fields.includes(error.message) ? error.message : null });
             }
         });

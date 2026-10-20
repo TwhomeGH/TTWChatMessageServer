@@ -58,7 +58,8 @@
         const outcome = await mutate(action, value);
         if (!outcome) return;
         if (!outcome.ok) {
-            const fields = ['channels', 'historyDays', 'maxPerWeek', 'weekdays', 'hours', 'timezone', 'channelNotConfigured'];
+            const fields = ['channels', 'historyDays', 'maxPerWeek', 'weekdays', 'hours', 'timezone',
+                'channelNotConfigured', 'collecting', 'target'];
             const key = outcome.status === 403 ? 'originError'
                 : fields.includes(outcome.result.field) ? 'error.' + outcome.result.field : 'saveError';
             el('status').textContent = t(key);
@@ -111,25 +112,115 @@
         initialized = true;
     }
 
+    /** 資料累積建議：依時段分組；同一個時段的平台共用一次提醒。 */
+    function collectingCard() {
+        const suggestions = data.collecting || [];
+        const targets = data.collectingTargets || [];
+        if (!suggestions.length && !targets.length) return null;
+        const card = node('article', undefined, 'plan-card plan-collecting');
+        card.append(node('strong', t('collecting.title')));
+        card.append(node('p', t('collecting.note', { days: data.settings.historyDays }), 'plan-muted'));
+        const ready = data.settings.enabled && data.settings.channels.some(channel => data.available?.[channel]);
+        if (!ready) card.append(node('p', t('collecting.disabled'), 'plan-muted'));
+
+        // 以時段分組，避免同一時間的 Twitch／TikTok 被拆成兩個獨立按鈕。
+        const groups = new Map();
+        for (const item of suggestions) {
+            if (!groups.has(item.slot)) groups.set(item.slot, { slot: item.slot, items: [] });
+            groups.get(item.slot).items.push(item);
+        }
+        for (const target of targets) {
+            if (!groups.has(target.slot)) groups.set(target.slot, { slot: target.slot, items: [] });
+            const group = groups.get(target.slot);
+            if (!group.items.some(item => item.platform === target.platform && item.broadcaster === target.broadcaster)) {
+                group.items.push({ ...target, targetOnly: true });
+            }
+        }
+
+        const visible = [...groups.values()].slice(0, 2);
+        for (const group of visible) {
+            const groupTargets = targets.filter(target => target.slot === group.slot);
+            const addedCount = group.items.filter(item => groupTargets.some(target =>
+                target.platform === item.platform && target.broadcaster === item.broadcaster)).length;
+            const allAdded = group.items.length > 0 && addedCount === group.items.length;
+            const row = node('div', undefined, 'plan-collect-row');
+            const head = node('div', undefined, 'plan-collect-head');
+            head.append(node('strong', slot(group.slot)));
+            if (allAdded) head.append(node('span', t('collecting.added'), 'plan-badge'));
+            else if (addedCount) head.append(node('span', t('collecting.partial'), 'plan-badge'));
+            row.append(head);
+
+            for (const item of group.items) {
+                const line = node('div', undefined, 'plan-collect-platform');
+                line.append(node('span', item.platform));
+                if (item.targetOnly) {
+                    line.append(node('span', t('collecting.added'), 'plan-muted'));
+                } else {
+                    line.append(node('span', t('collecting.row', {
+                        sessions: item.n, minimum: item.minimum,
+                        days: item.observedDays, minDays: item.minDays, need: item.need
+                    }), 'plan-muted'));
+                    if (item.lastStarted) {
+                        line.append(node('span', t('collecting.recent', {
+                            date: date(item.lastStarted), mean: Number(item.mean).toFixed(1)
+                        }), 'plan-muted'));
+                    }
+                }
+                row.append(line);
+            }
+
+            const nextAt = groupTargets.map(target => target.nextAt)
+                .filter(Number.isSafeInteger).sort((a, b) => a - b)[0];
+            const meta = [];
+            if (nextAt) meta.push(t('collecting.next', { date: date(nextAt) }));
+            if (groupTargets.some(target => !target.available)) meta.push(t('collecting.paused'));
+            if (meta.length) row.append(node('p', meta.join(' · '), 'plan-muted'));
+
+            const actions = node('div', undefined, 'plan-fields');
+            if (!allAdded) {
+                const add = actionButton(t(addedCount ? 'collecting.addRest' : 'collecting.add'), () =>
+                    save('collectingAddSlot', { slot: group.slot }));
+                add.disabled = !ready;
+                actions.append(add);
+            }
+            if (groupTargets.length) {
+                actions.append(actionButton(t('collecting.remove'), () =>
+                    save('collectingRemoveSlot', { slot: group.slot })));
+            }
+            row.append(actions);
+            card.append(row);
+        }
+        if (groups.size > visible.length) {
+            card.append(node('p', t('collecting.more', { count: groups.size - visible.length }), 'plan-muted'));
+        }
+        card.append(node('p', t('collecting.auto'), 'plan-muted'));
+        return card;
+    }
+
     function renderJobs() {
         const groups = new Map();
         for (const job of data.jobs) {
             if (!groups.has(job.startAt)) groups.set(job.startAt, []);
             groups.get(job.startAt).push(job);
         }
+        const collecting = collectingCard();
         const cards = [];
         if (!data.settings.enabled) cards.push(node('p', t('disabled'), 'plan-muted'));
-        if (!groups.size) cards.push(node('p', t('waiting'), 'plan-muted'));
+        if (!groups.size && !collecting) cards.push(node('p', t('waiting'), 'plan-muted'));
         for (const [startAt, jobs] of groups) {
             const card = node('article', undefined, 'plan-card');
             card.append(node('strong', date(startAt)), node('p', t('notifyAt', { time: date(startAt - 30 * 60000) })));
-            for (const job of jobs) card.append(node('p', `${job.platform} / ${job.broadcaster} · ${t(job.status)}`));
+            for (const job of jobs) {
+                const kind = job.kind === 'collecting' ? `${t('collecting.job')} · ${slot(job.slot)} · ` : '';
+                card.append(node('p', `${job.platform} / ${job.broadcaster} · ${kind}${t(job.status)}`));
+            }
             for (const delivery of data.deliveries.filter(row => row.startAt === startAt)) {
                 card.append(node('p', `${delivery.channel} · ${t(delivery.status)}`, 'plan-muted'));
             }
             if (jobs.some(job => job.status === 'planned')) card.append(actionButton(t('skip'), () => save('skip', startAt)));
             cards.push(card);
         }
+        if (collecting) cards.push(collecting);
         el('jobs').replaceChildren(...cards);
     }
 

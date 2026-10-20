@@ -65,6 +65,14 @@ function calendar(time, timezone) {
     return { date, week, day, hour: Number(parts.hour), minute: Number(parts.minute), key: `${parts.weekday} ${parts.hour}` };
 }
 
+/** 將 `Mon 10` 轉成通知用的本地星期與整點。 */
+function notificationSlot(slot) {
+    const [day, hour] = String(slot).split(' ');
+    const weekday = new Intl.DateTimeFormat('zh-TW', { weekday: 'short', timeZone: 'UTC' })
+        .format(Date.UTC(2026, 0, 5 + WEEKDAYS.indexOf(day)));
+    return `${weekday} ${hour}:00`;
+}
+
 /** 驗證完整提醒設定；錯誤時拋出 RangeError，不接受靜默修正的排程。 */
 function validateSettings(value) {
     if (!value || typeof value.enabled !== 'boolean') throw new RangeError('enabled');
@@ -103,7 +111,13 @@ class TrafficPlanner {
             CREATE TABLE IF NOT EXISTS traffic_reminders (
                 id INTEGER PRIMARY KEY, platform TEXT NOT NULL, broadcaster TEXT NOT NULL,
                 startAt INTEGER NOT NULL, week TEXT NOT NULL, slot TEXT NOT NULL, evidence TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'recommendation',
                 status TEXT NOT NULL DEFAULT 'planned', UNIQUE(platform,broadcaster,startAt)
+            );
+            CREATE TABLE IF NOT EXISTS traffic_collecting_targets (
+                id INTEGER PRIMARY KEY, platform TEXT NOT NULL, broadcaster TEXT NOT NULL,
+                slot TEXT NOT NULL, createdAt INTEGER NOT NULL, active INTEGER NOT NULL DEFAULT 1,
+                UNIQUE(platform,broadcaster,slot)
             );
             CREATE TABLE IF NOT EXISTS traffic_deliveries (
                 startAt INTEGER NOT NULL, channel TEXT NOT NULL, status TEXT NOT NULL, updatedAt INTEGER NOT NULL,
@@ -121,6 +135,10 @@ class TrafficPlanner {
                 PRIMARY KEY(batch, session)
             );
         `);
+        const reminderColumns = new Set(this.db.prepare('PRAGMA table_info(traffic_reminders)').all().map(row => row.name));
+        if (!reminderColumns.has('kind')) {
+            this.db.exec("ALTER TABLE traffic_reminders ADD COLUMN kind TEXT NOT NULL DEFAULT 'recommendation'");
+        }
         // 「未分類」只是狀態，舊版卻曾把它寫成字面值。清掉後由 NULL 表示，
         // 避免同一狀態有兩種儲存方式，也讓可指派的用途只剩三種。
         this.db.exec("UPDATE sessions SET purpose=NULL WHERE purpose='unknown'");
@@ -398,6 +416,181 @@ class TrafficPlanner {
     }
 
     /**
+     * 自己的未達標時段；只回傳目前可開播的星期／整點。
+     * 依缺口、最近開播、開場平均排序，作為資料累積建議。
+     * @param {Object[]} analyses 分析明細。
+     * @param {Object} settings 提醒設定。
+     * @returns {Object[]} 累積建議。
+     */
+    collecting(analyses = this.analyses(), settings = this.settings()) {
+        const rows = [];
+        for (const analysis of analyses) {
+            if (analysis.purpose !== 'own' || analysis.platform.toLowerCase() === 'unknown') continue;
+            const minimum = analysis.rankings.minSessions ?? 3;
+            const minDays = analysis.rankings.minDays ?? 3;
+            for (const cell of analysis.rankings.cells) {
+                if (!cell.insufficient || !cell.n) continue;
+                const [day, hour] = cell.key.split(' ');
+                if (!settings.weekdays.includes(WEEKDAYS.indexOf(day)) || !settings.hours.includes(Number(hour))) continue;
+                const needSessions = Math.max(0, minimum - cell.n);
+                const needDays = Math.max(0, minDays - cell.observedDays);
+                const need = Math.max(needSessions, needDays);
+                if (!need) continue;
+                rows.push({
+                    platform: analysis.platform, broadcaster: analysis.broadcaster, slot: cell.key,
+                    n: cell.n, observedDays: cell.observedDays, minimum, minDays,
+                    need, needSessions, needDays, mean: cell.mean, lastStarted: cell.lastStarted ?? 0
+                });
+            }
+        }
+        rows.sort((a, b) => a.need - b.need ||
+            b.lastStarted - a.lastStarted ||
+            b.mean - a.mean ||
+            a.platform.localeCompare(b.platform) ||
+            a.slot.localeCompare(b.slot));
+        return rows.slice(0, 12);
+    }
+
+    /**
+     * 為使用中的累積目標排每週一次提醒；達標或離開可開播設定時自動停用。
+     * @param {Object} settings 提醒設定。
+     * @param {Object[]} analyses 分析明細。
+     * @param {Object[]} moments 可開播的整點清單。
+     * @param {number} now 目前時間。
+     * @returns {void}
+     */
+    reconcileCollecting(settings, analyses, moments, now) {
+        const targets = this.db.prepare('SELECT * FROM traffic_collecting_targets WHERE active=1').all();
+        const own = new Map(analyses.filter(analysis => analysis.purpose === 'own')
+            .map(analysis => [`${analysis.platform}|${analysis.broadcaster}`, analysis]));
+        const selected = new Set();
+        for (const target of targets) {
+            const analysis = own.get(`${target.platform}|${target.broadcaster}`);
+            const cell = analysis?.rankings.cells.find(item => item.key === target.slot);
+            if (!analysis || !cell || !cell.insufficient) {
+                this.db.prepare('UPDATE traffic_collecting_targets SET active=0 WHERE id=?').run(target.id);
+                this.db.prepare(`UPDATE traffic_reminders SET status='cancelled'
+                    WHERE kind='collecting' AND platform=? AND broadcaster=? AND slot=?
+                    AND status IN ('planned','expired')`).run(target.platform, target.broadcaster, target.slot);
+                continue;
+            }
+            const [day, hour] = target.slot.split(' ');
+            if (!settings.weekdays.includes(WEEKDAYS.indexOf(day)) || !settings.hours.includes(Number(hour))) continue;
+            const weeks = new Map();
+            for (const moment of moments) {
+                if (moment.key !== target.slot || moment.time <= now - 5 * 60000) continue;
+                if (!weeks.has(moment.week)) weeks.set(moment.week, moment);
+            }
+            for (const [week, moment] of weeks) {
+                if (moment.time - HALF_HOUR < now - 5 * 60000) continue;
+                const formal = this.db.prepare(`SELECT 1 FROM traffic_reminders
+                    WHERE platform=? AND broadcaster=? AND startAt=? AND kind='recommendation'
+                    AND status NOT IN ('cancelled','expired')`).get(target.platform, target.broadcaster, moment.time);
+                if (formal) continue;
+                selected.add(`${target.id}|${week}`);
+                const evidence = JSON.stringify({
+                    targetId: target.id, slot: target.slot, n: cell.n, observedDays: cell.observedDays,
+                    minimum: analysis.rankings.minSessions ?? 3, minDays: analysis.rankings.minDays ?? 3,
+                    mean: cell.mean, lastStarted: cell.lastStarted ?? 0
+                });
+                this.db.prepare(`INSERT INTO traffic_reminders(platform,broadcaster,startAt,week,slot,evidence,kind)
+                    VALUES(?,?,?,?,?,?,'collecting') ON CONFLICT(platform,broadcaster,startAt) DO UPDATE SET
+                    evidence=excluded.evidence,status=CASE WHEN status='cancelled' THEN 'planned' ELSE status END
+                    WHERE traffic_reminders.kind='collecting'`)
+                    .run(target.platform, target.broadcaster, moment.time, week, target.slot, evidence);
+            }
+        }
+        for (const job of this.db.prepare("SELECT * FROM traffic_reminders WHERE kind='collecting' AND status IN ('planned','expired')").all()) {
+            const evidence = JSON.parse(job.evidence);
+            const target = this.db.prepare('SELECT * FROM traffic_collecting_targets WHERE id=?').get(evidence.targetId);
+            if (!target || !target.active || !selected.has(`${target.id}|${job.week}`)) {
+                this.db.prepare("UPDATE traffic_reminders SET status='cancelled' WHERE id=?").run(job.id);
+            }
+        }
+    }
+
+    /** 寫入或重新啟用單一累積目標。 @param {Object} item 累積建議。 @returns {void} */
+    upsertCollectingTarget(item) {
+        this.db.prepare(`INSERT INTO traffic_collecting_targets(platform,broadcaster,slot,createdAt,active)
+            VALUES(?,?,?,?,1) ON CONFLICT(platform,broadcaster,slot) DO UPDATE SET
+            active=1,createdAt=excluded.createdAt`)
+            .run(item.platform, item.broadcaster, item.slot, this.now());
+    }
+
+    /** 停用單一累積目標並取消尚未發送或已過期的累積提醒。 @param {Object} target 目標。 @returns {void} */
+    deactivateCollectingTarget(target) {
+        this.db.prepare('UPDATE traffic_collecting_targets SET active=0 WHERE id=?').run(target.id);
+        this.db.prepare(`UPDATE traffic_reminders SET status='cancelled'
+            WHERE kind='collecting' AND status IN ('planned','expired')
+            AND platform=? AND broadcaster=? AND slot=?`)
+            .run(target.platform, target.broadcaster, target.slot);
+    }
+
+    /**
+     * 新增或重新啟用一個累積目標；只接受目前仍在建議清單內的時段。
+     * @param {Object} value platform、broadcaster、slot。
+     * @returns {Object} 目標資料。
+     */
+    addCollecting(value = {}) {
+        const platform = typeof value.platform === 'string' ? value.platform : '';
+        const broadcaster = normalizeBroadcaster(value.broadcaster);
+        const slot = typeof value.slot === 'string' ? value.slot : '';
+        const settings = this.settings();
+        const match = this.collecting(this.analyses(settings), settings)
+            .find(item => item.platform === platform && item.broadcaster === broadcaster && item.slot === slot);
+        if (!match) throw new RangeError('collecting');
+        this.upsertCollectingTarget(match);
+        this.reconcile();
+        return this.db.prepare('SELECT * FROM traffic_collecting_targets WHERE platform=? AND broadcaster=? AND slot=?')
+            .get(platform, broadcaster, slot);
+    }
+
+    /**
+     * 一次加入同一個時段的所有平台累積目標，讓一個時段只佔一則提醒。
+     * @param {string} slot 例如 `Tue 20`。
+     * @returns {Object[]} 啟用中的目標。
+     */
+    addCollectingSlot(slot) {
+        if (typeof slot !== 'string' || !/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}$/.test(slot)) {
+            throw new RangeError('collecting');
+        }
+        const settings = this.settings();
+        const matches = this.collecting(this.analyses(settings), settings).filter(item => item.slot === slot);
+        if (!matches.length) throw new RangeError('collecting');
+        for (const item of matches) this.upsertCollectingTarget(item);
+        this.reconcile();
+        return this.db.prepare('SELECT * FROM traffic_collecting_targets WHERE slot=? AND active=1 ORDER BY id').all(slot);
+    }
+
+    /**
+     * 移除累積目標並取消尚未發送的累積提醒。
+     * @param {Object} value 目標 id，或 platform／broadcaster／slot。
+     * @returns {Object} 被移除的目標。
+     */
+    removeCollecting(value = {}) {
+        const target = Number.isSafeInteger(value.id)
+            ? this.db.prepare('SELECT * FROM traffic_collecting_targets WHERE id=?').get(value.id)
+            : this.db.prepare('SELECT * FROM traffic_collecting_targets WHERE platform=? AND broadcaster=? AND slot=?')
+                .get(typeof value.platform === 'string' ? value.platform : '',
+                    normalizeBroadcaster(value.broadcaster), typeof value.slot === 'string' ? value.slot : '');
+        if (!target) throw new RangeError('target');
+        this.deactivateCollectingTarget(target);
+        return target;
+    }
+
+    /**
+     * 移除同一個時段的所有累積目標。
+     * @param {string} slot 例如 `Tue 20`。
+     * @returns {Object[]} 被移除的目標。
+     */
+    removeCollectingSlot(slot) {
+        const targets = this.db.prepare('SELECT * FROM traffic_collecting_targets WHERE slot=? AND active=1').all(slot);
+        if (!targets.length) throw new RangeError('target');
+        for (const target of targets) this.deactivateCollectingTarget(target);
+        return targets;
+    }
+
+    /**
      * 將各帳號每週最佳時段排入未來 14 天。每個日期最多一次；夏令時間重複整點只取一次。
      * @returns {Object[]} 歷史分析明細。
      */
@@ -430,7 +623,8 @@ class TrafficPlanner {
             for (const [week, options] of weeks) {
                 const dates = new Set();
                 const existing = this.db.prepare(`SELECT * FROM traffic_reminders WHERE platform=? AND broadcaster=? AND week=?
-                    AND status NOT IN ('planned','cancelled','expired')`).all(analysis.platform, analysis.broadcaster, week);
+                    AND kind='recommendation' AND status NOT IN ('planned','cancelled','expired')`)
+                    .all(analysis.platform, analysis.broadcaster, week);
                 for (const entry of existing) dates.add(calendar(entry.startAt, settings.timezone).date);
                 let count = dates.size;
                 options.sort((a, b) => b.cell.shrunk - a.cell.shrunk || a.time - b.time);
@@ -444,18 +638,23 @@ class TrafficPlanner {
                     const key = JSON.stringify([analysis.platform, analysis.broadcaster, option.time]);
                     selected.add(key);
                     const evidence = JSON.stringify(option.cell);
-                    this.db.prepare(`INSERT INTO traffic_reminders(platform,broadcaster,startAt,week,slot,evidence)
-                        VALUES(?,?,?,?,?,?) ON CONFLICT(platform,broadcaster,startAt) DO UPDATE SET
-                        evidence=excluded.evidence,status=CASE WHEN status='cancelled' THEN 'planned' ELSE status END`)
+                    // 正式推薦優先於資料累積提醒，同時段不重複發送。
+                    this.db.prepare("DELETE FROM traffic_reminders WHERE platform=? AND broadcaster=? AND startAt=? AND kind='collecting'")
+                        .run(analysis.platform, analysis.broadcaster, option.time);
+                    this.db.prepare(`INSERT INTO traffic_reminders(platform,broadcaster,startAt,week,slot,evidence,kind)
+                        VALUES(?,?,?,?,?,?,'recommendation') ON CONFLICT(platform,broadcaster,startAt) DO UPDATE SET
+                        evidence=excluded.evidence,kind='recommendation',
+                        status=CASE WHEN status='cancelled' THEN 'planned' ELSE status END`)
                         .run(analysis.platform, analysis.broadcaster, option.time, week, option.key, evidence);
                 }
             }
         }
-        for (const job of this.db.prepare("SELECT * FROM traffic_reminders WHERE status='planned'").all()) {
+        for (const job of this.db.prepare("SELECT * FROM traffic_reminders WHERE status='planned' AND kind='recommendation'").all()) {
             if (!selected.has(JSON.stringify([job.platform, job.broadcaster, job.startAt]))) {
                 this.db.prepare("UPDATE traffic_reminders SET status='cancelled' WHERE id=?").run(job.id);
             }
         }
+        this.reconcileCollecting(settings, analyses, moments, now);
         return analyses;
     }
 
@@ -477,7 +676,7 @@ class TrafficPlanner {
             const due = this.db.prepare("SELECT * FROM traffic_reminders WHERE status='planned' AND startAt-?<=? ORDER BY startAt")
                 .all(HALF_HOUR, now);
             for (const startAt of new Set(due.map(job => job.startAt))) {
-                const jobs = due.filter(job => {
+                let jobs = due.filter(job => {
                     if (job.startAt !== startAt) return false;
                     // 只以同一主播的新鮮觀看取樣判斷在線；不能以舊的 ended=NULL 當成仍在直播。
                     const live = this.db.prepare(`SELECT 1 FROM sessions WHERE platform=? AND broadcaster=?
@@ -488,12 +687,28 @@ class TrafficPlanner {
                     return !live;
                 });
                 if (!jobs.length) continue;
+                const formal = jobs.filter(job => job.kind !== 'collecting');
+                if (formal.length) {
+                    // 同一時段已有正式推薦時，不再重複發累積提醒。
+                    for (const job of jobs.filter(job => job.kind === 'collecting')) {
+                        this.db.prepare("UPDATE traffic_reminders SET status='suppressed' WHERE id=?").run(job.id);
+                    }
+                    jobs = formal;
+                }
+                const collectingOnly = jobs.every(job => job.kind === 'collecting');
                 for (const job of jobs) this.db.prepare("UPDATE traffic_reminders SET status='dispatching' WHERE id=?").run(job.id);
                 const date = new Intl.DateTimeFormat('zh-TW', { timeZone: settings.timezone, dateStyle: 'medium', timeStyle: 'short' }).format(startAt);
-                const body = `建議於 ${date}（${settings.timezone}）開播\n` + jobs.map(job => {
-                    const cell = JSON.parse(job.evidence);
-                    return `${job.platform} / ${job.broadcaster}：${cell.n} 場、${cell.observedDays} 個日期，開場平均 ${cell.mean.toFixed(1)} 人`;
-                }).join('\n') + '\n依自己的歷史開場觀測提供參考，不代表因果；詳情請查看人流分析頁。';
+                const body = collectingOnly
+                    ? `資料累積提醒：${date}（${settings.timezone}）\n` + jobs.map(job => {
+                        const cell = JSON.parse(job.evidence);
+                        const need = Math.max((cell.minimum ?? 3) - cell.n, (cell.minDays ?? 3) - cell.observedDays, 0);
+                        return `${job.platform} / ${job.broadcaster} · ${notificationSlot(job.slot)}：目前 ${cell.n}/${cell.minimum ?? 3} 場、${cell.observedDays}/${cell.minDays ?? 3} 日期；再 ${need} 場（不同日期）`;
+                    }).join('\n') + '\n這不是最佳時段推薦；達標後會自動切回正式推薦。'
+                    : `建議於 ${date}（${settings.timezone}）開播\n` + jobs.map(job => {
+                        const cell = JSON.parse(job.evidence);
+                        return `${job.platform} / ${job.broadcaster}：${cell.n} 場、${cell.observedDays} 個日期，開場平均 ${cell.mean.toFixed(1)} 人`;
+                    }).join('\n') + '\n依自己的歷史開場觀測提供參考，不代表因果；詳情請查看人流分析頁。';
+                const title = collectingOnly ? '資料累積提醒 · 約 30 分鐘後' : '開播提醒 · 約 30 分鐘後';
                 for (const channel of settings.channels) {
                     const current = this.settings();
                     if (!current.enabled || !current.channels.includes(channel)) continue;
@@ -501,7 +716,7 @@ class TrafficPlanner {
                         .run(startAt, channel, 'sending', now);
                     if (!claim.changes) continue;
                     let success = false;
-                    try { success = await this.send(channel, '開播提醒 · 約 30 分鐘後', body); } catch { /* 結果只記狀態，不記含憑證的例外。 */ }
+                    try { success = await this.send(channel, title, body); } catch { /* 結果只記狀態，不記含憑證的例外。 */ }
                     this.db.prepare('UPDATE traffic_deliveries SET status=?,updatedAt=? WHERE startAt=? AND channel=?')
                         .run(success ? 'sent' : 'failed', this.now(), startAt, channel);
                 }
@@ -513,6 +728,19 @@ class TrafficPlanner {
     /** @returns {Object} 管理頁快照，不傳回推播網址或密鑰。 */
     snapshot() {
         const analyses = this.reconcile();
+        const settings = this.settings();
+        const collecting = this.collecting(analyses, settings);
+        const collectingTargets = this.db.prepare(`SELECT t.*,
+            (SELECT startAt FROM traffic_reminders r WHERE r.kind='collecting' AND r.platform=t.platform
+             AND r.broadcaster=t.broadcaster AND r.slot=t.slot AND r.status='planned'
+             ORDER BY r.startAt LIMIT 1) AS nextAt
+            FROM traffic_collecting_targets t WHERE t.active=1 ORDER BY t.id`).all().map(target => {
+            const [day, hour] = target.slot.split(' ');
+            return {
+                ...target,
+                available: settings.weekdays.includes(WEEKDAYS.indexOf(day)) && settings.hours.includes(Number(hour))
+            };
+        });
         const detected = new Map(this.db.prepare('SELECT platform,broadcaster FROM traffic_identities').all()
             .map(row => [row.platform, row.broadcaster]));
         const identity = (platform, ...keys) => detected.get(platform) ||
@@ -524,7 +752,8 @@ class TrafficPlanner {
             COALESCE(SUM(CASE WHEN COALESCE(s.purpose,p.purpose,'unknown')='unknown' THEN 1 ELSE 0 END),0) AS unclassified
             FROM sessions s LEFT JOIN traffic_profiles p ON p.platform=s.platform AND p.broadcaster=s.broadcaster`).get();
         return {
-            settings: this.settings(), available: this.available(), profiles: this.profiles(), analyses,
+            settings, available: this.available(), profiles: this.profiles(), analyses,
+            collecting, collectingTargets,
             unclassified: statusCounts.unclassified,
             statusCounts: {
                 all: statusCounts.total, own: statusCounts.own, reference: statusCounts.reference,

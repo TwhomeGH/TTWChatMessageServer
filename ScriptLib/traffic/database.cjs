@@ -718,11 +718,12 @@ class TrafficDatabase {
     const key = parts.weekday + ' ' + parts.hour;
             const date = parts.year + '-' + parts.month + '-' + parts.day;
 
-            if (!buckets.has(key)) buckets.set(key, { key, values: [], dates: new Set() });
-            const bucket = buckets.get(key);
-            bucket.values.push(early);
-            bucket.dates.add(date);
-            allValues.push(early);
+    if (!buckets.has(key)) buckets.set(key, { key, values: [], dates: new Set(), lastStarted: 0 });
+    const bucket = buckets.get(key);
+    bucket.values.push(early);
+    bucket.dates.add(date);
+    bucket.lastStarted = Math.max(bucket.lastStarted, session.actualStarted);
+    allValues.push(early);
         }
 
         const globalMean = allValues.length ? allValues.reduce((sum, v) => sum + v, 0) / allValues.length : 0;
@@ -748,6 +749,7 @@ class TrafficDatabase {
                 shrunk,
                 ci95: null, // 小樣本不顯示容易被誤解的常態近似信賴區間。
                 observedDays: bucket.dates.size,
+                lastStarted: bucket.lastStarted,
                 insufficient: n < MIN_BUCKET_SESSIONS || bucket.dates.size < 3
             };
         });
