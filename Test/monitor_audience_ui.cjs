@@ -5,6 +5,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { serveWebAsset } = require('../WebAssets.cjs');
+const { browserPath } = require('./browser_path.cjs');
 
 async function main() {
     const { default: puppeteer } = await import('puppeteer-core');
@@ -42,10 +43,7 @@ async function main() {
 
     let browser;
     try {
-        browser = await puppeteer.launch({
-            executablePath: process.env.TRAFFIC_TEST_BROWSER || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-            headless: true
-        });
+        browser = await puppeteer.launch({ executablePath: browserPath(), headless: true });
         const page = await browser.newPage();
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));

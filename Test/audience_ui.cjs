@@ -7,6 +7,7 @@ const path = require('node:path');
 const { createAudienceTracker } = require('../ScriptLib/audience/tracker.cjs');
 const { createAudienceRoutes } = require('../AudienceRoutes.cjs');
 const { serveWebAsset } = require('../WebAssets.cjs');
+const { browserPath } = require('./browser_path.cjs');
 
 const DAY = 86400000;
 const BASE = Date.parse('2026-09-01T10:00:00Z');
@@ -45,10 +46,7 @@ async function main() {
 
     let browser;
     try {
-        browser = await puppeteer.launch({
-            executablePath: process.env.TRAFFIC_TEST_BROWSER || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-            headless: true
-        });
+        browser = await puppeteer.launch({ executablePath: browserPath(), headless: true });
         const page = await browser.newPage();
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));

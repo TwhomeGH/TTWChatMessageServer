@@ -77,4 +77,4 @@ node --test Test/audience_tracker.test.cjs Test/audience_routes.test.cjs
 node Test/audience_ui.cjs
 ```
 
-UI 冒煙測試使用記憶體追蹤器與假場次，不需要啟動正式服務。
+UI 冒煙測試使用記憶體追蹤器與假場次，不需要啟動正式服務；會自動尋找 Chrome/Edge，必要時用 `TRAFFIC_TEST_BROWSER` 指定執行檔。

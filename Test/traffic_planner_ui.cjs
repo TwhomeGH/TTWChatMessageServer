@@ -8,6 +8,7 @@ const { TrafficDatabase } = require('../ScriptLib/traffic/database.cjs');
 const { TrafficPlanner } = require('../ScriptLib/traffic/planner.cjs');
 const { createPlannerRoutes } = require('../ScriptLib/traffic/plannerRoutes.cjs');
 const { serveWebAsset } = require('../WebAssets.cjs');
+const { browserPath } = require('./browser_path.cjs');
 
 async function main() {
     const { default: puppeteer } = await import('puppeteer-core');
@@ -40,7 +41,7 @@ async function main() {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     let browser;
     try {
-        browser = await puppeteer.launch({ executablePath: process.env.TRAFFIC_TEST_BROWSER || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true });
+        browser = await puppeteer.launch({ executablePath: browserPath(), headless: true });
         const page = await browser.newPage();
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
