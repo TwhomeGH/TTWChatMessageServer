@@ -9,6 +9,10 @@ test('廣告帳號：簡繁變體與混淆字元', () => {
     assert.equal(checkFilter({ user: '加濑' }).filtered, true);
     assert.equal(checkFilter({ user: '✔️1OOO薹=⑨萬钭＋濑：@TR55' }).reason, 'any:廣告-混淆字元');
     assert.equal(checkFilter({ user: 'normal_user' }).filtered, false);
+    // 裝飾用圈號／數學字母不應單獨被當成廣告；必須同時有廣告訊號。
+    assert.equal(checkFilter({ user: '☾soyeno 𝜗𝜚娟三歲☽ •ﻌ•ྀི', message: '加入了' }).filtered, false);
+    assert.equal(checkFilter({ user: '①', message: 'hi' }).filtered, false);
+    assert.equal(checkFilter({ user: 'a', message: '今天好累 𝜗𝜚' }).filtered, false);
 });
 
 // 混淆字元與大量 emoji 都要涵蓋「內容」欄位（只檢查暱稱會漏；也預先涵蓋帳號名塞內容的情境）。

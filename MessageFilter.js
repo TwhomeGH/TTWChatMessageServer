@@ -315,6 +315,9 @@ export function simulateSequence({ user = '', messages = [], stepMs = 1000, extr
 // 刻意用字元類列出組合記號的範圍，逐 code point 比對。
 // eslint-disable-next-line no-misleading-character-class
 const COMBINING_MARKS = /[\u{20D0}-\u{20FF}\u{FE00}-\u{FE0F}\u{0300}-\u{036F}]/u;
+// 圈號／數學字母也常用在裝飾暱稱；只有同時出現廣告訊號才視為混淆廣告。
+const OBFUSCATED_CHARS = /[\u2460-\u24FF]|[\u{1D400}-\u{1D7FF}]/u;
+const AD_SIGNAL = /(?:加\s*(?:line|賴|瀨|濑|頼)|微信|wechat|telegram|t\.me|https?:\/\/|www\.|[瀨濑])/i;
 
 addFilterRules([
     // ── 用戶名：block ──
@@ -329,9 +332,8 @@ addFilterRules([
         name: 'any:廣告-混淆字元',
         field: 'any',
         action: 'block',
-        // 圈號（①-⑳ 等 Enclosed Alphanumerics）與數學粗體字母（𝗔-𝟵）：正常暱稱或留言幾乎不會出現。
-        // 用 any 是「預先防範」廣告哪天改成把帳號名塞進留言內容（目前尚未觀察到；目前是 emoji 洗頻）。
-        test: (v) => /[\u2460-\u24FF]|[\u{1D400}-\u{1D7FF}]/u.test(v),
+        // 圈號與數學字母本身也用於裝飾暱稱；必須同時有廣告訊號才阻擋，避免誤殺正常觀眾。
+        test: (v) => OBFUSCATED_CHARS.test(v) && AD_SIGNAL.test(v),
     },
     {
         name: 'msg:大量 emoji',
