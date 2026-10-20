@@ -195,9 +195,11 @@ canvas {cursor:crosshair;}
 .ranking-slot-progress {color:#aebdce;font-size:.85rem;font-variant-numeric:tabular-nums;}
 .ranking-need {color:#fde68a;font-size:.8rem;white-space:nowrap;}
 .ranking-next-tips {margin:8px 0 0;padding-left:20px;color:#fde68a;}
+.ranking-next-hint {margin:6px 0;color:#93c5fd;font-size:.85rem;}
 .ranking-next-min {margin:10px 0 0;color:#93c5fd;font-size:.85rem;}
 .ranking-why {margin-top:16px;border-top:1px solid #374151;padding-top:12px;}
 .ranking-why > summary {cursor:pointer;padding:4px 0;color:#93c5fd;font-weight:600;}
+.ranking-why .ranking-slot-boundary {color:#aebdce;font-size:.85rem;}
 @media (max-width:520px) {
     .ranking-slot {grid-template-columns:1fr;gap:4px;}
 }

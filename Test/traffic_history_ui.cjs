@@ -33,12 +33,28 @@ const DATA = {
     }
 };
 
+const SCATTERED = {
+    platform: 'TikTok',
+    cells: [],
+    daily: [],
+    metrics: { daily: [] },
+    rankings: {
+        scope: 'own', totalSessions: 6, sessionCount: 6, minSessions: 3, minDays: 3,
+        earlyMinutes: 30, minObservedMinutes: 20, days: 30,
+        excluded: { missingStart: 0, pending: 0, insufficientCoverage: 0 },
+        cells: ['Mon 08', 'Tue 12', 'Wed 17', 'Thu 21', 'Fri 09', 'Sat 14'].map((key, index) => ({
+            key, n: 1, observedDays: 1, median: 10 + index, mean: 10 + index, shrunk: 10 + index, insufficient: true
+        }))
+    }
+};
+
 async function main() {
     const { default: puppeteer } = await import('puppeteer-core');
+    let current = DATA;
     const server = http.createServer((req, res) => {
         if (req.url.startsWith('/api/traffic/history')) {
             res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-            res.end(JSON.stringify(DATA));
+            res.end(JSON.stringify(current));
             return;
         }
         if (req.url === '/') {
@@ -64,16 +80,30 @@ async function main() {
         const headline = await page.$eval('.ranking-next-head strong', node => node.textContent);
         assert.match(headline, /再開 4 場/);
         assert.equal(await page.$$eval('.ranking-slot', nodes => nodes.length), 2);
+        const hints = await page.$$eval('.ranking-next-hint', nodes => nodes.map(node => node.textContent));
+        assert.ok(hints.some(text => text.includes('約 2 週')));
+        assert.ok(hints.some(text => text.includes('不會推進')));
         assert.equal(await page.$$eval('.ranking-next-tips li', nodes => nodes.length), 2);
         assert.equal(await page.$eval('.ranking-why', node => node.open), false);
         await page.click('.ranking-why > summary');
         assert.equal(await page.$eval('.ranking-why', node => node.open), true);
         assert.equal(await page.$$eval('.ranking-why .ranking-criteria li', nodes => nodes.length), 2);
+        assert.match(await page.$eval('.ranking-slot-boundary', node => node.textContent), /19:45/);
 
         fs.mkdirSync(path.join(__dirname, '../output/playwright'), { recursive: true });
         await page.screenshot({ path: path.join(__dirname, '../output/playwright/traffic-ranking-next.png'), fullPage: true });
+
+        current = SCATTERED;
+        await page.reload();
+        await page.waitForFunction(() => document.querySelector('.ranking-next'));
+        const scatteredHeadline = await page.$eval('.ranking-next-head strong', node => node.textContent);
+        assert.match(scatteredHeadline, /分散/);
+        assert.equal(await page.$$eval('.ranking-slot', nodes => nodes.length), 0);
+        assert.match(await page.$eval('.ranking-next-action', node => node.textContent), /6 個時段/);
+        await page.screenshot({ path: path.join(__dirname, '../output/playwright/traffic-ranking-scattered.png'), fullPage: true });
+
         assert.deepEqual(errors, []);
-        console.log('Traffic ranking next-step UI passed: 4-session guidance, slot progress, tips and expandable rules.');
+        console.log('Traffic ranking next-step UI passed: clear next step, scattered-schedule warning, slot progress, tips and expandable rules.');
     } finally {
         await browser?.close();
         await new Promise(resolve => server.close(resolve));

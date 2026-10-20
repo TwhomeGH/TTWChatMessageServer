@@ -14,6 +14,8 @@ const MIN_SESSION_SAMPLES = 2;
 
 // 收縮估計的平滑常數：把樣本少的時段往整體平均拉，避免「只開過一次剛好爆紅」奪冠。
 const SHRINK_K = 3;
+// 開播前 15 分鐘內視為下一個整點時段；例如 19:45–20:44 都歸到 20:00。
+const RANKING_START_GRACE_MS = 15 * 60000;
 
 // 一個時段至少要有這麼多場次才給排名，否則只標記資料不足。
 const MIN_BUCKET_SESSIONS = 3;
@@ -711,8 +713,9 @@ class TrafficDatabase {
             const early = session.earlySpanMs > 0 ? session.earlyArea / session.earlySpanMs : null;
             if (early === null) continue;
 
-            const parts = Object.fromEntries(formatter.formatToParts(session.actualStarted).map(part => [part.type, part.value]));
-            const key = parts.weekday + ' ' + parts.hour;
+    const parts = Object.fromEntries(formatter.formatToParts(session.actualStarted + RANKING_START_GRACE_MS)
+        .map(part => [part.type, part.value]));
+    const key = parts.weekday + ' ' + parts.hour;
             const date = parts.year + '-' + parts.month + '-' + parts.day;
 
             if (!buckets.has(key)) buckets.set(key, { key, values: [], dates: new Set() });

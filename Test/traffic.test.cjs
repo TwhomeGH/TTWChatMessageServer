@@ -214,6 +214,25 @@ test('時段排名取開場平均並做收縮與樣本門檻', () => {
     db.close();
 });
 
+test('開播容差 15 分鐘會把 19:59 與 20:01 歸到同一個時段', () => {
+    const db = new TrafficDatabase(':memory:');
+    const insert = db.db.prepare(`INSERT INTO sessions(platform,started,actualStarted,lastSampleAt,
+        lastViewers,peak,earlyArea,earlySpanMs,sampleCount) VALUES('TikTok',?,?,?,?,?,?,?,?)`);
+    const first = Date.parse('2026-10-06T19:59:00Z');
+    const second = Date.parse('2026-10-13T20:01:00Z');
+    insert.run(first, first, first + 1200000, 10, 10, 12000000, 1200000, 21);
+    insert.run(second, second, second + 1200000, 20, 20, 24000000, 1200000, 21);
+    // rankings() 以 minutes 判斷有哪些平台，補一筆讓 TikTok 被視為有效平台。
+    db.db.prepare('INSERT INTO minutes(platform,time,viewerSum,viewerCount) VALUES(?,?,?,1)')
+        .run('TikTok', first, 10);
+    const rankings = db.rankings('TikTok', 30, Date.parse('2026-10-20T00:00:00Z'), 'UTC');
+    assert.equal(rankings.cells.length, 1);
+    assert.equal(rankings.cells[0].key, 'Tue 20');
+    assert.equal(rankings.cells[0].n, 2);
+    assert.equal(rankings.cells[0].observedDays, 2);
+    db.close();
+});
+
 test('排名可只計自己的場次，且保留全來源模式', () => {
     const base = Date.parse('2026-09-07T10:00:00Z');
     let now = base;

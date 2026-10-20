@@ -158,7 +158,7 @@
         const excluded = rankings.excluded ?? { missingStart: rankings.unstarted || 0 };
         const slotLabel = key => {
             const [day, hour] = key.split(' ');
-            return `${weekday(WEEKDAYS.indexOf(day))} ${hour}:00–${hour}:59`;
+            return `${weekday(WEEKDAYS.indexOf(day))} ${hour}:00`;
         };
         const rows = [['#', t('timeSlot'), t('sessions'), t('median'), t('mean'), t('shrunk')]];
 
@@ -201,10 +201,16 @@
                     b.cell.n - a.cell.n ||
                     b.cell.observedDays - a.cell.observedDays);
 
+            const maxPartialN = partial.reduce((max, cell) => Math.max(max, cell.n), 0);
+            const dispersed = enough.length === 0 && partial.length >= 4 && maxPartialN <= 1;
+
             let headline;
             let actionText;
             let selected = [];
-            if (enough.length === 1) {
+            if (dispersed) {
+                headline = t('ranking.nextDispersed');
+                actionText = t('ranking.nextDispersedAction', { slots: partial.length });
+            } else if (enough.length === 1) {
                 const item = candidates[0];
                 if (item) {
                     selected = [item];
@@ -275,6 +281,9 @@
                     list.append(row);
                 }
                 next.append(list);
+                const weeks = Math.max(...selected.map(item => item.need));
+                addTo(next, t('ranking.nextWeeklyHint', { weeks }), 'ranking-next-hint');
+                addTo(next, t('ranking.nextOtherSlotHint'), 'ranking-next-hint');
             }
 
             const tips = [];
@@ -321,6 +330,7 @@
             criteria.append(item);
         }
         details.append(criteria);
+        addTo(details, t('ranking.slotBoundary'), 'ranking-slot-boundary');
 
         const reasons = document.createElement('ul');
         reasons.className = 'ranking-reasons';
