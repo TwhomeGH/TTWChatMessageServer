@@ -148,9 +148,14 @@
     function renderRanking(rankings) {
         if (!rankings) return;
 
+        const minSessions = rankings.minSessions ?? 3;
+        const minDays = rankings.minDays ?? 3;
+        const earlyMinutes = rankings.earlyMinutes ?? 30;
+        const minObserved = rankings.minObservedMinutes ?? 20;
         const enough = rankings.cells.filter(cell => !cell.insufficient);
         const partial = rankings.cells.filter(cell => cell.insufficient);
         const comparable = enough.length >= 2;
+        const excluded = rankings.excluded ?? { missingStart: rankings.unstarted || 0 };
         const slotLabel = key => {
             const [day, hour] = key.split(' ');
             return `${weekday(WEEKDAYS.indexOf(day))} ${hour}:00–${hour}:59`;
@@ -176,32 +181,147 @@
         const heading = document.createElement('strong');
         heading.textContent = t(comparable ? 'ranking.ready' : 'ranking.collecting');
         card.append(heading);
-        const addNote = (text, className = '') => {
+
+        const addTo = (container, text, className = '') => {
             const paragraph = document.createElement('p');
             paragraph.textContent = text;
             paragraph.className = className;
-            card.append(paragraph);
+            container.append(paragraph);
+            return paragraph;
         };
-        addNote(t('ranking.summary', {
+
+        // 先給「下一步」：用最接近達標的時段算出還要開幾場，再談規則細節。
+        if (!comparable) {
+            const candidates = partial.map(cell => {
+                const needSessions = Math.max(0, minSessions - cell.n);
+                const needDays = Math.max(0, minDays - cell.observedDays);
+                return { cell, needSessions, needDays, need: Math.max(needSessions, needDays) };
+            }).filter(item => item.need > 0)
+                .sort((a, b) => a.need - b.need ||
+                    b.cell.n - a.cell.n ||
+                    b.cell.observedDays - a.cell.observedDays);
+
+            let headline;
+            let actionText;
+            let selected = [];
+            if (enough.length === 1) {
+                const item = candidates[0];
+                if (item) {
+                    selected = [item];
+                    headline = t('ranking.nextSecond', { sessions: item.need });
+                    actionText = t('ranking.nextActionSecond', {
+                        slot: slotLabel(item.cell.key), count: item.need
+                    });
+                } else {
+                    headline = t('ranking.nextSecondSlot');
+                    actionText = t('ranking.nextActionSecondSlot', {
+                        minimum: minSessions, days: minDays
+                    });
+                }
+            } else if (candidates.length) {
+                selected = candidates.slice(0, 2);
+                if (selected.length === 1) {
+                    headline = t('ranking.nextOneSlot', { sessions: selected[0].need });
+                    actionText = t('ranking.nextActionOne', {
+                        slot: slotLabel(selected[0].cell.key), count: selected[0].need
+                    });
+                } else {
+                    const total = selected.reduce((sum, item) => sum + item.need, 0);
+                    headline = t('ranking.nextUnlock', { sessions: total });
+                    actionText = t('ranking.nextActionTwo', {
+                        slot1: slotLabel(selected[0].cell.key), count1: selected[0].need,
+                        slot2: slotLabel(selected[1].cell.key), count2: selected[1].need
+                    });
+                }
+            } else {
+                headline = t('ranking.nextCollect');
+                actionText = t('ranking.nextActionCollect', {
+                    window: earlyMinutes, observed: minObserved
+                });
+            }
+
+            const next = document.createElement('section');
+            next.className = 'ranking-next';
+            const head = document.createElement('div');
+            head.className = 'ranking-next-head';
+            const title = document.createElement('strong');
+            title.textContent = headline;
+            const badge = document.createElement('span');
+            badge.className = 'ranking-next-badge';
+            badge.textContent = t('ranking.nextBadge');
+            head.append(title, badge);
+            next.append(head);
+            addTo(next, actionText, 'ranking-next-action');
+
+            if (selected.length) {
+                const list = document.createElement('div');
+                list.className = 'ranking-slots';
+                for (const item of selected) {
+                    const row = document.createElement('div');
+                    row.className = 'ranking-slot';
+                    const name = document.createElement('span');
+                    name.className = 'ranking-slot-name';
+                    name.textContent = slotLabel(item.cell.key);
+                    const progress = document.createElement('span');
+                    progress.className = 'ranking-slot-progress';
+                    progress.textContent = t('ranking.nextProgress', {
+                        sessions: item.cell.n, minimum: minSessions,
+                        days: item.cell.observedDays, minDays
+                    });
+                    const need = document.createElement('span');
+                    need.className = 'ranking-need';
+                    need.textContent = t('ranking.nextNeed', { count: item.need });
+                    row.append(name, progress, need);
+                    list.append(row);
+                }
+                next.append(list);
+            }
+
+            const tips = [];
+            if (excluded.missingStart) tips.push(t('ranking.nextTipMissing', { count: excluded.missingStart }));
+            if (excluded.insufficientCoverage) tips.push(t('ranking.nextTipCoverage', { count: excluded.insufficientCoverage }));
+            if (excluded.pending) tips.push(t('ranking.nextTipPending', { count: excluded.pending }));
+            if (tips.length) {
+                const list = document.createElement('ul');
+                list.className = 'ranking-next-tips';
+                for (const tip of tips) {
+                    const item = document.createElement('li');
+                    item.textContent = tip;
+                    list.append(item);
+                }
+                next.append(list);
+            }
+            addTo(next, t('ranking.nextMinSlots'), 'ranking-next-min');
+            card.append(next);
+        }
+
+        addTo(card, t('ranking.summary', {
             total: rankings.totalSessions ?? rankings.sessionCount + (rankings.unstarted || 0),
             usable: rankings.sessionCount, qualified: enough.length
         }));
-        if (rankings.scope === 'own') addNote(t('ranking.scopeOwn'));
-        else if (rankings.scope === 'all') addNote(t('ranking.scopeAll'));
+        if (rankings.scope === 'own') addTo(card, t('ranking.scopeOwn'));
+        else if (rankings.scope === 'all') addTo(card, t('ranking.scopeAll'));
+
+        // 規則、排除原因與完整進度收進摺疊區，避免一次塞滿畫面。
+        const details = document.createElement('details');
+        details.className = 'ranking-why';
+        const why = document.createElement('summary');
+        why.textContent = t('ranking.nextWhy');
+        details.append(why);
+
         const criteria = document.createElement('ul');
         criteria.className = 'ranking-criteria';
-        // 翻譯以換行分隔條件，保留語意清單與自然折行。
         for (const line of t('ranking.criteria', {
-            minimum: rankings.minSessions, days: rankings.minDays ?? 3,
-            window: rankings.earlyMinutes, observed: rankings.minObservedMinutes ?? 20
+            minimum: minSessions, days: minDays,
+            window: earlyMinutes, observed: minObserved
         }).split('\n')) {
             if (!line.trim()) continue;
             const item = document.createElement('li');
             item.textContent = line;
             criteria.append(item);
         }
-        card.append(criteria);
-        const excluded = rankings.excluded ?? { missingStart: rankings.unstarted };
+        details.append(criteria);
+
         const reasons = document.createElement('ul');
         reasons.className = 'ranking-reasons';
         for (const reason of ['missingStart', 'pending', 'insufficientCoverage']) {
@@ -210,25 +330,27 @@
             item.textContent = t(`ranking.${reason}`, { count: excluded[reason] });
             reasons.append(item);
         }
-        if (reasons.childElementCount) card.append(reasons);
+        if (reasons.childElementCount) details.append(reasons);
+
         if (partial.length) {
-            addNote(t('ranking.progress'), 'ranking-section-title');
+            addTo(details, t('ranking.progress'), 'ranking-section-title');
             const progress = document.createElement('ul');
-            // 未達標項目依時段排序，避免讓小樣本分數看起來像排名。
             for (const cell of [...partial].sort((a, b) => a.key.localeCompare(b.key))) {
                 const item = document.createElement('li');
                 item.textContent = t('ranking.progressItem', {
                     slot: slotLabel(cell.key), sessions: cell.n, days: cell.observedDays,
-                    missingSessions: Math.max(0, rankings.minSessions - cell.n),
-                    missingDays: Math.max(0, (rankings.minDays ?? 3) - cell.observedDays)
+                    missingSessions: Math.max(0, minSessions - cell.n),
+                    missingDays: Math.max(0, minDays - cell.observedDays)
                 });
                 progress.append(item);
             }
-            card.append(progress);
+            details.append(progress);
         }
-        if (rankings.days < 15) addNote(t('ranking.shortRange'));
-        if (!comparable) addNote(t('ranking.comparison'));
-        addNote(t('ranking.caution'), 'ranking-caution');
+
+        if (rankings.days < 15) addTo(details, t('ranking.shortRange'));
+        if (!comparable) addTo(details, t('ranking.comparison'));
+        addTo(details, t('ranking.caution'), 'ranking-caution');
+        card.append(details);
     }
 
     /** 重新抓取歷史並更新熱圖、每日統計與時段排名。 */

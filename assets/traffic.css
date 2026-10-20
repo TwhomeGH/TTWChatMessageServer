@@ -182,6 +182,25 @@ canvas {cursor:crosshair;}
 .ranking-note .ranking-reasons li::marker {color:#fbbf24;}
 .ranking-note .ranking-section-title {margin-top:20px;font-weight:600;color:#93c5fd;}
 .ranking-note .ranking-caution {margin:20px 0 0;padding-top:14px;border-top:1px solid #374151;color:#aebdce;font-size:.875rem;}
+
+/* 下一步卡：先告訴主播還要開幾場，再把規則與排除原因收進摺疊區。 */
+.ranking-next {margin:14px 0 18px;padding:14px 16px;border:1px solid #1d4ed8;border-radius:10px;background:#0b1b3a;}
+.ranking-next-head {display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+.ranking-next-head strong {color:#dbeafe;font-size:1.05rem;}
+.ranking-next-badge {padding:2px 10px;border-radius:999px;background:#1d4ed8;color:#fff;font-size:.8rem;line-height:1.6;}
+.ranking-next-action {margin:8px 0;color:#bfdbfe;}
+.ranking-slots {display:grid;gap:8px;margin:10px 0;}
+.ranking-slot {display:grid;grid-template-columns:minmax(110px,1fr) auto auto;gap:8px;align-items:center;padding:8px 10px;border-radius:6px;background:#111f3d;}
+.ranking-slot-name {font-weight:600;color:#e2e8f0;}
+.ranking-slot-progress {color:#aebdce;font-size:.85rem;font-variant-numeric:tabular-nums;}
+.ranking-need {color:#fde68a;font-size:.8rem;white-space:nowrap;}
+.ranking-next-tips {margin:8px 0 0;padding-left:20px;color:#fde68a;}
+.ranking-next-min {margin:10px 0 0;color:#93c5fd;font-size:.85rem;}
+.ranking-why {margin-top:16px;border-top:1px solid #374151;padding-top:12px;}
+.ranking-why > summary {cursor:pointer;padding:4px 0;color:#93c5fd;font-weight:600;}
+@media (max-width:520px) {
+    .ranking-slot {grid-template-columns:1fr;gap:4px;}
+}
 #ranking[hidden] {display:none;}
 
 /* 提醒表單與場次分類在窄視窗自然堆疊；所有狀態同時保留文字標示。 */
