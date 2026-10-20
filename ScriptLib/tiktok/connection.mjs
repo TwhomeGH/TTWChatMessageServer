@@ -29,6 +29,7 @@ import { roomStartTime, createStartTimeProbe } from './viewers.mjs';
  * @property {() => void} handleExit 收尾退出。
  * @property {() => boolean} isEnd 是否已進入結束流程。
  * @property {() => boolean} getStreamEnded 直播是否已真正結束（不再重連）。
+ * @property {() => void} [onLive] 連線成功（初次或重連）時通知。
  * @property {number} [retryBase=15000] 重連基礎間隔（ms）。
  * @property {number} [retryMax=5] 最大重連次數。
  * @property {number} [viewCacheIntervalMs=30000] 觀眾數輪詢間隔（ms）。
@@ -45,7 +46,7 @@ export function createTikTokConnectionManager(deps) {
         getConnection, tiktokName, isTK, isTwitch, getTwitchViewerCount,
         setTikTokViewerCount, setCacheUserNum, getCacheUserNum, getCacheUserList,
         updateCombinedViewerCount, notify, sendSystem, writeLog, reportTraffic,
-        getAutoClip, tikTokChatGuard, adScheduler, handleExit, isEnd, getStreamEnded,
+        getAutoClip, tikTokChatGuard, adScheduler, handleExit, isEnd, getStreamEnded, onLive,
         retryBase = 15000, retryMax = 5, viewCacheIntervalMs = 30000, logger = console
     } = deps;
 
@@ -94,6 +95,7 @@ export function createTikTokConnectionManager(deps) {
      */
     function onConnected(state) {
         retryCount = 0;
+        onLive?.();
         if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
         roomId = state.roomId;
         const info = getConnection().state.roomInfo.data;

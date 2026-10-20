@@ -22,6 +22,12 @@ TWITCH_USER_NAME=你的Twitch頻道 用戶名
 # AUTO_CLIP_COOLDOWN_MIN=15
 # AUTO_CLIP_TITLE_PREFIX=人氣高峰
 
+# ─── 自動停止 ──────────────────────────────────────
+# 所有支援結束偵測的平台（TikTok／Twitch）都結束後，延遲幾秒自動停止聊天子程序。
+# 同時啟用 Kick／Odysee／YouTube 時不會自動停止（目前沒有可靠的結束訊號）。
+# AUTO_STOP_ENABLED=0
+# AUTO_STOP_GRACE_SEC=60
+
 # ─── TikTok ──────────────────────────────────────────
 TIKTOK_NAME=你的TikTok 用戶名
 

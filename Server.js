@@ -1142,7 +1142,9 @@ const server = http.createServer((req, res) => {
             .replace('${AUTO_CLIP_SUSTAIN_MIN}', process.env.AUTO_CLIP_SUSTAIN_MIN || '0.167')
             .replace('${AUTO_CLIP_INSTANT_MULTIPLIER}', process.env.AUTO_CLIP_INSTANT_MULTIPLIER || '2')
             .replace('${AUTO_CLIP_DEDUP_SEC}', process.env.AUTO_CLIP_DEDUP_SEC || '10')
-            .replace('${AUTO_CLIP_TITLE_PREFIX}', process.env.AUTO_CLIP_TITLE_PREFIX || '');
+            .replace('${AUTO_CLIP_TITLE_PREFIX}', process.env.AUTO_CLIP_TITLE_PREFIX || '')
+            .replace('${AUTO_STOP_ENABLED}', process.env.AUTO_STOP_ENABLED || '0')
+            .replace('${AUTO_STOP_GRACE_SEC}', process.env.AUTO_STOP_GRACE_SEC || '60');
 
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end(filledHtml);
@@ -1180,6 +1182,11 @@ const server = http.createServer((req, res) => {
             const newAutoClipInstantMultiplier = params.get('AUTO_CLIP_INSTANT_MULTIPLIER') || '2';
             const newAutoClipDedupSec = params.get('AUTO_CLIP_DEDUP_SEC') || '10';
             const newAutoClipTitlePrefix = params.get('AUTO_CLIP_TITLE_PREFIX') || '';
+            const newAutoStopEnabled = params.get('AUTO_STOP_ENABLED') === '1' ? '1' : '0';
+            const rawAutoStopGrace = params.get('AUTO_STOP_GRACE_SEC');
+            const parsedAutoStopGrace = Number(rawAutoStopGrace);
+            const newAutoStopGraceSec = String(rawAutoStopGrace !== '' && Number.isFinite(parsedAutoStopGrace)
+                ? Math.min(Math.max(Math.round(parsedAutoStopGrace), 10), 600) : 60);
 
             // 更新 process.env
             process.env.BARK_API = newBark;
@@ -1204,6 +1211,8 @@ const server = http.createServer((req, res) => {
             process.env.AUTO_CLIP_INSTANT_MULTIPLIER = newAutoClipInstantMultiplier;
             process.env.AUTO_CLIP_DEDUP_SEC = newAutoClipDedupSec;
             process.env.AUTO_CLIP_TITLE_PREFIX = newAutoClipTitlePrefix;
+            process.env.AUTO_STOP_ENABLED = newAutoStopEnabled;
+            process.env.AUTO_STOP_GRACE_SEC = newAutoStopGraceSec;
 
             // 更新 .env 檔案
             const envPath = path.resolve('.env');
@@ -1244,6 +1253,8 @@ const server = http.createServer((req, res) => {
             updateEnv('AUTO_CLIP_SUSTAIN_MIN', newAutoClipSustainMin);
             updateEnv('AUTO_CLIP_INSTANT_MULTIPLIER', newAutoClipInstantMultiplier);
             updateEnv('AUTO_CLIP_DEDUP_SEC', newAutoClipDedupSec);
+            updateEnv('AUTO_STOP_ENABLED', newAutoStopEnabled);
+            updateEnv('AUTO_STOP_GRACE_SEC', newAutoStopGraceSec);
             updateEnv('AUTO_CLIP_TITLE_PREFIX', newAutoClipTitlePrefix);
 
             fs.writeFileSync(envPath, envContent, 'utf-8');

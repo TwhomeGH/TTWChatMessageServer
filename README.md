@@ -502,6 +502,10 @@ G#clip 這波操作太秀了
 
 完整判斷、時間校準、歷史紀錄與驗證方式見 [留言統計與自動剪輯說明](Docs/KEYWORD_AUTOCLIP_V2.md)。轉接欄位見 [/chat 參數文件](Docs/CHAT_API.md)。
 
+## 自動停止
+
+`AUTO_STOP_ENABLED=1` 時，TikTok 與 Twitch 都明確結束（TikTok `STREAM_END`／Twitch 離線）後，等待 `AUTO_STOP_GRACE_SEC`（預設 60 秒）自動停止聊天子程序；期間任一平台恢復直播會取消倒數。若同時啟用 Kick／Odysee／YouTube，因目前沒有可靠的結束訊號，不會自動停止。設定可從 `/config` 修改，儲存後需重啟子程序。
+
 ## 推流端診斷頁 `/pushdiag`
 
 > 需搭配自己的 **SRS / Oryx** 串流伺服器使用。此頁面直接以瀏覽器連到 SRS 的 HTTP-FLV 播放埠（如 `http://192.168.0.102:882`），解析即時 FLV tag 檢查推流端（OBS 等）送出的資料是否正常，是排查「推流端問題」的分析工具。

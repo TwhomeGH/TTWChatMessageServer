@@ -35,7 +35,7 @@ export function registerTikTokEvents(connection, deps) {
         giftNames, getGiftMapReady,
         getCacheUserNum, setCacheUserNum, setCacheUserList,
         getAutoClip, sendAudienceUpdate,
-        isEnd, setStreamEnded, cancelReconnect,
+        isEnd, setStreamEnded, cancelReconnect, onStreamEnd,
         logger = console,
     } = deps;
 
@@ -520,5 +520,6 @@ export function registerTikTokEvents(connection, deps) {
         // 直播真正結束：取消排程中的重連，不再自動重試
         setStreamEnded();
         cancelReconnect();
+        onStreamEnd?.();
     });
 }

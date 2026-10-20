@@ -299,6 +299,39 @@
         </div>
 
         <hr class="my-6 border-gray-300" />
+        <h3 class="text-xl font-bold text-gray-800 mb-4">自動停止</h3>
+        <p class="text-sm text-gray-500 mb-4">
+          當所有支援結束偵測的平台（TikTok／Twitch）都結束後，延遲指定秒數自動停止聊天子程序。
+          同時啟用 Kick／Odysee／YouTube 時不會自動停止，因為目前沒有可靠的結束訊號。儲存後需重新啟動子程序。
+        </p>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label for="AUTO_STOP_ENABLED" class="block text-gray-700 mb-2">AUTO_STOP_ENABLED:</label>
+            <select
+              name="AUTO_STOP_ENABLED"
+              id="AUTO_STOP_ENABLED"
+              data-value="${AUTO_STOP_ENABLED}"
+              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="0">停用</option>
+              <option value="1">啟用</option>
+            </select>
+          </div>
+          <div>
+            <label for="AUTO_STOP_GRACE_SEC" class="block text-gray-700 mb-2">AUTO_STOP_GRACE_SEC (秒):</label>
+            <input
+              type="number"
+              min="10"
+              max="600"
+              name="AUTO_STOP_GRACE_SEC"
+              id="AUTO_STOP_GRACE_SEC"
+              value="${AUTO_STOP_GRACE_SEC}"
+              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        <hr class="my-6 border-gray-300" />
         <h3 class="text-xl font-bold text-gray-800 mb-4">平台 OAuth 重新授權</h3>
 
         <div class="mt-4">
@@ -352,6 +385,8 @@
             mode.value = mode.dataset.value;
             const sel = document.getElementById('AUTO_CLIP_ENABLED');
             if (sel) sel.value = sel.dataset.value || '0';
+            const autoStop = document.getElementById('AUTO_STOP_ENABLED');
+            if (autoStop) autoStop.value = autoStop.dataset.value || '0';
         });
 
         async function logout() {

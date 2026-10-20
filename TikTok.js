@@ -13,6 +13,7 @@ import { promises as fs, readFileSync, existsSync, writeFileSync } from 'fs';
 import axios from 'axios';
 
 import { createHub } from './ScriptLib/socket/hub.mjs';
+import { createAutoStop } from './ScriptLib/lifecycle/autoStop.mjs';
 import { createMonitorRelay } from './ScriptLib/socket/monitor-relay.mjs';
 import { MessageDedup } from './ScriptLib/socket/dedup.mjs';
 import { createGiftNameStore } from './ScriptLib/gift/names.mjs';
@@ -214,6 +215,8 @@ const tikTokChatGuard = new TikTokChatGuard();
 
 // TikTok 直播間斷線自動重連（有限次數 + 指數退避）
 let streamEnded = false;       // 直播真正結束（使用者主動結束 / 平台封鎖）→ 不再重連
+let autoStop = null;           // 所有支援平台結束後自動停止的管理器（啟動後才建立）
+let tiktokLiveBeforeAutoStop = false; // 連線早於管理器建立時，先記住已上線
 
 // Socket 輸出層：端點／去重／扇出皆在 ScriptLib/socket/。
 const dedup = new MessageDedup();
@@ -327,7 +330,11 @@ const tiktokConn = createTikTokConnectionManager({
     handleExit,
     isEnd: () => isEnd,
     getStreamEnded: () => streamEnded,
-});
+    onLive: () => {
+        if (autoStop) autoStop.markLive('TikTok');
+        else tiktokLiveBeforeAutoStop = true;
+    },
+    });
 
 
 var isEnd=false
@@ -499,6 +506,8 @@ process.stdin.on('data', async (chunk) => {
 
         // 🔴 Kick 啟動指令
         if (msg === 'KICK_START') {
+            // Kick 沒有可靠的結束訊號；一旦啟用就停用自動停止，避免誤停。
+            autoStop?.dispose();
             if (!isKick) {
                 isKick = true;
                 startKickChat(kickDeps);
@@ -913,6 +922,22 @@ if (isTK) {
 }
 
 
+// ─── 自動停止：只在有可靠結束訊號的平台都結束後才觸發 ───
+const autoStopRequested = /^(1|true|yes|on)$/i.test(process.env.AUTO_STOP_ENABLED || '');
+const autoStopGraceMs = Math.min(Math.max(Number(process.env.AUTO_STOP_GRACE_SEC || 60) * 1000, 10000), 600000) || 60000;
+autoStop = createAutoStop({
+    enabled: autoStopRequested,
+    platforms: [isTK && 'TikTok', isTwitch && 'Twitch'].filter(Boolean),
+    blocked: [isKick && 'Kick', isOdysee && 'Odysee', isYoutube && 'Youtube'].filter(Boolean),
+    graceMs: autoStopGraceMs,
+    log: message => writeLog('Default', `[AutoStop] ${message}`),
+    onStop: () => {
+        writeLog('Default', '[AutoStop] 所有平台已結束，停止程序');
+        void handleExit();
+    }
+});
+if (tiktokLiveBeforeAutoStop) autoStop.markLive('TikTok');
+
 // 註冊所有 TikTok 事件處理器（實作在 ScriptLib/tiktok/events.mjs）
 registerTikTokEvents(connection, {
     tiktokName, isTK,
@@ -926,6 +951,7 @@ registerTikTokEvents(connection, {
     setCacheUserNum: (n) => { CacheUserNum = n; }, setCacheUserList: (n) => { CacheUserList = n; },
     getAutoClip: () => autoClip, sendAudienceUpdate,
     isEnd: () => isEnd, getStreamEnded: () => streamEnded, setStreamEnded: () => { streamEnded = true; },
+    onStreamEnd: () => autoStop.markEnded('TikTok'),
     stopViewCache: () => tiktokConn.stopViewCache(),
     scheduleReconnect: () => tiktokConn.scheduleReconnect(),
     cancelReconnect: () => tiktokConn.cancelReconnect(),
@@ -991,13 +1017,17 @@ await startTwitchClient({
     enabled: isTwitch,
     writeLog,
     onError: (err) => twitchOnError(err, twitchDeps),
-    onStreamOnline: (event) => twitchOnStreamOnline(event, twitchDeps),
-    onStreamOffline: (event) => twitchOnStreamOffline(event, twitchDeps),
+    onStreamOnline: (event) => { autoStop.markLive('Twitch'); twitchOnStreamOnline(event, twitchDeps); },
+    onStreamOffline: (event) => { autoStop.markEnded('Twitch'); twitchOnStreamOffline(event, twitchDeps); },
     onFollow: (event) => twitchOnFollow(event, twitchDeps),
     onCheer: (event) => twitchOnCheer(event, twitchDeps),
     onChat: (event) => twitchOnChat(event, twitchChatDeps),
     onSocketDisconnect: () => autoClip?.reset(),
-    onViewer: (stream) => twitchOnViewer(stream, twitchDeps),
+    onViewer: (stream) => {
+        if (stream) autoStop.markLive('Twitch');
+        else autoStop.markEnded('Twitch');
+        twitchOnViewer(stream, twitchDeps);
+    },
 });
 
 
