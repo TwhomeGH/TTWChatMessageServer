@@ -33,6 +33,19 @@ test('TikTok and Live Center bridges preserve real metadata and identify their p
         }
     }
 });
+test('liveCenter 主播帳號有無 @ 或前後空白都能正規化', () => {
+    const source = fs.readFileSync(new URL('../UserScript/liveCenter.user.js', import.meta.url), 'utf8');
+    const start = source.indexOf('function normalizeBroadcaster');
+    const end = source.indexOf('\n    }', start) + '\n    }'.length;
+    assert.ok(start >= 0 && end > start);
+    const ctx = vm.createContext({});
+    vm.runInContext(source.slice(start, end), ctx);
+    assert.equal(ctx.normalizeBroadcaster('@Handle'), 'handle');
+    assert.equal(ctx.normalizeBroadcaster('  @Handle  '), 'handle');
+    assert.equal(ctx.normalizeBroadcaster('Handle'), 'handle');
+    assert.equal(ctx.normalizeBroadcaster(''), '');
+});
+
 test('YouTube bridge attaches the configured broadcaster to the payload', () => {
     const { ctx, sent } = contextFor('youtube-chat-userscript.user.js', 'function send(data)', '// ─────');
     ctx.send({ type: 'StreamMessage', platform: 'Youtube', transport: 'userscript', user: 'u', message: 'm' });

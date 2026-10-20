@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat → Socket Bridge
 // @namespace    pip-chat-bridge
-// @version      1.16
+// @version      1.17
 // @description  Listen TikTok live chat and forward to socket server
 // @author       Nuclear0709
 // @match        https://livecenter.tiktok.com/*
@@ -32,10 +32,15 @@
     const BROADCASTER_KEY = 'ttw-livecenter-broadcaster';
     let broadcasterName = loadBroadcaster();
 
+    /** 正規化主播識別：先去除空白，再去掉開頭 @，最後轉小寫。 */
+    function normalizeBroadcaster(value) {
+        return String(value || '').trim().replace(/^@/, '').trim().toLowerCase();
+    }
+
     /** 讀取主播帳號設定；只保留帳號本體，去除 @ 與空白。 */
     function loadBroadcaster() {
         try {
-            return String(GM_getValue(BROADCASTER_KEY, '') || '').replace(/^@/, '').trim().toLowerCase();
+            return normalizeBroadcaster(GM_getValue(BROADCASTER_KEY, ''));
         } catch { return ''; }
     }
 
@@ -286,11 +291,11 @@ function getTopFanUsers() {
     const accountLabel = document.createElement('label');
     const accountInput = document.createElement('input');
     accountInput.type = 'text';
-    accountInput.placeholder = '@你的帳號（選填）';
+    accountInput.placeholder = '你的帳號（@ 可省略）';
     accountInput.value = broadcasterName;
     accountInput.setAttribute('aria-label', '主播帳號（用於人流歸屬）');
     accountInput.oninput = () => {
-        broadcasterName = accountInput.value.replace(/^@/, '').trim().toLowerCase();
+        broadcasterName = normalizeBroadcaster(accountInput.value);
         GM_setValue(BROADCASTER_KEY, broadcasterName);
     };
     accountLabel.append(document.createTextNode('主播帳號（選填） '), accountInput);
