@@ -176,6 +176,17 @@
         updateTable('ranking', rows);
         el('ranking').hidden = !enough.length;
 
+        // 2 場／2 日期先提供暫定觀察，但不進入正式排名。
+        const provisional = partial.filter(cell => cell.n >= 2 && cell.observedDays >= 2)
+            .sort((a, b) => b.mean - a.mean || a.key.localeCompare(b.key));
+        updateTable('ranking-provisional', [
+            [t('timeSlot'), t('sessions'), t('ranking.provisionalDays'), t('mean'), t('median')],
+            ...provisional.map(cell => [slotLabel(cell.key), cell.n, cell.observedDays, format(cell.mean), format(cell.median)])
+        ]);
+        el('ranking-provisional').hidden = !provisional.length;
+        el('ranking-provisional-title').hidden = !provisional.length;
+        el('ranking-provisional-note').hidden = !provisional.length;
+
         const card = el('ranking-note');
         card.replaceChildren();
         const heading = document.createElement('strong');

@@ -4,6 +4,7 @@
     const el = id => document.getElementById('plan-' + id);
     let data, page = 1, busy = false, initialized = false, dirty = false, timer, bfPreview = null, bfBatch = null;
     const purposeValues = ['own', 'reference', 'test'];
+    const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const node = (tag, text, className = '') => {
         const result = document.createElement(tag);
         if (text !== undefined) result.textContent = text;
@@ -17,7 +18,7 @@
         .format(Date.UTC(2026, 0, 5 + index));
     const slot = key => {
         const [day, hour] = key.split(' ');
-        return `${weekday(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(day))} ${hour}:00`;
+        return `${weekday(WEEKDAYS.indexOf(day))} ${hour}:00`;
     };
 
     /**
@@ -53,16 +54,34 @@
         finally { busy = false; }
     }
 
+    let toastTimer;
+    /** 在頁面底部顯示短暫訊息，讓下方卡片的操作也有回饋。 */
+    function toast(message) {
+        let box = document.getElementById('plan-toast');
+        if (!box) {
+            box = node('div', undefined, 'plan-toast');
+            box.id = 'plan-toast';
+            box.setAttribute('role', 'status');
+            document.body.append(box);
+        }
+        box.textContent = message;
+        box.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => box.classList.remove('show'), 4000);
+    }
+
     /** 所有變更均由使用者點擊後送出，成功後重新取得伺服器狀態。 */
     async function save(action, value) {
         const outcome = await mutate(action, value);
         if (!outcome) return;
         if (!outcome.ok) {
             const fields = ['channels', 'historyDays', 'maxPerWeek', 'weekdays', 'hours', 'timezone',
-                'channelNotConfigured', 'collecting', 'target'];
+                'channelNotConfigured', 'collecting', 'target', 'action', 'slot'];
             const key = outcome.status === 403 ? 'originError'
                 : fields.includes(outcome.result.field) ? 'error.' + outcome.result.field : 'saveError';
-            el('status').textContent = t(key);
+            const message = t(key);
+            el('status').textContent = message;
+            toast(message);
             return;
         }
         el('status').textContent = t('saved');
@@ -71,6 +90,9 @@
         if (action === 'tests' || action === 'assign') page = 1;
         window.dispatchEvent(new Event('traffic-classified'));
         await refresh();
+        if (action.startsWith('collecting')) {
+            toast(action === 'collectingAddSeries' ? t('collecting.seriesAdded') : t('saved'));
+        }
     }
 
     function actionButton(label, action) {
@@ -112,7 +134,7 @@
         initialized = true;
     }
 
-    /** 資料累積建議：依時段分組；同一個時段的平台共用一次提醒。 */
+    /** 資料累積建議：以整點分組；每週計畫用一張緊湊表，多平台共用提醒。 */
     function collectingCard() {
         const suggestions = data.collecting || [];
         const targets = data.collectingTargets || [];
@@ -121,77 +143,155 @@
         card.append(node('strong', t('collecting.title')));
         card.append(node('p', t('collecting.note', { days: data.settings.historyDays }), 'plan-muted'));
         const ready = data.settings.enabled && data.settings.channels.some(channel => data.available?.[channel]);
+        const seriesReady = ready && data.capabilities?.collectingSeries === true;
         if (!ready) card.append(node('p', t('collecting.disabled'), 'plan-muted'));
 
-        // 以時段分組，避免同一時間的 Twitch／TikTok 被拆成兩個獨立按鈕。
-        const groups = new Map();
+        const dayNumber = time => {
+            const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+                timeZone: data.settings.timezone, year: 'numeric', month: '2-digit', day: '2-digit'
+            }).formatToParts(time).map(part => [part.type, part.value]));
+            return Math.floor(Date.parse(`${parts.year}-${parts.month}-${parts.day}T00:00:00Z`) / 86400000);
+        };
+        const relativeDay = time => {
+            if (!Number.isSafeInteger(time)) return null;
+            const days = dayNumber(time) - dayNumber(data.now ?? Date.now());
+            if (days < 0) return null;
+            if (days === 0) return { text: t('collecting.today'), className: 'today' };
+            if (days === 1) return { text: t('collecting.tomorrow'), className: 'tomorrow' };
+            if (days === 2) return { text: t('collecting.dayAfter'), className: 'soon' };
+            if (days <= 6) return { text: t('collecting.inDays', { count: days }), className: 'soon' };
+            return null;
+        };
+
+        const hours = new Map();
+        const ensureHour = hour => {
+            if (!hours.has(hour)) hours.set(hour, { hour, items: [] });
+            return hours.get(hour);
+        };
         for (const item of suggestions) {
-            if (!groups.has(item.slot)) groups.set(item.slot, { slot: item.slot, items: [] });
-            groups.get(item.slot).items.push(item);
+            const group = ensureHour(item.slot.split(' ')[1]);
+            group.items.push({
+                ...item,
+                targeted: targets.some(target => target.slot === item.slot &&
+                    target.platform === item.platform && target.broadcaster === item.broadcaster)
+            });
         }
         for (const target of targets) {
-            if (!groups.has(target.slot)) groups.set(target.slot, { slot: target.slot, items: [] });
-            const group = groups.get(target.slot);
-            if (!group.items.some(item => item.platform === target.platform && item.broadcaster === target.broadcaster)) {
+            const group = ensureHour(target.slot.split(' ')[1]);
+            if (!group.items.some(item => item.slot === target.slot &&
+                item.platform === target.platform && item.broadcaster === target.broadcaster)) {
                 group.items.push({ ...target, targetOnly: true });
             }
         }
 
-        const visible = [...groups.values()].slice(0, 2);
-        for (const group of visible) {
-            const groupTargets = targets.filter(target => target.slot === group.slot);
-            const addedCount = group.items.filter(item => groupTargets.some(target =>
-                target.platform === item.platform && target.broadcaster === item.broadcaster)).length;
-            const allAdded = group.items.length > 0 && addedCount === group.items.length;
-            const row = node('div', undefined, 'plan-collect-row');
-            const head = node('div', undefined, 'plan-collect-head');
-            head.append(node('strong', slot(group.slot)));
-            if (allAdded) head.append(node('span', t('collecting.added'), 'plan-badge'));
-            else if (addedCount) head.append(node('span', t('collecting.partial'), 'plan-badge'));
-            row.append(head);
+        const ordered = [...hours.values()].sort((a, b) => Number(a.hour) - Number(b.hour));
+        for (const group of ordered) {
+            const hour = group.hour;
+            const groupTargets = targets.filter(target => target.slot.endsWith(` ${hour}`));
+            const slots = [...new Set(group.items.map(item => item.slot))]
+                .sort((a, b) => WEEKDAYS.indexOf(a.split(' ')[0]) - WEEKDAYS.indexOf(b.split(' ')[0]));
+            const platforms = [...new Set(group.items.map(item => item.platform))];
 
-            for (const item of group.items) {
-                const line = node('div', undefined, 'plan-collect-platform');
-                line.append(node('span', item.platform));
-                if (item.targetOnly) {
-                    line.append(node('span', t('collecting.added'), 'plan-muted'));
-                } else {
-                    line.append(node('span', t('collecting.row', {
-                        sessions: item.n, minimum: item.minimum,
-                        days: item.observedDays, minDays: item.minDays, need: item.need
-                    }), 'plan-muted'));
-                    if (item.lastStarted) {
-                        line.append(node('span', t('collecting.recent', {
-                            date: date(item.lastStarted), mean: Number(item.mean).toFixed(1)
-                        }), 'plan-muted'));
-                    }
-                }
-                row.append(line);
-            }
-
-            const nextAt = groupTargets.map(target => target.nextAt)
-                .filter(Number.isSafeInteger).sort((a, b) => a - b)[0];
-            const meta = [];
-            if (nextAt) meta.push(t('collecting.next', { date: date(nextAt) }));
-            if (groupTargets.some(target => !target.available)) meta.push(t('collecting.paused'));
-            if (meta.length) row.append(node('p', meta.join(' · '), 'plan-muted'));
-
-            const actions = node('div', undefined, 'plan-fields');
-            if (!allAdded) {
-                const add = actionButton(t(addedCount ? 'collecting.addRest' : 'collecting.add'), () =>
-                    save('collectingAddSlot', { slot: group.slot }));
-                add.disabled = !ready;
-                actions.append(add);
-            }
+            const section = node('section', undefined, 'plan-hour');
+            const head = node('div', undefined, 'plan-hour-head');
+            head.append(node('strong', t(groupTargets.length ? 'collecting.weekPlan' : 'collecting.hourSuggestions', { hour: `${hour}:00` })));
             if (groupTargets.length) {
-                actions.append(actionButton(t('collecting.remove'), () =>
-                    save('collectingRemoveSlot', { slot: group.slot })));
+                head.append(node('span', t('collecting.daysCount', {
+                    count: new Set(groupTargets.map(target => target.slot)).size
+                }), 'plan-badge'));
             }
-            row.append(actions);
-            card.append(row);
-        }
-        if (groups.size > visible.length) {
-            card.append(node('p', t('collecting.more', { count: groups.size - visible.length }), 'plan-muted'));
+            section.append(head);
+
+            const wrap = node('div', undefined, 'table-wrap plan-hour-table');
+            const table = node('table');
+            const thead = node('thead');
+            const headRow = node('tr');
+            headRow.append(node('th', t('collecting.weekday')));
+            for (const platform of platforms) headRow.append(node('th', platform));
+            headRow.append(node('th', t('collecting.next')), node('th', t('collecting.actions')));
+            thead.append(headRow);
+            table.append(thead);
+            const tbody = node('tbody');
+            for (const slot of slots) {
+                const slotTargets = targets.filter(target => target.slot === slot);
+                const nextAt = slotTargets.map(target => target.nextAt)
+                    .filter(Number.isSafeInteger).sort((a, b) => a - b)[0];
+                const row = node('tr');
+                const weekdayCell = node('th');
+                weekdayCell.append(node('span', weekday(WEEKDAYS.indexOf(slot.split(' ')[0]))));
+                const badge = relativeDay(nextAt);
+                if (badge?.text) weekdayCell.append(node('span', badge.text, `plan-day-badge ${badge.className}`));
+                row.append(weekdayCell);
+                for (const platform of platforms) {
+                    const item = group.items.find(entry => entry.slot === slot && entry.platform === platform);
+                    const cell = node('td');
+                    if (item) {
+                        cell.append(node('span', t('collecting.cell', {
+                            sessions: item.n, minimum: item.minimum,
+                            days: item.observedDays, minDays: item.minDays
+                        })));
+                        if (!item.n) cell.append(node('span', t('collecting.none'), 'plan-muted'));
+                        if (item.lastStarted) {
+                            cell.title = t('collecting.recent', {
+                                date: date(item.lastStarted), mean: Number(item.mean).toFixed(1)
+                            });
+                        }
+                    } else {
+                        cell.textContent = '—';
+                    }
+                    row.append(cell);
+                }
+                row.append(node('td', nextAt ? date(nextAt) : '—'));
+                const actions = node('td', undefined, 'plan-hour-actions');
+                const slotItems = group.items.filter(item => item.slot === slot);
+                const hasTarget = slotTargets.length > 0;
+                if (hasTarget) {
+                    actions.append(actionButton(t('collecting.remove'), () =>
+                        save('collectingRemoveSlot', { slot })));
+                }
+                if (slotItems.some(item => !item.targetOnly && !item.targeted)) {
+                    const add = actionButton(t(hasTarget ? 'collecting.addRest' : 'collecting.add'), () =>
+                        save('collectingAddSlot', { slot }));
+                    add.disabled = !ready;
+                    actions.append(add);
+                }
+                row.append(actions);
+                tbody.append(row);
+            }
+            table.append(tbody);
+            wrap.append(table);
+            section.append(wrap);
+
+            const seed = group.items.find(item => !item.targetOnly);
+            if (seed) {
+                const seedDay = WEEKDAYS.indexOf(seed.slot.split(' ')[0]);
+                const activeDays = new Set(groupTargets.map(target => WEEKDAYS.indexOf(target.slot.split(' ')[0])));
+                const series = node('details', undefined, 'plan-series');
+                series.append(node('summary', t('collecting.seriesOpen', { hour: `${hour}:00` })));
+                series.append(node('p', t('collecting.seriesNote'), 'plan-series-note'));
+                if (!data.capabilities?.collectingSeries) {
+                    series.append(node('p', t('collecting.seriesNeedsRestart'), 'plan-series-note'));
+                }
+                const days = node('div', undefined, 'plan-series-days');
+                for (const day of data.settings.weekdays) {
+                    const label = node('label');
+                    const input = node('input');
+                    input.type = 'checkbox';
+                    input.value = String(day);
+                    input.checked = activeDays.size ? activeDays.has(day) : day === seedDay;
+                    label.append(input, document.createTextNode(weekday(day)));
+                    days.append(label);
+                }
+                series.append(days);
+                const addSeries = actionButton(t('collecting.seriesAdd'), () => {
+                    const selected = [...series.querySelectorAll('input:checked')].map(input => Number(input.value));
+                    if (selected.length) save('collectingAddSeries', { slot: seed.slot, weekdays: selected });
+                });
+                addSeries.disabled = !seriesReady;
+                series.append(addSeries);
+                section.append(series);
+            }
+            card.append(section);
         }
         card.append(node('p', t('collecting.auto'), 'plan-muted'));
         return card;
@@ -199,14 +299,16 @@
 
     function renderJobs() {
         const groups = new Map();
-        for (const job of data.jobs) {
+        for (const job of data.jobs.filter(job => job.kind !== 'collecting')) {
             if (!groups.has(job.startAt)) groups.set(job.startAt, []);
             groups.get(job.startAt).push(job);
         }
         const collecting = collectingCard();
         const cards = [];
         if (!data.settings.enabled) cards.push(node('p', t('disabled'), 'plan-muted'));
+        if (collecting) cards.push(collecting);
         if (!groups.size && !collecting) cards.push(node('p', t('waiting'), 'plan-muted'));
+        if (groups.size) cards.push(node('h4', t('formalTitle'), 'plan-section-title'));
         for (const [startAt, jobs] of groups) {
             const card = node('article', undefined, 'plan-card');
             card.append(node('strong', date(startAt)), node('p', t('notifyAt', { time: date(startAt - 30 * 60000) })));
@@ -220,7 +322,6 @@
             if (jobs.some(job => job.status === 'planned')) card.append(actionButton(t('skip'), () => save('skip', startAt)));
             cards.push(card);
         }
-        if (collecting) cards.push(collecting);
         el('jobs').replaceChildren(...cards);
     }
 

@@ -63,29 +63,53 @@ async function main() {
         page.on('pageerror', error => errors.push(error.message));
         await page.setViewport({ width: 1100, height: 950 });
         await page.goto(`http://127.0.0.1:${server.address().port}/`);
-        await page.waitForFunction(() => document.querySelectorAll('.plan-collect-row').length === 2);
+        await page.waitForFunction(() => document.querySelectorAll('.plan-hour-table tbody tr').length === 2);
         assert.match(await page.$eval('.plan-collecting > strong', node => node.textContent), /資料累積建議/);
-        const firstGroup = await page.$eval('.plan-collect-row', node => node.textContent);
-        assert.match(firstGroup, /週二 20:00/);
-        assert.match(firstGroup, /Twitch/);
-        assert.match(firstGroup, /TikTok/);
-        assert.match(firstGroup, /1\/3 場/);
-        assert.equal(await page.$$eval('.plan-collect-row:first-of-type button', nodes => nodes.length), 1);
+        const cardText = await page.$eval('.plan-collecting', node => node.textContent);
+        assert.match(cardText, /週二/);
+        assert.match(cardText, /Twitch/);
+        assert.match(cardText, /TikTok/);
+        assert.match(cardText, /1\/3/);
 
-        await page.click('.plan-collect-row:first-of-type button');
-        await page.waitForFunction(() => document.querySelector('.plan-collect-row .plan-badge'));
-        assert.match(await page.$eval('.plan-collect-row', node => node.textContent), /已加入提醒/);
+        const clickRowAction = (weekday, label) => page.evaluate((weekday, label) => {
+            const row = [...document.querySelectorAll('.plan-hour-table tbody tr')]
+                .find(item => item.textContent.includes(weekday));
+            const button = [...row.querySelectorAll('.plan-hour-actions button')]
+                .find(item => item.textContent.includes(label));
+            button?.click();
+        }, weekday, label);
+
+        await clickRowAction('週二', '加入提醒');
+        await page.waitForFunction(() => {
+            const row = [...document.querySelectorAll('.plan-hour-table tbody tr')]
+                .find(item => item.textContent.includes('週二'));
+            return row?.textContent.includes('移除') && document.querySelector('.plan-hour-head')?.textContent.includes('1 天已加入');
+        });
         const jobs = await page.$eval('#plan-jobs', node => node.textContent);
         assert.match(jobs, /資料累積/);
         assert.match(jobs, /Twitch/);
         assert.match(jobs, /TikTok/);
 
-        await page.click('.plan-collect-row:first-of-type button');
+        await clickRowAction('週二', '移除');
         await page.waitForFunction(() => {
-            const row = document.querySelector('.plan-collect-row');
-            return row && !row.querySelector('.plan-badge') && row.querySelector('button');
+            const row = [...document.querySelectorAll('.plan-hour-table tbody tr')]
+                .find(item => item.textContent.includes('週二'));
+            return row?.textContent.includes('加入提醒');
         });
-        assert.equal(await page.$$eval('.plan-collect-row .plan-badge', nodes => nodes.length), 0);
+
+        await page.click('.plan-hour .plan-series > summary');
+        await page.evaluate(() => {
+            const inputs = [...document.querySelectorAll('.plan-hour .plan-series-days input')];
+            for (const input of inputs) input.checked = ['0', '2', '4'].includes(input.value);
+        });
+        await page.click('.plan-hour .plan-series button');
+        await page.waitForFunction(() => {
+            const rows = document.querySelectorAll('.plan-hour-table tbody tr');
+            return rows.length === 4 && document.querySelector('.plan-hour-head')?.textContent.includes('3 天已加入');
+        });
+        const rows = await page.$$eval('.plan-hour-table tbody tr', nodes => nodes.map(node => node.textContent));
+        assert.ok(rows.some(text => text.includes('週三') && text.includes('0/3') && text.includes('尚無資料')));
+        assert.ok(rows.some(text => text.includes('週一') && text.includes('4 天後')));
 
         fs.mkdirSync(path.join(__dirname, '../output/playwright'), { recursive: true });
         await page.screenshot({ path: path.join(__dirname, '../output/playwright/traffic-collecting.png'), fullPage: true });

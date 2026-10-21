@@ -137,6 +137,34 @@ test('累積時段達標後自動停用目標並取消提醒', t => {
     assert.equal(f.database.db.prepare('SELECT active FROM traffic_collecting_targets WHERE id=?').get(target.id).active, 0);
 });
 
+test('可從已知時段建立其他星期的冷啟動累積計畫', t => {
+    const f = fixture(t);
+    const start = MONDAY + 10 * 3600000; // 週一 20:00 UTC
+    f.setNow(start);
+    f.seedPartial('self', start, 'TikTok');
+    f.seedPartial('self', start + DAY, 'Twitch');
+    f.planner.classifyProfile({ platform: 'TikTok', broadcaster: 'self', purpose: 'own' });
+    f.planner.classifyProfile({ platform: 'Twitch', broadcaster: 'self', purpose: 'own' });
+    f.setNow(start + 3 * DAY);
+    f.enable({ hours: [20] });
+    const targets = f.planner.addCollectingSeries({ slot: 'Mon 20', weekdays: [0, 2, 4] });
+    assert.equal(targets.length, 6);
+    const snapshot = f.planner.snapshot();
+    assert.equal(snapshot.collectingTargets.length, 6);
+    const wednesday = snapshot.collectingTargets.find(row => row.slot === 'Wed 20');
+    assert.equal(wednesday.n, 0);
+    assert.equal(wednesday.observedDays, 0);
+    assert.equal(wednesday.minimum, 3);
+    assert.ok(wednesday.nextAt > f.options.now());
+    assert.ok(snapshot.jobs.filter(job => job.kind === 'collecting').length >= 6);
+
+    f.seedPartial('self', start + 2 * DAY, 'TikTok');
+    f.setNow(start + 4 * DAY);
+    const after = f.planner.snapshot();
+    const wedTikTok = after.collectingTargets.find(row => row.slot === 'Wed 20' && row.platform === 'TikTok');
+    assert.equal(wedTikTok.n, 1);
+});
+
 test('累積提醒送出時使用獨立標題與進度內容', async t => {
     const f = fixture(t);
     f.setNow(MONDAY);

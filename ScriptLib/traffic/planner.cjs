@@ -467,7 +467,7 @@ class TrafficPlanner {
         for (const target of targets) {
             const analysis = own.get(`${target.platform}|${target.broadcaster}`);
             const cell = analysis?.rankings.cells.find(item => item.key === target.slot);
-            if (!analysis || !cell || !cell.insufficient) {
+            if (!analysis || (cell && !cell.insufficient)) {
                 this.db.prepare('UPDATE traffic_collecting_targets SET active=0 WHERE id=?').run(target.id);
                 this.db.prepare(`UPDATE traffic_reminders SET status='cancelled'
                     WHERE kind='collecting' AND platform=? AND broadcaster=? AND slot=?
@@ -476,6 +476,10 @@ class TrafficPlanner {
             }
             const [day, hour] = target.slot.split(' ');
             if (!settings.weekdays.includes(WEEKDAYS.indexOf(day)) || !settings.hours.includes(Number(hour))) continue;
+            const minimum = analysis.rankings.minSessions ?? 3;
+            const minDays = analysis.rankings.minDays ?? 3;
+            const n = cell?.n ?? 0;
+            const observedDays = cell?.observedDays ?? 0;
             const weeks = new Map();
             for (const moment of moments) {
                 if (moment.key !== target.slot || moment.time <= now - 5 * 60000) continue;
@@ -489,9 +493,9 @@ class TrafficPlanner {
                 if (formal) continue;
                 selected.add(`${target.id}|${week}`);
                 const evidence = JSON.stringify({
-                    targetId: target.id, slot: target.slot, n: cell.n, observedDays: cell.observedDays,
-                    minimum: analysis.rankings.minSessions ?? 3, minDays: analysis.rankings.minDays ?? 3,
-                    mean: cell.mean, lastStarted: cell.lastStarted ?? 0
+                    targetId: target.id, slot: target.slot, n, observedDays,
+                    minimum, minDays,
+                    mean: cell?.mean ?? null, lastStarted: cell?.lastStarted ?? 0
                 });
                 this.db.prepare(`INSERT INTO traffic_reminders(platform,broadcaster,startAt,week,slot,evidence,kind)
                     VALUES(?,?,?,?,?,?,'collecting') ON CONFLICT(platform,broadcaster,startAt) DO UPDATE SET
@@ -560,6 +564,39 @@ class TrafficPlanner {
         for (const item of matches) this.upsertCollectingTarget(item);
         this.reconcile();
         return this.db.prepare('SELECT * FROM traffic_collecting_targets WHERE slot=? AND active=1 ORDER BY id').all(slot);
+    }
+
+    /**
+     * 從一個已知時段建立同一個整點的其他星期目標；允許尚無資料的冷啟動時段。
+     * @param {Object} value slot 與 weekdays（0=Mon）。
+     * @returns {Object[]} 啟用中的目標。
+     */
+    addCollectingSeries(value = {}) {
+        const slot = typeof value.slot === 'string' ? value.slot : '';
+        const weekdays = Array.isArray(value.weekdays) ? [...new Set(value.weekdays)] : [];
+        if (!/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}$/.test(slot) || !weekdays.length ||
+            weekdays.some(day => !Number.isInteger(day) || day < 0 || day > 6)) {
+            throw new RangeError('collecting');
+        }
+        const settings = this.settings();
+        if (weekdays.some(day => !settings.weekdays.includes(day))) throw new RangeError('weekdays');
+        const hour = Number(slot.split(' ')[1]);
+        if (!settings.hours.includes(hour)) throw new RangeError('hours');
+        const hourSeeds = this.collecting(this.analyses(settings), settings)
+            .filter(item => Number(item.slot.split(' ')[1]) === hour);
+        if (!hourSeeds.some(item => item.slot === slot)) throw new RangeError('collecting');
+        // 用整個整點觀測到的平台建立目標，不只種子那一個星期。
+        const platforms = new Map(hourSeeds.map(item => [`${item.platform}|${item.broadcaster}`, item]));
+        for (const day of weekdays) {
+            const targetSlot = `${WEEKDAYS[day]} ${hour}`;
+            for (const seed of platforms.values()) {
+                this.upsertCollectingTarget({ platform: seed.platform, broadcaster: seed.broadcaster, slot: targetSlot });
+            }
+        }
+        this.reconcile();
+        const slots = new Set(weekdays.map(day => `${WEEKDAYS[day]} ${hour}`));
+        return this.db.prepare('SELECT * FROM traffic_collecting_targets WHERE active=1 ORDER BY id').all()
+            .filter(target => slots.has(target.slot));
     }
 
     /**
@@ -730,15 +767,29 @@ class TrafficPlanner {
         const analyses = this.reconcile();
         const settings = this.settings();
         const collecting = this.collecting(analyses, settings);
+        const ownCells = new Map();
+        for (const analysis of analyses) {
+            if (analysis.purpose !== 'own') continue;
+            for (const cell of analysis.rankings.cells) {
+                ownCells.set(`${analysis.platform}|${analysis.broadcaster}|${cell.key}`, { analysis, cell });
+            }
+        }
         const collectingTargets = this.db.prepare(`SELECT t.*,
             (SELECT startAt FROM traffic_reminders r WHERE r.kind='collecting' AND r.platform=t.platform
              AND r.broadcaster=t.broadcaster AND r.slot=t.slot AND r.status='planned'
              ORDER BY r.startAt LIMIT 1) AS nextAt
             FROM traffic_collecting_targets t WHERE t.active=1 ORDER BY t.id`).all().map(target => {
             const [day, hour] = target.slot.split(' ');
+            const entry = ownCells.get(`${target.platform}|${target.broadcaster}|${target.slot}`);
             return {
                 ...target,
-                available: settings.weekdays.includes(WEEKDAYS.indexOf(day)) && settings.hours.includes(Number(hour))
+                available: settings.weekdays.includes(WEEKDAYS.indexOf(day)) && settings.hours.includes(Number(hour)),
+                n: entry?.cell.n ?? 0,
+                observedDays: entry?.cell.observedDays ?? 0,
+                minimum: entry?.analysis.rankings.minSessions ?? 3,
+                minDays: entry?.analysis.rankings.minDays ?? 3,
+                mean: entry?.cell.mean ?? null,
+                lastStarted: entry?.cell.lastStarted ?? 0
             };
         });
         const detected = new Map(this.db.prepare('SELECT platform,broadcaster FROM traffic_identities').all()
@@ -754,6 +805,8 @@ class TrafficPlanner {
         return {
             settings, available: this.available(), profiles: this.profiles(), analyses,
             collecting, collectingTargets,
+            capabilities: { collectingSeries: true },
+            now: this.now(),
             unclassified: statusCounts.unclassified,
             statusCounts: {
                 all: statusCounts.total, own: statusCounts.own, reference: statusCounts.reference,

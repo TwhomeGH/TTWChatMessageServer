@@ -15,6 +15,7 @@ const HTML = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewp
 <select id="timezone"><option>UTC</option></select>
 <p id="history-status"></p><div id="heatmap"></div><div id="daily"></div><div id="metrics"></div>
 <div id="ranking-note" class="ranking-note" role="status"></div><div id="ranking" class="table-wrap"></div>
+<h4 id="ranking-provisional-title" data-i18n="traffic.ranking.provisionalTitle" hidden>暫定觀察（樣本不足）</h4><p id="ranking-provisional-note" data-i18n="traffic.ranking.provisionalNote" hidden>2 場／2 日期僅供參考；正式排名仍需 3 場／3 日期，且至少 2 個時段達標。</p><div id="ranking-provisional" class="table-wrap" hidden></div>
 </main><script src="/assets/i18n.js"></script><script src="/assets/traffic-history.js"></script></body></html>`;
 
 const DATA = {
@@ -29,6 +30,22 @@ const DATA = {
         cells: [
             { key: 'Sat 22', n: 1, observedDays: 1, median: 10, mean: 10, shrunk: 10, insufficient: true },
             { key: 'Tue 20', n: 1, observedDays: 1, median: 12, mean: 12, shrunk: 12, insufficient: true }
+        ]
+    }
+};
+
+const PROVISIONAL = {
+    platform: 'TikTok',
+    cells: [],
+    daily: [],
+    metrics: { daily: [] },
+    rankings: {
+        scope: 'own', totalSessions: 4, sessionCount: 4, minSessions: 3, minDays: 3,
+        earlyMinutes: 30, minObservedMinutes: 20, days: 30,
+        excluded: { missingStart: 0, pending: 0, insufficientCoverage: 0 },
+        cells: [
+            { key: 'Sat 22', n: 2, observedDays: 2, median: 18, mean: 18, shrunk: 18, insufficient: true },
+            { key: 'Tue 20', n: 2, observedDays: 2, median: 12, mean: 12, shrunk: 12, insufficient: true }
         ]
     }
 };
@@ -101,6 +118,15 @@ async function main() {
         assert.equal(await page.$$eval('.ranking-slot', nodes => nodes.length), 0);
         assert.match(await page.$eval('.ranking-next-action', node => node.textContent), /6 個時段/);
         await page.screenshot({ path: path.join(__dirname, '../output/playwright/traffic-ranking-scattered.png'), fullPage: true });
+
+        current = PROVISIONAL;
+        await page.reload();
+        await page.waitForFunction(() => !document.querySelector('#ranking-provisional').hidden);
+        const provisionalHeadline = await page.$eval('.ranking-next-head strong', node => node.textContent);
+        assert.match(provisionalHeadline, /再開 2 場/);
+        assert.equal(await page.$$eval('#ranking-provisional tbody tr', rows => rows.length), 2);
+        assert.match(await page.$eval('#ranking-provisional-note', node => node.textContent), /僅供參考/);
+        await page.screenshot({ path: path.join(__dirname, '../output/playwright/traffic-ranking-provisional.png'), fullPage: true });
 
         assert.deepEqual(errors, []);
         console.log('Traffic ranking next-step UI passed: clear next step, scattered-schedule warning, slot progress, tips and expandable rules.');

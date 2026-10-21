@@ -200,6 +200,8 @@ canvas {cursor:crosshair;}
 .ranking-why {margin-top:16px;border-top:1px solid #374151;padding-top:12px;}
 .ranking-why > summary {cursor:pointer;padding:4px 0;color:#93c5fd;font-weight:600;}
 .ranking-why .ranking-slot-boundary {color:#aebdce;font-size:.85rem;}
+.ranking-provisional-title {margin:20px 0 6px;color:#fde68a;font-weight:600;}
+.ranking-provisional-note {margin:0 0 10px;color:#aebdce;font-size:.875rem;}
 @media (max-width:520px) {
     .ranking-slot {grid-template-columns:1fr;gap:4px;}
 }
@@ -224,6 +226,30 @@ canvas {cursor:crosshair;}
 .plan-collect-platform > span:first-child {min-width:64px;font-weight:600;color:#e2e8f0;}
 .plan-collecting .plan-badge {color:#bfdbfe;border:1px solid #1d4ed8;border-radius:999px;padding:1px 8px;font-size:.75rem;}
 .plan-collecting .plan-fields {margin-top:8px;}
+.plan-series {margin-top:10px;border-top:1px dashed #334155;padding-top:8px;}
+.plan-series > summary {cursor:pointer;padding:4px 0;color:#93c5fd;font-weight:600;}
+.plan-series-note {color:#aebdce;font-size:.85rem;margin:4px 0;}
+.plan-series-days {display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;}
+.plan-series-days label {display:inline-flex;align-items:center;gap:4px;color:#cbd5e1;}
+.plan-toast {position:fixed;left:50%;bottom:24px;z-index:80;max-width:min(90vw,560px);padding:10px 14px;border:1px solid #334155;border-radius:8px;background:#0f172a;color:#e2e8f0;box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:0;pointer-events:none;transform:translate(-50%,12px);transition:opacity .15s,transform .15s;}
+.plan-toast.show {opacity:1;transform:translate(-50%,0);}
+.plan-hour {margin:14px 0;padding-top:12px;border-top:1px solid #1e3a5f;}
+.plan-hour:first-of-type {margin-top:6px;padding-top:0;border-top:0;}
+.plan-hour-head {display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px;}
+.plan-hour-head strong {color:#dbeafe;}
+.plan-hour-table {overflow-x:auto;}
+.plan-hour-table table {width:100%;border-collapse:collapse;font-size:.85rem;}
+.plan-hour-table th, .plan-hour-table td {padding:6px 8px;border-bottom:1px solid #1e293b;text-align:left;white-space:nowrap;}
+.plan-hour-table thead th {color:#93c5fd;font-weight:600;}
+.plan-hour-table tbody th {color:#e2e8f0;font-weight:600;}
+.plan-hour-actions {display:flex;flex-wrap:wrap;gap:6px;}
+.plan-hour-actions button {padding:4px 8px;font-size:.8rem;}
+.plan-day-badge {margin-left:6px;padding:1px 6px;border-radius:999px;font-size:.7rem;font-weight:600;white-space:nowrap;background:#1e3a5f;color:#bfdbfe;}
+.plan-day-badge.today {background:#1d4ed8;color:#fff;}
+.plan-day-badge.tomorrow {background:#0e7490;color:#e0f2fe;}
+.plan-day-badge.soon {background:#1e293b;color:#93c5fd;}
+.plan-day-badge:empty {display:none;}
+.plan-section-title {margin:18px 0 8px;color:#93c5fd;font-size:1rem;}
 .plan-card p,.plan-card ul {margin:10px 0;line-height:1.7;}
 .plan-card ul {list-style:disc;padding-left:24px;}
 .plan-muted {color:#aebdce;font-size:.875rem;line-height:1.7;}
