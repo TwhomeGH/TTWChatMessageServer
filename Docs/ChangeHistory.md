@@ -1,5 +1,242 @@
 # ChangeHistory
 
+## 2026.10.22 00:05 一週累積計畫、2/2 暫定觀察與計畫介面
+
+**類型**: 功能 · **檔案**: `ScriptLib/traffic/planner.cjs`、`assets/traffic-planner.js`、`assets/traffic-history.js`
+
+### 問題 - 累積目標只能逐時段加入，2 場時仍看不到任何數據
+
+資料不足時只能一個時段一個時段加入；同一星期要湊滿 3 個日期往往要數週，2 場／2 日期又完全沒有可看的數字。多個 1/3 時段以大型卡片呈現，建立一週面板夾在日期之間，累積計畫與正式推薦混在一起。
+
+### 根因 - 缺少跨星期建立、暫定資料與整點層級的版面
+
+`addCollectingSlot` 只接受目前有資料的單一時段；排名只輸出 3/3 達標的時段；planner 以逐日卡片呈現，沒有把同一個整點的多個星期收斂成一張表。
+
+### 修改 - 冷啟動跨星期目標、2/2 暫定表與整點表格
+
+- `TrafficPlanner.addCollectingSeries` 從已知時段建立同一個整點的其他星期目標，允許尚無資料的 0/3 冷啟動；平台取整個整點觀測到的聯集，避免只建立種子那一個平台。
+- `collectingAddSlot`、`collectingRemoveSlot` 與每週各日提醒沿用既有目標機制；達標、離開可開播設定或分類改變時自動停用。
+- `traffic-history.js` 新增 2 場／2 日期的「暫定觀察（樣本不足）」表；正式排名仍要求 3 場／3 日期、至少 2 個時段達標。
+- planner UI 改為每個整點一張表（星期、平台進度、下次提醒、操作）；「建立一週」面板移到整點底部，正式推薦加上「正式開播建議」分區。
+- 已排程提醒顯示「今天／明天／後天／N 天後」徽章，以主服務 `now` 與提醒時區換算；空白徽章以 `:empty` 與文字檢查隱藏。
+- 新增操作 toast、`capabilities.collectingSeries` 能力提示，舊後端不會靜默 400。
+- 測試：planner 26、`traffic_planner_collecting_ui.cjs`（同整點多平台、建立週一／三／五、0/3、日期徽章）、`traffic_history_ui.cjs`（2/2 暫定表）、`test:ci`。
+
+**相關文件**: [TRAFFIC.md](TRAFFIC.md)
+
+---
+
+## 2026.10.21 00:34 資料累積建議與分組每週提醒
+
+**類型**: 功能 · **檔案**: `ScriptLib/traffic/planner.cjs`、`ScriptLib/traffic/plannerRoutes.cjs`、`assets/traffic-planner.js`
+
+### 問題 - 資料不足時沒有下一步，同一個時段的平台被拆成兩個提醒
+
+planner 只在至少 2 個時段達標後推薦；未達標時畫面只說等待，主播不知道要補哪個時段。Twitch／TikTok 同一時間各自一個提醒，加入時要按兩次。
+
+### 根因 - 只有合格時段的排程，沒有部分時段的目標模型
+
+`reconcile` 只讀 `qualified` cells；`traffic_reminders` 沒有累積類型，也沒有跨平台分組的目標表。
+
+### 修改 - collecting 建議、目標表與每週提醒
+
+- `TrafficPlanner.collecting` 依缺口、最近開播、開場平均排序自己的未達標時段；只取可開播星期／整點。
+- 新增 `traffic_collecting_targets`；`traffic_reminders` 加 `kind`（舊資料預設 recommendation）。
+- `collectingAdd`／`collectingAddSlot`／`collectingRemove`／`collectingRemoveSlot`；同一個時段的多平台合併成一組。
+- 每週最多提醒一次，達標自動停用；正式推薦同時段優先，累積提醒不佔 `maxPerWeek`；通知標題為「資料累積提醒」。
+- UI 顯示進度、最近開播、開場平均（僅供參考）與加入／移除；提醒關閉或管道未設定時只能查看。
+- 測試：planner 25、collecting UI、`test:ci`。
+
+**相關文件**: [TRAFFIC.md](TRAFFIC.md)
+
+---
+
+## 2026.10.20 23:59 15 分鐘開播容差與分散累積提示
+
+**類型**: 功能 · **檔案**: `ScriptLib/traffic/database.cjs`、`assets/traffic-history.js`
+
+### 問題 - 19:59 與 20:01 被拆成不同時段，分散開播只看到一堆 1/3
+
+排名用嚴格整點分桶，差幾分鐘就落在不同星期×小時；多個 1/3 時段時，下一步卡只會挑兩個 arbitrary 時段。
+
+### 根因 - 沒有開播容差，也沒有分散狀態
+
+`rankings` 直接以 `actualStarted` 取 weekday/hour；UI 只依 partial 排序取前兩個。
+
+### 修改 - 15 分鐘容差與分散提示
+
+- `RANKING_START_GRACE_MS = 15 分鐘`：`actualStarted + 15 分鐘` 後取整點，19:45–20:44 都歸 20:00；19:44 仍屬 19:00。
+- 時段標籤與計算說明同步；UI 不再用 `20:00–20:59` 造成邊界誤解。
+- 多個 1/3（4 個以上、每桶 1 場）顯示「開播時間分散」，先引導固定 1–2 個時段。
+- 測試：19:59／20:01 同桶、分散 UI、`test:ci`。
+
+**相關文件**: [TRAFFIC.md](TRAFFIC.md)
+
+---
+
+## 2026.10.20 22:57 時段累積的下一步指引
+
+**類型**: 功能 · **檔案**: `assets/traffic-history.js`、`assets/traffic.css`
+
+### 問題 - 累積說明是一長串規則，主播不知道要再開幾場
+
+歷史頁只列總數、排除原因與每個時段缺幾場，沒有把「下一步」放在最前面。
+
+### 根因 - 規則與行動混在同一段文字
+
+`renderRanking` 依序輸出 summary、criteria、reasons、progress，沒有先計算最接近達標的兩個時段。
+
+### 修改 - 下一步卡與可摺疊規則
+
+- 依缺口排序最接近的兩個時段，顯示「再開 N 場就能解鎖」、每週估算與「開在其他時段不會推進」提示。
+- 只有 1 個時段達標時提示補第二個時段；沒有可用資料時提示先累積開場觀測。
+- 規則、排除原因與完整進度收進「計算方式與排除原因」摺疊區。
+- 新增 `traffic_history_ui.cjs` 與 i18n；`test:ci`。
+
+**相關文件**: [TRAFFIC.md](TRAFFIC.md)
+
+---
+
+## 2026.10.20 22:57 可選的自動停止
+
+**類型**: 功能 · **檔案**: `ScriptLib/lifecycle/autoStop.mjs`、`TikTok.js`、`Server.js`
+
+### 問題 - TikTok 與 Twitch 都結束後程序仍掛著
+
+直播結束後聊天子程序繼續存在，只能手動關閉。
+
+### 根因 - 沒有跨平台的結束狀態與自動停止機制
+
+TikTok `STREAM_END` 只取消重連；Twitch 離線只更新狀態，沒有整合判斷。
+
+### 修改 - 可選的跨平台自動停止
+
+- `AUTO_STOP_ENABLED`（預設 0）與 `AUTO_STOP_GRACE_SEC`（預設 60，10–600）可在 `/config` 或 `.env` 設定。
+- TikTok `STREAM_END` 與 Twitch 離線／`onViewer(null)` 都確認後才倒數；任一平台恢復即取消。
+- 啟動時尚未觀測到直播不停止；同時啟用 Kick／Odysee／YouTube 時停用（沒有可靠結束訊號）；`KICK_START` 也會停用。
+- 停止走既有 `handleExit` 收尾；設定頁、文件與單元測試同步。
+
+**相關文件**: [README.md](../README.md)、[envExample](envExample)
+
+---
+
+## 2026.10.20 22:57 修正混淆字元規則誤殺
+
+**類型**: 修正 · **檔案**: `MessageFilter.js`
+
+### 問題 - 裝飾用數學字母的觀眾加入被廣告規則阻擋
+
+`any:廣告-混淆字元` 只要名稱含圈號或數學字母就阻擋，`☾soyeno 𝜗𝜚...` 的加入被誤殺。
+
+### 根因 - 混淆字元規則沒有廣告訊號條件
+
+規則對 `\u2460-\u24FF` 與 `\u{1D400}-\u{1D7FF}` 直接 block，未區分裝飾暱稱與廣告。
+
+### 修改 - 混淆字元＋廣告訊號才阻擋
+
+- 規則改為同時符合混淆字元與 `加LINE`／微信／Telegram／http／`瀨`／`濑` 等廣告訊號。
+- 保留原本廣告帳號阻擋；新增裝飾名、`①`、裝飾訊息不阻擋的回歸測試。
+
+**相關文件**: [MessageFilter.js](../MessageFilter.js)
+
+---
+
+## 2026.10.20 16:14 liveCenter 主播帳號正規化
+
+**類型**: 修正 · **檔案**: `UserScript/liveCenter.user.js`
+
+### 問題 - 輸入「 @handle 」時仍留下 `@`
+
+舊流程先去 `@` 再 trim，開頭空白會讓 `@` 留著。
+
+### 根因 - 正規化順序錯誤
+
+### 修改 - 固定 trim → 去 `@` → trim → 小寫
+
+- liveCenter 版本 1.16 → 1.17；後端 `store.record` 與 planner 也用相同順序。
+- 新增 userscript 正規化測試（`@Handle`／` @Handle `／`Handle` 都收斂為 `handle`）。
+
+**相關文件**: [TRAFFIC.md](TRAFFIC.md)
+
+---
+
+## 2026.10.20 13:35 UI 測試自動偵測 Chrome/Edge
+
+**類型**: 測試 · **檔案**: `Test/browser_path.cjs`
+
+### 問題 - UI 測試硬編碼 Edge 路徑，headless 啟動失敗只回 Code 0
+
+### 根因 - 固定 x86 Edge 路徑，沒有瀏覽器偵測與明確錯誤
+
+### 修改 - 共用 browserPath 與環境變數
+
+- 依 `TRAFFIC_TEST_BROWSER`／`CHROME_PATH`，再找 Windows／macOS／Linux 的 Chrome、Edge、Chromium。
+- audience／monitor／traffic planner UI 測試改用；找不到時給明確訊息。
+- 文件同步。
+
+**相關文件**: [AUDIENCE.md](AUDIENCE.md)
+
+---
+
+## 2026.10.20 04:35 常客活躍等級、分析頁與監控標記
+
+**類型**: 功能 · **檔案**: `ScriptLib/audience/tracker.cjs`、`AudienceRoutes.cjs`
+
+### 問題 - 監控看不到常客，也沒有專門的觀眾頁
+
+### 根因 - 觀眾關係沒有獨立資料層，traffic 與 monitor 混在一起
+
+### 修改 - audience 模組、/audience 與監控標記
+
+- `data/audience.sqlite` 只存聚合；`user_key` 優先平台 userId，沒有才退回平台＋正規化名稱。
+- 四種標記（送禮常客／每次都來／常打字／新朋友）在查詢時計算；0–100 分數與 L0–L4 由 tenure（first_seen）＋最近 30 天活躍分量即時算出，不存 XP。
+- `/audience` 列表、搜尋、平台篩選、分數拆解與最近 10 場；monitor 名稱旁標記 chip、只看常客。
+- 場次邊界向 traffic 讀取；每日 prune(180)；測試與 `AUDIENCE.md`。
+
+**相關文件**: [AUDIENCE.md](AUDIENCE.md)
+
+---
+
+## 2026.10.19 23:11 主播歸屬、批次補分類與開播分析
+
+**類型**: 功能 · **檔案**: `ScriptLib/traffic/attribution.mjs`、`ScriptLib/traffic/planner.cjs`
+
+### 問題 - 新場次常缺主播、舊場次無法批次補分類，排名混入其他來源
+
+### 根因 - 原生事件只有 TikTok／Twitch 帶 broadcaster；userscript 不帶身分；場次以平台＋主播切分；沒有批次補分類與 own 篩選
+
+### 修改 - 五平台歸屬、分類契約、補分類與時段分析
+
+- 五個原生平台都帶 `broadcasterId`；TikTokChat 自動從 `/@handle/live` 帶入；liveCenter／YouTube userscript 可選填，未填保持未分類。
+- 用途契約 own／reference／test，「待分類」是 NULL 狀態；批次 assign 可清除；unknown 不再寫入。
+- 批次補分類：篩選、預覽 50 場、勾選、expected 409、批次記錄與最近一批復原；只改 broadcaster／purpose。
+- `traffic_identities` 原生偵測優先，其次 `.env`；表單可帶入。
+- 排名優先 own，沒有 own 時回退全來源並標 scope；只有 1 個達標時段不排名。
+- planner 帳號預設、時段分析、提醒與管理頁；UI 分類、補分類、分析卡。
+- 測試、`TRAFFIC.md`。
+
+**相關文件**: [TRAFFIC.md](TRAFFIC.md)
+
+---
+
+## 2026.10.19 23:10 notify 支援 ntfy 主題名稱與通知可用狀態
+
+**類型**: 重構 · **檔案**: `ScriptLib/notify/targets.cjs`
+
+### 問題 - ntfy 只能填完整網址，設定頁無法區分未設定與格式錯誤
+
+### 根因 - ntfy 通道直接解析 URL，沒有共用 target 解析與可用狀態
+
+### 修改 - 抽出 target 解析與狀態
+
+- `NTFY_API` 可填 ntfy.sh 主題名稱（英數、底線、連字號）或完整 HTTP(S) 網址；`targets.cjs` 統一解析。
+- ntfy 通道改用解析後 URL；`/config` 顯示設定狀態，不洩漏主題或密鑰。
+- Bark 仍使用完整網址；通知可用狀態供 planner 顯示。
+
+**相關文件**: [README.md](../README.md)
+
+---
+
 ## 2026.10.15 06:35 WebUI 直播訊息監控面板（/monitor）
 
 **類型**: 功能 · **檔案**: `Server.js`
@@ -148,7 +385,7 @@ DISCONNECTED／ERROR／CAPTION／ROOM_USER／MEMBER／FOLLOW／CHAT／SOCIAL／E
 
 Kick 是獨立平台，卻與其他平台邏輯混在一檔。
 
-### 修改 - 抽出 chat.mjs（deps 注入）
+### 修改 - 抽出 Kick chat.mjs（deps 注入）
 
 - 匯出 `startKickChat(deps)`：推播、socket、過濾、統計、翻譯、日誌全由 `KickChatDeps` 注入；OAuth token 由同目錄 `tokens.cjs` 取得；socket 以 `createSocket` 可注入（測試用）。
 - TikTok.js 組 `kickDeps` 並改呼 `startKickChat(kickDeps)`；移除 Kick 區塊（−213 行，現 1481 行）與 `kickTokens`／`KickWebSocket` import。
@@ -168,7 +405,7 @@ Kick 是獨立平台，卻與其他平台邏輯混在一檔。
 
 聊天處理與其他平台邏輯混在一檔，副作用硬編碼。
 
-### 修改 - 抽出 chat.mjs（deps 注入）
+### 修改 - 抽出 Twitch chat.mjs（deps 注入）
 
 - 匯出 `onChat(event, deps)`；`handleGAd` 收為模組內部函式。所有副作用（推播、socket、過濾、統計、翻譯、贊助資料、剪輯、日誌）由 `TwitchChatDeps` 注入，`apiClient`／`tuser` 以 getter 取值。
 - TikTok.js 組 `twitchChatDeps` 並接上 `onChat`，移除 `onTwitchChat`（−278 行，現 1639 行）。
