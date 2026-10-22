@@ -1318,7 +1318,7 @@ const server = http.createServer((req, res) => {
             fs.writeFileSync(envPath, envContent, 'utf-8');
 
             
-            pushLog(`[SYSTEM] Updated .env: SOCKET_API=${newSocket} , SOCKET_APIS=${newSocketApis} , BARK_API=${maskKey(newBark)} , NTFY_API=${newNtfy} , BING_TRANSLATE_API_KEY=${maskKey(newBingKey)}`);
+            pushLog(`[SYSTEM] Updated .env: SOCKET_API=${newSocket} , SOCKET_APIS=${newSocketApis} , BARK_API=${maskKey(newBark)} , NTFY_API=${maskKey(newNtfy)} , BING_TRANSLATE_API_KEY=${maskKey(newBingKey)}`);
 
 
 
