@@ -28,9 +28,9 @@ API＋Userscript 是同一個平台的兩個入口，不拆成兩份平台分數
 
 | 檔案 | 新版 |
 | --- | --- |
-| TikTokChat.user.js | 2.7 |
-| liveCenter.user.js | 1.15 |
-| youtube-chat-userscript.user.js | 1.1 |
+| TikTokChat.user.js | 2.10 |
+| liveCenter.user.js | 1.17 |
+| youtube-chat-userscript.user.js | 1.5 |
 | TestCenter.user.js | 1.5 |
 | ws-relay.user.js | 1.3（已合併 ws-relay.js） |
 

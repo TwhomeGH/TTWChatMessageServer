@@ -1,3 +1,5 @@
+const { normalizeBroadcaster } = require('./identity.cjs');
+
 const ASSIGNABLE_PURPOSES = ['own', 'reference', 'test'];
 const STATUSES = ['unclassified', 'own', 'reference', 'test', 'all'];
 const BACKFILL_COMPLETE_SAMPLES = 2;
@@ -14,11 +16,6 @@ const DEFAULTS = {
     enabled: false, channels: [], timezone: 'Asia/Taipei', historyDays: 90,
     maxPerWeek: 1, weekdays: [0, 1, 2, 3, 4, 5, 6], hours: [18, 19, 20, 21, 22, 23]
 };
-
-/** 正規化主播識別：去空白、去開頭 @、轉小寫；空白回傳空字串。 */
-function normalizeBroadcaster(value) {
-    return typeof value === 'string' ? value.trim().replace(/^@/, '').toLowerCase() : '';
-}
 
 /**
  * 建立批次補分類的篩選 SQL（不含完整度條件）。
@@ -180,9 +177,9 @@ class TrafficPlanner {
      */
     classifyProfile({ platform, broadcaster, purpose }) {
         if (typeof platform !== 'string' || !platform || platform.length > 40 || typeof broadcaster !== 'string' ||
-            !normalizeBroadcaster(broadcaster) || broadcaster.length > 100 ||
+            !normalizeBroadcaster(broadcaster, platform) || broadcaster.length > 100 ||
             (purpose !== null && !ASSIGNABLE_PURPOSES.includes(purpose))) throw new RangeError('profile');
-        const key = normalizeBroadcaster(broadcaster);
+        const key = normalizeBroadcaster(broadcaster, platform);
         if (purpose === null) {
             this.db.prepare('DELETE FROM traffic_profiles WHERE platform=? AND broadcaster=?').run(platform, key);
             return;
@@ -197,7 +194,7 @@ class TrafficPlanner {
         const row = this.db.prepare('SELECT * FROM sessions WHERE id=?').get(id);
         if (!row) throw new RangeError('session');
         this.db.prepare('UPDATE sessions SET broadcaster=?,purpose=? WHERE id=?')
-            .run(normalizeBroadcaster(broadcaster) || null, purpose, id);
+            .run(normalizeBroadcaster(broadcaster, row.platform) || null, purpose, id);
     }
 
     /**
@@ -267,7 +264,7 @@ class TrafficPlanner {
         if (hasBroadcaster) {
             if (typeof value.broadcaster !== 'string' || value.broadcaster.length > 100)
                 throw new RangeError('broadcaster');
-            broadcaster = normalizeBroadcaster(value.broadcaster);
+            broadcaster = normalizeBroadcaster(value.broadcaster, filter.platform);
             if (!broadcaster) throw new RangeError('broadcaster');
         }
         if (hasPurpose && value.purpose !== null && !ASSIGNABLE_PURPOSES.includes(value.purpose))
@@ -562,7 +559,7 @@ class TrafficPlanner {
      */
     addCollecting(value = {}) {
         const platform = typeof value.platform === 'string' ? value.platform : '';
-        const broadcaster = normalizeBroadcaster(value.broadcaster);
+        const broadcaster = normalizeBroadcaster(value.broadcaster, platform);
         const slot = typeof value.slot === 'string' ? value.slot : '';
         const settings = this.settings();
         const match = this.collecting(this.analyses(settings), settings)
@@ -634,7 +631,8 @@ class TrafficPlanner {
             ? this.db.prepare('SELECT * FROM traffic_collecting_targets WHERE id=?').get(value.id)
             : this.db.prepare('SELECT * FROM traffic_collecting_targets WHERE platform=? AND broadcaster=? AND slot=?')
                 .get(typeof value.platform === 'string' ? value.platform : '',
-                    normalizeBroadcaster(value.broadcaster), typeof value.slot === 'string' ? value.slot : '');
+                    normalizeBroadcaster(value.broadcaster, typeof value.platform === 'string' ? value.platform : null),
+                    typeof value.slot === 'string' ? value.slot : '');
         if (!target) throw new RangeError('target');
         this.deactivateCollectingTarget(target);
         return target;
@@ -843,7 +841,7 @@ class TrafficPlanner {
         const detected = new Map(this.db.prepare('SELECT platform,broadcaster FROM traffic_identities').all()
             .map(row => [row.platform, row.broadcaster]));
         const identity = (platform, ...keys) => detected.get(platform) ||
-            normalizeBroadcaster(keys.map(key => process.env[key]).find(Boolean));
+            normalizeBroadcaster(keys.map(key => process.env[key]).find(Boolean), platform);
         const statusCounts = this.db.prepare(`SELECT COUNT(*) AS total,
             COALESCE(SUM(CASE WHEN COALESCE(s.purpose,p.purpose,'unknown')='own' THEN 1 ELSE 0 END),0) AS own,
             COALESCE(SUM(CASE WHEN COALESCE(s.purpose,p.purpose,'unknown')='reference' THEN 1 ELSE 0 END),0) AS reference,

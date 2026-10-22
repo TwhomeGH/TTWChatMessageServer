@@ -46,6 +46,19 @@ test('liveCenter 主播帳號有無 @ 或前後空白都能正規化', () => {
     assert.equal(ctx.normalizeBroadcaster(''), '');
 });
 
+test('YouTube userscript 保留 UC 頻道 ID 大小寫，handle 才轉小寫', () => {
+    const source = fs.readFileSync(new URL('../UserScript/youtube-chat-userscript.user.js', import.meta.url), 'utf8');
+    const start = source.indexOf('function normalizeBroadcaster');
+    const end = source.indexOf('\n    }', start) + '\n    }'.length;
+    assert.ok(start >= 0 && end > start);
+    const ctx = vm.createContext({});
+    vm.runInContext(source.slice(start, end), ctx);
+    assert.equal(ctx.normalizeBroadcaster('UCAbCdEfGhIjKlMnOpQrStUv'), 'UCAbCdEfGhIjKlMnOpQrStUv');
+    assert.equal(ctx.normalizeBroadcaster('@Handle'), 'handle');
+    assert.equal(ctx.normalizeBroadcaster('  UCAbCdEfGhIjKlMnOpQrStUv  '), 'UCAbCdEfGhIjKlMnOpQrStUv');
+    assert.equal(ctx.normalizeBroadcaster(''), '');
+});
+
 test('YouTube bridge attaches the configured broadcaster to the payload', () => {
     const { ctx, sent } = contextFor('youtube-chat-userscript.user.js', 'function send(data)', '// ─────');
     ctx.send({ type: 'StreamMessage', platform: 'Youtube', transport: 'userscript', user: 'u', message: 'm' });

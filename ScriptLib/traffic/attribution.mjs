@@ -1,3 +1,7 @@
+import identity from './identity.cjs';
+
+const { normalizeBroadcaster } = identity;
+
 const PLATFORM_IDENTITIES = Object.freeze({
     TikTok: 'tiktokName',
     Twitch: 'twitchUser',
@@ -14,10 +18,11 @@ const PLATFORM_IDENTITIES = Object.freeze({
  *
  * @param {string} platform 平台名稱（TikTok／Twitch／Kick／Odysee／Youtube）。
  * @param {Object} identities 各平台的主播識別。
- * @returns {string|undefined} 去除空白並轉小寫的主播識別。
+ * @returns {string|undefined} 正規化後的主播識別；YouTube UC ID 保留大小寫。
  */
 export function broadcasterForPlatform(platform, identities = {}) {
     const key = PLATFORM_IDENTITIES[platform];
     const value = key ? identities[key] : '';
-    return typeof value === 'string' && value.trim() ? value.trim().toLowerCase() : undefined;
+    const normalized = typeof value === 'string' ? normalizeBroadcaster(value, platform) : '';
+    return normalized || undefined;
 }

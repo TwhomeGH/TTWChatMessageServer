@@ -152,6 +152,8 @@ const tiktokName = keyword.length > 0 ? keyword : process.env.TIKTOK_NAME || "co
 const kickChannelName = process.env.KICK_USER_NAME || keyword || '';
 const odyseeChannelName = process.env.ODYSEE_CHANNEL_NAME || keyword || '';
 const youtubeChannelName = process.env.YOUTUBE_CHANNEL_ID || keyword || '';
+// YouTube 的 @handle 會由 startYoutubeChat 解析成頻道 ID；人流身分要用解析後的 UC ID。
+let youtubeBroadcasterId = '';
 
 /**
  * 將正在觀測的主播身分附於事件。
@@ -162,7 +164,7 @@ const youtubeChannelName = process.env.YOUTUBE_CHANNEL_ID || keyword || '';
 function reportTraffic(data) {
     sendTraffic({ ...data, broadcasterId: broadcasterForPlatform(data.platform, {
         tiktokName, twitchUser: tuser, kickName: kickChannelName,
-        odyseeName: odyseeChannelName, youtubeName: youtubeChannelName
+        odyseeName: odyseeChannelName, youtubeName: youtubeBroadcasterId || youtubeChannelName
     }) });
 }
 const youtubeApiKey = process.env.YOUTUBE_API_KEY || '';
@@ -1134,6 +1136,9 @@ if (isYoutube) {
         recordHeat: recordChatHeat,
         replaceEmojis,
         translate: (text) => Translate.TranslateText(text),
+        onChannelIdentity: (channelId) => {
+            if (typeof channelId === 'string' && channelId) youtubeBroadcasterId = channelId;
+        },
         onViewerCount: (count) => {
             YoutubeViewerCount = count
             autoClip?.updatePlatformViewers('Youtube', Number(count))

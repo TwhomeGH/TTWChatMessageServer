@@ -308,7 +308,7 @@ function connect(liveChatId, videoId, channelName, deps) {
  * @returns {Promise<void>}
  */
 export async function startYoutubeChat(channelName, deps) {
-    const { writeLog, sendSystem, notify, apiKey } = deps;
+    const { writeLog, sendSystem, notify, apiKey, onChannelIdentity } = deps;
 
     if (!apiKey) {
         console.log('⚠️ 未設定 YOUTUBE_API_KEY，跳過');
@@ -331,6 +331,8 @@ export async function startYoutubeChat(channelName, deps) {
         return;
     }
     console.log(`🔍 Youtube 頻道 ID: ${info.channelId}`);
+    // 人流歸屬使用解析後、大小寫正確的頻道 ID，而不是使用者輸入的 @handle。
+    if (typeof onChannelIdentity === 'function') onChannelIdentity(info.channelId, info.channelName);
 
     const liveInfo = await checkIsLive(deps.axios, apiKey, info.channelId);
     if (!liveInfo.live) {

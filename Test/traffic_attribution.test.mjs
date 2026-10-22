@@ -7,7 +7,7 @@ const identities = {
     twitchUser: '123456',
     kickName: 'KickName',
     odyseeName: 'OdyseeName',
-    youtubeName: 'UCabcDEF'
+    youtubeName: 'UCAbCdEfGhIjKlMnOpQrStUv'
 };
 
 test('每個平台使用自己的主播識別，不互相借用', () => {
@@ -15,7 +15,11 @@ test('每個平台使用自己的主播識別，不互相借用', () => {
     assert.equal(broadcasterForPlatform('Twitch', identities), '123456');
     assert.equal(broadcasterForPlatform('Kick', identities), 'kickname');
     assert.equal(broadcasterForPlatform('Odysee', identities), 'odyseename');
-    assert.equal(broadcasterForPlatform('Youtube', identities), 'ucabcdef');
+    assert.equal(broadcasterForPlatform('Youtube', identities), 'UCAbCdEfGhIjKlMnOpQrStUv');
+});
+
+test('YouTube handle 只在沒有頻道 ID 時作為小寫 fallback', () => {
+    assert.equal(broadcasterForPlatform('Youtube', { youtubeName: '@MyHandle' }), 'myhandle');
 });
 
 test('缺少設定、空字串或未知平台都不猜測主播', () => {

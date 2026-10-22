@@ -1,3 +1,5 @@
+const { normalizeBroadcaster } = require('./identity.cjs');
+
 // 原生觀看樣本在線時，備用（userscript）樣本在這段時間內不計入，避免兩條來源互相污染。
 // 超過這個時間沒有原生樣本，就讓備用接手。
 const NATIVE_PRIORITY_MS = 90000;
@@ -79,7 +81,7 @@ class TrafficStore {
         const user = String(raw.userId || raw.user || '').slice(0, 100);
         const stream = this.streamOf(raw);
         const broadcaster = typeof raw.broadcasterId === 'string' && raw.broadcasterId.trim()
-            ? raw.broadcasterId.trim().replace(/^@/, '').toLowerCase().slice(0, 100) : null;
+            ? normalizeBroadcaster(raw.broadcasterId, platform).slice(0, 100) : null;
         const source = JSON.stringify([platform, broadcaster]);
 
         const id = raw.msgId || raw.id;

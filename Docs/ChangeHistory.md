@@ -1,5 +1,35 @@
 # ChangeHistory
 
+## 2026.10.23 05:10 YouTube 主播識別改用頻道 ID
+
+**類型**: 修正 · **檔案**: `ScriptLib/traffic/identity.cjs`、`attribution.mjs`、`store.cjs`、`planner.cjs`、`TikTok.js`、`ScriptLib/youtube/chat.mjs`、`UserScript/youtube-chat-userscript.user.js`、測試與文件
+
+### 問題 - 同一台 YouTube 用 @handle 和 UC 頻道 ID 會變成兩個主播
+
+原生 YouTube 已經在 `resolveChannelId()` 取得真正的 `channelId`，但 `reportTraffic` 仍使用 `YOUTUBE_CHANNEL_ID`／`keyword` 的原始輸入；userscript 也把主播欄位一律轉小寫。YouTube 頻道 ID 大小寫敏感，handle 又可能改名，因此同一台可能被拆成不同主播，或和 userscript 場次對不上。
+
+### 根因 - 所有平台共用同一套小寫正規化，且解析後的身分沒有回傳給 traffic
+
+`normalizeBroadcaster` 只做 `trim`、去 `@`、`toLowerCase`，沒有平台概念；`startYoutubeChat` 解析出的 `channelId` 只用在 API 查詢，沒有交給人流歸屬。
+
+### 修改
+
+- 新增 `ScriptLib/traffic/identity.cjs`：YouTube `UC...` 保留大小寫；`@handle` 僅作 fallback 並轉小寫；其他平台維持原規則。
+- `attribution.mjs`、`store.cjs`、`planner.cjs` 改用同一個正規化，並在可取得平台時傳入平台。
+- `startYoutubeChat` 解析後透過 `onChannelIdentity` 回傳 `channelId`；`TikTok.js` 的人流事件改用解析後的 UC ID。
+- YouTube userscript 升級到 1.5：欄位改為「YouTube 頻道 ID」，嘗試從 `ytcfg`／`videoDetails` 自動偵測，保留 UC 大小寫；抓不到時請使用者貼 UC ID。
+- liveCenter／TikTok 仍使用 handle；文件與 `.env.example` 說明 YouTube 建議填 UC ID。
+
+### 影響與限制
+
+既有已寫入的 YouTube 主播若是小寫 handle 或小寫化 ID，無法可靠還原原始大小寫；不會自動合併。需要時用批次補分類填入 UC ID，讓後續場次使用同一個身分。
+
+### 驗證
+
+`traffic_attribution`、`traffic`、`traffic_planner`、`userscript_source` 共 78 項通過；`test:ci` 全過。
+
+---
+
 ## 2026.10.23 04:20 AUTO_CLIP_MODE 設定與執行模式分開顯示
 
 **類型**: 修正 · **檔案**: `Server.js`、`config.html`、`assets/autoclip.js`、`assets/autoclip.css`

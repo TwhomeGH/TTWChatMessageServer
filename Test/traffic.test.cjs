@@ -46,6 +46,22 @@ test('主播識別的 @ 在寫入場次前就會去掉', () => {
     db.close();
 });
 
+test('YouTube UC 頻道 ID 保留大小寫，handle 仍轉小寫', () => {
+    const now = 1700000000000;
+    const db = new TrafficDatabase(':memory:');
+    const store = new TrafficStore(() => now, db);
+    const channelId = 'UCAbCdEfGhIjKlMnOpQrStUv';
+    store.record({ type: 'audience', platform: 'Youtube', broadcasterId: channelId, userNum: 1, transport: 'native' });
+    const session = db.db.prepare("SELECT broadcaster FROM sessions WHERE platform='Youtube'").get();
+    assert.equal(session.broadcaster, channelId);
+    const identity = db.db.prepare("SELECT broadcaster FROM traffic_identities WHERE platform='Youtube'").get();
+    assert.equal(identity.broadcaster, channelId);
+    store.record({ type: 'audience', platform: 'Youtube', broadcasterId: '@MyHandle', userNum: 2, transport: 'native' });
+    const handle = db.db.prepare("SELECT broadcaster FROM sessions WHERE platform='Youtube' ORDER BY id DESC LIMIT 1").get();
+    assert.equal(handle.broadcaster, 'myhandle');
+    db.close();
+});
+
 test('觀看數斜率、零值、缺漏與平台隔離', () => {
     let now = 1700000000000;
     const store = new TrafficStore(() => now);

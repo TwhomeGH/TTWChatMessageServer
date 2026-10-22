@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Chat to TTW Server
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  直接從 YouTube Studio 直播聊天室 DOM 抓訊息送到 TTW 伺服器（不耗 API quota；新增面板可手動開關轉接）
 // @author       TTW
 // @match        https://studio.youtube.com/live_chat*
@@ -32,15 +32,46 @@
     // 所以改成使用者自己在面板上開／關。預設關閉（安全），要送再自己打開。
     // ─────────────────────────────────────────────────────────────
     const STATE_KEY = 'ttw_youtube_relay'
+
+    /**
+     * YouTube 頻道 ID（UC...）大小寫敏感，保留原樣；@handle 只作為舊資料 fallback。
+     * @param {string} value 使用者輸入或頁面偵測值。
+     * @returns {string} 正規化後的主播識別。
+     */
+    function normalizeBroadcaster(value) {
+        const trimmed = String(value || '').trim().replace(/^@/, '').trim()
+        return /^UC[\w-]{20,}$/.test(trimmed) ? trimmed : trimmed.toLowerCase()
+    }
+
+    /** 盡量從目前頁面的 ytcfg／videoDetails 取得真正的頻道 ID。 */
+    function detectChannelId() {
+        try {
+            const candidates = [
+                window.ytcfg?.get?.('CHANNEL_ID'),
+                window.ytInitialPlayerResponse?.videoDetails?.channelId,
+            ]
+            return candidates.find(value => typeof value === 'string' && /^UC[\w-]{20,}$/.test(value)) || ''
+        } catch {
+            return ''
+        }
+    }
+
     const state = loadState()
+    if (!state.broadcaster) {
+        const detected = detectChannelId()
+        if (detected) {
+            state.broadcaster = detected
+            saveState()
+        }
+    }
 
     function loadState() {
         try {
             const saved = JSON.parse(localStorage.getItem(STATE_KEY) || '{}')
             return {
                 enabled: saved.enabled === true,
-                // 主播帳號只用於人流歸屬；未填時不猜測，維持未分類。
-                broadcaster: typeof saved.broadcaster === 'string' ? saved.broadcaster.replace(/^@/, '').trim().toLowerCase() : '',
+                // 主播頻道 ID 只用於人流歸屬；未填時不猜測，維持未分類。
+                broadcaster: normalizeBroadcaster(saved.broadcaster),
             }
         } catch {
             return { enabled: false, broadcaster: '' }
@@ -194,12 +225,12 @@
                     h('span', { class: 'ttw-switch-text', text: '啟用轉接' })
                 ]),
                 h('label', { class: 'ttw-field' }, [
-                    h('span', { text: '主播帳號（選填）' }),
-                    h('input', { type: 'text', id: 'ttw-yt-broadcaster', placeholder: '@頻道帳號' })
+                    h('span', { text: 'YouTube 頻道 ID（選填）' }),
+                    h('input', { type: 'text', id: 'ttw-yt-broadcaster', placeholder: 'UC...（頻道 ID）' })
                 ]),
                 h('div', { class: 'ttw-state', id: 'ttw-yt-state' }),
                 h('div', { class: 'ttw-last', id: 'ttw-yt-last' }),
-                h('div', { class: 'ttw-hint', text: 'YouTube 無法自動判斷是不是目標直播主，請自己確認這一台再開啟；填主播帳號可讓人流歸屬到正確主播，未填則記為未分類。設定自動存在此瀏覽器。' })
+                h('div', { class: 'ttw-hint', text: '請填 UC 開頭的頻道 ID；會嘗試從頁面自動偵測，抓不到再手動貼上。頻道 ID 才能和原生 YouTube 場次對上；@handle 可能因改名或解析差異被分成不同主播。未填則記為未分類。' })
             ])
         ])
         document.body.append(box)
@@ -209,7 +240,7 @@
         const broadcaster = box.querySelector('#ttw-yt-broadcaster')
         broadcaster.value = state.broadcaster || ''
         broadcaster.oninput = () => {
-            state.broadcaster = broadcaster.value.replace(/^@/, '').trim().toLowerCase()
+            state.broadcaster = normalizeBroadcaster(broadcaster.value)
             saveState()
         }
         box.querySelector('#ttw-yt-pill').onclick = () => {
