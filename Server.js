@@ -257,6 +257,10 @@ const crypto = require('crypto');
 
 const server_tokenFile = path.join(__dirname, 'server_tokens.json');
 
+// 控制台登入 token 的有效期；cookie Max-Age 必須與它一致。
+const CONTROL_TOKEN_TTL_SECONDS = Math.max(60, Number(process.env.CONTROL_TOKEN_TTL_SECONDS) || 14 * 24 * 60 * 60);
+const CONTROL_TOKEN_TTL_MS = CONTROL_TOKEN_TTL_SECONDS * 1000;
+
 // 用 Map 儲存 token -> expiry
 var validTokens = new Map();
 
@@ -273,42 +277,37 @@ if (fs.existsSync(server_tokenFile)) {
     fs.writeFileSync(server_tokenFile, JSON.stringify(obj, null, 2));
 }
 
-// 建立 token，設定有效期 (例如 30 分鐘)
+// 建立 token；登入當下就落地，避免重啟後尚未驗證過的 token 消失。
 function createToken() {
     const token = crypto.randomBytes(32).toString('hex');
-    const expiry = Date.now() + 14 * 24 * 60 * 60 * 1000; // 14天  24小時 60 分鐘
-    validTokens.set(token, expiry);
+    validTokens.set(token, Date.now() + CONTROL_TOKEN_TTL_MS);
+    saveTokens();
     return token;
 }
 
-// 驗證 token
+// 驗證 token；只有建立／過期清理時才寫檔，不在每個請求重寫。
 function isValidToken(token) {
     if (!token) return false;
     const expiry = validTokens.get(token);
     if (!expiry) return false;
-    
-    saveTokens();
-    
     if (Date.now() > expiry) {
-        validTokens.delete(token); // 過期就刪掉
-        
+        validTokens.delete(token);
+        saveTokens();
         return false;
     }
     return true;
 }
 
 /**
- * 安全遮罩函式
- * 會自動截斷最後 N 個字並替換成指定字串
+ * 安全遮罩函式：只保留開頭與結尾少量字元，避免日誌洩漏大部分金鑰。
  * @param {string} key - 要保護的字串或金鑰
- * @param {number} maskLen - 要遮罩的長度 (預設 5)
- * @param {string} maskStr - 遮罩替代字串 (預設 "*****")
+ * @param {number} visible - 開頭／結尾各保留幾個字元
  * @returns {string} - 遮罩後的字串
  */
-function maskKey(key, maskLen = 5, maskStr = "*****") {
-    if (typeof key !== "string") return "";
-    if (key.length <= maskLen) return maskStr;
-    return key.slice(0, key.length - maskLen) + maskStr;
+function maskKey(key, visible = 4) {
+    if (typeof key !== "string" || !key) return "";
+    if (key.length <= visible * 2) return "*".repeat(key.length);
+    return `${key.slice(0, visible)}…${key.slice(-visible)}`;
 }
 
 function parseCookies(req) {
@@ -1132,7 +1131,7 @@ const server = http.createServer((req, res) => {
             const token = createToken(); // 你自己的 token 生成邏輯
             res.writeHead(200, {
                 'Content-Type': 'application/json',
-                'Set-Cookie': `authToken=${token}; SameSite=Strict`
+                'Set-Cookie': `authToken=${token}; HttpOnly; Path=/; SameSite=Strict; Max-Age=${CONTROL_TOKEN_TTL_SECONDS}`
             });
             res.end(JSON.stringify({ success: true }));
             } else {
@@ -1153,8 +1152,6 @@ const server = http.createServer((req, res) => {
             .map(c => c.trim())
             .find(c => c.startsWith('authToken='))
             ?.split('=')[1];
-        
-        console.log("Cookie",String(token).substring(0,String(token).length-5)+"00000")
 
         if (!isValidToken(token)) {
             // 直接回傳 login.html，而不是 302
@@ -1449,7 +1446,7 @@ const server = http.createServer((req, res) => {
 
     else if (req.url === '/logout') {
     res.writeHead(200, {
-        'Set-Cookie': 'authToken=; HttpOnly; SameSite=Strict; Max-Age=0'
+        'Set-Cookie': 'authToken=; HttpOnly; Path=/; SameSite=Strict; Max-Age=0'
         // 本地測試時不要加 Secure，正式環境再加
     });
     res.end(JSON.stringify({ success: true }));

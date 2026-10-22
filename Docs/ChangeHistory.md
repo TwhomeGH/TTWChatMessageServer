@@ -1,5 +1,31 @@
 # ChangeHistory
 
+## 2026.10.23 11:10 控制台登入 token 日誌、cookie 與持久化
+
+**類型**: 修正／安全 · **檔案**: `Server.js`、`.env.example`
+
+### 問題 - `/config` 日誌出現 `Cookie unde00000`，而且遮罩後仍洩漏大部分 token
+
+未登入時 cookie 沒有 `authToken`，舊程式直接對 `undefined` 取 substring，得到 `unde00000`；有 token 時則保留前 59 個字元，只把最後 5 個換成 `00000`。`maskKey` 也有同樣問題。
+
+另外登入 cookie 沒有 `HttpOnly`、`Path`、`Max-Age`；token 只在第一次驗證時才寫入 `server_tokens.json`，且每次驗證都重寫檔案。
+
+### 根因 - 日誌直接格式化未定義值，遮罩邏輯保留過多原文；cookie 與 token 生命週期沒有對齊
+
+### 修改
+
+- 移除 `/config` 的 token 日誌；不再輸出 `unde00000` 或 token 原文。
+- `maskKey` 改為只保留開頭／結尾各 4 個字元，其餘以 `…` 遮罩。
+- 登入 cookie 加上 `HttpOnly; Path=/; SameSite=Strict; Max-Age=<token TTL>`；`/logout` 也補上 `Path=/`。
+- token 建立時立即寫入 `server_tokens.json`；驗證成功不再每次寫檔，只有建立與過期清理時寫入。
+- 新增 `CONTROL_TOKEN_TTL_SECONDS`（預設 14 天），token 與 cookie 有效期一致。
+
+### 驗證
+
+`node --check Server.js`、`npm run lint`、`npm run test:ci` 全過。舊的 session cookie 仍可沿用，重新登入後會換成 HttpOnly 版本。
+
+---
+
 ## 2026.10.23 10:10 YouTube 零 API Key 的瀏覽器 discovery
 
 **類型**: 功能 · **檔案**: `ScriptLib/youtube/browser.mjs`、`ScriptLib/youtube/chat.mjs`、`Test/youtube_browser_ui.mjs`、`.env.example`、`Docs/YOUTUBE_BROWSER.md`
