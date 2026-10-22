@@ -1,6 +1,17 @@
 /* /autoclip 自動剪輯分析：頁面專用樣式（搭配 /assets/app.css 的 Tailwind）。 */
 
 .dashboard { max-width: 1600px; margin: auto; }
+.autoclip-view-switch { display: flex; gap: 6px; }
+.autoclip-view-switch button { padding: 6px 14px; border-radius: 8px; background: #374151; color: #e5e7eb; font-size: .875rem; }
+.autoclip-view-switch button[aria-pressed="true"] { background: #6d28d9; color: #fff; }
+.autoclip-history-panel { padding: 12px; border-radius: 12px; background: #1f2937; }
+.autoclip-history-panel select { padding: 4px 8px; border-radius: 6px; background: #374151; color: #e5e7eb; }
+.autoclip-mode-badge { display: inline-flex; align-items: center; padding: 3px 9px; border: 1px solid #92400e; border-radius: 999px; background: #2a1a0a; color: #fde68a; font-size: .75rem; font-weight: 600; }
+.autoclip-mode-badge.is-live { border-color: #166534; background: #0f1f17; color: #bbf7d0; }
+.autoclip-status { padding: 10px 14px; border: 1px solid #334155; border-radius: 12px; background: #0f172a; color: #cbd5e1; font-size: .875rem; }
+.autoclip-status.is-live { border-color: #166534; background: #0f1f17; color: #bbf7d0; }
+.autoclip-status.is-stale { border-color: #92400e; background: #2a1a0a; color: #fde68a; }
+.autoclip-status.is-offline { border-color: #7f1d1d; background: #2a0f12; color: #fecaca; }
 
 /* 平台卡片：桌面 6 欄、行動 2 欄。 */
 .platform-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }

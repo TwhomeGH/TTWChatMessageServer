@@ -2,6 +2,8 @@ let viewerChart, msgChart, scoreChart;
 let cfg = {};
 let graphRows = [], selectedTrigger = null;
 let allRows = [], customRange = null;
+let viewMode = 'live';
+let historySessions = [];
 function visibleRows(rows) {
     if(!rows.length)return [];
     const range=document.getElementById('rangeSelect').value;
@@ -81,14 +83,31 @@ const platformColors = { TikTok:'#22d3ee', Twitch:'#c084fc', Kick:'#4ade80', Ody
 const numberText = value => typeof value === 'number' && Number.isFinite(value) ? value.toFixed(2) : '—';
 function renderPlatformCards() {
     const historical = selectedTrigger !== null;
-    const row = historical ? allRows.find(r => r.t === selectedTrigger) : allRows.at(-1);
+    let row = historical ? allRows.find(r => r.t === selectedTrigger) : allRows.at(-1);
+    let fallback = false;
+    if (!historical && !(Array.isArray(row?.platforms) && row.platforms.length)) {
+        const valid = [...allRows].reverse().find(r => Array.isArray(r.platforms) && r.platforms.length);
+        if (valid) {
+            row = valid;
+            fallback = true;
+        }
+    }
     const platforms = historical ? row?.evidence?.platforms ?? row?.platforms : row?.platforms;
     const source = historical ? row?.evidence?.sourcePlatform ?? row?.sourcePlatform : row?.sourcePlatform;
     const threshold = historical ? row?.evidence?.threshold : cfg.scoreThreshold ?? 1.8;
+    const historyMode = viewMode === 'history' && !historical;
     const stale = !historical && row && Date.now() - new Date(row.t).getTime() > 20000;
     document.getElementById('platformContext').textContent = historical
       ? '歷史快照 · '+fmtTime(row?.t)+(Array.isArray(platforms)?'':' · 此紀錄未保存平台數據')
-      : '即時評估 · '+(row ? fmtTime(row.t)+(stale?' · 資料已停止更新，以下為最後樣本':'') : '等待評估資料');
+      : historyMode
+        ? fallback
+          ? `歷史場次 · 上次有效平台樣本 ${fmtTime(row?.t)}`
+          : row ? `歷史場次 · ${fmtTime(row.t)}` : '歷史場次沒有平台資料'
+        : fallback
+          ? `上次有效平台快照 · ${fmtTime(row?.t)}（目前沒有新的平台資料${source ? ' · 來源 '+sourceLabel(source) : ''}）`
+          : row
+            ? '即時評估 · '+fmtTime(row.t)+(stale?' · 資料已停止更新，以下為最後樣本':'')
+            : '等待評估資料';
     document.getElementById('liveBtn').disabled = !historical && !customRange;
     document.getElementById('platformCards').innerHTML = platformOrder.map(platform => {
       const p = platforms?.find(p => p.platform === platform);
@@ -188,11 +207,11 @@ function renderTriggerDetail() {
     const candidates=allRows.filter(r=>r.triggered);
     if (!candidates.some(r=>r.t===selectedTrigger)) selectedTrigger=null;
     select.replaceChildren();
-    const liveOption=document.createElement('option');liveOption.value='';liveOption.textContent='即時模式（選擇事件查看快照）';select.append(liveOption);
+    const liveOption=document.createElement('option');liveOption.value='';liveOption.textContent=(viewMode==='history'?'歷史場次':'即時模式')+'（選擇事件查看快照）';select.append(liveOption);
     for(const row of [...candidates].reverse()) { const option=document.createElement('option');option.value=row.t;option.textContent=fmtTime(row.t)+' · '+(row.mode==='shadow'?'影子':'正式')+' · '+triggerHistoryInfo(row).label;select.append(option); }
     select.value=selectedTrigger||'';
     const row=candidates.find(r=>r.t===selectedTrigger);detail.replaceChildren();
-    if(!row){detail.textContent=candidates.length?'目前顯示即時平台分數；點選圖上觸發點或選單查看歷史原因。':'尚無觸發紀錄；平台卡片仍會隨評估更新。';return;}
+    if(!row){detail.textContent=candidates.length?(viewMode==='history'?'目前顯示歷史場次平台分數；點選圖上觸發點或選單查看歷史原因。':'目前顯示即時平台分數；點選圖上觸發點或選單查看歷史原因。'):'尚無觸發紀錄；平台卡片仍會隨評估更新。';return;}
     const heading=document.createElement('p');heading.className='font-semibold text-purple-200';heading.textContent=fmtTime(row.t)+' · '+row.reason;detail.append(heading);
     const ev=row.evidence;
     const historyInfo=triggerHistoryInfo(row);
@@ -380,13 +399,15 @@ function renderCards(stats) {
         container.innerHTML = '<div class="col-span-full text-center text-gray-500 py-4">尚無評估資料（自動剪輯啟用後每 5 秒產生一筆）</div>';
         return;
     }
+    // 最後一列可能是「觀眾過期／重新暖機」的 reset，數值全為零；卡片改用最近一次有平台資料的快照。
+    const current = [...stats].reverse().find(row => Array.isArray(row.platforms) && row.platforms.length) || last;
     const clips = stats.filter(s => s.triggered).length;
     const cards = [
-        { label: '目前觀眾', value: last.viewers, sub: `基準 ${last.baseViewers ?? 0}` },
-        { label: '訊息速率', value: `${last.msgRate ?? 0}/min`, sub: `基準 ${last.baseMsgRate ?? 0}` },
-        { label: '觸發分數', value: last.score ?? 0, sub: `門檻 ${cfg.scoreThreshold ?? 1.8}`, hot: (last.score ?? 0) >= (cfg.scoreThreshold ?? 1.8) },
-        { label: '影子觸發', value: last.shadowTriggers ?? 0, sub: '未建立剪輯' },
-        { label: '成功 / 失敗 / 建立中', value: `${last.totalClips ?? 0} / ${last.failedClips ?? 0} / ${last.pending ? 1 : 0}`, sub: `${last.totalTriggers ?? clips} 次觸發` },
+        { label: '目前觀眾', value: current.viewers, sub: `基準 ${current.baseViewers ?? 0}` },
+        { label: '訊息速率', value: `${current.msgRate ?? 0}/min`, sub: `基準 ${current.baseMsgRate ?? 0}` },
+        { label: '觸發分數', value: current.score ?? 0, sub: `門檻 ${cfg.scoreThreshold ?? 1.8}`, hot: (current.score ?? 0) >= (cfg.scoreThreshold ?? 1.8) },
+        { label: '影子觸發', value: current.shadowTriggers ?? 0, sub: cfg.mode === 'live' ? '正式模式仍會記錄' : '影子模式只記錄，不建立剪輯' },
+        { label: '成功 / 失敗 / 建立中', value: `${current.totalClips ?? 0} / ${current.failedClips ?? 0} / ${current.pending ? 1 : 0}`, sub: `${current.totalTriggers ?? clips} 次觸發` },
         { label: '目前狀態', value: '', sub: esc(last.reason || '') },
     ];
     container.innerHTML = cards.map(c => `
@@ -398,39 +419,174 @@ function renderCards(stats) {
     `).join('');
 }
 
+function formatAge(ms) {
+    if (!Number.isFinite(ms) || ms < 0) return '—';
+    const seconds = Math.floor(ms / 1000);
+    if (seconds < 60) return `${seconds} 秒`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} 分`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} 小時`;
+    return `${Math.floor(hours / 24)} 天`;
+}
+
+/** 顯示直播子程序與資料新鮮度，避免停止後頁面仍看起來像即時。 */
+function renderAutoclipStatus(runtime, stats) {
+    const box = document.getElementById('autoclipStatus');
+    if (!box) return;
+    const last = stats.at(-1);
+    const lastAt = last?.t ? new Date(last.t).getTime() : NaN;
+    const age = Number.isFinite(lastAt) ? Math.max(0, Date.now() - lastAt) : Infinity;
+    const running = Boolean(runtime?.running);
+    const mode = cfg?.mode === 'live' ? '正式剪輯模式' : '影子模式（只記錄，不剪輯）';
+    let text;
+    let className;
+    if (!last) {
+        text = `模式：${mode} · ` + (running ? '直播子程序運行中；尚未產生評估資料。' : '直播子程序未運行；尚無自動剪輯評估資料。');
+        className = running ? 'is-stale' : 'is-offline';
+    } else if (!running) {
+        text = `模式：${mode} · 直播子程序未運行：資料停留在 ${fmtTime(last.t)}（${formatAge(age)}前）。啟動直播後才會更新。`;
+        className = 'is-offline';
+    } else if (age > 30000) {
+        text = `模式：${mode} · 直播子程序運行中，但資料已 ${formatAge(age)}未更新；可能連線中斷。最後一筆 ${fmtTime(last.t)}。`;
+        className = 'is-stale';
+    } else {
+        text = `模式：${mode} · 直播子程序運行中 · 最後更新 ${formatAge(age)}前。`;
+        className = 'is-live';
+    }
+    box.textContent = text;
+    box.className = 'autoclip-status ' + className;
+    box.hidden = false;
+}
+
+/** 標題旁的模式徽章；歷史場次也沿用該場次的模式。 */
+function setModeBadge(mode) {
+    const live = mode === 'live';
+    const badge = document.getElementById('autoclipModeBadge');
+    if (!badge) return;
+    badge.textContent = live ? '正式剪輯模式' : '影子模式（只記錄，不剪輯）';
+    badge.className = 'autoclip-mode-badge' + (live ? ' is-live' : '');
+    badge.title = live
+        ? '達到門檻時會建立 Twitch 剪輯。'
+        : '影子模式只記錄分數與觸發，不會建立剪輯；要產生剪輯請將 AUTO_CLIP_MODE 設為 live。';
+    badge.hidden = false;
+}
+
 function renderConfig() {
+    const live = cfg.mode === 'live';
+    setModeBadge(cfg.mode);
     document.getElementById('configInfo').textContent =
-        '模式：'+(cfg.mode==='live'?'正式剪輯':'影子模式（不剪輯）')+' · 熱度：全平台 · 剪輯：Twitch'+' · 窗口 '+(cfg.rateWindowMin??0.5)+' 分 · 最少 '+(cfg.minUsers??3)+' 位發言人 / '+(cfg.minMessages??6)+' 筆 · 確認 '+Math.round((cfg.sustainMin??0.167)*60)+' 秒';
+        '模式：'+(live?'正式剪輯':'影子模式（不剪輯）')+' · 熱度：全平台 · 剪輯：Twitch'+' · 窗口 '+(cfg.rateWindowMin??0.5)+' 分 · 最少 '+(cfg.minUsers??3)+' 位發言人 / '+(cfg.minMessages??6)+' 筆 · 確認 '+Math.round((cfg.sustainMin??0.167)*60)+' 秒';
     document.getElementById('cfgBaseline').textContent = cfg.baselineWindowMin ?? 30;
 }
 
+function fmtSessionTime(value) {
+    if (!Number.isFinite(value)) return '—';
+    return new Date(value).toLocaleString('zh-TW', {
+        month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+    });
+}
+
+/** 切換即時與歷史；歷史不會被 5 秒輪詢覆蓋。 */
+function setAutoclipView(mode) {
+    viewMode = mode === 'history' ? 'history' : 'live';
+    const live = viewMode === 'live';
+    document.getElementById('viewLive').setAttribute('aria-pressed', String(live));
+    document.getElementById('viewHistory').setAttribute('aria-pressed', String(!live));
+    document.getElementById('liveOverview').hidden = !live;
+    document.getElementById('autoclipStatus').hidden = !live;
+    document.getElementById('historyControls').hidden = live;
+    document.getElementById('liveBtn').hidden = !live;
+}
+
+async function loadHistorySessions() {
+    const select = document.getElementById('historySession');
+    const meta = document.getElementById('historyMeta');
+    try {
+        const res = await fetch('/autoclip/sessions');
+        const result = await res.json();
+        if (!result.success) throw new Error(result.error || 'unknown');
+        historySessions = result.sessions || [];
+        const previous = select.value;
+        select.replaceChildren();
+        for (const session of historySessions) {
+            const option = document.createElement('option');
+            option.value = session.id;
+            const mode = session.mode === 'live' ? '正式' : session.mode === 'shadow' ? '影子' : '—';
+            option.textContent = `${fmtSessionTime(session.startedAt)}–${fmtSessionTime(session.endedAt || session.lastAt)} · ${mode} · ${session.sampleCount} 筆 · ${session.triggerCount} 觸發`;
+            select.append(option);
+        }
+        if (!historySessions.length) {
+            meta.textContent = '尚無歷史場次；啟動直播並收到評估資料後會累積。';
+            selectedTrigger = null;
+            customRange = null;
+            updateCharts([]);
+            return;
+        }
+        select.value = historySessions.some(session => session.id === previous) ? previous : historySessions[0].id;
+        await loadHistorySession(select.value);
+    } catch (error) {
+        meta.textContent = '歷史場次載入失敗：' + error.message;
+    }
+}
+
+async function loadHistorySession(sessionId) {
+    const meta = document.getElementById('historyMeta');
+    try {
+        const res = await fetch('/autoclip/history?session=' + encodeURIComponent(sessionId) + '&maxPoints=4000');
+        const result = await res.json();
+        if (!result.success) throw new Error(result.error || 'unknown');
+        cfg = result.config || cfg;
+        selectedTrigger = null;
+        customRange = null;
+        document.getElementById('triggerGroup').hidden = true;
+        document.getElementById('rangeSelect').value = 'all';
+        updateCharts(result.rows || []);
+        const info = result.meta || {};
+        const mode = info.mode === 'live' ? '正式' : info.mode === 'shadow' ? '影子' : '—';
+        setModeBadge(info.mode || cfg.mode);
+        meta.textContent = `${mode} · ${fmtSessionTime(info.startedAt)}–${fmtSessionTime(info.endedAt || info.lastAt)} · ${info.sampleCount || 0} 筆 · ${info.triggerCount || 0} 觸發${result.truncated ? ' · 已降採樣' : ''}`;
+    } catch (error) {
+        meta.textContent = '歷史載入失敗：' + error.message;
+    }
+}
+
 async function load() {
+    if (viewMode !== 'live') return;
     try {
         const res = await fetch('/autoclip/data');
         const result = await res.json();
         if (!result.success) throw new Error(result.error || 'unknown');
+        if (viewMode !== 'live') return;
         const stats = result.stats || [];
         cfg = result.config || {};
+        renderAutoclipStatus(result.runtime, stats);
         renderConfig();
         renderCards(stats);
-        let timing = document.getElementById('timingRecords');
-        if (!timing) { timing = document.createElement('section'); timing.id='timingRecords'; timing.className='bg-gray-800 rounded-2xl p-4 my-4'; document.getElementById('configInfo').parentElement.after(timing); }
-        timing.replaceChildren();
-        const heading=document.createElement('h2');heading.textContent='最近觸發時間與結果';timing.append(heading);
+        let timingSection = document.getElementById('timingRecords');
+        if (!timingSection) { timingSection = document.createElement('section'); timingSection.id='timingRecords'; timingSection.className='bg-gray-800 rounded-2xl p-4 my-4'; document.getElementById('configInfo').parentElement.after(timingSection); }
+        timingSection.replaceChildren();
+        const heading=document.createElement('h2');heading.textContent='最近觸發時間與結果';timingSection.append(heading);
         for (const row of stats.filter(s=>s.triggered).slice(-20).reverse()) {
             const p=document.createElement('p');p.className='text-sm text-gray-300 my-2';
             const format=t=>t?new Date(t).toLocaleTimeString('zh-TW',{hour12:false}):'—';
-            const timing=row.clip?.timing;
+            const clipTiming=row.clip?.timing;
             const secs=ms=>ms==null?'—':(ms/1000).toFixed(1)+'s';
-            const coverage=timing?.verified
-                ?(timing.coversPeak?'涵蓋熱度峰值':'未涵蓋熱度峰值')+'（峰值在片段第 '+secs(timing.peakOffsetMs)+'／片段長 '+secs(timing.endAt-timing.startAt)+'）'
-                :(timing?.requestLagMs!=null?'尚未核對片段時間（peak→請求 '+secs(timing.requestLagMs)+'）':'尚未核對片段時間');
+            const coverage=clipTiming?.verified
+                ?(clipTiming.coversPeak?'涵蓋熱度峰值':'未涵蓋熱度峰值')+'（峰值在片段第 '+secs(clipTiming.peakOffsetMs)+'／片段長 '+secs(clipTiming.endAt-clipTiming.startAt)+'）'
+                :(clipTiming?.requestLagMs!=null?'尚未核對片段時間（peak→請求 '+secs(clipTiming.requestLagMs)+'）':'尚未核對片段時間');
             p.textContent='開始 '+format(row.heatStartedAt)+' · 峰值 '+format(row.peakAt)+' · 觸發 '+format(row.triggeredAt)+' · 請求 '+format(row.requestedAt)+' · 完成 '+format(row.completedAt)+' · '+({shadow:'影子紀錄',pending:'建立中',success:'成功',failed:'失敗'}[row.status]||row.status||'歷史紀錄')+' · '+coverage+(row.error?' · '+row.error:'');
-            timing.append(p);
+            timingSection.append(p);
         }
         if (!viewerChart) buildCharts();
         updateCharts(stats);
     } catch (err) {
+        const status = document.getElementById('autoclipStatus');
+        if (status) {
+            status.textContent = `更新失敗：${err.message}。平台卡片保留上次資料，請確認主服務。`;
+            status.className = 'autoclip-status is-stale';
+            status.hidden = false;
+        }
         document.getElementById('platformContext').textContent = '更新失敗，平台卡片保留上次資料；請重新整理';
         document.getElementById('statusCards').innerHTML =
             `<div class="col-span-full text-red-400">載入失敗: ${esc(err.message)}</div>`;
@@ -449,7 +605,8 @@ document.getElementById('clearBtn').addEventListener('click', async () => {
         const result = await res.json();
         if (result.success) {
             btn.textContent = '✅ 已清空';
-            load();
+            if (viewMode === 'history') await loadHistorySessions();
+            else await load();
         } else {
             btn.textContent = '❌ 失敗';
             alert('清空失敗: ' + (result.error || '未知錯誤'));
@@ -461,6 +618,23 @@ document.getElementById('clearBtn').addEventListener('click', async () => {
     setTimeout(() => { btn.disabled = false; btn.textContent = '🗑️ 清空歷史'; }, 1500);
 });
 
+document.getElementById('viewLive').onclick = () => {
+    setAutoclipView('live');
+    selectedTrigger = null;
+    customRange = null;
+    document.getElementById('rangeSelect').value = '30';
+    load();
+};
+document.getElementById('viewHistory').onclick = () => {
+    setAutoclipView('history');
+    loadHistorySessions();
+};
+document.getElementById('historySession').onchange = event => {
+    if (event.target.value) loadHistorySession(event.target.value);
+};
+document.getElementById('historyRefresh').onclick = () => loadHistorySessions();
+
+setAutoclipView('live');
 buildCharts();
 load();
-setInterval(load, 5000); // 每 5 秒更新
+setInterval(() => { if (viewMode === 'live') load(); }, 5000); // 只有即時頁輪詢

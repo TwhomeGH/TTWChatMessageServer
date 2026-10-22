@@ -14,7 +14,10 @@
 <div class="dashboard space-y-4">
 
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-      <h1 class="text-2xl sm:text-3xl font-bold">📈 自動剪輯分析</h1>
+      <div class="flex items-center gap-2 flex-wrap">
+        <h1 class="text-2xl sm:text-3xl font-bold">📈 自動剪輯分析</h1>
+        <span id="autoclipModeBadge" class="autoclip-mode-badge" hidden></span>
+      </div>
       <nav class="flex gap-2 flex-wrap text-sm">
         <a href="/emoji" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg">😀 表情映射</a>
         <a href="/" class="bg-gray-700 text-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-600 transition">🏠 主控台</a>
@@ -24,8 +27,25 @@
       <a href="/traffic" class="bg-gray-700 rounded px-3 py-2" data-i18n="traffic.title">人流分析</a></nav>
     </div>
 
+    <div class="autoclip-view-switch" role="tablist" aria-label="即時或歷史">
+      <button id="viewLive" role="tab" aria-pressed="true">即時</button>
+      <button id="viewHistory" role="tab" aria-pressed="false">歷史</button>
+    </div>
+
+    <div id="autoclipStatus" class="autoclip-status" role="status" hidden></div>
+
+    <section id="historyControls" class="autoclip-history-panel" aria-label="歷史場次" hidden>
+      <div class="flex flex-wrap items-end gap-3">
+        <label class="text-sm">歷史場次
+          <select id="historySession" class="ml-2"></select>
+        </label>
+        <button id="historyRefresh" class="bg-gray-700 rounded-lg px-3 py-2 text-sm">重新整理</button>
+        <span id="historyMeta" class="text-xs text-gray-400" aria-live="polite"></span>
+      </div>
+    </section>
+
     <!-- 目前狀態卡 -->
-    <section aria-label="即時總覽"><h2 class="text-xs text-gray-400 mb-2">即時總覽（不隨歷史選取切換）</h2><div id="statusCards" class="grid grid-cols-2 lg:grid-cols-6 gap-3"></div></section>
+    <section id="liveOverview" aria-label="即時總覽"><h2 class="text-xs text-gray-400 mb-2">即時總覽（不隨歷史選取切換）</h2><div id="statusCards" class="grid grid-cols-2 lg:grid-cols-6 gap-3"></div></section>
     <section aria-label="平台觸發分數">
       <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
         <div><h2 class="font-semibold">平台觸發分數</h2><p id="platformContext" class="text-sm text-gray-400" aria-live="polite"></p></div>

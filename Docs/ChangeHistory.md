@@ -1,5 +1,34 @@
 # ChangeHistory
 
+## 2026.10.23 03:40 自動剪輯即時／歷史分離與模式提示
+
+**類型**: 功能／修正 · **檔案**: `ScriptLib/autoclip/history.cjs`、`Server.js`、`autoclip.html`、`assets/autoclip.js`、`assets/autoclip.css`、`Test/autoclip_history.test.cjs`、`.gitignore`
+
+### 問題 - 停止後頁面看起來像死掉、平台卡片空白，歷史只有 2.8 小時
+
+子程序停止後 `/autoclip/data` 仍回傳最後一份快照，頁面沒有 stale 或「未運行」提示；平台卡片只讀最後一列，而最後幾列是 `platforms: []` 的 reset，造成卡片始終空白。歷史又只在子程序結束時寫入 JSON 並每次覆寫，2000 筆 × 5 秒只能留約 2.8 小時，沒有跨 session 紀錄；影子模式也沒有明顯提示，容易誤以為自動剪輯壞掉。
+
+另外，首次出現觸發列時，`load()` 內的 `const timing = row.clip?.timing` 遮蔽了上方「最近觸發時間」區塊的 `timing`，導致 `timing.append` 讀到 undefined，整段載入失敗。
+
+### 根因 - 即時快照與歷史共用記憶體，且沒有獨立的持久化
+
+即時頁需要的是最近窗口；歷史頁需要的則是跨場次資料。原本兩者都依賴 `AutoClipManager.historyLimit` 的 2000 筆與 `/autoclip/data`，停止後就沒有新資料，也無法查詢舊場次。reset 列又被當成「目前平台狀態」，而不是「上次有效快照」。
+
+### 修改 - SQLite 歷史、即時／歷史分頁、stale 與模式提示
+
+- 新增 `ScriptLib/autoclip/history.cjs`：`data/autoclip.sqlite` 的 sessions／samples，以 `session + t` 去重；只寫新列與觸發更新，支援查詢、降採樣、30 天保留、清空與舊 `autoclip_stats.json` 匯入。
+- Server 在收到 `AUTOCLIP_STATS` 時持續寫入歷史（不再只在結束時寫檔），子程序結束時標記 `endedAt`；新增 `/autoclip/sessions` 與 `/autoclip/history`。
+- 頁面新增「即時／歷史」分頁：即時維持 5 秒輪詢；歷史有場次選單，查 SQLite 並可查看完整 session 與觸發，不再被 2.8 小時限制。
+- 即時平台卡片在最後一列沒有平台資料時，退回最近有效的平台快照並標示時間；頂部新增「影子模式／正式剪輯模式」徽章與 runtime／stale banner（未運行、超過 30 秒未更新）。
+- 修正觸發時間區塊的 `timing` 變數遮蔽；首次觸發不再讓整個載入失敗。
+- 舊 `autoclip_stats.json` 首次啟動會匯入成 legacy session；`clip_history.json` 與正式剪輯歷史維持獨立。
+
+### 驗證
+
+`Test/autoclip_history.test.cjs`（去重、觸發更新、降採樣、legacy 匯入與 prune）；`test:ci` core（含新增歷史測試）＋startup 17＋CSS 全過。另以 mock API 實際載入頁面，確認即時平台卡片、stale banner、模式徽章與歷史場次切換。
+
+---
+
 ## 2026.10.23 00:13 開播信心分級：exact／late／approx／estimated
 
 **類型**: 功能 · **檔案**: `ScriptLib/traffic/database.cjs`、`assets/traffic-history.js`、`assets/traffic-planner.js`

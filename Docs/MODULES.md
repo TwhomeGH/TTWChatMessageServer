@@ -9,6 +9,7 @@
 | ScriptLib/autoclip/metrics.mjs | 清理窗口、計算平台基準與貢獻分數、選出獨立達標的最高分 |
 | ScriptLib/autoclip/evidence.mjs | 複製觸發當下證據，保留總數並限制明細為 200 則 |
 | ScriptLib/autoclip/clipRequest.mjs | 提交剪輯請求、逾時處理、更新成功／失敗與 pending 狀態 |
+| ScriptLib/autoclip/history.cjs | SQLite 跨場次歷史：session/t 去重、查詢降採樣、保留期限、清空與舊 stats 匯入 |
 
 熱度仍接受所有平台（含 Unknown），明確標記的測試訊息不計入；Twitch 是剪輯入口。
 拆分不調整門檻、暖機、冷卻或去重規則。重置窗口也不清除冷卻、去重與累計結果。

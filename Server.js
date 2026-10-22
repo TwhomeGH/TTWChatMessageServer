@@ -105,6 +105,14 @@ var cacheKeywordDataAll = []
 // 自動剪輯分析歷史：執行時存記憶體（由 TikTok.js 透過 stdout 推播），僅在 TikTok.js 結束時寫入磁碟
 var cacheAutoClipStats = { config: {}, stats: [] }
 var lastAutoClipStatsLogAt = 0 // 自動剪輯統計心跳節流（避免每次推播洗版）
+const { AutoClipHistory } = require('./ScriptLib/autoclip/history.cjs');
+const autoClipHistory = new AutoClipHistory(path.join(__dirname, 'data', 'autoclip.sqlite'));
+try {
+    autoClipHistory.importLegacy(path.join(__dirname, 'autoclip_stats.json'));
+    autoClipHistory.prune(30);
+} catch (error) {
+    console.warn('AutoClip 歷史初始化失敗:', error.message);
+}
 var stdoutBuffer = ''
 
 function recordMessageStat(message, metadata = {}) {
@@ -438,10 +446,17 @@ function startRuntime(url) {
                     var PType = json.type;
 
                     if (PType == "AUTOCLIP_STATS") {
+                        const sessionId = typeof json.session === 'string' && json.session ? json.session : 'live';
                         cacheAutoClipStats = {
                             config: json.data?.config || {},
                             stats: (Array.isArray(json.data?.stats) ? json.data.stats : []).slice(-2000),
+                            session: sessionId,
                         };
+                        try {
+                            autoClipHistory.append(sessionId, cacheAutoClipStats.config, cacheAutoClipStats.stats);
+                        } catch (error) {
+                            pushLog('⚠️ AutoClip 歷史寫入失敗:', error.message);
+                        }
                         // 巨大 JSON 不印原始內容，只印摘要，避免洗版。
                         // 子程序已輸出節流後的狀態列；這裡只保留低頻心跳，確認統計有送達伺服器。
                         const last = cacheAutoClipStats.stats[cacheAutoClipStats.stats.length - 1];
@@ -485,8 +500,9 @@ function startRuntime(url) {
             pushLog(`[SYSTEM] Exit code=${code} signal=${signal}`);
             if (tiktokProcess === launchedProcess) tiktokProcess = null;
 
-            // 離線（TikTok.js 結束）時才把自動剪輯分析歷史寫入磁碟
+            // 離線（TikTok.js 結束）時才把自動剪輯即時快照寫入磁碟；跨場次歷史已在 SQLite。
             try {
+                if (cacheAutoClipStats.session) autoClipHistory.finish(cacheAutoClipStats.session);
                 fs.writeFileSync(path.join(__dirname, 'autoclip_stats.json'), JSON.stringify(cacheAutoClipStats,"",5), 'utf-8');
                 pushLog(`💾 已將自動剪輯分析歷史寫入 autoclip_stats.json (${cacheAutoClipStats.stats.length} 筆)`);
             } catch (err) {
@@ -1039,14 +1055,55 @@ const server = http.createServer((req, res) => {
                 console.warn('讀取 AutoClip 統計失敗，維持空:', err?.message || err);
             }
         }
+        const lastStats = cacheAutoClipStats.stats.at(-1);
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify({ success: true, stats: cacheAutoClipStats.stats, config: cacheAutoClipStats.config }));
+        res.end(JSON.stringify({
+            success: true, stats: cacheAutoClipStats.stats, config: cacheAutoClipStats.config,
+            session: cacheAutoClipStats.session ?? null,
+            runtime: {
+                running: Boolean(tiktokProcess),
+                source: tiktokProcess ? 'live' : 'snapshot',
+                lastStatsAt: lastStats?.t ?? null
+            }
+        }));
+    }
+
+    // 自動剪輯歷史場次清單
+    else if (req.url.split('?')[0] === '/autoclip/sessions') {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ success: true, sessions: autoClipHistory.listSessions() }));
+    }
+
+    // 自動剪輯歷史：session／from／to／maxPoints
+    else if (req.url.split('?')[0] === '/autoclip/history') {
+        try {
+            const url = new URL(req.url, 'http://localhost');
+            const session = url.searchParams.get('session') || null;
+            const intParam = name => {
+                const value = url.searchParams.get(name);
+                if (value === null || value === '') return null;
+                const parsed = Number(value);
+                return Number.isSafeInteger(parsed) ? parsed : null;
+            };
+            const result = autoClipHistory.query({
+                session,
+                from: intParam('from'),
+                to: intParam('to'),
+                maxPoints: intParam('maxPoints') ?? 4000
+            });
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ success: true, ...result }));
+        } catch (error) {
+            res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({ success: false, error: error.message }));
+        }
     }
 
     // 清空自動剪輯分析歷史
     else if (req.url === '/autoclip/clear' && req.method === 'POST') {
         try {
             cacheAutoClipStats = { config: {}, stats: [] };
+            autoClipHistory.clear();
             fs.writeFileSync(path.join(__dirname, 'autoclip_stats.json'), JSON.stringify(cacheAutoClipStats), 'utf-8');
             if (tiktokProcess && !tiktokProcess.killed) {
                 tiktokProcess.stdin.write('AUTOCLIP_CLEAR\n');
