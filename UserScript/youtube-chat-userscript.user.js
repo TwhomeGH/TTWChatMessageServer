@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Chat to TTW Server
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @description  直接從 YouTube Studio 直播聊天室 DOM 抓訊息送到 TTW 伺服器（不耗 API quota；新增面板可手動開關轉接）
 // @author       TTW
 // @match        https://studio.youtube.com/live_chat*
@@ -43,17 +43,16 @@
         return /^UC[\w-]{20,}$/.test(trimmed) ? trimmed : trimmed.toLowerCase()
     }
 
-    /** 盡量從目前頁面的 ytcfg／videoDetails 取得真正的頻道 ID。 */
+    /** 盡量從目前頁面或外層 Studio 頁面的 ytcfg／videoDetails 取得真正的頻道 ID。 */
     function detectChannelId() {
+        const candidates = []
         try {
-            const candidates = [
-                window.ytcfg?.get?.('CHANNEL_ID'),
-                window.ytInitialPlayerResponse?.videoDetails?.channelId,
-            ]
-            return candidates.find(value => typeof value === 'string' && /^UC[\w-]{20,}$/.test(value)) || ''
-        } catch {
-            return ''
-        }
+            candidates.push(window.ytcfg?.get?.('CHANNEL_ID'), window.ytInitialPlayerResponse?.videoDetails?.channelId)
+        } catch { /* ignore */ }
+        try {
+            candidates.push(window.top?.ytcfg?.get?.('CHANNEL_ID'), window.top?.ytInitialPlayerResponse?.videoDetails?.channelId)
+        } catch { /* ignore */ }
+        return candidates.find(value => typeof value === 'string' && /^UC[\w-]{20,}$/.test(value)) || ''
     }
 
     const state = loadState()
@@ -64,6 +63,11 @@
             saveState()
         }
     }
+    // 舊版沒有 targetVideoId；不要沿用舊的 enabled 狀態，避免一升級就送到錯的聊天室。
+    if (state.enabled && !state.targetVideoId) {
+        state.enabled = false
+        saveState()
+    }
 
     function loadState() {
         try {
@@ -72,9 +76,12 @@
                 enabled: saved.enabled === true,
                 // 主播頻道 ID 只用於人流歸屬；未填時不猜測，維持未分類。
                 broadcaster: normalizeBroadcaster(saved.broadcaster),
+                // 轉接只對已鎖定的影片生效；避免開到別的聊天室仍用同一個主播送資料。
+                targetVideoId: typeof saved.targetVideoId === 'string' ? saved.targetVideoId : '',
+                autoFollow: saved.autoFollow === true,
             }
         } catch {
-            return { enabled: false, broadcaster: '' }
+            return { enabled: false, broadcaster: '', targetVideoId: '', autoFollow: false }
         }
     }
 
@@ -82,18 +89,86 @@
         try { localStorage.setItem(STATE_KEY, JSON.stringify(state)) } catch { /* ignore */ }
     }
 
-    /** 目前這頁的 video id：面板用來確認「你在哪一台」。 */
+    /** 目前這頁的 video id；優先讀 iframe 自己的網址，再退回外層頁面。 */
     function currentVideoId() {
         const params = new URLSearchParams(location.search)
-        return params.get('v') || params.get('video_id') || ''
+        let id = params.get('v') || params.get('video_id') || ''
+        if (!id) {
+            try { id = new URLSearchParams(window.top.location.search).get('v') || '' } catch { /* ignore */ }
+        }
+        if (!id) {
+            try { id = window.ytInitialPlayerResponse?.videoDetails?.videoId || '' } catch { /* ignore */ }
+        }
+        return id
+    }
+
+    /** 只有目前聊天室等於已鎖定影片時才允許送出。 */
+    function isTargetChat(target = state.targetVideoId, current = currentVideoId()) {
+        return Boolean(target) && Boolean(current) && target === current
+    }
+
+    /** 自動跟隨只用來判斷「同一頻道的新直播」；讀不到直播狀態時保守地不自動啟用。 */
+    function isLiveVideo() {
+        try {
+            const flag = window.ytcfg?.get?.('IS_LIVE') ?? window.top?.ytcfg?.get?.('IS_LIVE')
+            if (typeof flag === 'boolean') return flag
+        } catch { /* ignore */ }
+        try {
+            const details = window.ytInitialPlayerResponse?.videoDetails || window.top?.ytInitialPlayerResponse?.videoDetails
+            if (details && typeof details.isLive === 'boolean') return details.isLive
+        } catch { /* ignore */ }
+        return false
+    }
+
+    /** 若已開啟自動跟隨，且目前是同一個已設定頻道的直播，才更新目標並啟用。 */
+    function maybeAutoFollow() {
+        if (!state.autoFollow || !state.broadcaster) return false
+        const current = currentVideoId()
+        if (!current || current === state.targetVideoId) return false
+        if (detectChannelId() !== state.broadcaster) return false
+        if (!isLiveVideo()) return false
+        state.targetVideoId = current
+        state.enabled = true
+        saveState()
+        return true
+    }
+
+    /** 將目前聊天室設為唯一目標；手動開啟或按「鎖定此聊天室」都走這裡。 */
+    function bindCurrentTarget() {
+        const current = currentVideoId()
+        const checkbox = document.getElementById('ttw-yt-enabled')
+        if (!current) {
+            state.enabled = false
+            if (checkbox) checkbox.checked = false
+            saveState()
+            renderPanelState()
+            return false
+        }
+        state.targetVideoId = current
+        state.enabled = true
+        const detected = detectChannelId()
+        if (detected) {
+            state.broadcaster = detected
+            const field = document.getElementById('ttw-yt-broadcaster')
+            if (field) field.value = detected
+        }
+        if (checkbox) checkbox.checked = true
+        saveState()
+        renderPanelState()
+        return true
     }
 
     let lastBlockedLog = ''
-    function logBlocked() {
-        if (lastBlockedLog === 'disabled') return
-        lastBlockedLog = 'disabled'
-        log('未開啟轉接，不送出（按左下角面板開啟）')
+    function logBlocked(reason = 'disabled') {
+        if (lastBlockedLog === reason) return
+        lastBlockedLog = reason
+        log(reason === 'wrong-target'
+            ? '目前聊天室不是已鎖定的目標，已暫停轉送'
+            : '未開啟轉接，不送出（按左下角面板開啟）')
     }
+
+    // 重新載入時只會自動接上同一個目標影片，或符合條件的同頻道新直播。
+    maybeAutoFollow()
 
     function log(...args) {
         if (debug) console.log('[YT Userscript]', ...args)
@@ -143,7 +218,11 @@
 
     function send(data) {
         if (!state.enabled) {
-            logBlocked()
+            logBlocked('disabled')
+            return
+        }
+        if (!isTargetChat()) {
+            logBlocked('wrong-target')
             return
         }
         flashSent(data.user, data.message)
@@ -167,7 +246,10 @@
     // ─────────────────────────────────────────────────────────────
     const PANEL_CSS = `
 #ttw-yt-panel { position: fixed; left: 12px; bottom: 12px; z-index: 2147483000; font: 12px/1.5 system-ui, "Noto Sans TC", sans-serif; color: #e7edf7; }
-#ttw-yt-panel .ttw-pill { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: #1b2940; border: 1px solid #344663; border-radius: 999px; cursor: pointer; color: inherit; font: inherit; }
+  #ttw-yt-panel .ttw-pill { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: #1b2940; border: 1px solid #344663; border-radius: 999px; cursor: grab; color: inherit; font: inherit; touch-action: none; user-select: none; }
+  #ttw-yt-panel .ttw-pill:active { cursor: grabbing; }
+  #ttw-yt-panel .ttw-bind { width: 100%; margin: 6px 0; padding: 6px 10px; border: 0; border-radius: 8px; background: #2563eb; color: #fff; font: inherit; cursor: pointer; }
+  #ttw-yt-panel .ttw-bind:hover { background: #1d4ed8; }
 #ttw-yt-panel .ttw-pill:hover { background: #24344f; }
 #ttw-yt-panel .ttw-body { width: 232px; margin-top: 6px; padding: 10px 12px; background: #131c2b; border: 1px solid #344663; border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
 #ttw-yt-panel .ttw-title { font-weight: 700; margin-bottom: 6px; }
@@ -206,6 +288,74 @@
         return node
     }
 
+    const PANEL_POSITION_KEY = 'ttw_youtube_relay_panel'
+    let suppressPillClickUntil = 0
+
+    function loadPanelPosition() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(PANEL_POSITION_KEY) || 'null')
+            if (Number.isFinite(saved?.left) && Number.isFinite(saved?.top)) return saved
+        } catch { /* ignore */ }
+        return null
+    }
+
+    function savePanelPosition(panel) {
+        try {
+            const left = Number.parseFloat(panel.style.left)
+            const top = Number.parseFloat(panel.style.top)
+            if (Number.isFinite(left) && Number.isFinite(top)) {
+                localStorage.setItem(PANEL_POSITION_KEY, JSON.stringify({ left, top }))
+            }
+        } catch { /* ignore */ }
+    }
+
+    /** 夾在視窗內；面板展開後高度改變時也要重新夾一次。 */
+    function clampPanel(panel) {
+        if (!panel.style.top) return
+        const left = Number.parseFloat(panel.style.left) || 8
+        const top = Number.parseFloat(panel.style.top) || 8
+        const maxLeft = Math.max(8, window.innerWidth - panel.offsetWidth - 8)
+        const maxTop = Math.max(8, window.innerHeight - panel.offsetHeight - 8)
+        panel.style.left = Math.min(Math.max(8, left), maxLeft) + 'px'
+        panel.style.top = Math.min(Math.max(8, top), maxTop) + 'px'
+    }
+
+    /** 拖動 pill 移動面板；沒有移動時仍保留原本的點擊開合。 */
+    function makeDraggable(panel, handle) {
+        let drag = null
+        handle.addEventListener('pointerdown', event => {
+            if (event.button !== 0) return
+            const rect = panel.getBoundingClientRect()
+            drag = { id: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top, moved: false }
+            try { handle.setPointerCapture(event.pointerId) } catch { /* ignore */ }
+        })
+        handle.addEventListener('pointermove', event => {
+            if (!drag || event.pointerId !== drag.id) return
+            const dx = event.clientX - drag.x
+            const dy = event.clientY - drag.y
+            if (!drag.moved && Math.hypot(dx, dy) < 5) return
+            drag.moved = true
+            event.preventDefault()
+            const maxLeft = Math.max(8, window.innerWidth - panel.offsetWidth - 8)
+            const maxTop = Math.max(8, window.innerHeight - panel.offsetHeight - 8)
+            panel.style.left = Math.min(Math.max(8, drag.left + dx), maxLeft) + 'px'
+            panel.style.top = Math.min(Math.max(8, drag.top + dy), maxTop) + 'px'
+            panel.style.bottom = 'auto'
+        })
+        const finish = event => {
+            if (!drag || event.pointerId !== drag.id) return
+            const moved = drag.moved
+            drag = null
+            try { handle.releasePointerCapture(event.pointerId) } catch { /* ignore */ }
+            if (moved) {
+                suppressPillClickUntil = Date.now() + 350
+                savePanelPosition(panel)
+            }
+        }
+        handle.addEventListener('pointerup', finish)
+        handle.addEventListener('pointercancel', finish)
+    }
+
     function buildPanel() {
         if (document.getElementById('ttw-yt-panel')) return
         const style = document.createElement('style')
@@ -214,7 +364,7 @@
 
         const box = h('div', { id: 'ttw-yt-panel' }, [
             h('div', { class: 'ttw-flash', id: 'ttw-yt-flash' }),
-            h('button', { class: 'ttw-pill', id: 'ttw-yt-pill', title: 'YouTube 轉接設定' }, [
+            h('button', { class: 'ttw-pill', id: 'ttw-yt-pill', title: 'YouTube 轉接設定（可拖曳移動）' }, [
                 '🎯 ', h('span', { id: 'ttw-yt-pill-text', text: '轉接設定' })
             ]),
             h('div', { class: 'ttw-body', id: 'ttw-yt-body', hidden: true }, [
@@ -224,16 +374,31 @@
                     h('span', { class: 'ttw-track' }),
                     h('span', { class: 'ttw-switch-text', text: '啟用轉接' })
                 ]),
+                h('label', { class: 'ttw-switch' }, [
+                    h('input', { type: 'checkbox', id: 'ttw-yt-autofollow' }),
+                    h('span', { class: 'ttw-track' }),
+                    h('span', { class: 'ttw-switch-text', text: '自動跟隨此頻道的新直播' })
+                ]),
                 h('label', { class: 'ttw-field' }, [
                     h('span', { text: 'YouTube 頻道 ID（選填）' }),
                     h('input', { type: 'text', id: 'ttw-yt-broadcaster', placeholder: 'UC...（頻道 ID）' })
                 ]),
+                h('button', { class: 'ttw-bind', id: 'ttw-yt-bind', type: 'button', text: '鎖定此聊天室' }),
                 h('div', { class: 'ttw-state', id: 'ttw-yt-state' }),
                 h('div', { class: 'ttw-last', id: 'ttw-yt-last' }),
-                h('div', { class: 'ttw-hint', text: '請填 UC 開頭的頻道 ID；會嘗試從頁面自動偵測，抓不到再手動貼上。頻道 ID 才能和原生 YouTube 場次對上；@handle 可能因改名或解析差異被分成不同主播。未填則記為未分類。' })
+                h('div', { class: 'ttw-hint', text: '請填 UC 開頭的頻道 ID；會嘗試從頁面自動偵測，抓不到再手動貼上。啟用時會鎖定目前影片，開到別的聊天室會自動暫停；同一個影片重新整理會自動恢復。自動跟隨只會在相同頻道且確認直播中時接手新影片。' })
             ])
         ])
         document.body.append(box)
+        const savedPosition = loadPanelPosition()
+        if (savedPosition) {
+            box.style.left = savedPosition.left + 'px'
+            box.style.top = savedPosition.top + 'px'
+            box.style.bottom = 'auto'
+            clampPanel(box)
+        }
+        makeDraggable(box, box.querySelector('#ttw-yt-pill'))
+        window.addEventListener('resize', () => clampPanel(box))
 
         const enabled = box.querySelector('#ttw-yt-enabled')
         enabled.checked = state.enabled
@@ -243,11 +408,31 @@
             state.broadcaster = normalizeBroadcaster(broadcaster.value)
             saveState()
         }
+        const autoFollow = box.querySelector('#ttw-yt-autofollow')
+        autoFollow.checked = state.autoFollow
+        autoFollow.onchange = () => {
+            state.autoFollow = autoFollow.checked
+            saveState()
+            if (state.autoFollow) maybeAutoFollow()
+            enabled.checked = state.enabled
+            renderPanelState()
+        }
+        box.querySelector('#ttw-yt-bind').onclick = bindCurrentTarget
         box.querySelector('#ttw-yt-pill').onclick = () => {
+            if (Date.now() < suppressPillClickUntil) return
             const body = box.querySelector('#ttw-yt-body')
             body.hidden = !body.hidden
+            requestAnimationFrame(() => clampPanel(box))
         }
-        enabled.onchange = () => { state.enabled = enabled.checked; saveState(); renderPanelState() }
+        enabled.onchange = () => {
+            if (enabled.checked) {
+                bindCurrentTarget()
+            } else {
+                state.enabled = false
+                saveState()
+                renderPanelState()
+            }
+        }
         renderPanelState()
     }
 
@@ -255,14 +440,19 @@
     function renderPanelState() {
         const el = document.getElementById('ttw-yt-state')
         if (!el) return
-        const video = currentVideoId()
-        const text = state.enabled
-            ? '✅ 轉接中' + (video ? '：' + video : '')
-            : '⏸ 未開啟轉接，不會送出'
+        const current = currentVideoId()
+        const target = state.targetVideoId
+        const active = state.enabled && isTargetChat(target, current)
+        let text
+        if (!state.enabled) text = '⏸ 未開啟轉接，不會送出'
+        else if (!target) text = '⚠️ 未鎖定目標聊天室，已暫停；請按「鎖定此聊天室」'
+        else if (!current) text = '⚠️ 讀不到 video ID，已暫停；請按「鎖定此聊天室」'
+        else if (current !== target) text = '⛔ 已暫停：目前 ' + current + '，目標 ' + target
+        else text = '✅ 轉接中：' + current
         el.textContent = text
-        el.className = 'ttw-state ' + (state.enabled ? 'on' : 'off')
+        el.className = 'ttw-state ' + (active ? 'on' : 'off')
         const pill = document.getElementById('ttw-yt-pill-text')
-        if (pill) pill.textContent = state.enabled ? ('轉接中' + (video ? ' ' + video : '')) : '轉接已暫停'
+        if (pill) pill.textContent = active ? ('轉接中 ' + (target || '')) : '轉接已暫停'
     }
 
     if (document.body) buildPanel()

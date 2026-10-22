@@ -10,6 +10,8 @@ function contextFor(file, start, end, source = fs.readFileSync(new URL('../UserS
         sentIds: new Set(), sentNodes: new WeakSet(), console: { log() {}, error() {} },
         // 目標直播間鎖定與轉送提示是 sendSocketMessage 的外掛依賴，這裡 stub 掉以驗證 payload 本身。
         canSend: () => true, logBlocked() {}, flashSent() {}, sentKind: () => '聊天', log() {},
+        // YouTube send() 會先檢查目標聊天室；payload 測試只驗證內容，因此注入通過的鎖定。
+        isTargetChat: () => true,
         // 主播歸屬：TikTokChat 由頁面 handle 取得，liveCenter／YouTube 由使用者設定取得。
         currentHandle: () => 'target_handle', broadcasterId: () => 'anchor_id',
         state: { enabled: true, broadcaster: 'yt_channel' }, SERVER_URL: 'http://localhost',
@@ -57,6 +59,19 @@ test('YouTube userscript 保留 UC 頻道 ID 大小寫，handle 才轉小寫', (
     assert.equal(ctx.normalizeBroadcaster('@Handle'), 'handle');
     assert.equal(ctx.normalizeBroadcaster('  UCAbCdEfGhIjKlMnOpQrStUv  '), 'UCAbCdEfGhIjKlMnOpQrStUv');
     assert.equal(ctx.normalizeBroadcaster(''), '');
+});
+
+test('YouTube userscript 只對已鎖定的影片目標送出', () => {
+    const source = fs.readFileSync(new URL('../UserScript/youtube-chat-userscript.user.js', import.meta.url), 'utf8');
+    const start = source.indexOf('function isTargetChat');
+    const end = source.indexOf('\n    }', start) + '\n    }'.length;
+    assert.ok(start >= 0 && end > start);
+    const ctx = vm.createContext({});
+    vm.runInContext(source.slice(start, end), ctx);
+    assert.equal(ctx.isTargetChat('v1', 'v1'), true);
+    assert.equal(ctx.isTargetChat('v1', 'v2'), false);
+    assert.equal(ctx.isTargetChat('', 'v1'), false);
+    assert.equal(ctx.isTargetChat('v1', ''), false);
 });
 
 test('YouTube bridge attaches the configured broadcaster to the payload', () => {

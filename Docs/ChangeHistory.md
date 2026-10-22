@@ -1,5 +1,31 @@
 # ChangeHistory
 
+## 2026.10.23 06:10 YouTube 轉接鎖定目標聊天室與可拖移面板
+
+**類型**: 修正 · **檔案**: `UserScript/youtube-chat-userscript.user.js`、`Test/userscript_source.test.mjs`、`Docs/USERSCRIPT_SOURCES.md`、`Docs/TRAFFIC.md`
+
+### 問題 - 開啟轉接後，開到別的聊天室仍會用同一個主播送資料
+
+`state.enabled` 是整個 origin 共用，`currentVideoId()` 只拿來顯示，`send()` 沒有比對目前聊天室；一旦啟用，導覽到另一個 `live_chat?v=...` 仍會轉送。面板固定在左下角，無法避開 YouTube 控制列。
+
+### 根因 - 沒有目標影片綁定，面板位置也沒有持久化
+
+轉接狀態只記 `enabled` 與主播，沒有 `targetVideoId`；`send()` 只檢查 enabled。面板 CSS 固定 `left/bottom`，沒有拖曳或位置儲存。
+
+### 修改
+
+- 啟用或按「鎖定此聊天室」時記錄目前 `v=`；`send()` 只在 `currentVideoId() === targetVideoId` 時送出，其他聊天室顯示暫停且不送。
+- 同一個影片重新整理會自動恢復；換新影片需重新鎖定。可選「自動跟隨此頻道的新直播」，僅在頻道 ID 相同且 `ytcfg`／`videoDetails` 確認直播中時才更新目標。
+- 舊版只有 enabled、沒有 target 的狀態會先停用，避免升級後直接送到錯的聊天室。
+- 面板 pill 可拖移並記住位置；拖曳與點擊以位移門檻和時間抑制區分，行動版用 pointer events 與 `touch-action:none`；展開面板或視窗縮放時會夾回可視範圍。
+- userscript 升至 1.6。
+
+### 驗證
+
+`userscript_source` 新增 `isTargetChat` 目標比對測試；`test:ci` 全過。
+
+---
+
 ## 2026.10.23 05:10 YouTube 主播識別改用頻道 ID
 
 **類型**: 修正 · **檔案**: `ScriptLib/traffic/identity.cjs`、`attribution.mjs`、`store.cjs`、`planner.cjs`、`TikTok.js`、`ScriptLib/youtube/chat.mjs`、`UserScript/youtube-chat-userscript.user.js`、測試與文件
