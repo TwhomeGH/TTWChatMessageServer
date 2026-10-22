@@ -15,7 +15,7 @@ const HTML = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewp
 <select id="timezone"><option>UTC</option></select>
 <p id="history-status"></p><div id="heatmap"></div><div id="daily"></div><div id="metrics"></div>
 <div id="ranking-note" class="ranking-note" role="status"></div><div id="ranking" class="table-wrap"></div>
-<h4 id="ranking-provisional-title" data-i18n="traffic.ranking.provisionalTitle" hidden>暫定觀察（樣本不足）</h4><p id="ranking-provisional-note" data-i18n="traffic.ranking.provisionalNote" hidden>2 場／2 日期僅供參考；正式排名仍需 3 場／3 日期，且至少 2 個時段達標。</p><div id="ranking-provisional" class="table-wrap" hidden></div>
+<h4 id="ranking-provisional-title" data-i18n="traffic.ranking.provisionalTitle" hidden>暫定觀察（樣本不足）</h4><p id="ranking-provisional-note" data-i18n="traffic.ranking.provisionalNote" hidden>2 場／2 日期僅供參考；正式排名仍需 3 場／3 日期，且至少 2 個時段達標。</p><div id="ranking-provisional" class="table-wrap" hidden></div><h4 id="ranking-assisted-title" data-i18n="traffic.ranking.assistedTitle" hidden>輔助時段</h4><p id="ranking-assisted-note" data-i18n="traffic.ranking.assistedNote" hidden>不列入精確排名。</p><div id="ranking-assisted" class="table-wrap" hidden></div>
 </main><script src="/assets/i18n.js"></script><script src="/assets/traffic-history.js"></script></body></html>`;
 
 const DATA = {
@@ -24,12 +24,12 @@ const DATA = {
     daily: [],
     metrics: { daily: [] },
     rankings: {
-        scope: 'own', totalSessions: 9, sessionCount: 2, minSessions: 3, minDays: 3,
+        scope: 'own', platform: 'TikTok', totalSessions: 9, sessionCount: 2, minSessions: 3, minDays: 3,
         earlyMinutes: 30, minObservedMinutes: 20, days: 30,
         excluded: { missingStart: 6, pending: 0, insufficientCoverage: 1 },
         cells: [
-            { key: 'Sat 22', n: 1, observedDays: 1, median: 10, mean: 10, shrunk: 10, insufficient: true },
-            { key: 'Tue 20', n: 1, observedDays: 1, median: 12, mean: 12, shrunk: 12, insufficient: true }
+            { key: 'Sat 22', n: 1, observedDays: 1, median: 10, mean: 10, shrunk: 10, insufficient: true, confidence: 'exact', startTypes: ['exact'] },
+            { key: 'Tue 20', n: 1, observedDays: 1, median: 12, mean: 12, shrunk: 12, insufficient: true, confidence: 'exact', startTypes: ['exact'] }
         ]
     }
 };
@@ -40,12 +40,12 @@ const PROVISIONAL = {
     daily: [],
     metrics: { daily: [] },
     rankings: {
-        scope: 'own', totalSessions: 4, sessionCount: 4, minSessions: 3, minDays: 3,
+        scope: 'own', platform: 'TikTok', totalSessions: 4, sessionCount: 4, minSessions: 3, minDays: 3,
         earlyMinutes: 30, minObservedMinutes: 20, days: 30,
         excluded: { missingStart: 0, pending: 0, insufficientCoverage: 0 },
         cells: [
-            { key: 'Sat 22', n: 2, observedDays: 2, median: 18, mean: 18, shrunk: 18, insufficient: true },
-            { key: 'Tue 20', n: 2, observedDays: 2, median: 12, mean: 12, shrunk: 12, insufficient: true }
+            { key: 'Sat 22', n: 2, observedDays: 2, median: 18, mean: 18, shrunk: 18, insufficient: true, confidence: 'exact', startTypes: ['exact'] },
+            { key: 'Tue 20', n: 2, observedDays: 2, median: 12, mean: 12, shrunk: 12, insufficient: true, confidence: 'exact', startTypes: ['exact'] }
         ]
     }
 };
@@ -56,12 +56,29 @@ const SCATTERED = {
     daily: [],
     metrics: { daily: [] },
     rankings: {
-        scope: 'own', totalSessions: 6, sessionCount: 6, minSessions: 3, minDays: 3,
+        scope: 'own', platform: 'TikTok', totalSessions: 6, sessionCount: 6, minSessions: 3, minDays: 3,
         earlyMinutes: 30, minObservedMinutes: 20, days: 30,
         excluded: { missingStart: 0, pending: 0, insufficientCoverage: 0 },
         cells: ['Mon 08', 'Tue 12', 'Wed 17', 'Thu 21', 'Fri 09', 'Sat 14'].map((key, index) => ({
-            key, n: 1, observedDays: 1, median: 10 + index, mean: 10 + index, shrunk: 10 + index, insufficient: true
+            key, n: 1, observedDays: 1, median: 10 + index, mean: 10 + index, shrunk: 10 + index,
+            insufficient: true, confidence: 'exact', startTypes: ['exact']
         }))
+    }
+};
+
+const ASSISTED = {
+    platform: 'TikTok',
+    cells: [],
+    daily: [],
+    metrics: { daily: [] },
+    rankings: {
+        scope: 'own', platform: 'TikTok', totalSessions: 5, sessionCount: 5, minSessions: 3, minDays: 3,
+        earlyMinutes: 30, minObservedMinutes: 20, days: 30,
+        excluded: { missingStart: 0, pending: 0, insufficientCoverage: 0 },
+        cells: [
+            { key: 'Thu 20', n: 3, observedDays: 3, median: 12, mean: 12, shrunk: 12, insufficient: false, confidence: 'assisted', startTypes: ['late'] },
+            { key: 'Sat 22', n: 2, observedDays: 2, median: 10, mean: 10, shrunk: 10, insufficient: true, confidence: 'assisted', startTypes: ['estimated'] }
+        ]
     }
 };
 
@@ -100,7 +117,10 @@ async function main() {
         const hints = await page.$$eval('.ranking-next-hint', nodes => nodes.map(node => node.textContent));
         assert.ok(hints.some(text => text.includes('約 2 週')));
         assert.ok(hints.some(text => text.includes('不會推進')));
-        assert.equal(await page.$$eval('.ranking-next-tips li', nodes => nodes.length), 2);
+        const tips = await page.$$eval('.ranking-next-tips li', nodes => nodes.map(node => node.textContent));
+        assert.equal(tips.length, 2);
+        assert.ok(tips.some(text => text.includes('開播後')));
+        assert.ok(!tips.some(text => text.includes('開台前先啟動')));
         assert.equal(await page.$eval('.ranking-why', node => node.open), false);
         await page.click('.ranking-why > summary');
         assert.equal(await page.$eval('.ranking-why', node => node.open), true);
@@ -127,6 +147,14 @@ async function main() {
         assert.equal(await page.$$eval('#ranking-provisional tbody tr', rows => rows.length), 2);
         assert.match(await page.$eval('#ranking-provisional-note', node => node.textContent), /僅供參考/);
         await page.screenshot({ path: path.join(__dirname, '../output/playwright/traffic-ranking-provisional.png'), fullPage: true });
+
+        current = ASSISTED;
+        await page.reload();
+        await page.waitForFunction(() => !document.querySelector('#ranking-assisted').hidden);
+        assert.equal(await page.$$eval('#ranking-assisted tbody tr', rows => rows.length), 2);
+        assert.equal(await page.$eval('#ranking', node => node.hidden), true);
+        assert.match(await page.$eval('.ranking-next-head', node => node.textContent), /只有輔助資料/);
+        await page.screenshot({ path: path.join(__dirname, '../output/playwright/traffic-ranking-assisted.png'), fullPage: true });
 
         assert.deepEqual(errors, []);
         console.log('Traffic ranking next-step UI passed: clear next step, scattered-schedule warning, slot progress, tips and expandable rules.');

@@ -165,6 +165,23 @@ test('可從已知時段建立其他星期的冷啟動累積計畫', t => {
     assert.equal(wedTikTok.n, 1);
 });
 
+test('approx 平台的累積窗口提前 30 分鐘，並標記開播信心', t => {
+    const f = fixture(t);
+    f.setNow(MONDAY);
+    f.seedPartial('self', MONDAY, 'Kick');
+    f.planner.classifyProfile({ platform: 'Kick', broadcaster: 'self', purpose: 'own' });
+    f.setNow(MONDAY + 3 * DAY);
+    f.enable();
+    const suggestion = f.planner.snapshot().collecting.find(row => row.platform === 'Kick');
+    assert.equal(suggestion.confidence, 'assisted');
+    assert.deepEqual(suggestion.startTypes, ['approx']);
+    f.planner.addCollecting({ platform: 'Kick', broadcaster: 'self', slot: 'Mon 10' });
+    const target = f.planner.snapshot().collectingTargets[0];
+    assert.deepEqual(target.startTypes, ['approx']);
+    assert.equal(new Date(target.nextAt).getUTCHours(), 9);
+    assert.equal(new Date(target.nextAt).getUTCMinutes(), 30);
+});
+
 test('累積提醒送出時使用獨立標題與進度內容', async t => {
     const f = fixture(t);
     f.setNow(MONDAY);
@@ -175,12 +192,19 @@ test('累積提醒送出時使用獨立標題與進度內容', async t => {
     f.enable();
     f.planner.addCollecting({ platform: 'TikTok', broadcaster: 'self', slot: 'Mon 10' });
     const nextAt = f.planner.snapshot().collectingTargets[0].nextAt;
-    f.setNow(nextAt - 30 * 60000);
+    f.setNow(nextAt);
     await f.planner.tick();
     assert.ok(f.sent.length > 0);
-    assert.match(f.sent[0][1], /資料累積提醒/);
+    assert.match(f.sent[0][1], /資料累積提醒 · 時段開始/);
+    assert.match(f.sent[0][2], /開播窗口/);
     assert.match(f.sent[0][2], /Mon 10|週一/);
     assert.match(f.sent[0][2], /1\/3/);
+
+    f.setNow(nextAt + 15 * 60000); // 20:00 正點 fallback
+    await f.planner.tick();
+    const fallback = f.sent.find(([, title]) => /資料累積提醒 · 到點/.test(title));
+    assert.ok(fallback);
+    assert.match(fallback[2], /仍算/);
 });
 
 test('待分類是狀態而非可寫入用途，批次指定可清除', t => {

@@ -152,10 +152,12 @@
         const minDays = rankings.minDays ?? 3;
         const earlyMinutes = rankings.earlyMinutes ?? 30;
         const minObserved = rankings.minObservedMinutes ?? 20;
-        const enough = rankings.cells.filter(cell => !cell.insufficient);
-        const partial = rankings.cells.filter(cell => cell.insufficient);
+        const enough = rankings.cells.filter(cell => !cell.insufficient && cell.confidence === 'exact');
+        const partial = rankings.cells.filter(cell => cell.insufficient && cell.confidence === 'exact');
+        const assisted = rankings.cells.filter(cell => cell.confidence !== 'exact');
         const comparable = enough.length >= 2;
         const excluded = rankings.excluded ?? { missingStart: rankings.unstarted || 0 };
+        const startPlatform = rankings.platform;
         const slotLabel = key => {
             const [day, hour] = key.split(' ');
             return `${weekday(WEEKDAYS.indexOf(day))} ${hour}:00`;
@@ -186,6 +188,26 @@
         el('ranking-provisional').hidden = !provisional.length;
         el('ranking-provisional-title').hidden = !provisional.length;
         el('ranking-provisional-note').hidden = !provisional.length;
+
+        const startTypeLabel = type => type === 'exact' ? t('ranking.startType.exact')
+            : type === 'late' ? t('ranking.startType.late')
+                : type === 'approx' ? t('ranking.startType.approx')
+                    : t('ranking.startType.estimated');
+        const startType = cell => (cell.startTypes ?? [])
+            .map(startTypeLabel).join(' + ') || t('ranking.confidence');
+        const assistedRows = [
+            [t('timeSlot'), t('ranking.confidence'), t('sessions'), t('ranking.provisionalDays'), t('mean'), t('median'), t('ranking.status')],
+            ...assisted.sort((a, b) => b.mean - a.mean || a.key.localeCompare(b.key))
+                .map(cell => [
+                    slotLabel(cell.key), startType(cell), cell.n, cell.observedDays,
+                    format(cell.mean), format(cell.median),
+                    t(cell.insufficient ? 'ranking.assistedStatus.partial' : 'ranking.assistedStatus.qualified')
+                ])
+        ];
+        updateTable('ranking-assisted', assistedRows);
+        el('ranking-assisted').hidden = !assisted.length;
+        el('ranking-assisted-title').hidden = !assisted.length;
+        el('ranking-assisted-note').hidden = !assisted.length;
 
         const card = el('ranking-note');
         card.replaceChildren();
@@ -218,7 +240,10 @@
             let headline;
             let actionText;
             let selected = [];
-            if (dispersed) {
+            if (enough.length === 0 && !candidates.length && assisted.length) {
+                headline = t('ranking.assistedOnly');
+                actionText = t('ranking.assistedOnlyAction');
+            } else if (dispersed) {
                 headline = t('ranking.nextDispersed');
                 actionText = t('ranking.nextDispersedAction', { slots: partial.length });
             } else if (enough.length === 1) {
@@ -299,7 +324,11 @@
 
             const tips = [];
             if (excluded.missingStart) tips.push(t('ranking.nextTipMissing', { count: excluded.missingStart }));
-            if (excluded.insufficientCoverage) tips.push(t('ranking.nextTipCoverage', { count: excluded.insufficientCoverage }));
+            if (excluded.insufficientCoverage) {
+                tips.push(t(startPlatform === 'TikTok'
+                    ? 'ranking.nextTipCoverageTikTok'
+                    : 'ranking.nextTipCoverage', { count: excluded.insufficientCoverage }));
+            }
             if (excluded.pending) tips.push(t('ranking.nextTipPending', { count: excluded.pending }));
             if (tips.length) {
                 const list = document.createElement('ul');
@@ -348,7 +377,9 @@
         for (const reason of ['missingStart', 'pending', 'insufficientCoverage']) {
             if (!excluded[reason]) continue;
             const item = document.createElement('li');
-            item.textContent = t(`ranking.${reason}`, { count: excluded[reason] });
+            const key = reason === 'insufficientCoverage' && startPlatform === 'TikTok'
+                ? 'ranking.insufficientCoverageTikTok' : `ranking.${reason}`;
+            item.textContent = t(key, { count: excluded[reason] });
             reasons.append(item);
         }
         if (reasons.childElementCount) details.append(reasons);

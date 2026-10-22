@@ -256,6 +256,7 @@ canvas {cursor:crosshair;}
 .plan-day-badge.today {background:#1d4ed8;color:#fff;}
 .plan-day-badge.tomorrow {background:#0e7490;color:#e0f2fe;}
 .plan-day-badge.soon {background:#1e293b;color:#93c5fd;}
+.plan-confidence {display:inline-block;margin-right:6px;padding:1px 6px;border-radius:999px;background:#1e293b;color:#bfdbfe;font-size:.7rem;white-space:nowrap;}
 .plan-day-badge:empty {display:none;}
 .plan-section-title {margin:18px 0 8px;color:#93c5fd;font-size:1rem;}
 .plan-card p,.plan-card ul {margin:10px 0;line-height:1.7;}

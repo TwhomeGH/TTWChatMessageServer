@@ -206,6 +206,7 @@
                 }), 'plan-badge'));
             }
             section.append(head);
+            section.append(node('p', t('collecting.windowHint'), 'plan-muted'));
 
             const wrap = node('div', undefined, 'table-wrap plan-hour-table');
             const table = node('table');
@@ -231,6 +232,9 @@
                     const item = group.items.find(entry => entry.slot === slot && entry.platform === platform);
                     const cell = node('td');
                     if (item) {
+                        for (const type of item.startTypes ?? []) {
+                            cell.append(node('span', t('collecting.startType.' + type), 'plan-confidence'));
+                        }
                         cell.append(node('span', t('collecting.cell', {
                             sessions: item.n, minimum: item.minimum,
                             days: item.observedDays, minDays: item.minDays
@@ -397,7 +401,7 @@
         const table = node('table');
         const thead = document.createElement('thead');
         const head = document.createElement('tr');
-        for (const key of ['broadcaster', 'platform', 'purpose', 'slot', 'sessions', 'days', 'mean', 'score', 'state']) {
+        for (const key of ['broadcaster', 'platform', 'purpose', 'slot', 'sessions', 'days', 'mean', 'score', 'confidence', 'state']) {
             head.append(node('th', t('analysis.col.' + key)));
         }
         thead.append(head);
@@ -414,6 +418,9 @@
                     node('td', String(cell.observedDays)),
                     node('td', cell.mean.toFixed(1)),
                     node('td', cell.shrunk.toFixed(1)),
+                    node('td', cell.confidence === 'exact'
+                        ? t('analysis.confidence.exact')
+                        : t('analysis.confidence.assisted')),
                     node('td', t(cell.insufficient ? 'partial' : 'qualified'))
                 );
                 tbody.append(tr);
@@ -422,7 +429,7 @@
         if (!tbody.childElementCount) {
             const tr = document.createElement('tr');
             const td = node('td', t('analysis.noSlots'));
-            td.colSpan = 9;
+            td.colSpan = 10;
             tr.append(td);
             tbody.append(tr);
         }

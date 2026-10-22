@@ -7,6 +7,7 @@ const BACKFILL_SOURCE = `FROM sessions s LEFT JOIN traffic_profiles p
     ON p.platform=s.platform AND p.broadcaster=s.broadcaster`;
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const HALF_HOUR = 30 * 60000;
+const COLLECTING_LEAD_MS = 15 * 60000;
 const DAY = 86400000;
 const formatters = new Map();
 const DEFAULTS = {
@@ -71,6 +72,18 @@ function notificationSlot(slot) {
     const weekday = new Intl.DateTimeFormat('zh-TW', { weekday: 'short', timeZone: 'UTC' })
         .format(Date.UTC(2026, 0, 5 + WEEKDAYS.indexOf(day)));
     return `${weekday} ${hour}:00`;
+}
+
+/** 回傳時段開播窗口的本地起訖時間，例如 19:45–20:44 或 19:30–20:29。 */
+function collectingWindow(slotStart, leadMs = COLLECTING_LEAD_MS, timezone) {
+    const formatter = new Intl.DateTimeFormat('zh-TW', {
+        timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+    });
+    const endOffset = 60 * 60000 - leadMs - 60000;
+    return {
+        start: formatter.format(slotStart - leadMs),
+        end: formatter.format(slotStart + endOffset)
+    };
 }
 
 /** 驗證完整提醒設定；錯誤時拋出 RangeError，不接受靜默修正的排程。 */
@@ -439,7 +452,8 @@ class TrafficPlanner {
                 rows.push({
                     platform: analysis.platform, broadcaster: analysis.broadcaster, slot: cell.key,
                     n: cell.n, observedDays: cell.observedDays, minimum, minDays,
-                    need, needSessions, needDays, mean: cell.mean, lastStarted: cell.lastStarted ?? 0
+                    need, needSessions, needDays, mean: cell.mean, lastStarted: cell.lastStarted ?? 0,
+                    confidence: cell.confidence ?? 'assisted', startTypes: cell.startTypes ?? []
                 });
             }
         }
@@ -486,28 +500,39 @@ class TrafficPlanner {
                 if (!weeks.has(moment.week)) weeks.set(moment.week, moment);
             }
             for (const [week, moment] of weeks) {
-                if (moment.time - HALF_HOUR < now - 5 * 60000) continue;
                 const formal = this.db.prepare(`SELECT 1 FROM traffic_reminders
                     WHERE platform=? AND broadcaster=? AND startAt=? AND kind='recommendation'
                     AND status NOT IN ('cancelled','expired')`).get(target.platform, target.broadcaster, moment.time);
                 if (formal) continue;
-                selected.add(`${target.id}|${week}`);
-                const evidence = JSON.stringify({
-                    targetId: target.id, slot: target.slot, n, observedDays,
-                    minimum, minDays,
-                    mean: cell?.mean ?? null, lastStarted: cell?.lastStarted ?? 0
-                });
-                this.db.prepare(`INSERT INTO traffic_reminders(platform,broadcaster,startAt,week,slot,evidence,kind)
-                    VALUES(?,?,?,?,?,?,'collecting') ON CONFLICT(platform,broadcaster,startAt) DO UPDATE SET
-                    evidence=excluded.evidence,status=CASE WHEN status='cancelled' THEN 'planned' ELSE status END
-                    WHERE traffic_reminders.kind='collecting'`)
-                    .run(target.platform, target.broadcaster, moment.time, week, target.slot, evidence);
+                const startTypes = cell?.startTypes ?? (target.platform === 'Twitch'
+                    ? ['exact'] : target.platform === 'TikTok' ? ['late'] : ['approx']);
+                const leadMs = startTypes.some(type => type === 'approx' || type === 'estimated')
+                    ? 30 * 60000 : COLLECTING_LEAD_MS;
+                // 窗口開始與正點各一則；正點只在尚未觀測到開播時才會送出。
+                const phases = [
+                    { phase: 'window', notifyAt: moment.time - leadMs },
+                    { phase: 'ontime', notifyAt: moment.time }
+                ];
+                for (const { phase, notifyAt } of phases) {
+                    if (notifyAt < now - 5 * 60000) continue;
+                    selected.add(`${target.id}|${notifyAt}`);
+                    const evidence = JSON.stringify({
+                        targetId: target.id, slot: target.slot, phase, slotStart: moment.time, leadMs,
+                        startTypes, n, observedDays, minimum, minDays,
+                        mean: cell?.mean ?? null, lastStarted: cell?.lastStarted ?? 0
+                    });
+                    this.db.prepare(`INSERT INTO traffic_reminders(platform,broadcaster,startAt,week,slot,evidence,kind)
+                        VALUES(?,?,?,?,?,?,'collecting') ON CONFLICT(platform,broadcaster,startAt) DO UPDATE SET
+                        evidence=excluded.evidence,status=CASE WHEN status='cancelled' THEN 'planned' ELSE status END
+                        WHERE traffic_reminders.kind='collecting'`)
+                        .run(target.platform, target.broadcaster, notifyAt, week, target.slot, evidence);
+                }
             }
         }
         for (const job of this.db.prepare("SELECT * FROM traffic_reminders WHERE kind='collecting' AND status IN ('planned','expired')").all()) {
             const evidence = JSON.parse(job.evidence);
             const target = this.db.prepare('SELECT * FROM traffic_collecting_targets WHERE id=?').get(evidence.targetId);
-            if (!target || !target.active || !selected.has(`${target.id}|${job.week}`)) {
+            if (!target || !target.active || !selected.has(`${target.id}|${job.startAt}`)) {
                 this.db.prepare("UPDATE traffic_reminders SET status='cancelled' WHERE id=?").run(job.id);
             }
         }
@@ -635,8 +660,9 @@ class TrafficPlanner {
         const settings = this.settings();
         const analyses = this.analyses(settings);
         const now = this.now();
-        this.db.prepare("UPDATE traffic_reminders SET status='expired' WHERE status='planned' AND startAt-?<?")
-            .run(HALF_HOUR, now - 5 * 60000);
+        this.db.prepare(`UPDATE traffic_reminders SET status='expired' WHERE status='planned'
+            AND ((kind='collecting' AND startAt<?) OR (kind!='collecting' AND startAt-?<?))`)
+            .run(now - 5 * 60000, HALF_HOUR, now - 5 * 60000);
         if (!settings.enabled) return analyses;
 
         const moments = [];
@@ -710,8 +736,12 @@ class TrafficPlanner {
             const settings = this.settings();
             if (!settings.enabled) return;
             const now = this.now();
-            const due = this.db.prepare("SELECT * FROM traffic_reminders WHERE status='planned' AND startAt-?<=? ORDER BY startAt")
-                .all(HALF_HOUR, now);
+            const due = this.db.prepare("SELECT * FROM traffic_reminders WHERE status='planned' AND startAt<=? ORDER BY startAt")
+                .all(now + HALF_HOUR)
+                .filter(job => {
+                    // 正式推薦提前 30 分鐘；累積提醒的 startAt 就是實際發送時間。
+                    return job.startAt - (job.kind === 'collecting' ? 0 : HALF_HOUR) <= now;
+                });
             for (const startAt of new Set(due.map(job => job.startAt))) {
                 let jobs = due.filter(job => {
                     if (job.startAt !== startAt) return false;
@@ -733,19 +763,33 @@ class TrafficPlanner {
                     jobs = formal;
                 }
                 const collectingOnly = jobs.every(job => job.kind === 'collecting');
+                const first = collectingOnly ? JSON.parse(jobs[0].evidence) : null;
+                const phase = first?.phase === 'ontime' ? 'ontime' : 'window';
+                const slotStart = first?.slotStart ?? startAt;
+                const leadMs = first?.leadMs ?? COLLECTING_LEAD_MS;
+                const window = collectingOnly ? collectingWindow(slotStart, leadMs, settings.timezone) : null;
                 for (const job of jobs) this.db.prepare("UPDATE traffic_reminders SET status='dispatching' WHERE id=?").run(job.id);
-                const date = new Intl.DateTimeFormat('zh-TW', { timeZone: settings.timezone, dateStyle: 'medium', timeStyle: 'short' }).format(startAt);
+                const date = new Intl.DateTimeFormat('zh-TW', {
+                    timeZone: settings.timezone, dateStyle: 'medium', timeStyle: 'short'
+                }).format(collectingOnly ? slotStart : startAt);
+                const progress = jobs.map(job => {
+                    const cell = JSON.parse(job.evidence);
+                    const need = Math.max((cell.minimum ?? 3) - cell.n, (cell.minDays ?? 3) - cell.observedDays, 0);
+                    return `${job.platform} / ${job.broadcaster} · ${notificationSlot(job.slot)}：目前 ${cell.n}/${cell.minimum ?? 3} 場、${cell.observedDays}/${cell.minDays ?? 3} 日期；再 ${need} 場（不同日期）`;
+                }).join('\n');
                 const body = collectingOnly
-                    ? `資料累積提醒：${date}（${settings.timezone}）\n` + jobs.map(job => {
-                        const cell = JSON.parse(job.evidence);
-                        const need = Math.max((cell.minimum ?? 3) - cell.n, (cell.minDays ?? 3) - cell.observedDays, 0);
-                        return `${job.platform} / ${job.broadcaster} · ${notificationSlot(job.slot)}：目前 ${cell.n}/${cell.minimum ?? 3} 場、${cell.observedDays}/${cell.minDays ?? 3} 日期；再 ${need} 場（不同日期）`;
-                    }).join('\n') + '\n這不是最佳時段推薦；達標後會自動切回正式推薦。'
+                    ? `資料累積提醒：${date}（${settings.timezone}）${phase === 'window' ? '時段開始' : '到點'}\n` +
+                        (phase === 'window'
+                            ? `開播窗口 ${window.start}–${window.end}；現在開播就落在 ${notificationSlot(first.slot)}。\n`
+                            : `現在到 ${window.end} 仍算 ${notificationSlot(first.slot)}；已偵測到開播的平台不重複提醒。\n`) +
+                        progress + '\n這不是最佳時段推薦；達標後會自動切回正式推薦。'
                     : `建議於 ${date}（${settings.timezone}）開播\n` + jobs.map(job => {
                         const cell = JSON.parse(job.evidence);
-                        return `${job.platform} / ${job.broadcaster}：${cell.n} 場、${cell.observedDays} 個日期，開場平均 ${cell.mean.toFixed(1)} 人`;
+                        return `${job.platform} / ${job.broadcaster}${cell.confidence === 'assisted' ? '（輔助開播）' : ''}：${cell.n} 場、${cell.observedDays} 個日期，開場平均 ${cell.mean.toFixed(1)} 人`;
                     }).join('\n') + '\n依自己的歷史開場觀測提供參考，不代表因果；詳情請查看人流分析頁。';
-                const title = collectingOnly ? '資料累積提醒 · 約 30 分鐘後' : '開播提醒 · 約 30 分鐘後';
+                const title = collectingOnly
+                    ? `資料累積提醒 · ${phase === 'window' ? '時段開始' : '到點'}`
+                    : '開播提醒 · 約 30 分鐘後';
                 for (const channel of settings.channels) {
                     const current = this.settings();
                     if (!current.enabled || !current.channels.includes(channel)) continue;
@@ -781,6 +825,8 @@ class TrafficPlanner {
             FROM traffic_collecting_targets t WHERE t.active=1 ORDER BY t.id`).all().map(target => {
             const [day, hour] = target.slot.split(' ');
             const entry = ownCells.get(`${target.platform}|${target.broadcaster}|${target.slot}`);
+            const startTypes = entry?.cell.startTypes ?? (target.platform === 'Twitch'
+                ? ['exact'] : target.platform === 'TikTok' ? ['late'] : ['approx']);
             return {
                 ...target,
                 available: settings.weekdays.includes(WEEKDAYS.indexOf(day)) && settings.hours.includes(Number(hour)),
@@ -789,7 +835,9 @@ class TrafficPlanner {
                 minimum: entry?.analysis.rankings.minSessions ?? 3,
                 minDays: entry?.analysis.rankings.minDays ?? 3,
                 mean: entry?.cell.mean ?? null,
-                lastStarted: entry?.cell.lastStarted ?? 0
+                lastStarted: entry?.cell.lastStarted ?? 0,
+                confidence: entry?.cell.confidence ?? (startTypes.length === 1 && startTypes[0] === 'exact' ? 'exact' : 'assisted'),
+                startTypes
             };
         });
         const detected = new Map(this.db.prepare('SELECT platform,broadcaster FROM traffic_identities').all()

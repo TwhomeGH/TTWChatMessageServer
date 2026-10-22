@@ -8,6 +8,8 @@ const SESSION_GAP_MS = 120000;
 
 // 「開場表現」只看場次開始後這段時間，避免長場次與當天內容差異混淆時段本身的效果。
 const EARLY_WINDOW_MS = 30 * 60000;
+// 連線較晚／推估開播的容忍窗口；排名會依開播信心選擇 30 或 45 分鐘。
+const LATE_WINDOW_MS = 45 * 60000;
 
 // 樣本太少的場次不納入排名，避免單點雜訊。
 const MIN_SESSION_SAMPLES = 2;
@@ -19,6 +21,20 @@ const RANKING_START_GRACE_MS = 15 * 60000;
 
 // 一個時段至少要有這麼多場次才給排名，否則只標記資料不足。
 const MIN_BUCKET_SESSIONS = 3;
+
+/**
+ * 判斷場次開播時間的信心等級。
+ * Twitch 的平台開播時間視為精確；TikTok 有時間但連線通常較晚；
+ * 其他平台有時間時視為近似；完全沒有時間時，才以第一次觀測當 estimated。
+ */
+function startConfidence(session) {
+    if (session.actualStarted != null) {
+        if (session.platform === 'Twitch') return 'exact';
+        if (session.platform === 'TikTok') return 'late';
+        return 'approx';
+    }
+    return session.sampleCount > 0 ? 'estimated' : 'missing';
+}
 
 // 場次累積的互動成效（來自中控台「直播指標」），累計值只取最大。
 const SESSION_METRIC_COLUMNS = ['diamonds', 'gifters', 'newFollowers', 'likes', 'uniqueViewers'];
@@ -92,6 +108,8 @@ class TrafficDatabase {
                 spanMs INTEGER DEFAULT 0,
                 earlyArea REAL DEFAULT 0,
                 earlySpanMs INTEGER DEFAULT 0,
+                lateArea REAL DEFAULT 0,
+                lateSpanMs INTEGER DEFAULT 0,
                 sampleCount INTEGER DEFAULT 0,
                 joins INTEGER DEFAULT 0,
                 chats INTEGER DEFAULT 0,
@@ -121,6 +139,8 @@ class TrafficDatabase {
         for (const column of SESSION_METRIC_COLUMNS) {
             if (!columns.has(column)) this.db.exec(`ALTER TABLE sessions ADD COLUMN ${column} REAL DEFAULT 0`);
         }
+        if (!columns.has('lateArea')) this.db.exec('ALTER TABLE sessions ADD COLUMN lateArea REAL DEFAULT 0');
+        if (!columns.has('lateSpanMs')) this.db.exec('ALTER TABLE sessions ADD COLUMN lateSpanMs INTEGER DEFAULT 0');
 
         for (const [name,type] of [['actualStarted','INTEGER'],['lastEventAt','INTEGER'],['broadcaster','TEXT'],['purpose','TEXT']]) {
             if(!columns.has(name)) this.db.exec('ALTER TABLE sessions ADD COLUMN '+name+' '+type);
@@ -333,7 +353,10 @@ class TrafficDatabase {
         const spanMs = open.spanMs + (observed ? gap : 0);
         const early = observed
             ? this.extendEarlyWindow(open, event, gap)
-            : { earlyArea: open.earlyArea, earlySpanMs: open.earlySpanMs };
+            : {
+                earlyArea: open.earlyArea, earlySpanMs: open.earlySpanMs,
+                lateArea: open.lateArea ?? 0, lateSpanMs: open.lateSpanMs ?? 0
+            };
 
         this.db.prepare(`UPDATE sessions SET
                 ended=NULL,
@@ -344,10 +367,13 @@ class TrafficDatabase {
                 spanMs=?,
                 earlyArea=?,
                 earlySpanMs=?,
+                lateArea=?,
+                lateSpanMs=?,
                 sampleCount=sampleCount+1
             WHERE id=?`)
             .run(event.time, viewers, Math.max(open.peak ?? viewers, viewers),
-                area, spanMs, early.earlyArea, early.earlySpanMs, open.id);
+                area, spanMs, early.earlyArea, early.earlySpanMs,
+                early.lateArea, early.lateSpanMs, open.id);
     }
 
     /**
@@ -357,18 +383,26 @@ class TrafficDatabase {
     extendEarlyWindow(open, event, dt) {
         let earlyArea = open.earlyArea;
         let earlySpanMs = open.earlySpanMs;
-        if(open.actualStarted == null) return {earlyArea,earlySpanMs};
-        const earlyEnd = open.actualStarted + EARLY_WINDOW_MS;
+        let lateArea = open.lateArea ?? 0;
+        let lateSpanMs = open.lateSpanMs ?? 0;
+        // 沒有平台開播時間時，以第一次觀測作為 estimated 的起點。
+        const anchor = open.actualStarted ?? open.started;
+        if (anchor == null) return { earlyArea, earlySpanMs, lateArea, lateSpanMs };
+        const earlyEnd = anchor + EARLY_WINDOW_MS;
+        const lateEnd = anchor + LATE_WINDOW_MS;
+        if (dt <= 0 || open.lastSampleAt >= lateEnd) return { earlyArea, earlySpanMs, lateArea, lateSpanMs };
 
-        if (dt > 0 && open.lastSampleAt < earlyEnd) {
-            const segmentEnd = Math.min(event.time, earlyEnd);
+        const addSegment = (end, area, span) => {
+            if (open.lastSampleAt >= end) return [area, span];
+            const segmentEnd = Math.min(event.time, end);
             const segmentMs = segmentEnd - open.lastSampleAt;
+            if (segmentMs <= 0) return [area, span];
             const endViewers = open.lastViewers + (event.viewers - open.lastViewers) * segmentMs / dt;
-            earlyArea += ((open.lastViewers + endViewers) / 2) * segmentMs;
-            earlySpanMs += segmentMs;
-        }
-
-        return { earlyArea, earlySpanMs };
+            return [area + ((open.lastViewers + endViewers) / 2) * segmentMs, span + segmentMs];
+        };
+        [earlyArea, earlySpanMs] = addSegment(earlyEnd, earlyArea, earlySpanMs);
+        [lateArea, lateSpanMs] = addSegment(lateEnd, lateArea, lateSpanMs);
+        return { earlyArea, earlySpanMs, lateArea, lateSpanMs };
     }
 
     /**
@@ -689,16 +723,25 @@ class TrafficDatabase {
         // 每場只歸入一個原因，讓畫面上的總數與可用／未納入場次能核對。
         const excluded = { missingStart: 0, pending: 0, insufficientCoverage: 0 };
         const rows = candidates.filter(session => {
-            if (session.actualStarted == null) {
+            const confidence = startConfidence(session);
+            if (confidence === 'missing') {
                 excluded.missingStart++;
-            } else if (session.actualStarted + EARLY_WINDOW_MS > now) {
-                excluded.pending++;
-            } else if (session.sampleCount < MIN_SESSION_SAMPLES || session.earlySpanMs < 20 * 60000) {
-                excluded.insufficientCoverage++;
-            } else {
-                return true;
+                return false;
             }
-            return false;
+            const start = session.actualStarted ?? session.started;
+            const windowMs = confidence === 'exact' || confidence === 'estimated' ? EARLY_WINDOW_MS : LATE_WINDOW_MS;
+            if (start + windowMs > now) {
+                excluded.pending++;
+                return false;
+            }
+            const span = confidence === 'exact' || confidence === 'estimated'
+                ? session.earlySpanMs
+                : (session.lateSpanMs || session.earlySpanMs);
+            if (session.sampleCount < MIN_SESSION_SAMPLES || span < 20 * 60000) {
+                excluded.insufficientCoverage++;
+                return false;
+            }
+            return true;
         });
 
         const formatter = new Intl.DateTimeFormat('en-US', {
@@ -710,20 +753,31 @@ class TrafficDatabase {
         const allValues = [];
 
         for (const session of rows) {
-            const early = session.earlySpanMs > 0 ? session.earlyArea / session.earlySpanMs : null;
+            const confidence = startConfidence(session);
+            const useLate = confidence === 'late' || confidence === 'approx';
+            const span = useLate && session.lateSpanMs ? session.lateSpanMs : session.earlySpanMs;
+            const area = useLate && session.lateSpanMs ? session.lateArea : session.earlyArea;
+            const early = span > 0 ? area / span : null;
             if (early === null) continue;
 
-    const parts = Object.fromEntries(formatter.formatToParts(session.actualStarted + RANKING_START_GRACE_MS)
-        .map(part => [part.type, part.value]));
-    const key = parts.weekday + ' ' + parts.hour;
+            const start = confidence === 'approx' || confidence === 'estimated'
+                ? (session.actualStarted ?? session.started)
+                : session.actualStarted;
+            const grace = confidence === 'approx' || confidence === 'estimated' ? 30 * 60000 : RANKING_START_GRACE_MS;
+            const parts = Object.fromEntries(formatter.formatToParts(start + grace)
+                .map(part => [part.type, part.value]));
+            const key = parts.weekday + ' ' + parts.hour;
             const date = parts.year + '-' + parts.month + '-' + parts.day;
 
-    if (!buckets.has(key)) buckets.set(key, { key, values: [], dates: new Set(), lastStarted: 0 });
-    const bucket = buckets.get(key);
-    bucket.values.push(early);
-    bucket.dates.add(date);
-    bucket.lastStarted = Math.max(bucket.lastStarted, session.actualStarted);
-    allValues.push(early);
+            if (!buckets.has(key)) buckets.set(key, {
+                key, values: [], dates: new Set(), lastStarted: 0, startTypes: new Set()
+            });
+            const bucket = buckets.get(key);
+            bucket.values.push(early);
+            bucket.dates.add(date);
+            bucket.startTypes.add(confidence);
+            bucket.lastStarted = Math.max(bucket.lastStarted, start);
+            allValues.push(early);
         }
 
         const globalMean = allValues.length ? allValues.reduce((sum, v) => sum + v, 0) / allValues.length : 0;
@@ -750,6 +804,8 @@ class TrafficDatabase {
                 ci95: null, // 小樣本不顯示容易被誤解的常態近似信賴區間。
                 observedDays: bucket.dates.size,
                 lastStarted: bucket.lastStarted,
+                confidence: bucket.startTypes.size === 1 && bucket.startTypes.has('exact') ? 'exact' : 'assisted',
+                startTypes: [...bucket.startTypes],
                 insufficient: n < MIN_BUCKET_SESSIONS || bucket.dates.size < 3
             };
         });
@@ -759,6 +815,7 @@ class TrafficDatabase {
         return {
             platform, platforms, days, timezone,
             earlyMinutes: EARLY_WINDOW_MS / 60000,
+            lateMinutes: LATE_WINDOW_MS / 60000,
             sessionCount: rows.length, globalMean,
             totalSessions: candidates.length, excluded,
             purposes: selection?.purposes ?? null,

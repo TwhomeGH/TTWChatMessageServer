@@ -1,5 +1,30 @@
 # ChangeHistory
 
+## 2026.10.23 00:13 開播信心分級：exact／late／approx／estimated
+
+**類型**: 功能 · **檔案**: `ScriptLib/traffic/database.cjs`、`assets/traffic-history.js`、`assets/traffic-planner.js`
+
+### 問題 - 所有平台都被當成有精確開播時間，TikTok 與無開播時間的場次被排除
+
+排名原本用同一個 30 分鐘窗口與 15 分鐘分桶，且沒有 `actualStarted` 就直接排除。Twitch 的 `startDate` 很明確，但 TikTok 通常較晚才連得上；Kick／Odysee／YouTube 不一定有精確開播時間。工具若在開播後才啟動，第一次觀測其實仍是有效的觀測開場，卻被當成 missing。
+
+### 根因 - 只有單一開播時間與單一開場窗口
+
+`rankings` 直接以 `actualStarted` 計算，`extendEarlyWindow` 只累積 30 分鐘，沒有開播信心或 45 分鐘容錯；UI 也沒有區分精確與輔助資料。
+
+### 修改 - 四級信心、45 分鐘開場與 estimated
+
+- session 新增 `lateArea`／`lateSpanMs`，同時累積 30 與 45 分鐘開場；沒有平台開播時間時，以第一次觀測作 estimated 起點。
+- 信心分級：Twitch exact（30／20、15 分桶）、TikTok late（45／20、15 分桶）、Kick／Odysee／YouTube approx（45／20、30 分桶）、無平台時間但有 viewer sample 為 estimated（30／20、30 分桶）；沒有 viewer sample 才列 missing。
+- ranking cells 新增 `confidence` 與 `startTypes`；歷史頁分成精確排名與「輔助時段」表，輔助資料不冒充精確排名。
+- planner 分析表顯示開播信心；推薦與提醒可使用 assisted／estimated，但文案與時段表標示信心。approx／estimated 的累積提醒窗口使用 30 分鐘、exact／late 使用 15 分鐘，正點 fallback 不變。
+- 測試：traffic 34、planner 26、i18n、歷史頁 assisted 案例、collecting UI、`test:ci`。
+
+**相關文件**: [TRAFFIC.md](TRAFFIC.md)
+
+---
+
+
 ## 2026.10.22 00:05 一週累積計畫、2/2 暫定觀察與計畫介面
 
 **類型**: 功能 · **檔案**: `ScriptLib/traffic/planner.cjs`、`assets/traffic-planner.js`、`assets/traffic-history.js`

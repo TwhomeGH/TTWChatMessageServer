@@ -199,7 +199,8 @@ test('時段排名取開場平均並做收縮與樣本門檻', () => {
     const rankings = db.rankings('TikTok', 30, rankNow, 'Asia/Taipei');
 
     assert.equal(rankings.sessionCount, 6);
-    assert.equal(rankings.unstarted, 1);
+    assert.equal(rankings.unstarted, 0);
+    assert.equal(rankings.excluded.insufficientCoverage, 1);
     assert.equal(rankings.globalMean, 110);
     assert.deepEqual(rankings.cells.map(c => c.key), ['Mon 18', 'Tue 18']);
 
@@ -331,11 +332,11 @@ test('排名回報互斥的排除原因與全部場次，包括只有一筆取�
     const result = db.rankings('TikTok', 30, now, 'UTC');
     assert.equal(result.totalSessions, 4);
     assert.equal(result.sessionCount, 1);
-    assert.deepEqual(result.excluded, { missingStart: 1, pending: 1, insufficientCoverage: 1 });
+    assert.deepEqual(result.excluded, { missingStart: 0, pending: 1, insufficientCoverage: 2 });
     assert.equal(result.totalSessions, result.sessionCount + Object.values(result.excluded).reduce((a, b) => a + b, 0));
-    const later = db.rankings('TikTok', 30, now + 30 * 60000, 'UTC');
+    const later = db.rankings('TikTok', 30, now + 45 * 60000, 'UTC');
     assert.equal(later.excluded.pending, 0);
-    assert.equal(later.excluded.insufficientCoverage, 2);
+    assert.equal(later.excluded.insufficientCoverage, 3);
     db.close();
 });
 
@@ -561,7 +562,7 @@ test('清理半場不殘留不一致統計，交易失敗會回滾',()=>{
 });
 
 // 中途觀測與未知開播時間不當成完整開場，三場同日也不能達標。
-test('排名排除未知開播和覆蓋不足，要求不同日期',()=>{
+test('沒有開播時間時以第一次觀測作 estimated，且仍需不同日期',()=>{
  const db=new TrafficDatabase(':memory:');const base=Date.parse('2026-09-07T10:00:00Z');
  for(let session=0;session<3;session++) {
   const start=base+session*60000;
@@ -569,7 +570,14 @@ test('排名排除未知開播和覆蓋不足，要求不同日期',()=>{
  }
  db.db.prepare('INSERT INTO minutes(platform,time) VALUES(?,?)').run('TikTok',base);
  let r=db.rankings('TikTok',30,base+86400000,'UTC');assert.equal(r.cells[0].insufficient,true);
- db.db.exec('UPDATE sessions SET actualStarted=NULL');assert.equal(db.rankings('TikTok',30,base+86400000,'UTC').sessionCount,0);
+ db.db.exec('UPDATE sessions SET actualStarted=NULL');
+ r=db.rankings('TikTok',30,base+86400000,'UTC');
+ assert.equal(r.sessionCount,3);
+ assert.equal(r.excluded.missingStart,0);
+ assert.equal(r.cells[0].n,3);
+ assert.equal(r.cells[0].observedDays,1);
+ assert.equal(r.cells[0].insufficient,true);
+ assert.equal(r.cells[0].confidence,'assisted');
  db.close();
 });
 
