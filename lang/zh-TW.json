@@ -12,6 +12,7 @@
   "traffic.plan.hours": "可開播整點（依提醒時區）",
   "traffic.plan.policy": "同一主播至少兩個時段達標才推薦；每個時段需 3 場／3 個日期、已開播滿 30 分鐘且前 30 分鐘內至少觀測 20 分鐘。主服務須持續運行；錯過超過 5 分鐘不補發，失敗不自動重送。",
   "traffic.plan.save": "儲存提醒設定",
+  "traffic.plan.settingsSaved": "提醒設定已儲存",
   "traffic.plan.next": "建議與發送紀錄",
   "traffic.plan.compare": "自己與參考主播的時段明細",
   "traffic.plan.compareNote": "依平台與主播分開比較開場觀看；不同主播的觀看人數不可直接視為優劣，也不代表避開對方就會更好。測試資料不參與本區。",

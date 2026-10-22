@@ -231,8 +231,16 @@ canvas {cursor:crosshair;}
 .plan-series-note {color:#aebdce;font-size:.85rem;margin:4px 0;}
 .plan-series-days {display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;}
 .plan-series-days label {display:inline-flex;align-items:center;gap:4px;color:#cbd5e1;}
-.plan-toast {position:fixed;left:50%;bottom:24px;z-index:80;max-width:min(90vw,560px);padding:10px 14px;border:1px solid #334155;border-radius:8px;background:#0f172a;color:#e2e8f0;box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:0;pointer-events:none;transform:translate(-50%,12px);transition:opacity .15s,transform .15s;}
-.plan-toast.show {opacity:1;transform:translate(-50%,0);}
+.plan-toast {position:fixed;right:24px;bottom:24px;z-index:80;max-width:min(380px,calc(100vw - 48px));padding:10px 14px 10px 16px;border:1px solid #334155;border-left:4px solid #64748b;border-radius:8px;background:#0f172a;color:#e2e8f0;box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:0;pointer-events:none;transform:translateY(12px);transition:opacity .15s,transform .15s;}
+.plan-toast.show {opacity:1;transform:translateY(0);}
+.plan-toast.success {border-left-color:#22c55e;background:#0f1f17;}
+.plan-toast.error {border-left-color:#ef4444;background:#241014;}
+@media (max-width:640px) {
+    .plan-toast {left:16px;right:16px;bottom:16px;max-width:none;}
+}
+@media (prefers-reduced-motion: reduce) {
+    .plan-toast {transition:none;}
+}
 .plan-hour {margin:14px 0;padding-top:12px;border-top:1px solid #1e3a5f;}
 .plan-hour:first-of-type {margin-top:6px;padding-top:0;border-top:0;}
 .plan-hour-head {display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px;}

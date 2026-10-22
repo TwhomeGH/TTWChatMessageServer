@@ -55,6 +55,7 @@ async function main() {
         await page.click('#plan-bark');
         await page.click('#plan-settings button[type=submit]');
         await page.waitForFunction(() => document.querySelector('#plan-status').textContent.includes('已儲存'));
+        await page.waitForFunction(() => document.querySelector('#plan-toast.success.show')?.textContent.includes('提醒設定已儲存'));
         assert.equal(planner.settings().enabled, true);
         assert.deepEqual(planner.settings().channels, ['ntfy', 'bark']);
         await page.waitForFunction(() => document.querySelector('#plan-jobs article'));

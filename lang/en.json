@@ -12,6 +12,7 @@
   "traffic.plan.hours": "Available start hours (reminder timezone)",
   "traffic.plan.policy": "Suggestions require two qualified slots for the same streamer; each needs 3 sessions on 3 dates, 30 elapsed minutes and 20 observed opening minutes. Keep the main service running. Reminders more than 5 minutes late are missed; failed sends are not retried automatically.",
   "traffic.plan.save": "Save reminder settings",
+  "traffic.plan.settingsSaved": "Reminder settings saved",
   "traffic.plan.next": "Suggestions and delivery history",
   "traffic.plan.compare": "Your slots and reference streamers",
   "traffic.plan.compareNote": "Opening viewers are analyzed separately by platform and streamer. Audience sizes do not establish which streamer or time is better; avoiding another streamer is not necessarily beneficial. Test data is excluded.",

@@ -55,19 +55,22 @@
     }
 
     let toastTimer;
-    /** 在頁面底部顯示短暫訊息，讓下方卡片的操作也有回饋。 */
-    function toast(message) {
+    /** 在頁面底部顯示短暫訊息；success／error 使用不同左側色條。 */
+    function toast(message, tone = 'info') {
         let box = document.getElementById('plan-toast');
         if (!box) {
             box = node('div', undefined, 'plan-toast');
             box.id = 'plan-toast';
             box.setAttribute('role', 'status');
+            box.setAttribute('aria-live', 'polite');
             document.body.append(box);
         }
+        box.className = `plan-toast ${tone}`;
         box.textContent = message;
+        void box.offsetWidth;
         box.classList.add('show');
         clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => box.classList.remove('show'), 4000);
+        toastTimer = setTimeout(() => box.classList.remove('show'), tone === 'error' ? 6000 : 4000);
     }
 
     /** 所有變更均由使用者點擊後送出，成功後重新取得伺服器狀態。 */
@@ -81,7 +84,7 @@
                 : fields.includes(outcome.result.field) ? 'error.' + outcome.result.field : 'saveError';
             const message = t(key);
             el('status').textContent = message;
-            toast(message);
+            toast(message, 'error');
             return;
         }
         el('status').textContent = t('saved');
@@ -90,8 +93,10 @@
         if (action === 'tests' || action === 'assign') page = 1;
         window.dispatchEvent(new Event('traffic-classified'));
         await refresh();
-        if (action.startsWith('collecting')) {
-            toast(action === 'collectingAddSeries' ? t('collecting.seriesAdded') : t('saved'));
+        if (action === 'settings') {
+            toast(t('settingsSaved'), 'success');
+        } else if (action.startsWith('collecting')) {
+            toast(action === 'collectingAddSeries' ? t('collecting.seriesAdded') : t('saved'), 'success');
         }
     }
 
