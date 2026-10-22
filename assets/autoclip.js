@@ -431,27 +431,33 @@ function formatAge(ms) {
 }
 
 /** 顯示直播子程序與資料新鮮度，避免停止後頁面仍看起來像即時。 */
-function renderAutoclipStatus(runtime, stats) {
+function renderAutoclipStatus(runtime, stats, configured = {}) {
     const box = document.getElementById('autoclipStatus');
     if (!box) return;
     const last = stats.at(-1);
     const lastAt = last?.t ? new Date(last.t).getTime() : NaN;
     const age = Number.isFinite(lastAt) ? Math.max(0, Date.now() - lastAt) : Infinity;
     const running = Boolean(runtime?.running);
-    const mode = cfg?.mode === 'live' ? '正式剪輯模式' : '影子模式（只記錄，不剪輯）';
+    const runtimeMode = cfg?.mode === 'live' ? 'live' : 'shadow';
+    const configuredMode = configured.mode === 'live' || configured.mode === 'shadow' ? configured.mode : runtimeMode;
+    const pending = Boolean(configured.mode) && configuredMode !== runtimeMode;
+    const modeLabel = mode => mode === 'live' ? '正式剪輯模式' : '影子模式（只記錄，不剪輯）';
+    const mode = pending
+        ? `目前執行 ${modeLabel(runtimeMode)}；設定 ${modeLabel(configuredMode)}（待套用，重新啟動子程序後生效）`
+        : `模式：${modeLabel(runtimeMode)}`;
     let text;
     let className;
     if (!last) {
-        text = `模式：${mode} · ` + (running ? '直播子程序運行中；尚未產生評估資料。' : '直播子程序未運行；尚無自動剪輯評估資料。');
+        text = `${mode} · ` + (running ? '直播子程序運行中；尚未產生評估資料。' : '直播子程序未運行；尚無自動剪輯評估資料。');
         className = running ? 'is-stale' : 'is-offline';
     } else if (!running) {
-        text = `模式：${mode} · 直播子程序未運行：資料停留在 ${fmtTime(last.t)}（${formatAge(age)}前）。啟動直播後才會更新。`;
+        text = `${mode} · 直播子程序未運行：資料停留在 ${fmtTime(last.t)}（${formatAge(age)}前）。啟動直播後才會更新。`;
         className = 'is-offline';
     } else if (age > 30000) {
-        text = `模式：${mode} · 直播子程序運行中，但資料已 ${formatAge(age)}未更新；可能連線中斷。最後一筆 ${fmtTime(last.t)}。`;
+        text = `${mode} · 直播子程序運行中，但資料已 ${formatAge(age)}未更新；可能連線中斷。最後一筆 ${fmtTime(last.t)}。`;
         className = 'is-stale';
     } else {
-        text = `模式：${mode} · 直播子程序運行中 · 最後更新 ${formatAge(age)}前。`;
+        text = `${mode} · 直播子程序運行中 · 最後更新 ${formatAge(age)}前。`;
         className = 'is-live';
     }
     box.textContent = text;
@@ -460,23 +466,28 @@ function renderAutoclipStatus(runtime, stats) {
 }
 
 /** 標題旁的模式徽章；歷史場次也沿用該場次的模式。 */
-function setModeBadge(mode) {
+function setModeBadge(mode, pending = false) {
     const live = mode === 'live';
     const badge = document.getElementById('autoclipModeBadge');
     if (!badge) return;
-    badge.textContent = live ? '正式剪輯模式' : '影子模式（只記錄，不剪輯）';
-    badge.className = 'autoclip-mode-badge' + (live ? ' is-live' : '');
-    badge.title = live
-        ? '達到門檻時會建立 Twitch 剪輯。'
-        : '影子模式只記錄分數與觸發，不會建立剪輯；要產生剪輯請將 AUTO_CLIP_MODE 設為 live。';
+    badge.textContent = (live ? '正式剪輯模式' : '影子模式（只記錄，不剪輯）') + (pending ? '（待套用）' : '');
+    badge.className = 'autoclip-mode-badge' + (live ? ' is-live' : '') + (pending ? ' is-pending' : '');
+    badge.title = pending
+        ? '設定已變更；重新啟動直播子程序後才會套用。'
+        : live
+            ? '達到門檻時會建立 Twitch 剪輯。'
+            : '影子模式只記錄分數與觸發，不會建立剪輯；要產生剪輯請將 AUTO_CLIP_MODE 設為 live。';
     badge.hidden = false;
 }
 
-function renderConfig() {
-    const live = cfg.mode === 'live';
-    setModeBadge(cfg.mode);
+function renderConfig(configured = {}) {
+    const runtimeMode = cfg.mode === 'live' ? 'live' : 'shadow';
+    const configuredMode = configured.mode === 'live' || configured.mode === 'shadow' ? configured.mode : runtimeMode;
+    const pending = Boolean(configured.mode) && configuredMode !== runtimeMode;
+    const live = runtimeMode === 'live';
+    setModeBadge(pending ? configuredMode : runtimeMode, pending);
     document.getElementById('configInfo').textContent =
-        '模式：'+(live?'正式剪輯':'影子模式（不剪輯）')+' · 熱度：全平台 · 剪輯：Twitch'+' · 窗口 '+(cfg.rateWindowMin??0.5)+' 分 · 最少 '+(cfg.minUsers??3)+' 位發言人 / '+(cfg.minMessages??6)+' 筆 · 確認 '+Math.round((cfg.sustainMin??0.167)*60)+' 秒';
+        '上次執行模式：'+(live?'正式剪輯':'影子模式（不剪輯）')+' · 熱度：全平台 · 剪輯：Twitch'+' · 窗口 '+(cfg.rateWindowMin??0.5)+' 分 · 最少 '+(cfg.minUsers??3)+' 位發言人 / '+(cfg.minMessages??6)+' 筆 · 確認 '+Math.round((cfg.sustainMin??0.167)*60)+' 秒';
     document.getElementById('cfgBaseline').textContent = cfg.baselineWindowMin ?? 30;
 }
 
@@ -560,8 +571,8 @@ async function load() {
         if (viewMode !== 'live') return;
         const stats = result.stats || [];
         cfg = result.config || {};
-        renderAutoclipStatus(result.runtime, stats);
-        renderConfig();
+        renderAutoclipStatus(result.runtime, stats, result.configured);
+        renderConfig(result.configured);
         renderCards(stats);
         let timingSection = document.getElementById('timingRecords');
         if (!timingSection) { timingSection = document.createElement('section'); timingSection.id='timingRecords'; timingSection.className='bg-gray-800 rounded-2xl p-4 my-4'; document.getElementById('configInfo').parentElement.after(timingSection); }

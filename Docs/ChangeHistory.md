@@ -1,5 +1,30 @@
 # ChangeHistory
 
+## 2026.10.23 04:20 AUTO_CLIP_MODE 設定與執行模式分開顯示
+
+**類型**: 修正 · **檔案**: `Server.js`、`config.html`、`assets/autoclip.js`、`assets/autoclip.css`
+
+### 問題 - 設定頁改成正式模式，自動剪輯頁仍顯示影子模式
+
+`AUTO_CLIP_MODE` 在設定頁儲存後只更新 `.env` 與 Server 的 `process.env`；正在執行的子程序仍使用啟動時讀到的模式。若子程序已停止，`/autoclip/data` 又從舊的 `autoclip_stats.json` 讀取上次執行的 config，頁面因此一直顯示影子模式，看起來像設定沒有生效。
+
+### 根因 - 徽章只反映上一次執行的 config，沒有和目前設定比較
+
+頁面沒有拿到「目前儲存設定」，也沒有標示待套用狀態；設定頁對這個欄位也沒有明確的重啟提示。
+
+### 修改
+
+- `/autoclip/data` 新增 `configured.mode`／`configured.enabled`，直接反映目前 `.env`／`process.env`。
+- 模式徽章顯示上次執行模式；若與目前設定不同，加上「（待套用）」並在 banner 顯示「目前執行…；設定…（重新啟動子程序後生效）」。
+- 設定頁在 `AUTO_CLIP_MODE` 下方明確標示：變更需要停止後再啟動直播子程序，儲存不會中斷目前直播。
+- 未改動模式套用邏輯：仍在子程序啟動時讀取，避免執行中變更造成不可預期的剪輯行為。
+
+### 驗證
+
+`test:ci` 全過；以 mock API 驗證設定為 live、上次執行 shadow 時顯示「正式剪輯模式（待套用）」。
+
+---
+
 ## 2026.10.23 03:40 自動剪輯即時／歷史分離與模式提示
 
 **類型**: 功能／修正 · **檔案**: `ScriptLib/autoclip/history.cjs`、`Server.js`、`autoclip.html`、`assets/autoclip.js`、`assets/autoclip.css`、`Test/autoclip_history.test.cjs`、`.gitignore`

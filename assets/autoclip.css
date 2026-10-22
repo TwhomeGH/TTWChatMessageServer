@@ -8,6 +8,7 @@
 .autoclip-history-panel select { padding: 4px 8px; border-radius: 6px; background: #374151; color: #e5e7eb; }
 .autoclip-mode-badge { display: inline-flex; align-items: center; padding: 3px 9px; border: 1px solid #92400e; border-radius: 999px; background: #2a1a0a; color: #fde68a; font-size: .75rem; font-weight: 600; }
 .autoclip-mode-badge.is-live { border-color: #166534; background: #0f1f17; color: #bbf7d0; }
+.autoclip-mode-badge.is-pending { border-color: #d97706; background: #3a2505; color: #fcd34d; }
 .autoclip-status { padding: 10px 14px; border: 1px solid #334155; border-radius: 12px; background: #0f172a; color: #cbd5e1; font-size: .875rem; }
 .autoclip-status.is-live { border-color: #166534; background: #0f1f17; color: #bbf7d0; }
 .autoclip-status.is-stale { border-color: #92400e; background: #2a1a0a; color: #fde68a; }

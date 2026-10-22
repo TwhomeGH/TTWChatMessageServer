@@ -1060,6 +1060,10 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({
             success: true, stats: cacheAutoClipStats.stats, config: cacheAutoClipStats.config,
             session: cacheAutoClipStats.session ?? null,
+            configured: {
+                mode: process.env.AUTO_CLIP_MODE === 'live' ? 'live' : 'shadow',
+                enabled: process.env.AUTO_CLIP_ENABLED === '1'
+            },
             runtime: {
                 running: Boolean(tiktokProcess),
                 source: tiktokProcess ? 'live' : 'snapshot',

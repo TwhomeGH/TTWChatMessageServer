@@ -41,6 +41,7 @@ Userscript 轉接格式見 [/chat 入口與參數文件](CHAT_API.md)；平台�
 - 頁面的「即時／歷史」分頁：即時維持 5 秒更新與 runtime／stale banner；歷史可選場次並查看完整 session，不受即時 rolling window 限制。
 - 平台卡片在最後一列是 reset（`platforms: []`）時，退回最近有效平台快照並標示時間；選取歷史事件時仍使用該事件保存的平台明細。
 - 模式徽章會顯示「影子模式（只記錄，不剪輯）」或「正式剪輯模式」，避免誤以為影子模式應該產生 clip。子程序停止超過 30 秒未更新時顯示 stale banner。
+- 設定頁的 `AUTO_CLIP_MODE` 只寫入 `.env`／`process.env`；子程序在啟動時讀取。若目前設定與上次執行不同，徽章顯示「（待套用）」，banner 會寫出目前執行模式與設定模式；停止後再啟動直播子程序才會生效。
 - 舊 `autoclip_stats.json` 首次啟動會匯入為 legacy session；歷史預設保留 30 天，過期資料由啟動時的 prune 清除。
 
 ## 圖表與時間核對
