@@ -43,7 +43,10 @@ ESM 模組若要 `await fs.readFile`／`fs.writeFile`，必須 `import { promise
 
 | 檔案 | 責任 |
 | --- | --- |
-| ScriptLib/youtube/chat.mjs | YouTube 聊天輪詢與事件 |
+| ScriptLib/youtube/chat.mjs | YouTube 聊天輪詢、事件與原生／瀏覽器來源選擇 |
+| ScriptLib/youtube/browser.mjs | 無 OAuth 時用實際觀看頁與聊天 iframe 的專用瀏覽器 fallback |
+| ScriptLib/youtube/tokens.cjs | YouTube OAuth token 讀寫、刷新冷卻與認證方式快取 |
+| ScriptLib/browser/path.cjs | Chrome／Edge／Chromium 執行檔偵測 |
 | ScriptLib/odysee/chat.mjs | Odysee 聊天 |
 | ScriptLib/twitch/events.mjs | Twitch EventSub 事件（觀眾／開台／追蹤／小奇點） |
 | ScriptLib/twitch/clip.mjs | Twitch 剪輯建立與歷史 |

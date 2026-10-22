@@ -1,5 +1,33 @@
 # ChangeHistory
 
+## 2026.10.23 09:10 無 OAuth 時用專用瀏覽器讀取 YouTube 實際觀看頁
+
+**類型**: 功能 · **檔案**: `ScriptLib/youtube/browser.mjs`、`ScriptLib/browser/path.cjs`、`ScriptLib/youtube/chat.mjs`、`TikTok.js`、`Test/youtube_browser_ui.mjs`、`.env.example`、`Docs/YOUTUBE_BROWSER.md`
+
+### 問題 - OAuth 失效後原生 YouTube 聊天室完全不能用
+
+`liveChatMessages.list` 需要 OAuth；只有 API Key 會得到 403。使用者不一定會重新授權，且 API Key 的輪詢會被拒絕。
+
+### 根因 - 把人流／剪輯資料來源綁在單一 OAuth API
+
+沒有 OAuth 時缺少另一條可讀取聊天室的來源。
+
+### 修改
+
+- 新增專用瀏覽器 fallback：API Key 只解析目前 `videoId`，用 Chrome／Edge 的獨立 profile 開啟實際觀看頁 `watch?v=...`。
+- 在 `/live_chat` iframe（找不到時在主頁）注入 relay；透過 Puppeteer binding 回傳訊息，避開 GM API 與 CORS。
+- 瀏覽器訊息和原生 API 共用 `handleYoutubeText()`，走相同的過濾、翻譯、AutoClip、人流與 socket 管線；transport 記為 `browser`。
+- 啟動時沒有 bearer，或原生輪詢 401／403，才啟用 fallback；404／410 不啟用。觀眾數仍由 API Key 更新。
+- 專用 profile 放在 `data/youtube-browser-profile`（gitignore）；第一次登入／同意可用 `YOUTUBE_BROWSER_HEADLESS=0`，之後 headless。
+- 可設定 `YOUTUBE_BROWSER_FALLBACK`、`YOUTUBE_BROWSER_PATH`、`YOUTUBE_BROWSER_HEADLESS`、`YOUTUBE_BROWSER_PROFILE`。
+- `stopYoutubeChat()` 改為 async，關閉瀏覽器後才結束。
+
+### 驗證
+
+`Test/youtube_browser_ui.mjs` 以本地 watch 頁＋聊天 iframe 啟動 headless Chrome，確認既有與新增訊息都進入 relay；找不到瀏覽器時 skip。`test:ci` 全過。
+
+---
+
 ## 2026.10.23 08:10 YouTube OAuth 失效的刷新與輪詢退避
 
 **類型**: 修正 · **檔案**: `ScriptLib/youtube/tokens.cjs`、`ScriptLib/youtube/chat.mjs`、`Test/youtube_tokens.test.cjs`

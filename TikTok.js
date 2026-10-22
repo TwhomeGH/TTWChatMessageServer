@@ -357,7 +357,7 @@ async function handleExit() {
     isEnd = true;
 
     tiktokConn.stop();
-    stopYoutubeChat();
+    await stopYoutubeChat();
     stopOdyseeChat();
     stopTwitchClient();
     console.log("⏹️ 已停止重連／計時器");

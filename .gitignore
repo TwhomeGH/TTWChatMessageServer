@@ -42,6 +42,9 @@ cache/
 # Local AutoClip session history (including SQLite WAL files)
 /data/autoclip.sqlite*
 
+# YouTube 無 OAuth 時的專用瀏覽器 profile（含登入 cookie，不可提交）。
+/data/youtube-browser-profile/
+
 # 使用者自訂過濾規則（首次啟動從 FilterRules.custom.example.js 複製一份）。
 FilterRules.custom.js
 output/playwright/*

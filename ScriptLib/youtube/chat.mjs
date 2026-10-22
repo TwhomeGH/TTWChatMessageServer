@@ -25,6 +25,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import youtubeTokens from './tokens.cjs';
+import { startYoutubeBrowser, stopYoutubeBrowser, youtubeBrowserEnabled } from './browser.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const youtubeCacheFile = path.resolve(__dirname, '..', '..', 'youtube_cache.json');
@@ -34,6 +35,7 @@ let youtubeLiveChatId = null;
 let youtubeVideoId = null;
 let youtubeNextPageToken = null;
 let youtubeViewerInterval = null;
+let youtubeBrowserFallbackStarted = false;
 
 function loadYoutubeCache() {
     try {
@@ -146,10 +148,77 @@ async function checkIsLive(axios, apiKey, channelId) {
     }
 }
 
+/**
+ * 處理一則 YouTube 文字聊天。原生 API 與瀏覽器 relay 共用同一條過濾／翻譯／剪輯／人流管線。
+ * @param {Object} payload id、user、userId、sentAt、message、img。
+ * @param {YoutubeChatDeps} deps
+ * @param {string} transport native 或 browser。
+ */
+function handleYoutubeText(payload, deps, transport = 'native') {
+    const { id, user, userId, sentAt, message, img: avatar } = payload;
+    if (!user || !message) return;
+    const { writeLog, notify, sendChat, reportTraffic, reportFiltered, filter, recordHeat, replaceEmojis, translate } = deps;
+    const event = { platform: 'Youtube', eventType: 'chat', id, userId, user, sentAt, message, transport };
+
+    console.info(`[Youtube Chat] ${user} : ${message}`);
+    writeLog("Default", `${user} : ${message}`, "Youtube Chat Original");
+    reportTraffic(event);
+
+    const fr = filter({ user, message });
+    if (fr.blocked) {
+        reportFiltered(fr, event);
+        console.info('🚫 過濾器阻擋(Youtube):', user, message, `(規則: ${fr.reason})`);
+        writeLog("Default", `過濾器阻擋(Youtube): ${user} : ${message} (規則: ${fr.reason})`, "Filter");
+        return;
+    }
+
+    const tUser = fr.modified && fr.user ? fr.user : user;
+    let tMsg = fr.modified && fr.message ? fr.message : message;
+    if (!tUser || !tMsg) {
+        console.info('⚠️ 過濾後(Youtube) nick/msg 為空，跳過:', user, message);
+        return;
+    }
+
+    if (!recordHeat(tMsg, event)) return;
+    notify(tUser, tMsg, avatar);
+
+    // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
+    tMsg = replaceEmojis(tMsg);
+    translate(tMsg).then(RES => {
+        const RESCHAT = `${tMsg}${tMsg === RES ? '' : `\n${RES}`}`;
+        if (RES.toLowerCase() !== tMsg.toLowerCase()) {
+            notify(tUser, RES, avatar);
+        }
+        sendChat(tUser, RESCHAT, avatar);
+        writeLog("Default", `${tUser} : ${RESCHAT}`, "Youtube Chat");
+    });
+}
+
+/** 每 60 秒用 API Key 更新觀眾數；瀏覽器 fallback 與原生 API 共用。 */
+function startYoutubeViewerPolling(videoId, deps) {
+    clearInterval(youtubeViewerInterval);
+    youtubeVideoId = videoId;
+    youtubeViewerInterval = setInterval(async () => {
+        if (!youtubeVideoId) return;
+        try {
+            const auth = await youtubeTokens.getYoutubeAuthParams(deps.apiKey);
+            if (!auth) return;
+            const res = await deps.axios.get('https://www.googleapis.com/youtube/v3/videos', {
+                params: { part: 'liveStreamingDetails', id: youtubeVideoId, maxResults: 1, ...auth.params },
+                headers: auth.headers,
+                timeout: 10000,
+            });
+            const cv = res.data?.items?.[0]?.liveStreamingDetails?.concurrentViewers;
+            if (cv) deps.onViewerCount(parseInt(cv) || 0);
+        } catch { /* ignore poll errors */ }
+    }, 60000);
+}
+
 function connect(liveChatId, videoId, channelName, deps) {
-    const { axios, apiKey, pollIntervalS, writeLog, notify, sendSystem, sendChat, reportTraffic, reportFiltered, filter, recordHeat, replaceEmojis, translate, onViewerCount } = deps;
+    const { axios, apiKey, pollIntervalS, writeLog, notify, sendSystem, sendChat } = deps;
     youtubeLiveChatId = liveChatId;
     youtubeNextPageToken = null;
+    youtubeBrowserFallbackStarted = false;
 
     console.log(`🔌 Youtube 聊天室開始輪詢: liveChatId=${liveChatId}`);
     writeLog("Default", `Youtube 聊天室開始輪詢: ${liveChatId}`, "Youtube");
@@ -157,25 +226,7 @@ function connect(liveChatId, videoId, channelName, deps) {
     notify("Youtube 連線", `已連線 ${channelName}`, "");
     sendSystem(`Youtube 已連線 ${channelName}`);
 
-    youtubeVideoId = videoId; // 儲存 videoId 供 viewer count 更新用
-
-    // 定期更新觀眾數
-    youtubeViewerInterval = setInterval(async () => {
-        if (!youtubeVideoId) return;
-        try {
-            const auth = await youtubeTokens.getYoutubeAuthParams(apiKey);
-            if (!auth) return;
-            const res = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
-                params: { part: 'liveStreamingDetails', id: youtubeVideoId, maxResults: 1, ...auth.params },
-                headers: auth.headers,
-                timeout: 10000,
-            });
-            const cv = res.data?.items?.[0]?.liveStreamingDetails?.concurrentViewers;
-            if (cv) {
-                onViewerCount(parseInt(cv) || 0);
-            }
-        } catch { /* ignore poll errors */ }
-    }, 60000);
+    startYoutubeViewerPolling(videoId, deps);
 
     let youtubePollFailures = 0;
 
@@ -216,41 +267,14 @@ function connect(liveChatId, videoId, channelName, deps) {
                         const avatar = item.authorDetails?.profileImageUrl || '';
 
                         if (type === 'textMessageEvent') {
-                            const message = item.snippet.displayMessage || '';
-
-                            console.info(`[Youtube Chat] ${userName} : ${message}`);
-                            writeLog("Default", `${userName} : ${message}`, "Youtube Chat Original");
-                            reportTraffic({ platform: 'Youtube', eventType: 'chat', id: item.id, userId: item.authorDetails?.channelId, user: userName, sentAt: item.snippet.publishedAt, message });
-
-                            const fr = filter({ user: userName, message });
-                            if (fr.blocked) {
-                                reportFiltered(fr, { platform: 'Youtube', id: item.id, userId: item.authorDetails?.channelId, user: userName, sentAt: item.snippet.publishedAt, message });
-                                console.info('🚫 過濾器阻擋(Youtube):', userName, message, `(規則: ${fr.reason})`);
-                                writeLog("Default", `過濾器阻擋(Youtube): ${userName} : ${message} (規則: ${fr.reason})`, "Filter");
-                                continue;
-                            }
-
-                            let tUser = fr.modified && fr.user ? fr.user : userName;
-                            let tMsg = fr.modified && fr.message ? fr.message : message;
-                            if (!tUser || !tMsg) {
-                                console.info('⚠️ 過濾後(Youtube) nick/msg 為空，跳過:', userName, message);
-                                continue;
-                            }
-
-                            if (!recordHeat(tMsg, { platform: 'Youtube', id: item.id, userId: item.authorDetails?.channelId, user: userName, sentAt: item.snippet.publishedAt })) continue;
-                            notify(tUser, tMsg, avatar);
-
-                            // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
-                            tMsg = replaceEmojis(tMsg);
-
-                            translate(tMsg).then(RES => {
-                                let RESCHAT = `${tMsg}${tMsg == RES ? "" : `\n${RES}`}`;
-                                if (RES.toLowerCase() != tMsg.toLowerCase()) {
-                                    notify(tUser, RES, avatar);
-                                }
-                                sendChat(tUser, RESCHAT, avatar);
-                                writeLog("Default", `${tUser} : ${RESCHAT}`, "Youtube Chat");
-                            });
+                            handleYoutubeText({
+                                id: item.id,
+                                userId: item.authorDetails?.channelId,
+                                user: userName,
+                                sentAt: item.snippet.publishedAt,
+                                message: item.snippet.displayMessage || '',
+                                img: avatar
+                            }, deps, 'native');
 
                         } else if (type === 'superChatEvent') {
                             const details = item.snippet.superChatDetails;
@@ -315,6 +339,25 @@ function connect(liveChatId, videoId, channelName, deps) {
                         console.error('   請確認 OAuth 授權含 youtube.force-ssl 且額度足夠；API Key 不能用於 liveChatMessages。');
                     }
                     youtubeLiveChatId = null;
+                    if ((status === 401 || status === 403) && youtubeBrowserEnabled() && !youtubeBrowserFallbackStarted && youtubeVideoId) {
+                        youtubeBrowserFallbackStarted = true;
+                        console.log(`🌐 Youtube 原生聊天室無法使用，改用專用瀏覽器讀取實際觀看頁：${youtubeVideoId}`);
+                        startYoutubeBrowser({
+                            videoId: youtubeVideoId,
+                            channelName,
+                            deps: {
+                                writeLog,
+                                onText: payload => handleYoutubeText(payload, deps, 'browser')
+                            }
+                        }).then(() => {
+                            notify("Youtube 連線", `已改由專用瀏覽器連線 ${channelName}`, "");
+                            sendSystem(`Youtube 已改由專用瀏覽器連線 ${channelName}`);
+                        }).catch(error => {
+                            console.error('❌ YouTube 瀏覽器 fallback 失敗:', error.message);
+                            writeLog("Default", `YouTube 瀏覽器 fallback 失敗: ${error.message}`, "Youtube");
+                            notify("Youtube 連線失敗", `專用瀏覽器無法讀取聊天室：${error.message}`, "");
+                        });
+                    }
                     return;
                 }
                 youtubePollFailures += 1;
@@ -375,14 +418,46 @@ export async function startYoutubeChat(channelName, deps) {
     deps.onViewerCount(liveInfo.concurrentViewers);
     console.log(`📺 Youtube 直播中，觀眾數: ${liveInfo.concurrentViewers}`);
 
-    connect(liveInfo.liveChatId, liveInfo.videoId, info.channelName, deps);
+    const auth = await youtubeTokens.getYoutubeAuthParams(apiKey);
+    if (auth?.mode === 'bearer') {
+        connect(liveInfo.liveChatId, liveInfo.videoId, info.channelName, deps);
+        return;
+    }
+
+    if (!youtubeBrowserEnabled()) {
+        console.error('⛔ 沒有有效的 YouTube OAuth，原生聊天室不可用；瀏覽器 fallback 已停用。請重新授權或設定 YOUTUBE_BROWSER_FALLBACK=1。');
+        writeLog("Default", "YouTube 無 OAuth 且瀏覽器 fallback 已停用", "Youtube");
+        return;
+    }
+
+    console.log(`🌐 沒有有效 OAuth，改用 YouTube 專用瀏覽器讀取實際觀看頁：${liveInfo.videoId}`);
+    startYoutubeViewerPolling(liveInfo.videoId, deps);
+    try {
+        await startYoutubeBrowser({
+            videoId: liveInfo.videoId,
+            channelName: info.channelName,
+            deps: {
+                writeLog,
+                onText: payload => handleYoutubeText(payload, deps, 'browser')
+            }
+        });
+        sendSystem(`Youtube 已透過專用瀏覽器連線 ${info.channelName}`);
+        notify("Youtube 連線", `已透過專用瀏覽器連線 ${info.channelName}`, "");
+    } catch (error) {
+        clearInterval(youtubeViewerInterval);
+        youtubeViewerInterval = null;
+        console.error('❌ YouTube 瀏覽器 fallback 失敗:', error.message);
+        writeLog("Default", `YouTube 瀏覽器 fallback 失敗: ${error.message}`, "Youtube");
+        notify("Youtube 連線失敗", `專用瀏覽器無法讀取聊天室：${error.message}`, "");
+        sendSystem(`Youtube 瀏覽器 fallback 失敗：${error.message}`);
+    }
 }
 
 /**
- * 停止 YouTube 輪詢與觀眾數計時器，並清空聊天室狀態（可重複呼叫）。
- * @returns {void}
+ * 停止 YouTube 輪詢、觀眾數計時器與瀏覽器 fallback（可重複呼叫）。
+ * @returns {Promise<void>}
  */
-export function stopYoutubeChat() {
+export async function stopYoutubeChat() {
     clearTimeout(youtubePollInterval);
     clearInterval(youtubeViewerInterval);
     youtubePollInterval = null;
@@ -390,5 +465,11 @@ export function stopYoutubeChat() {
     youtubeLiveChatId = null;
     youtubeVideoId = null;
     youtubeNextPageToken = null;
+    youtubeBrowserFallbackStarted = false;
+    try {
+        await stopYoutubeBrowser();
+    } catch (error) {
+        console.error('❌ 關閉 Youtube 專用瀏覽器失敗:', error.message);
+    }
     console.log('❌ Youtube 聊天室已斷線');
 }
