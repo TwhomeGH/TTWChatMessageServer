@@ -177,11 +177,23 @@ function connect(liveChatId, videoId, channelName, deps) {
         } catch { /* ignore poll errors */ }
     }, 60000);
 
+    let youtubePollFailures = 0;
+
     function poll() {
         if (!youtubeLiveChatId) return;
 
         youtubeTokens.getYoutubeAuthParams(apiKey).then(auth => {
-            if (!auth) { youtubePollInterval = setTimeout(poll, 30000); return; }
+            if (!auth) {
+                console.error('⛔ 無可用 YouTube 認證，已停止原生聊天室輪詢。');
+                youtubeLiveChatId = null;
+                return;
+            }
+            // liveChatMessages.list 需要 OAuth；API Key 只用於影片／開播查詢，不能拿來輪詢聊天室。
+            if (auth.mode !== 'bearer') {
+                console.error('⛔ 原生 YouTube 聊天室需要 OAuth 授權；目前只有 API Key，已停止輪詢。請至設定頁重新授權 YouTube，或使用 YouTube userscript。');
+                youtubeLiveChatId = null;
+                return;
+            }
 
             const params = {
                 part: 'snippet,authorDetails',
@@ -194,6 +206,7 @@ function connect(liveChatId, videoId, channelName, deps) {
             axios.get('https://www.googleapis.com/youtube/v3/liveChat/messages', { params, headers: auth.headers, timeout: 10000 })
             .then(res => {
                 const data = res.data;
+                youtubePollFailures = 0;
                 youtubeNextPageToken = data.nextPageToken || null;
 
                 if (data.items) {
@@ -292,8 +305,24 @@ function connect(liveChatId, videoId, channelName, deps) {
                 youtubePollInterval = setTimeout(poll, intervalMs);
             })
             .catch(err => {
-                console.error('⚠️ Youtube 輪詢錯誤:', err.message);
-                youtubePollInterval = setTimeout(poll, 10000);
+                const status = err.response?.status || 0;
+                const apiError = err.response?.data?.error;
+                const reason = apiError?.errors?.[0]?.reason || '';
+                const detail = apiError?.message || err.message;
+                if (status === 401 || status === 403 || status === 404 || status === 410) {
+                    console.error(`⛔ Youtube 原生聊天室停止輪詢 (${status}${reason ? ' ' + reason : ''})：${detail}`);
+                    if (status === 403) {
+                        console.error('   請確認 OAuth 授權含 youtube.force-ssl 且額度足夠；API Key 不能用於 liveChatMessages。');
+                    }
+                    youtubeLiveChatId = null;
+                    return;
+                }
+                youtubePollFailures += 1;
+                const delay = Math.min(60000, 10000 * 2 ** (youtubePollFailures - 1));
+                if (youtubePollFailures === 1 || youtubePollFailures % 5 === 0) {
+                    console.error(`⚠️ Youtube 輪詢錯誤 (${status || 'network'})：${detail}；${Math.round(delay / 1000)} 秒後重試`);
+                }
+                youtubePollInterval = setTimeout(poll, delay);
             });
         });
     }

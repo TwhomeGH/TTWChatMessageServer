@@ -1,5 +1,31 @@
 # ChangeHistory
 
+## 2026.10.23 08:10 YouTube OAuth 失效的刷新與輪詢退避
+
+**類型**: 修正 · **檔案**: `ScriptLib/youtube/tokens.cjs`、`ScriptLib/youtube/chat.mjs`、`Test/youtube_tokens.test.cjs`
+
+### 問題 - invalid_grant 每 30 秒重試，API Key 輪詢聊天室 403 又每 10 秒重試
+
+refresh token 失效後，`getYoutubeAuthParams()` 每次呼叫都重新嘗試刷新並印出「使用 API Key 認證」；`liveChatMessages.list` 用 API Key 得到 403 後，輪詢又以 10 秒間隔重試，造成日誌與請求量異常。
+
+### 根因 - 沒有認證狀態快取／失敗冷卻，且把所有錯誤都當成可立即重試
+
+永久性的 `invalid_grant` 與權限錯誤被當成暫態；API Key 也不能用於需要 OAuth 的 liveChatMessages。
+
+### 修改
+
+- token 模組快取認證方式與 API Key，只在切換時輸出一次；`invalid_grant` 冷卻 30 分鐘、其他刷新錯誤冷卻 1 分鐘，冷卻期間只回 API Key，不再打 token endpoint。
+- 重新授權成功會清除冷卻與記憶體 token。
+- `poll()` 在只有 API Key 時直接停止原生聊天室輪詢，不再送出必定 403 的請求；401／403／404／410 只記錄一次並停止。
+- 其他暫態錯誤改用 10→20→40→60 秒指數退避，不再固定 10 秒；成功後重置。
+- 無可用認證時停止輪詢，不無限重試。
+
+### 驗證
+
+新增 `Test/youtube_tokens.test.cjs`：refresh 只打一次、第二次直接 API Key、日誌各只出現一次；`test:ci` 全過。
+
+---
+
 ## 2026.10.23 06:40 YouTube 轉接讀取 Studio 影片路徑
 
 **類型**: 修正 · **檔案**: `UserScript/youtube-chat-userscript.user.js`、`Test/userscript_source.test.mjs`、`Docs/USERSCRIPT_SOURCES.md`
