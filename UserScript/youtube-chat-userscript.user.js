@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         YouTube Chat to TTW Server
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.7
 // @description  直接從 YouTube Studio 直播聊天室 DOM 抓訊息送到 TTW 伺服器（不耗 API quota；新增面板可手動開關轉接）
 // @author       TTW
 // @match        https://studio.youtube.com/live_chat*
@@ -89,12 +89,27 @@
         try { localStorage.setItem(STATE_KEY, JSON.stringify(state)) } catch { /* ignore */ }
     }
 
+    /** 從網址讀影片 ID：支援 ?v=、/video/{id}/livestreaming、/live/{id}。 */
+    function videoIdFromUrl(url) {
+        try {
+            const parsed = new URL(url, location.href)
+            const query = parsed.searchParams.get('v') || parsed.searchParams.get('video_id')
+            if (query) return query
+            const match = parsed.pathname.match(/\/(?:video|live)\/([A-Za-z0-9_-]{6,})(?:\/|$)/)
+            return match ? match[1] : ''
+        } catch {
+            return ''
+        }
+    }
+
     /** 目前這頁的 video id；優先讀 iframe 自己的網址，再退回外層頁面。 */
     function currentVideoId() {
-        const params = new URLSearchParams(location.search)
-        let id = params.get('v') || params.get('video_id') || ''
+        let id = videoIdFromUrl(location.href)
         if (!id) {
-            try { id = new URLSearchParams(window.top.location.search).get('v') || '' } catch { /* ignore */ }
+            try { id = videoIdFromUrl(window.top.location.href) } catch { /* ignore */ }
+        }
+        if (!id) {
+            try { id = videoIdFromUrl(document.referrer) } catch { /* ignore */ }
         }
         if (!id) {
             try { id = window.ytInitialPlayerResponse?.videoDetails?.videoId || '' } catch { /* ignore */ }
@@ -139,11 +154,13 @@
         const checkbox = document.getElementById('ttw-yt-enabled')
         if (!current) {
             state.enabled = false
+            panelMessage = '讀不到影片 ID；請從含 v= 的聊天室網址開啟，或使用直播聊天室的彈出視窗。'
             if (checkbox) checkbox.checked = false
             saveState()
             renderPanelState()
             return false
         }
+        panelMessage = ''
         state.targetVideoId = current
         state.enabled = true
         const detected = detectChannelId()
@@ -158,6 +175,7 @@
         return true
     }
 
+    let panelMessage = ''
     let lastBlockedLog = ''
     function logBlocked(reason = 'disabled') {
         if (lastBlockedLog === reason) return
@@ -444,7 +462,8 @@
         const target = state.targetVideoId
         const active = state.enabled && isTargetChat(target, current)
         let text
-        if (!state.enabled) text = '⏸ 未開啟轉接，不會送出'
+        if (panelMessage) text = '⚠️ ' + panelMessage
+        else if (!state.enabled) text = '⏸ 未開啟轉接，不會送出'
         else if (!target) text = '⚠️ 未鎖定目標聊天室，已暫停；請按「鎖定此聊天室」'
         else if (!current) text = '⚠️ 讀不到 video ID，已暫停；請按「鎖定此聊天室」'
         else if (current !== target) text = '⛔ 已暫停：目前 ' + current + '，目標 ' + target

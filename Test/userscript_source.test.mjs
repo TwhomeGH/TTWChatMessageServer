@@ -61,6 +61,19 @@ test('YouTube userscript 保留 UC 頻道 ID 大小寫，handle 才轉小寫', (
     assert.equal(ctx.normalizeBroadcaster(''), '');
 });
 
+test('YouTube userscript 能從 popout 與 Studio 路徑讀出影片 ID', () => {
+    const source = fs.readFileSync(new URL('../UserScript/youtube-chat-userscript.user.js', import.meta.url), 'utf8');
+    const start = source.indexOf('function videoIdFromUrl');
+    const end = source.indexOf('\n    }', start) + '\n    }'.length;
+    assert.ok(start >= 0 && end > start);
+    const ctx = vm.createContext({ location: { href: 'https://studio.youtube.com/' }, URL });
+    vm.runInContext(source.slice(start, end), ctx);
+    assert.equal(ctx.videoIdFromUrl('https://studio.youtube.com/live_chat?is_popout=1&v=o2rjGLKx-ec'), 'o2rjGLKx-ec');
+    assert.equal(ctx.videoIdFromUrl('https://studio.youtube.com/video/o2rjGLKx-ec/livestreaming'), 'o2rjGLKx-ec');
+    assert.equal(ctx.videoIdFromUrl('https://www.youtube.com/live/o2rjGLKx-ec'), 'o2rjGLKx-ec');
+    assert.equal(ctx.videoIdFromUrl('https://studio.youtube.com/'), '');
+});
+
 test('YouTube userscript 只對已鎖定的影片目標送出', () => {
     const source = fs.readFileSync(new URL('../UserScript/youtube-chat-userscript.user.js', import.meta.url), 'utf8');
     const start = source.indexOf('function isTargetChat');

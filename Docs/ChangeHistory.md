@@ -1,5 +1,27 @@
 # ChangeHistory
 
+## 2026.10.23 06:40 YouTube 轉接讀取 Studio 影片路徑
+
+**類型**: 修正 · **檔案**: `UserScript/youtube-chat-userscript.user.js`、`Test/userscript_source.test.mjs`、`Docs/USERSCRIPT_SOURCES.md`
+
+### 問題 - 按下啟用或「鎖定此聊天室」沒有反應
+
+在 Studio 的 `/video/{id}/livestreaming` 或內嵌聊天 iframe 中，`currentVideoId()` 只讀 query `v=` 與 `top` 的 query；Studio 的影片 ID 在**路徑**裡，因此回傳空字串。`bindCurrentTarget()` 取得不到 ID 就默默取消 enabled，畫面看起來像按鈕沒反應。
+
+### 根因 - 只支援 `?v=`，沒有解析 `/video/{id}`／`/live/{id}`，失敗也沒有提示
+
+### 修改
+
+- 新增 `videoIdFromUrl()`，支援 `?v=`／`?video_id=`、`/video/{id}/livestreaming`、`/live/{id}`；依序讀 iframe 自己、外層頁面、referrer，最後才用 `videoDetails`。
+- 鎖定失敗時保留 enabled 關閉並顯示「讀不到影片 ID」的明確訊息，不再靜默。
+- userscript 升至 1.7。
+
+### 驗證
+
+`userscript_source` 新增 popout、Studio 路徑與 `/live/` 的影片 ID 解析測試；15 項全過，`test:ci` 全過。
+
+---
+
 ## 2026.10.23 06:10 YouTube 轉接鎖定目標聊天室與可拖移面板
 
 **類型**: 修正 · **檔案**: `UserScript/youtube-chat-userscript.user.js`、`Test/userscript_source.test.mjs`、`Docs/USERSCRIPT_SOURCES.md`、`Docs/TRAFFIC.md`
