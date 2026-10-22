@@ -45,13 +45,18 @@ function fixtureServer() {
             res.end(chat);
             return;
         }
+        if (pathname === '/@handle/live' || pathname === '/%40handle/live') {
+            res.writeHead(302, { Location: '/watch?v=testVideo' });
+            res.end();
+            return;
+        }
         res.statusCode = 404;
         res.end('not found');
     });
     return new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(server)));
 }
 
-test('YouTube 瀏覽器 fallback 會從實際觀看頁的聊天 iframe 收到訊息', async t => {
+test('YouTube 瀏覽器 fallback 可從頻道 /live 頁 discovery 後收到聊天', async t => {
     let executable;
     try {
         executable = browserPath();
@@ -77,8 +82,8 @@ test('YouTube 瀏覽器 fallback 會從實際觀看頁的聊天 iframe 收到訊
 
     try {
         await startYoutubeBrowser({
-            videoId: 'testVideo',
-            url: `http://127.0.0.1:${address.port}/watch`,
+            channelName: '@handle',
+            url: `http://127.0.0.1:${address.port}/@handle/live`,
             deps: {
                 onText: payload => received.push(payload),
                 writeLog: () => {}

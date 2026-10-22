@@ -22,6 +22,71 @@ function watchUrl(videoId) {
     return `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
 }
 
+/** 從 watch／live 網址取得 videoId。 */
+function videoIdFromUrl(value) {
+    try {
+        const url = new URL(value, 'https://www.youtube.com');
+        const query = url.searchParams.get('v');
+        if (query) return query;
+        const match = url.pathname.match(/^\/(?:live|watch)\/([A-Za-z0-9_-]{6,})/);
+        return match ? match[1] : '';
+    } catch {
+        return '';
+    }
+}
+
+/** 把 @handle、UC ID 或頻道 URL 轉成該頻道的 /live 頁。 */
+function channelLiveUrl(input) {
+    const raw = String(input || '').trim();
+    if (!raw) throw new Error('缺少 YouTube 頻道');
+    if (/^UC[\w-]{20,}$/.test(raw)) return `https://www.youtube.com/channel/${raw}/live`;
+
+    if (/^(https?:)?\/\//i.test(raw) || /^(www\.)?youtube\.com\//i.test(raw)) {
+        const url = new URL(raw.startsWith('http') ? raw : `https://${raw}`);
+        if (url.hostname === 'youtu.be') {
+            const id = url.pathname.replace(/^\/+/, '').split('/')[0];
+            return id ? watchUrl(id) : raw;
+        }
+        if (url.searchParams.get('v')) return url.toString();
+        if (/\/live(?:\/[^/]+)?\/?$/.test(url.pathname)) return url.toString();
+        url.pathname = url.pathname.replace(/\/+$/, '') + '/live';
+        return url.toString();
+    }
+
+    if (/^(c|user|channel)\//i.test(raw)) return `https://www.youtube.com/${raw.replace(/\/+$/, '')}/live`;
+    return `https://www.youtube.com/@${encodeURIComponent(raw.replace(/^@/, ''))}/live`;
+}
+
+/** 等待 /live 頁轉址或播放器提供目前影片 ID。 */
+async function waitForVideoId(page, timeoutMs = 45000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const direct = videoIdFromUrl(page.url());
+        if (direct) return direct;
+        const candidates = await page.evaluate(() => {
+            const canonical = globalThis.document?.querySelector('link[rel="canonical"]')?.href || '';
+            const details = globalThis.ytInitialPlayerResponse?.videoDetails?.videoId || '';
+            return [globalThis.location?.href || '', canonical, details].filter(Boolean);
+        }).catch(() => []);
+        for (const value of candidates) {
+            if (/^[A-Za-z0-9_-]{11}$/.test(value)) return value;
+            const id = videoIdFromUrl(value);
+            if (id) return id;
+        }
+        await delay(500);
+    }
+    return '';
+}
+
+/** 從實際觀看頁取得頻道 ID；不要用 ytcfg，避免拿到已登入觀眾自己的頻道。 */
+async function detectPageChannelId(page) {
+    return page.evaluate(() => {
+        const details = globalThis.ytInitialPlayerResponse?.videoDetails;
+        const meta = globalThis.document?.querySelector('meta[itemprop="channelId"]')?.content;
+        return details?.channelId || meta || '';
+    }).catch(() => '');
+}
+
 function profileDir() {
     const configured = process.env.YOUTUBE_BROWSER_PROFILE || DEFAULT_PROFILE;
     const resolved = path.isAbsolute(configured) ? configured : path.resolve(ROOT, configured);
@@ -113,13 +178,16 @@ async function injectFrame(frame) {
  * 專用 profile 只存放登入／同意狀態，不寫入程式碼或日誌。
  */
 export async function startYoutubeBrowser({ videoId, channelName, deps = {}, url }) {
-    if (!videoId) throw new Error('缺少 YouTube videoId');
+    if (!videoId && !channelName && !url) throw new Error('缺少 YouTube 頻道或 videoId');
     if (active) await stopYoutubeBrowser();
 
     const executablePath = browserPath();
     const userDataDir = profileDir();
     const headless = process.env.YOUTUBE_BROWSER_HEADLESS !== '0';
-    const target = url || watchUrl(videoId);
+    let targetVideoId = videoId || '';
+    const target = targetVideoId
+        ? (url || watchUrl(targetVideoId))
+        : (url || channelLiveUrl(channelName));
     const puppeteer = (await import('puppeteer-core')).default;
     let browser;
 
@@ -144,7 +212,7 @@ export async function startYoutubeBrowser({ videoId, channelName, deps = {}, url
         await page.exposeFunction('__ttwYoutubeRelay', payload => {
             try {
                 if (!payload || typeof payload !== 'object') return;
-                if (payload.videoId && String(payload.videoId) !== String(videoId)) return;
+                if (payload.videoId && String(payload.videoId) !== String(targetVideoId)) return;
                 const key = payload.id || `${payload.user}\u0000${payload.message}\u0000${payload.sentAt}`;
                 if (seen.has(key)) return;
                 seen.add(key);
@@ -156,7 +224,7 @@ export async function startYoutubeBrowser({ videoId, channelName, deps = {}, url
         });
 
         page.on('framenavigated', frame => {
-            if (/\/live_chat/.test(frame.url())) injectFrame(frame);
+            if (targetVideoId && /\/live_chat/.test(frame.url())) injectFrame(frame);
         });
         page.on('error', error => log('頁面錯誤:', error.message));
         browser.on('disconnected', () => {
@@ -167,7 +235,17 @@ export async function startYoutubeBrowser({ videoId, channelName, deps = {}, url
         });
 
         await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 45000 });
-        const frame = await waitForChatFrame(page, videoId);
+        if (!targetVideoId) {
+            targetVideoId = await waitForVideoId(page, 45000);
+            if (!targetVideoId) {
+                throw new Error('找不到目前直播的影片 ID；頻道可能未開播，或頁面需要登入／同意。');
+            }
+            const detectedChannelId = await detectPageChannelId(page);
+            if (detectedChannelId) deps.onChannelIdentity?.(detectedChannelId);
+            log(`discovery 找到直播：${targetVideoId}` + (detectedChannelId ? `（${detectedChannelId}）` : ''));
+        }
+
+        const frame = await waitForChatFrame(page, targetVideoId);
         if (!frame) {
             log('找不到聊天室 iframe，改在目前頁面尋找');
         }
@@ -186,7 +264,7 @@ export async function startYoutubeBrowser({ videoId, channelName, deps = {}, url
         log(`已開啟實際觀看頁：${target}` + (channelName ? `（${channelName}）` : ''));
         log(`模式：${headless ? 'headless' : 'headed'} · profile：${userDataDir}`);
         deps.writeLog?.('Default', `YouTube 瀏覽器 fallback 已啟動：${target}`, 'Youtube');
-        return { browser, page };
+        return { browser, page, videoId: targetVideoId };
     } catch (error) {
         if (browser) {
             try { await browser.close(); } catch { /* ignore */ }

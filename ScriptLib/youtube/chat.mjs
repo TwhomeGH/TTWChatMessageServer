@@ -382,14 +382,40 @@ function connect(liveChatId, videoId, channelName, deps) {
 export async function startYoutubeChat(channelName, deps) {
     const { writeLog, sendSystem, notify, apiKey, onChannelIdentity } = deps;
 
-    if (!apiKey) {
-        console.log('⚠️ 未設定 YOUTUBE_API_KEY，跳過');
-        writeLog("Default", "未設定 YOUTUBE_API_KEY", "Youtube");
-        return;
-    }
     if (!channelName) {
         console.log('⚠️ 未指定 Youtube 頻道名稱，跳過');
         writeLog("Default", "未指定 Youtube 頻道名稱", "Youtube");
+        return;
+    }
+
+    const auth = await youtubeTokens.getYoutubeAuthParams(apiKey);
+    if (!auth) {
+        // 沒有 API Key 也沒有 OAuth：完全交給瀏覽器從頻道 /live 頁 discovery。
+        if (!youtubeBrowserEnabled()) {
+            console.error('⛔ 沒有 YouTube API Key／OAuth，且瀏覽器 fallback 已停用。請設定 YOUTUBE_CHANNEL_ID 並啟用 YOUTUBE_BROWSER_FALLBACK。');
+            writeLog("Default", "無 YouTube 認證且瀏覽器 fallback 已停用", "Youtube");
+            return;
+        }
+        const match = String(channelName).match(/(?:^|\/)(UC[\w-]{20,})(?:\/|$)/);
+        if (match && typeof onChannelIdentity === 'function') onChannelIdentity(match[1]);
+        console.log(`🌐 沒有 API Key／OAuth，使用專用瀏覽器從頻道 /live 頁找直播：${channelName}`);
+        try {
+            await startYoutubeBrowser({
+                channelName,
+                deps: {
+                    writeLog,
+                    onChannelIdentity,
+                    onText: payload => handleYoutubeText(payload, deps, 'browser')
+                }
+            });
+            sendSystem(`Youtube 已透過專用瀏覽器 discovery 連線 ${channelName}`);
+            notify("Youtube 連線", `已透過專用瀏覽器 discovery 連線 ${channelName}`, "");
+        } catch (error) {
+            console.error('❌ YouTube 瀏覽器 discovery 失敗:', error.message);
+            writeLog("Default", `YouTube 瀏覽器 discovery 失敗: ${error.message}`, "Youtube");
+            notify("Youtube 連線失敗", `專用瀏覽器找不到直播或聊天室：${error.message}`, "");
+            sendSystem(`Youtube 瀏覽器 discovery 失敗：${error.message}`);
+        }
         return;
     }
 
@@ -418,8 +444,7 @@ export async function startYoutubeChat(channelName, deps) {
     deps.onViewerCount(liveInfo.concurrentViewers);
     console.log(`📺 Youtube 直播中，觀眾數: ${liveInfo.concurrentViewers}`);
 
-    const auth = await youtubeTokens.getYoutubeAuthParams(apiKey);
-    if (auth?.mode === 'bearer') {
+    if (auth.mode === 'bearer') {
         connect(liveInfo.liveChatId, liveInfo.videoId, info.channelName, deps);
         return;
     }

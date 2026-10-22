@@ -1,5 +1,32 @@
 # ChangeHistory
 
+## 2026.10.23 10:10 YouTube 零 API Key 的瀏覽器 discovery
+
+**類型**: 功能 · **檔案**: `ScriptLib/youtube/browser.mjs`、`ScriptLib/youtube/chat.mjs`、`Test/youtube_browser_ui.mjs`、`.env.example`、`Docs/YOUTUBE_BROWSER.md`
+
+### 問題 - 沒有 API Key 時仍會直接跳過 YouTube
+
+原本 `startYoutubeChat()` 一開頭就要求 `YOUTUBE_API_KEY`；即使瀏覽器 fallback 已存在，沒有 API Key 也找不到 `videoId`，對不想建立 Google Cloud 專案的使用者沒有幫助。
+
+### 根因 - 直播 discovery 綁在 API Key，而不是瀏覽器實際頁面
+
+### 修改
+
+- 移除啟動時的 API Key 硬性檢查；先取得認證：
+  - 有 bearer → 原生 API。
+  - 只有 API Key → API 找 `videoId` 後用瀏覽器。
+  - 兩者都沒有 → 直接讓瀏覽器開頻道 `/live` 頁，等待轉址取得 `videoId`。
+- `channelLiveUrl()` 支援 `@handle`、`UC...`、完整頻道 URL；`waitForVideoId()` 讀網址、canonical 與 `videoDetails`。
+- 從實際觀看頁的 `videoDetails.channelId` 取得主播頻道 ID（不使用可能代表登入觀眾的 `ytcfg.CHANNEL_ID`）。
+- 沒有 API Key 時不啟用觀眾數輪詢；觀眾數缺省，聊天、過濾、翻譯、AutoClip 訊息熱度與 socket 照常。
+- 保留有 API Key／OAuth 的既有路徑與 viewer 更新。
+
+### 驗證
+
+`Test/youtube_browser_ui.mjs` 改為從本地 `/@handle/live` 轉址到 watch 頁，確認 discovery、聊天 iframe 與 relay；`test:ci` 與 lint 全過。
+
+---
+
 ## 2026.10.23 09:10 無 OAuth 時用專用瀏覽器讀取 YouTube 實際觀看頁
 
 **類型**: 功能 · **檔案**: `ScriptLib/youtube/browser.mjs`、`ScriptLib/browser/path.cjs`、`ScriptLib/youtube/chat.mjs`、`TikTok.js`、`Test/youtube_browser_ui.mjs`、`.env.example`、`Docs/YOUTUBE_BROWSER.md`
