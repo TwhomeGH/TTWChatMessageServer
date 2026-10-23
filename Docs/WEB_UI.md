@@ -62,6 +62,8 @@ npm run watch:css
 - 全站採深色優先：監控、人流、剪輯、常客與設定／登入頁一致使用深色。
 - 目前沒有淺／深主題切換；`config`／`login` 使用頁面內的區域 CSS 變數，若未來要做切換，需改成全站 token 與 `data-theme`，不能只在 Tailwind class 上加按鈕。
 - 執行 `node --test Test/web_assets.test.cjs Test/autoclip_chart.test.mjs` 驗證資源路由與圖表邏輯。
+- 設定／登入頁使用 `node Test/config_login_ui.cjs` 做 UI 冒煙檢查（需 Chrome／Edge，不在 `test:ci`）；會產生
+  `output/playwright/config-desktop.png`、`config-mobile.png`、`login-desktop.png`，供展示與版面比較。
 - 版面使用獨立測試資料預覽，勿為了測試啟動聊天或送出真實剪輯、通知。
 
 流程依據：[Tailwind CLI 靜態建置](https://tailwindcss.com/docs/installation/tailwind-cli)、

@@ -1,5 +1,29 @@
 # ChangeHistory
 
+## 2026.10.23 14:10 設定／登入 UI 冒煙測試
+
+**類型**: 測試 · **檔案**: `Test/config_login_ui.cjs`、`Docs/WEB_UI.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 問題 - 設定／登入只有臨時截圖，沒有可重複的 UI 驗證
+
+深色重排後只用臨時預覽伺服器看過畫面；`output/playwright` 有截圖，但沒有測試會檢查安全閘門、欄位、響應式導覽、未儲存狀態或登入錯誤／成功。
+
+### 根因 - 這兩個頁面不在既有 UI 冒煙測試清單內
+
+### 修改
+
+- 新增 `Test/config_login_ui.cjs`：本機靜態預覽、不啟動聊天服務。
+- 驗證深色主題、安全確認閘門、23 個欄位、桌面側欄與手機分區導覽、390px 無水平溢出、sticky 儲存列高度、未儲存提示。
+- 驗證登入錯誤訊息與成功後導向 `/config`。
+- 輸出 `config-desktop.png`、`config-mobile.png`、`login-desktop.png` 到 `output/playwright`（展示用，不進 git）。
+- 文件標明這是需要 Chrome／Edge 的手動 UI 測試，不在 `test:ci`。
+
+### 驗證
+
+`node Test/config_login_ui.cjs` 全過；`lint`、`test:ci` 全過。
+
+---
+
 ## 2026.10.23 13:40 修正設定頁品牌標記對齊
 
 **類型**: 介面 · **檔案**: `config.html`、`styles/app.css`
