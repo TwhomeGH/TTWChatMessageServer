@@ -421,6 +421,8 @@ function startRuntime(url) {
                     pushLog('[BROWSER] 開啟 TikTok 直播頁失敗:', error.message);
                 });
             }
+        } else if (isTK && tiktokChatSource() === 'manual') {
+            pushLog('[BROWSER] TikTok manual 模式：不開程式瀏覽器，請自行在 Edge／Tampermonkey 開啟 userscript。');
         }
 
         const launchedProcess = tiktokProcess;
@@ -1204,7 +1206,8 @@ const server = http.createServer((req, res) => {
             .replace('${KICK_CLIENT_ID}', process.env.KICK_CLIENT_ID || '')
             .replace('${KICK_CLIENT_SECRET}', process.env.KICK_CLIENT_SECRET || '')
             .replace('${KICK_USER_NAME}', process.env.KICK_USER_NAME || '')
-            .replace('${TIKTOK_CHAT_SOURCE}', ['auto', 'native', 'browser'].includes(process.env.TIKTOK_CHAT_SOURCE) ? process.env.TIKTOK_CHAT_SOURCE : 'auto')
+            .replace('${TIKTOK_CHAT_SOURCE}', ['auto', 'native', 'browser', 'manual'].includes(process.env.TIKTOK_CHAT_SOURCE) ? process.env.TIKTOK_CHAT_SOURCE : 'auto')
+            .replace('${YOUTUBE_CHAT_SOURCE}', ['auto', 'native', 'browser', 'manual'].includes(process.env.YOUTUBE_CHAT_SOURCE) ? process.env.YOUTUBE_CHAT_SOURCE : 'auto')
             .replace('${AUTO_CLIP_MODE}', process.env.AUTO_CLIP_MODE === 'live' ? 'live' : 'shadow')
             .replace('${AUTO_CLIP_ENABLED}', process.env.AUTO_CLIP_ENABLED || '0')
             .replace('${AUTO_CLIP_W_VIEWERS}', process.env.AUTO_CLIP_W_VIEWERS || '0.2')
@@ -1245,7 +1248,9 @@ const server = http.createServer((req, res) => {
             const newKickClientSecret = params.get('KICK_CLIENT_SECRET') || '';
             const newKickUserName = params.get('KICK_USER_NAME') || '';
             const requestedTiktokSource = params.get('TIKTOK_CHAT_SOURCE');
-            const newTiktokChatSource = ['auto', 'native', 'browser'].includes(requestedTiktokSource) ? requestedTiktokSource : 'auto';
+            const newTiktokChatSource = ['auto', 'native', 'browser', 'manual'].includes(requestedTiktokSource) ? requestedTiktokSource : 'auto';
+            const requestedYoutubeSource = params.get('YOUTUBE_CHAT_SOURCE');
+            const newYoutubeChatSource = ['auto', 'native', 'browser', 'manual'].includes(requestedYoutubeSource) ? requestedYoutubeSource : 'auto';
             const newAutoClipMode = params.get('AUTO_CLIP_MODE') === 'live' ? 'live' : 'shadow';
             const newAutoClipEnabled = params.get('AUTO_CLIP_ENABLED') || '0';
             const newAutoClipWViewers = params.get('AUTO_CLIP_W_VIEWERS') || '0.2';
@@ -1276,6 +1281,7 @@ const server = http.createServer((req, res) => {
             process.env.KICK_CLIENT_SECRET = newKickClientSecret;
             process.env.KICK_USER_NAME = newKickUserName;
             process.env.TIKTOK_CHAT_SOURCE = newTiktokChatSource;
+            process.env.YOUTUBE_CHAT_SOURCE = newYoutubeChatSource;
             process.env.AUTO_CLIP_MODE = newAutoClipMode;
             process.env.AUTO_CLIP_ENABLED = newAutoClipEnabled;
             process.env.AUTO_CLIP_W_VIEWERS = newAutoClipWViewers;
@@ -1320,6 +1326,7 @@ const server = http.createServer((req, res) => {
             updateEnv('KICK_CLIENT_SECRET', newKickClientSecret);
             updateEnv('KICK_USER_NAME', newKickUserName);
             updateEnv('TIKTOK_CHAT_SOURCE', newTiktokChatSource);
+            updateEnv('YOUTUBE_CHAT_SOURCE', newYoutubeChatSource);
             updateEnv('AUTO_CLIP_MODE', newAutoClipMode);
             updateEnv('AUTO_CLIP_ENABLED', newAutoClipEnabled);
             updateEnv('AUTO_CLIP_W_VIEWERS', newAutoClipWViewers);

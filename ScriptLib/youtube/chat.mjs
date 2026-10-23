@@ -25,6 +25,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import youtubeTokens from './tokens.cjs';
+import youtubeSource from './source.cjs';
 import { startYoutubeBrowser, stopYoutubeBrowser, youtubeBrowserEnabled } from './browser.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -36,6 +37,7 @@ let youtubeVideoId = null;
 let youtubeNextPageToken = null;
 let youtubeViewerInterval = null;
 let youtubeBrowserFallbackStarted = false;
+let youtubeSourceMode = 'auto';
 
 function loadYoutubeCache() {
     try {
@@ -339,7 +341,7 @@ function connect(liveChatId, videoId, channelName, deps) {
                         console.error('   請確認 OAuth 授權含 youtube.force-ssl 且額度足夠；API Key 不能用於 liveChatMessages。');
                     }
                     youtubeLiveChatId = null;
-                    if ((status === 401 || status === 403) && youtubeBrowserEnabled() && !youtubeBrowserFallbackStarted && youtubeVideoId) {
+                    if ((status === 401 || status === 403) && youtubeSourceMode !== 'native' && youtubeSourceMode !== 'manual' && youtubeBrowserEnabled() && !youtubeBrowserFallbackStarted && youtubeVideoId) {
                         youtubeBrowserFallbackStarted = true;
                         console.log(`🌐 Youtube 原生聊天室無法使用，改用專用瀏覽器讀取實際觀看頁：${youtubeVideoId}`);
                         startYoutubeBrowser({
@@ -381,6 +383,14 @@ function connect(liveChatId, videoId, channelName, deps) {
  */
 export async function startYoutubeChat(channelName, deps) {
     const { writeLog, sendSystem, notify, apiKey, onChannelIdentity } = deps;
+    const source = youtubeSource.youtubeChatSource();
+    youtubeSourceMode = source;
+
+    if (source === 'manual') {
+        console.log('🌐 YouTube manual 模式：不啟動原生／程式瀏覽器，只收外部 userscript 的 /chat');
+        writeLog("Default", "YouTube manual 模式：等待外部 userscript", "Youtube");
+        return;
+    }
 
     if (!channelName) {
         console.log('⚠️ 未指定 Youtube 頻道名稱，跳過');
@@ -390,7 +400,12 @@ export async function startYoutubeChat(channelName, deps) {
 
     const auth = await youtubeTokens.getYoutubeAuthParams(apiKey);
     if (!auth) {
-        // 沒有 API Key 也沒有 OAuth：完全交給瀏覽器從頻道 /live 頁 discovery。
+        // 沒有 API Key 也沒有 OAuth：依來源決定是否交給瀏覽器 discovery。
+        if (source === 'native') {
+            console.error('⛔ YouTube native 模式需要有效 OAuth；目前沒有，已停止。');
+            writeLog("Default", "YouTube native 模式缺少 OAuth", "Youtube");
+            return;
+        }
         if (!youtubeBrowserEnabled()) {
             console.error('⛔ 沒有 YouTube API Key／OAuth，且瀏覽器 fallback 已停用。請設定 YOUTUBE_CHANNEL_ID 並啟用 YOUTUBE_BROWSER_FALLBACK。');
             writeLog("Default", "無 YouTube 認證且瀏覽器 fallback 已停用", "Youtube");
@@ -444,14 +459,24 @@ export async function startYoutubeChat(channelName, deps) {
     deps.onViewerCount(liveInfo.concurrentViewers);
     console.log(`📺 Youtube 直播中，觀眾數: ${liveInfo.concurrentViewers}`);
 
-    if (auth.mode === 'bearer') {
+    if (source === 'native') {
+        if (auth.mode === 'bearer') {
+            connect(liveInfo.liveChatId, liveInfo.videoId, info.channelName, deps);
+            return;
+        }
+        console.error('⛔ YouTube native 模式需要有效 OAuth；API Key 不能讀取聊天室。已停止，不會自動開瀏覽器。');
+        writeLog("Default", "YouTube native 模式缺少 OAuth", "Youtube");
+        return;
+    }
+
+    if (source === 'auto' && auth.mode === 'bearer') {
         connect(liveInfo.liveChatId, liveInfo.videoId, info.channelName, deps);
         return;
     }
 
     if (!youtubeBrowserEnabled()) {
-        console.error('⛔ 沒有有效的 YouTube OAuth，原生聊天室不可用；瀏覽器 fallback 已停用。請重新授權或設定 YOUTUBE_BROWSER_FALLBACK=1。');
-        writeLog("Default", "YouTube 無 OAuth 且瀏覽器 fallback 已停用", "Youtube");
+        console.error('⛔ YouTube 瀏覽器 fallback 已停用；請重新授權、改用 native/manual，或設定 YOUTUBE_BROWSER_FALLBACK=1。');
+        writeLog("Default", "YouTube 瀏覽器 fallback 已停用", "Youtube");
         return;
     }
 

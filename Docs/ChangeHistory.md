@@ -1,5 +1,33 @@
 # ChangeHistory
 
+## 2026.10.23 15:10 補上 TikTok／YouTube manual 聊天來源
+
+**類型**: 功能 · **檔案**: `ScriptLib/tiktok/source.cjs`、`ScriptLib/youtube/source.cjs`、`ScriptLib/youtube/chat.mjs`、`TikTok.js`、`Server.js`、`config.html`、`.env.example`、`Test/tiktok_source.test.cjs`、`Test/youtube_source.test.cjs`、`Test/config_login_ui.cjs`、`Docs/BROWSER.md`、`Docs/YOUTUBE_BROWSER.md`
+
+### 問題 - 自己接 Edge userscript 沒有明確模式，容易和程式來源重複
+
+TikTok 只有 auto／native／browser；YouTube 沒有來源選單，會自動 native 或 browser。使用者自己開 Edge 時，程式仍可能同時產生第二份來源。
+
+### 根因 - 沒有「程式不啟動來源、只收外部 userscript」的選項
+
+### 修改
+
+- TikTok `TIKTOK_CHAT_SOURCE` 新增 `manual`：不啟動原生、不開程式瀏覽器；只收 Edge userscript 的 `/chat`。browser 與 manual 都停用 AutoStop（無可信結束訊號）。
+- 新增 `YOUTUBE_CHAT_SOURCE=auto|native|browser|manual`：
+  - `native` 只用原生，缺少 OAuth 直接停止，不偷偷開瀏覽器。
+  - `browser` 只用程式 headless＋內建 relay，不使用外部 userscript。
+  - `manual` 不啟動原生／瀏覽器，只收外部 userscript。
+  - `auto` 有 OAuth 用 native，否則 browser。
+- 設定頁新增 YouTube 來源選單與 TikTok manual 選項；browser／manual 的文案明確區分「程式專用」與「自己的 Edge」。
+- 原生 401／403 只在 `auto` 模式下才會轉 browser；`native` 不會偷換來源。
+- 文件與 `.env.example` 同步；config UI 測試欄位數更新為 24。
+
+### 驗證
+
+`Test/tiktok_source.test.cjs`、`Test/youtube_source.test.cjs`、`Test/config_login_ui.cjs`、`lint`、`test:ci` 全過。
+
+---
+
 ## 2026.10.23 14:30 釐清 browser 與 manual 聊天來源
 
 **類型**: 文件／文案 · **檔案**: `config.html`、`Docs/BROWSER.md`、`Docs/YOUTUBE_BROWSER.md`
@@ -165,7 +193,7 @@ TikTok 的 `browser` 其實是程式管理的專用 profile；YouTube 的 browse
   - 兩者都沒有 → 直接讓瀏覽器開頻道 `/live` 頁，等待轉址取得 `videoId`。
 - `channelLiveUrl()` 支援 `@handle`、`UC...`、完整頻道 URL；`waitForVideoId()` 讀網址、canonical 與 `videoDetails`。
 - 從實際觀看頁的 `videoDetails.channelId` 取得主播頻道 ID（不使用可能代表登入觀眾的 `ytcfg.CHANNEL_ID`）。
-- 沒有 API Key 時不啟用觀眾數輪詢；觀眾數缺省，聊天、過濾、翻譯、AutoClip 訊息熱度與 socket 照常。
+- 沒有 API Key 時不啟用觀眾數輪詢；觀眾數會缺少，聊天、過濾、翻譯、AutoClip 訊息熱度與 socket 照常。
 - 保留有 API Key／OAuth 的既有路徑與 viewer 更新。
 
 ### 驗證

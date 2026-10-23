@@ -13,23 +13,29 @@
 - 在頁面的 `/live_chat` iframe（沒有 iframe 時在主頁面）注入 relay，監聽
   `yt-live-chat-text-message-renderer`；訊息透過 Puppeteer binding 回到 Node，
   不依賴 `GM_xmlhttpRequest` 或瀏覽器 CORS。
-- 這裡的 browser fallback 是**程式自己的 headless profile ＋內建 relay**，不是你的日常 Edge，也不需要 Tampermonkey。若要在自己的 Edge 手動掛 userscript，屬於尚未提供的 `manual` 模式；同時開啟會重複送出。
+- 這裡的 browser fallback 是**程式自己的 headless profile ＋內建 relay**，不是你的日常 Edge，也不需要 Tampermonkey。
+- `YOUTUBE_CHAT_SOURCE=manual` 才是自己用 Edge／Tampermonkey：程式不啟動原生、不開瀏覽器，只收外部 userscript 的 `/chat`，觀眾數可能不會提供。不要同時開 browser 與 manual。
 - 瀏覽器訊息和原生 API 走同一條管線：主播歸屬、過濾、表情、翻譯、
   AutoClip、人流統計與 `sendChat`。
 - 觀眾數：有 API Key 時由 `videos.list` 每 60 秒更新；完全沒有 API Key 時不提供可靠的
-  觀眾數，YouTube 觀眾數會缺省，聊天與 AutoClip 的訊息熱度仍可運作。
+  觀眾數，YouTube 觀眾數不會提供，聊天與 AutoClip 的訊息熱度仍可運作。
 - 404／410（聊天室已結束）不啟動瀏覽器；停止直播或關閉程式時會關閉瀏覽器。
 
 ## 設定
 
 ```dotenv
+# auto：有 OAuth 用原生，否則程式瀏覽器；native／browser／manual 為強制來源。
+YOUTUBE_CHAT_SOURCE=auto
 YOUTUBE_BROWSER_FALLBACK=1
 YOUTUBE_BROWSER_HEADLESS=1
 YOUTUBE_BROWSER_PROFILE=data/youtube-browser-profile
 # YOUTUBE_BROWSER_PATH=C:\Program Files\Google\Chrome\Application\chrome.exe
 ```
 
-- `YOUTUBE_BROWSER_FALLBACK=0` 可完全停用。
+- `YOUTUBE_CHAT_SOURCE=manual`：你自行在 Edge 掛 YouTube userscript；程式不啟動原生或瀏覽器。
+- `YOUTUBE_CHAT_SOURCE=native`：只用原生，缺少 OAuth 時直接停止，不會偷偷開瀏覽器。
+- `YOUTUBE_CHAT_SOURCE=browser`：只用程式的 headless 瀏覽器。
+- `YOUTUBE_BROWSER_FALLBACK=0` 可停用 auto 的瀏覽器 fallback；來源明確設為 browser 時仍受此開關限制。
 - `YOUTUBE_API_KEY` 可以留空；`YOUTUBE_CHANNEL_ID` 填 `@handle`、`UC...` 或完整頻道 URL 即可走
   `/live` discovery。沒有 API Key 時沒有可靠的觀眾數。
 - 未設定 `YOUTUBE_BROWSER_PATH` 時會依序找 Chrome、Edge、Chromium；

@@ -31,6 +31,7 @@
             <a href="#kick" data-section-link>Kick</a>
             <a href="#autoclip" data-section-link>Twitch 自動剪輯</a>
             <a href="#tiktok" data-section-link>TikTok 聊天來源</a>
+            <a href="#youtube" data-section-link>YouTube 聊天來源</a>
             <a href="#autostop" data-section-link>自動停止</a>
             <a href="#oauth" data-section-link>平台授權</a>
           </nav>
@@ -55,6 +56,7 @@
             <a href="#kick" data-section-link>Kick</a>
             <a href="#autoclip" data-section-link>自動剪輯</a>
             <a href="#tiktok" data-section-link>TikTok</a>
+            <a href="#youtube" data-section-link>YouTube</a>
             <a href="#autostop" data-section-link>自動停止</a>
             <a href="#oauth" data-section-link>平台授權</a>
           </nav>
@@ -212,8 +214,29 @@
                   <option value="auto">自動：有簽名用原生，否則用程式專用瀏覽器</option>
                   <option value="native">原生：EulerStream／Cookie／Direct Signer</option>
                   <option value="browser">程式專用瀏覽器（不是日常 Edge）＋userscript</option>
+                  <option value="manual">手動：自己用 Edge／Tampermonkey，程式不開來源</option>
                 </select>
-                <p class="config-help"><strong class="text-gray-200">browser</strong> 是程式管理的專用 profile，不是你的日常 Edge；第一次請在該 profile 安裝一次 <code>TikTokChat.user.js</code>，程式會幫你開直播頁。若你要自己用 Edge 掛腳本，那屬於 <strong class="text-gray-200">manual</strong>（目前尚未提供）；兩者同時開會重複送出訊息。browser 模式沒有可靠的觀眾數與 AutoStop。</p>
+                <p class="config-help"><strong class="text-gray-200">browser</strong> 是程式管理的專用 profile，不是你的日常 Edge；第一次請在該 profile 安裝一次 <code>TikTokChat.user.js</code>，程式會幫你開直播頁。<strong class="text-gray-200">manual</strong> 才是你自己用 Edge 掛腳本；程式不開瀏覽器、不連原生，只收 <code>/chat</code>。兩者不要同時開，否則會重複送出訊息。browser／manual 沒有可靠的觀眾數與 AutoStop。</p>
+              </div>
+            </section>
+
+            <section id="youtube" class="config-card">
+              <header class="config-card-header">
+                <div>
+                  <p class="config-eyebrow">YouTube</p>
+                  <h2>YouTube 聊天來源</h2>
+                </div>
+                <p class="config-help">原生需要 OAuth；程式瀏覽器使用內建 relay；manual 只收你 Edge 的 userscript。</p>
+              </header>
+              <div class="config-field">
+                <label for="YOUTUBE_CHAT_SOURCE">YOUTUBE_CHAT_SOURCE</label>
+                <select name="YOUTUBE_CHAT_SOURCE" id="YOUTUBE_CHAT_SOURCE" data-value="${YOUTUBE_CHAT_SOURCE}" class="config-input">
+                  <option value="auto">自動：有 OAuth 用原生，否則程式瀏覽器</option>
+                  <option value="native">原生：需要有效 OAuth</option>
+                  <option value="browser">程式專用 headless 瀏覽器＋內建 relay（不是日常 Edge）</option>
+                  <option value="manual">手動：自己用 Edge／Tampermonkey，程式不開來源</option>
+                </select>
+                <p class="config-help"><strong class="text-gray-200">browser</strong> 不需要安裝 userscript，也不是你的日常 Edge。<strong class="text-gray-200">manual</strong> 才是自己接 Edge；此模式不啟動原生或程式瀏覽器，觀眾數可能不會提供。不要同時開 browser 與 manual。</p>
               </div>
             </section>
 
@@ -282,7 +305,8 @@
         for (const [id, fallback] of [
           ['AUTO_CLIP_ENABLED', '0'],
           ['AUTO_STOP_ENABLED', '0'],
-          ['TIKTOK_CHAT_SOURCE', 'auto']
+          ['TIKTOK_CHAT_SOURCE', 'auto'],
+          ['YOUTUBE_CHAT_SOURCE', 'auto']
         ]) {
           const element = document.getElementById(id);
           if (element) element.value = element.dataset.value || fallback;

@@ -29,6 +29,7 @@ const values = {
     AUTO_CLIP_SUSTAIN_MIN: '0.167',
     AUTO_CLIP_TITLE_PREFIX: '人氣高峰',
     TIKTOK_CHAT_SOURCE: 'auto',
+    YOUTUBE_CHAT_SOURCE: 'auto',
     AUTO_STOP_ENABLED: '1',
     AUTO_STOP_GRACE_SEC: '60'
 };
@@ -112,7 +113,7 @@ async function main() {
         assert.equal(bodyBg, 'rgb(7, 11, 18)');
         assert.equal(await page.$eval('.config-sidebar', el => getComputedStyle(el).display !== 'none'), true);
         assert.equal(await page.$eval('.config-mobile-nav', el => getComputedStyle(el).display === 'none'), true);
-        assert.equal(await page.$$eval('.config-nav a', links => links.length), 6);
+        assert.equal(await page.$$eval('.config-nav a', links => links.length), 7);
         assert.equal(await page.evaluate(ids => ids.every(id => Boolean(document.getElementById(id))), fieldIds), true);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 
@@ -156,7 +157,7 @@ async function main() {
         assert.equal(await page.$eval('#safetyOverlay', el => getComputedStyle(el).display !== 'none'), true);
 
         assert.deepEqual(errors, []);
-        console.log('Config/Login UI passed: dark theme, safety gate, 23 fields, sidebar/mobile nav, no 390px overflow, dirty state, login error/success; screenshots in output/playwright.');
+        console.log('Config/Login UI passed: dark theme, safety gate, 24 fields, sidebar/mobile nav, no 390px overflow, dirty state, login error/success; screenshots in output/playwright.');
     } finally {
         await browser?.close();
         await new Promise(resolve => server.close(resolve));

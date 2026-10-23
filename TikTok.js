@@ -143,8 +143,12 @@ if (platformsArg) {
     isTwitch = true
 }
 
-const tiktokBrowserMode = isTK && tiktokSource.tiktokChatSource() === 'browser';
-if (tiktokBrowserMode) console.log('[TikTok] 使用專用瀏覽器使用者腳本，略過原生 TikTok 連線');
+const tiktokSourceMode = isTK ? tiktokSource.tiktokChatSource() : 'native';
+const tiktokBrowserMode = tiktokSourceMode === 'browser';
+const tiktokManualMode = tiktokSourceMode === 'manual';
+const tiktokNativeDisabled = tiktokBrowserMode || tiktokManualMode;
+if (tiktokBrowserMode) console.log('[TikTok] 使用程式專用瀏覽器，略過原生 TikTok 連線');
+if (tiktokManualMode) console.log('[TikTok] manual 模式：不啟動原生／專用瀏覽器，只收外部 userscript 的 /chat');
 
 console.log('收到參數:', keyword, isTK ? '(TikTok)' : '', isTwitch ? '(Twitch)' : '', isKick ? '(Kick)' : '', isOdysee ? '(Odysee)' : '', isYoutube ? '(Youtube)' : '');
 
@@ -893,7 +897,7 @@ function connectSocket() {
 
 
 
-if (isTK && !tiktokBrowserMode) {
+if (isTK && !tiktokNativeDisabled) {
     console.log("連接 TikTok 直播間:", tiktokName)
 
     // 初始化簽名服務（僅 TikTok 模式需要）
@@ -933,9 +937,9 @@ const autoStopRequested = /^(1|true|yes|on)$/i.test(process.env.AUTO_STOP_ENABLE
 const autoStopGraceMs = Math.min(Math.max(Number(process.env.AUTO_STOP_GRACE_SEC || 60) * 1000, 10000), 600000) || 60000;
 autoStop = createAutoStop({
     enabled: autoStopRequested,
-    // browser 模式沒有可靠的 TikTok 結束訊號；放進 blocked 會停用自動停止，避免誤判。
-    platforms: [isTK && !tiktokBrowserMode && 'TikTok', isTwitch && 'Twitch'].filter(Boolean),
-    blocked: [isTK && tiktokBrowserMode && 'TikTok', isKick && 'Kick', isOdysee && 'Odysee', isYoutube && 'Youtube'].filter(Boolean),
+    // browser／manual 沒有可靠的 TikTok 結束訊號；放進 blocked 會停用自動停止，避免誤判。
+    platforms: [isTK && !tiktokNativeDisabled && 'TikTok', isTwitch && 'Twitch'].filter(Boolean),
+    blocked: [isTK && tiktokNativeDisabled && 'TikTok', isKick && 'Kick', isOdysee && 'Odysee', isYoutube && 'Youtube'].filter(Boolean),
     graceMs: autoStopGraceMs,
     log: message => writeLog('Default', `[AutoStop] ${message}`),
     onStop: () => {
