@@ -1,5 +1,27 @@
 # ChangeHistory
 
+## 2026.10.23 13:40 修正設定頁品牌標記對齊
+
+**類型**: 介面 · **檔案**: `config.html`、`styles/app.css`
+
+### 問題 - 側邊欄「TTW／控制台／設定」字沒有對齊
+
+`config-brand span` 同時選到 `.config-brand-mark`，把 TTW 標記的 `inline-flex` 置中、顏色與字級覆蓋成一般說明文字；標記與右側文字看起來歪掉。
+
+### 根因 - 過寬的後代選擇器影響到品牌標記本身
+
+### 修改
+
+- 右側文字加上 `.config-brand-copy`，選擇器只作用在複製區。
+- TTW 標記固定 `inline-flex`、`flex: none`、`line-height: 1`，保持正方塊內置中。
+- 複製區改為 `grid` 並統一兩行 `line-height`，與 38px 標記垂直對齊。
+
+### 驗證
+
+以 1280 寬度檢查 computed layout（標記與文字中心同為 y=53）與截圖；`build:css`、`check:css`、`lint`、`test:ci` 全過。
+
+---
+
 ## 2026.10.23 13:10 設定與登入頁深色優先重排
 
 **類型**: 介面 · **檔案**: `config.html`、`login.html`、`Update.html`、`styles/app.css`、`Docs/WEB_UI.md`

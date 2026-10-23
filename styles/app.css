@@ -32,9 +32,10 @@
 .config-shell { display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: 24px; align-items: start; }
 .config-sidebar { position: sticky; top: 20px; display: grid; gap: 18px; }
 .config-brand { display: flex; gap: 10px; align-items: center; padding: 2px 4px; }
-.config-brand-mark { display: inline-flex; width: 38px; height: 38px; align-items: center; justify-content: center; border-radius: 12px; background: #1d4ed8; color: #eff6ff; font-size: 12px; font-weight: 800; letter-spacing: .06em; }
-.config-brand strong { display: block; color: #f8fafc; font-size: 14px; }
-.config-brand span { display: block; color: var(--config-muted); font-size: 12px; }
+.config-brand-mark { display: inline-flex; flex: none; width: 38px; height: 38px; align-items: center; justify-content: center; border-radius: 12px; background: #1d4ed8; color: #eff6ff; font-size: 12px; font-weight: 800; line-height: 1; letter-spacing: .06em; }
+.config-brand-copy { display: grid; gap: 2px; min-width: 0; }
+.config-brand-copy strong { display: block; color: #f8fafc; font-size: 14px; line-height: 1.15; }
+.config-brand-copy span { display: block; color: var(--config-muted); font-size: 12px; line-height: 1.2; }
 .config-nav { display: grid; gap: 4px; }
 .config-nav a { display: flex; align-items: center; min-height: 38px; padding: 8px 10px; border: 1px solid transparent; border-radius: 9px; color: var(--config-muted); font-size: 13px; text-decoration: none; }
 .config-nav a:hover { border-color: var(--config-border); background: var(--config-surface-2); color: #e2e8f0; }
