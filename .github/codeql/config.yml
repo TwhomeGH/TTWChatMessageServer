@@ -6,3 +6,4 @@ name: "CodeQL configuration"
 paths-ignore:
   - '**/webmssdk*.js'
   - '**/xgnarly.mjs'
+  - '**/webmssdk_5.1.3.js'
