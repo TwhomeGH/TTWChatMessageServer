@@ -1,5 +1,33 @@
 # ChangeHistory
 
+## 2026.10.23 17:10 修正 keyword 規則產生器的字串跳脫
+
+**類型**: 修正／安全 · **檔案**: `assets/keyword.js`
+
+### 問題 - CodeQL #46／#47／#48：規則片段只跳脫部分字元
+
+`/keyword` 的規則產生器把名稱、正則、旗標與取代文字直接串進單引號字串或正規表示式；名稱完全未跳脫，取代文字、marker 只處理單引號，遇到反斜線、換行或其他引號時可能產生壞掉的片段。這是使用者主動複製到 `FilterRules.custom.js` 的程式碼，不是伺服器執行路徑，但仍應產生合法且安全的文字。
+
+### 根因 - 手動選擇性跳脫，沒有統一的 JavaScript 字串編碼
+
+### 修改
+
+- 所有文字欄位改用 `JSON.stringify()` 嵌入，正確處理引號、反斜線與換行。
+- 正則與旗標改成 `new RegExp(<JSON 字串>, <JSON 字串>)`，不再手動拼接 `/.../flags`。
+- 保留原本的規則格式與數值欄位。
+
+### CodeQL 其他舊 alert
+
+- `SignServer/xgnarly.mjs` 與 `Docs/patched-plugins/tiktok-signature/xgnarly.mjs` 的 biased-random alert 是演算法 checksum 插入位置，不是安全隨機；改動會破壞 TikTok 位元組相容。
+- `Docs/patched-plugins/.../webmssdk_5.1.3.js` 是第三方 TikTok SDK，`Math.random` 在其內部；不可修改。
+- 上述路徑已在 `.github/codeql/config.yml` 的 `paths-ignore` 排除；既有 alert 是舊掃描留下的，應以 false positive／won't fix 關閉，不是本次新程式碼。
+
+### 驗證
+
+`node --check assets/keyword.js`、`lint`、`test:ci` 全過。
+
+---
+
 ## 2026.10.23 16:40 補充 http-cache-semantics 無補丁與爭議
 
 **類型**: 文件／安全 · **檔案**: `Docs/ChangeHistory.md`

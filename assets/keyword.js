@@ -154,36 +154,37 @@
 
     /**
      * 依目前表單組出可貼進 FilterRules.custom.js 的片段。
-     * 正則直接以字面值輸出，所以要把 `/` 與換行轉義。
+     * 使用者輸入一律以 JSON 字串嵌入，避免引號、反斜線或換行破壞產生的 JS。
      */
     function buildSnippet() {
+        const js = value => JSON.stringify(String(value));
         const name = el('rule-name').value.trim() || '自訂規則';
         const action = el('rule-action').value;
 
         if (action === 'throttle') {
             const similarity = el('rule-similarity').value;
             const onExceed = el('rule-onexceed').value;
-            const marker = el('rule-marker').value.replace(/'/g, "\\'");
+            const marker = el('rule-marker').value;
             return [
-                `{ name: '${name}', action: 'throttle',`,
-                `  scope: '${el('rule-scope').value}', windowMs: ${(Number(el('rule-window').value) || 10) * 1000}, max: ${Number(el('rule-max').value) || 0},`,
-                `  similarity: '${similarity}',${similarity === 'normalized' ? ` distance: ${Number(el('rule-distance').value) || 0},` : ''}`,
-                `  onExceed: '${onExceed}'${onExceed === 'marker' ? `, marker: '${marker || '（×{n}）'}'` : ''} },`
+                `{ name: ${js(name)}, action: 'throttle',`,
+                `  scope: ${js(el('rule-scope').value)}, windowMs: ${(Number(el('rule-window').value) || 10) * 1000}, max: ${Number(el('rule-max').value) || 0},`,
+                `  similarity: ${js(similarity)},${similarity === 'normalized' ? ` distance: ${Number(el('rule-distance').value) || 0},` : ''}`,
+                `  onExceed: ${js(onExceed)}${onExceed === 'marker' ? `, marker: ${js(marker || '（×{n}）')}` : ''} },`
             ].join('\n');
         }
 
         const field = el('rule-field').value;
-        const pattern = el('rule-pattern').value.replace(/\//g, '\\/').replace(/\n/g, '\\n');
+        const pattern = el('rule-pattern').value;
         const flags = el('rule-flags').value.trim();
         if (!pattern) return '';
 
         if (action === 'block') {
-            return `{ name: '${name}', field: '${field}', action: 'block',\n  test: (v) => /${pattern}/${flags}.test(v) },`;
+            return `{ name: ${js(name)}, field: ${js(field)}, action: 'block',\n  test: (v) => new RegExp(${js(pattern)}, ${js(flags)}).test(v) },`;
         }
         const replacement = action === 'replace'
-            ? `, replacement: '${el('rule-replacement').value.replace(/'/g, "\\'")}'`
+            ? `, replacement: ${js(el('rule-replacement').value)}`
             : '';
-        return `{ name: '${name}', field: '${field}', action: '${action}',\n  match: /${pattern}/${flags}${replacement} },`;
+        return `{ name: ${js(name)}, field: ${js(field)}, action: ${js(action)},\n  match: new RegExp(${js(pattern)}, ${js(flags)})${replacement} },`;
     }
 
     /** 把符合的片段用 <mark> 標出；零長度命中要中斷，避免無限迴圈。 */
