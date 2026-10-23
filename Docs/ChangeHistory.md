@@ -1,5 +1,28 @@
 # ChangeHistory
 
+## 2026.10.23 16:40 補充 http-cache-semantics 無補丁與爭議
+
+**類型**: 文件／安全 · **檔案**: `Docs/ChangeHistory.md`
+
+### 事實
+
+- `GHSA-ch52-4w7c-c8xp`（CVE-2026-93748）標示 affected `<=4.2.0`，**patched version 為 None**。
+- 這是因為 advisory 沒有宣告修補版本；`http-cache-semantics 4.3.0` 是 2026-10-04 的一般新版本，不是官方確認的 security patch。`npm audit` 會因為 4.3.0 落在 affected range 外而顯示 0，但這不等於行為已被官方證實修補。
+- 上游 issue #56 已被維護者關閉為 not planned；維護者主張 RFC 9111 允許共享帶 Set-Cookie 的回應，並認為這是誤報。GitHub advisory 可能仍待更新或撤回。
+
+### 本專案的暴露面
+
+`http-cache-semantics` 只透過 `tiktok-live-connector` → `got` → `cacheable-request` 引入，是 client-side cache 語意工具；本專案沒有執行跨使用者的 shared/proxy cache，也沒有把 `satisfiesWithoutRevalidation` 當成多用戶快取邊界。依 advisory 的攻擊前提，目前不具實際可利用路徑。
+
+### 處置
+
+- 保留最新的 4.3.0 與 `npm audit 0`，但不把它描述成已確認的安全修補。
+- 不新增 override；`tiktok-live-connector` 仍維持 2.4.0。
+- 若 Dependabot #105 在 advisory 更新後仍存在，因其為 disputed 且本專案不使用 shared cache，可考慮以「Vulnerable code is not in use」記錄處置，而不是宣稱已有補丁。
+- follow-redirects #107／#108 是另一組有實際修補的 advisory，已由 1.16.1 處理；source-map-js #106 已由 1.2.2 處理。
+
+---
+
 ## 2026.10.23 16:10 更新間接依賴安全修補
 
 **類型**: 安全 · **檔案**: `package-lock.json`、`assets/app.css.build.json`
