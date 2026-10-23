@@ -2,430 +2,347 @@
 <html lang="zh-TW">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Config Editor</title>
-    <link rel="stylesheet" href="/assets/app.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>設定 · TTW Chat Message Server</title>
+    <link rel="stylesheet" href="/assets/app.css" />
   </head>
-  <body class="app-ui config-page bg-gray-100 min-h-screen">
-    <div id="safetyOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70">
-      <div class="bg-white rounded-2xl shadow-2xl p-10 max-w-lg mx-4 text-center">
-        <div class="text-6xl mb-4">⚠️</div>
-        <h2 class="text-2xl font-bold text-gray-800 mb-4">安全確認</h2>
-        <p class="text-lg text-gray-600 mb-2">請確認你已在安全環境，</p>
-        <p class="text-lg text-red-600 font-semibold mb-8">未處於直播畫面放送中</p>
-        <button onclick="confirmSafety()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-10 rounded-lg transition text-lg">
-          確認，顯示內容
-        </button>
+  <body class="app-ui config-page min-h-screen">
+    <div id="safetyOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-labelledby="safetyTitle">
+      <div class="config-safety-card">
+        <p class="config-eyebrow text-red-400">安全確認</p>
+        <h1 id="safetyTitle">請確認你已在安全環境</h1>
+        <p class="config-subtitle">未處於直播畫面放送中。設定頁包含通知與平台金鑰。</p>
+        <button type="button" onclick="confirmSafety()" class="config-primary-button w-full mt-6">確認，顯示內容</button>
       </div>
     </div>
+
     <div id="configContent" class="hidden">
-    <div class="bg-white shadow-lg rounded-lg p-8 w-full max-w-md md:max-w-3xl">
-      <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">
-        修改環境變數
-      </h2>
-
-      <form method="POST" action="/config" class="space-y-6">
-        <div>
-          <label for="BARK_API" class="block text-gray-700 mb-2"
-            >BARK_API:</label
-          >
-          <input
-            type="text"
-            name="BARK_API"
-            id="BARK_API"
-            value="${BARK_API}"
-            class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label for="SOCKET_API" class="block text-gray-700 mb-2"
-            >SOCKET_API:</label
-          >
-          <input
-            type="text"
-            name="SOCKET_API"
-            id="SOCKET_API"
-            value="${SOCKET_API}"
-            class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label for="SOCKET_APIS" class="block text-gray-700 mb-2"
-            >SOCKET_APIS（選填，額外端點；一行一筆，可加 ?filter=類別，如 tcp://192.168.0.5:9322?filter=chat,gift）:</label
-          >
-          <textarea
-            name="SOCKET_APIS"
-            id="SOCKET_APIS"
-            rows="3"
-            class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >${SOCKET_APIS}</textarea>
-        </div>
-
-        <div>
-          <label for="NTFY_API" class="block text-gray-700 mb-2"
-            >NTFY_API（ntfy.sh 主題名稱，或完整網址 https://ntfy.sh/你的主題）:</label
-          >
-          <input
-            type="text"
-            name="NTFY_API"
-            id="NTFY_API"
-            value="${NTFY_API}"
-            class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label for="BING_TRANSLATE_API_KEY" class="block text-gray-700 mb-2"
-            >BING_TRANSLATE_API_KEY (選填，Microsoft 翻譯備援):</label
-          >
-          <input
-            type="text"
-            name="BING_TRANSLATE_API_KEY"
-            id="BING_TRANSLATE_API_KEY"
-            value="${BING_TRANSLATE_API_KEY}"
-            class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <hr class="my-6 border-gray-300" />
-        <h3 class="text-xl font-bold text-gray-800 mb-4">Kick 設定</h3>
-
-        <div>
-          <label for="KICK_CLIENT_ID" class="block text-gray-700 mb-2"
-            >KICK_CLIENT_ID:</label
-          >
-          <input
-            type="text"
-            name="KICK_CLIENT_ID"
-            id="KICK_CLIENT_ID"
-            value="${KICK_CLIENT_ID}"
-            class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label for="KICK_CLIENT_SECRET" class="block text-gray-700 mb-2"
-            >KICK_CLIENT_SECRET:</label
-          >
-          <input
-            type="text"
-            name="KICK_CLIENT_SECRET"
-            id="KICK_CLIENT_SECRET"
-            value="${KICK_CLIENT_SECRET}"
-            class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label for="KICK_USER_NAME" class="block text-gray-700 mb-2"
-            >KICK_USER_NAME (頻道名稱):</label
-          >
-          <input
-            type="text"
-            name="KICK_USER_NAME"
-            id="KICK_USER_NAME"
-            value="${KICK_USER_NAME}"
-            class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div class="mt-4">
-          <a href="/kick-login"
-            class="inline-block w-full text-center bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition font-bold">
-            🔑 Kick OAuth 登入（取得頭像）
-          </a>
-        </div>
-
-        <hr class="my-6 border-gray-300" />
-        <h3 class="text-xl font-bold text-gray-800 mb-4">Twitch 自動剪輯 (AutoClip)</h3>
-        <p class="text-sm text-gray-500 mb-4">
-          以頻道自己的近期平均為基準，當觀眾數與聊天訊息速率相對平常出現高峰時自動建立剪輯。
-          以短期聊天突增為主，觀眾倍率最多採計 2 倍；需通過發言人數、留言量與持續時間檢查。舊設定會保留，建議窗口設為 0.5 分鐘、持續時間 0.167 分鐘。
-        </p>
-
-        <div>
-          <label for="AUTO_CLIP_ENABLED" class="block text-gray-700 mb-2"
-            >AUTO_CLIP_ENABLED (需同時啟用 Twitch 聊天室才生效):</label
-          >
-          <select
-            name="AUTO_CLIP_ENABLED"
-            id="AUTO_CLIP_ENABLED"
-            data-value="${AUTO_CLIP_ENABLED}"
-            class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="0">停用</option>
-            <option value="1">啟用</option>
-          </select>
-        </div>
-
-        <div class="mt-4"><label for="AUTO_CLIP_MODE">剪輯模式（預設只記錄觸發時機）</label><select name="AUTO_CLIP_MODE" id="AUTO_CLIP_MODE" data-value="${AUTO_CLIP_MODE}" class="w-full border rounded-lg p-3"><option value="shadow">影子模式：不建立剪輯</option><option value="live">正式模式：建立剪輯</option></select><p>熱度採用所有平台，Twitch 作為剪輯入口。各平台獨立基準，取合格平台最高分；每平台至少 3 位發言人、6 筆有效留言，暖機 3 分鐘。</p><p class="text-amber-600">模式變更需要重新啟動直播子程序（停止後再啟動）才會套用；儲存設定不會中斷目前直播。</p></div><div class="grid grid-cols-2 gap-4 mt-4">
-          <div>
-            <label for="AUTO_CLIP_W_VIEWERS" class="block text-gray-700 mb-2"
-              >W_VIEWERS 觀眾權重:</label
-            >
-            <input
-              type="number"
-              step="0.1"
-              name="AUTO_CLIP_W_VIEWERS"
-              id="AUTO_CLIP_W_VIEWERS"
-              value="${AUTO_CLIP_W_VIEWERS}"
-              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+      <div class="config-shell">
+        <aside class="config-sidebar">
+          <div class="config-brand">
+            <span class="config-brand-mark">TTW</span>
+            <div>
+              <strong>控制台</strong>
+              <span>設定</span>
+            </div>
           </div>
-          <div>
-            <label for="AUTO_CLIP_W_MSG" class="block text-gray-700 mb-2"
-              >W_MSG 訊息權重:</label
-            >
-            <input
-              type="number"
-              step="0.1"
-              name="AUTO_CLIP_W_MSG"
-              id="AUTO_CLIP_W_MSG"
-              value="${AUTO_CLIP_W_MSG}"
-              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label for="AUTO_CLIP_SCORE_THRESHOLD" class="block text-gray-700 mb-2"
-              >SCORE_THRESHOLD 觸發門檻:</label
-            >
-            <input
-              type="number"
-              step="0.1"
-              name="AUTO_CLIP_SCORE_THRESHOLD"
-              id="AUTO_CLIP_SCORE_THRESHOLD"
-              value="${AUTO_CLIP_SCORE_THRESHOLD}"
-              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label for="AUTO_CLIP_COOLDOWN_MIN" class="block text-gray-700 mb-2"
-              >COOLDOWN_MIN 冷卻(分鐘):</label
-            >
-            <input
-              type="number"
-              min="1"
-              name="AUTO_CLIP_COOLDOWN_MIN"
-              id="AUTO_CLIP_COOLDOWN_MIN"
-              value="${AUTO_CLIP_COOLDOWN_MIN}"
-              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label for="AUTO_CLIP_BASELINE_WINDOW_MIN" class="block text-gray-700 mb-2"
-              >BASELINE_WINDOW_MIN 基準統計窗口(分鐘):</label
-            >
-            <input
-              type="number"
-              min="5"
-              name="AUTO_CLIP_BASELINE_WINDOW_MIN"
-              id="AUTO_CLIP_BASELINE_WINDOW_MIN"
-              value="${AUTO_CLIP_BASELINE_WINDOW_MIN}"
-              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label for="AUTO_CLIP_RATE_WINDOW_MIN" class="block text-gray-700 mb-2"
-              >RATE_WINDOW_MIN 即時速率窗口(分鐘):</label
-            >
-            <input
-              type="number"
-              min="0.0834"
-              step="any"
-              name="AUTO_CLIP_RATE_WINDOW_MIN"
-              id="AUTO_CLIP_RATE_WINDOW_MIN"
-              value="${AUTO_CLIP_RATE_WINDOW_MIN}"
-              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label for="AUTO_CLIP_FLOOR_VIEWERS" class="block text-gray-700 mb-2"
-              >FLOOR_VIEWERS 最低觀眾(少於此不觸發):</label
-            >
-            <input
-              type="number"
-              min="1"
-              name="AUTO_CLIP_FLOOR_VIEWERS"
-              id="AUTO_CLIP_FLOOR_VIEWERS"
-              value="${AUTO_CLIP_FLOOR_VIEWERS}"
-              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label for="AUTO_CLIP_FLOOR_MSG_PER_MIN" class="block text-gray-700 mb-2"
-              >FLOOR_MSG_PER_MIN 最低訊息速率:</label
-            >
-            <input
-              type="number"
-              step="0.1"
-              name="AUTO_CLIP_FLOOR_MSG_PER_MIN"
-              id="AUTO_CLIP_FLOOR_MSG_PER_MIN"
-              value="${AUTO_CLIP_FLOOR_MSG_PER_MIN}"
-              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label for="AUTO_CLIP_SUSTAIN_MIN" class="block text-gray-700 mb-2"
-              >SUSTAIN_MIN 持續達標時間(分鐘，分數在門檻上維持此時間才觸發):</label
-            >
-            <input
-              type="number"
-              step="any"
-              min="0.01"
-              name="AUTO_CLIP_SUSTAIN_MIN"
-              id="AUTO_CLIP_SUSTAIN_MIN"
-              value="${AUTO_CLIP_SUSTAIN_MIN}"
-              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+          <nav class="config-nav" aria-label="設定分區">
+            <a href="#connect" data-section-link>連線與通知</a>
+            <a href="#kick" data-section-link>Kick</a>
+            <a href="#autoclip" data-section-link>Twitch 自動剪輯</a>
+            <a href="#tiktok" data-section-link>TikTok 聊天來源</a>
+            <a href="#autostop" data-section-link>自動停止</a>
+            <a href="#oauth" data-section-link>平台授權</a>
+          </nav>
+          <p class="config-sidebar-note">儲存後，部分設定需要重新啟動直播子程序才會套用。</p>
+        </aside>
 
+        <main class="config-main">
+          <header class="config-header">
+            <div>
+              <p class="config-eyebrow">TTW Chat Message Server</p>
+              <h1>設定</h1>
+              <p class="config-subtitle">連線、通知、剪輯與平台授權。修改後按底部「儲存設定」。</p>
+            </div>
+            <nav class="config-header-actions" aria-label="帳號操作">
+              <a href="/" class="config-secondary-button">回主頁</a>
+              <button type="button" onclick="logout()" class="config-secondary-button">登出</button>
+            </nav>
+          </header>
 
-        </div>
+          <nav class="config-mobile-nav" aria-label="設定分區">
+            <a href="#connect" data-section-link>連線與通知</a>
+            <a href="#kick" data-section-link>Kick</a>
+            <a href="#autoclip" data-section-link>自動剪輯</a>
+            <a href="#tiktok" data-section-link>TikTok</a>
+            <a href="#autostop" data-section-link>自動停止</a>
+            <a href="#oauth" data-section-link>平台授權</a>
+          </nav>
 
-        <div class="mt-4">
-          <label for="AUTO_CLIP_TITLE_PREFIX" class="block text-gray-700 mb-2"
-            >AUTO_CLIP_TITLE_PREFIX (剪輯標題前綴，留空則使用直播標題):</label
-          >
-          <input
-            type="text"
-            name="AUTO_CLIP_TITLE_PREFIX"
-            id="AUTO_CLIP_TITLE_PREFIX"
-            value="${AUTO_CLIP_TITLE_PREFIX}"
-            placeholder="例如：人氣高峰"
-            class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
+          <form method="POST" action="/config" id="configForm" class="config-form">
+            <section id="connect" class="config-card">
+              <header class="config-card-header">
+                <div>
+                  <p class="config-eyebrow">Connection</p>
+                  <h2>連線與通知</h2>
+                </div>
+                <p class="config-help">Socket 推送、Bark／ntfy 通知與翻譯備援。</p>
+              </header>
+              <div class="config-grid">
+                <div class="config-field">
+                  <label for="BARK_API">BARK_API</label>
+                  <input type="text" name="BARK_API" id="BARK_API" value="${BARK_API}" class="config-input" autocomplete="off" spellcheck="false" />
+                </div>
+                <div class="config-field">
+                  <label for="NTFY_API">NTFY_API</label>
+                  <input type="text" name="NTFY_API" id="NTFY_API" value="${NTFY_API}" class="config-input" autocomplete="off" spellcheck="false" />
+                  <p class="config-help">可填主題名稱或完整的 https://ntfy.sh/… 網址。</p>
+                </div>
+                <div class="config-field">
+                  <label for="SOCKET_API">SOCKET_API</label>
+                  <input type="text" name="SOCKET_API" id="SOCKET_API" value="${SOCKET_API}" class="config-input" autocomplete="off" spellcheck="false" />
+                </div>
+                <div class="config-field">
+                  <label for="SOCKET_APIS">SOCKET_APIS <span class="config-optional">選填</span></label>
+                  <textarea name="SOCKET_APIS" id="SOCKET_APIS" rows="3" class="config-input config-textarea" spellcheck="false">${SOCKET_APIS}</textarea>
+                  <p class="config-help">一行一筆；可加 <code>?filter=chat,gift</code>。</p>
+                </div>
+                <div class="config-field config-span-2">
+                  <label for="BING_TRANSLATE_API_KEY">BING_TRANSLATE_API_KEY <span class="config-optional">選填</span></label>
+                  <input type="text" name="BING_TRANSLATE_API_KEY" id="BING_TRANSLATE_API_KEY" value="${BING_TRANSLATE_API_KEY}" class="config-input" autocomplete="off" spellcheck="false" />
+                  <p class="config-help">Microsoft 翻譯備援；留空不啟用。</p>
+                </div>
+              </div>
+            </section>
 
-        <hr class="my-6 border-gray-300" />
-        <h3 class="text-xl font-bold text-gray-800 mb-4">TikTok 聊天來源</h3>
-        <p class="text-sm text-gray-500 mb-4">
-          auto：有 EulerStream／Cookie／Direct Signer 用原生，否則使用專用瀏覽器＋TikTokChat userscript。
-          browser 模式請在專用瀏覽器安裝一次 TikTokChat.user.js，不要再另開 Edge 掛同一支腳本；此模式沒有可靠的 TikTok 觀眾數與自動停止。
-        </p>
-        <div>
-          <label for="TIKTOK_CHAT_SOURCE" class="block text-gray-700 mb-2">TIKTOK_CHAT_SOURCE:</label>
-          <select
-            name="TIKTOK_CHAT_SOURCE"
-            id="TIKTOK_CHAT_SOURCE"
-            data-value="${TIKTOK_CHAT_SOURCE}"
-            class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="auto">自動（有簽名用原生，否則瀏覽器）</option>
-            <option value="native">原生（EulerStream／Cookie／Direct Signer）</option>
-            <option value="browser">專用瀏覽器＋userscript</option>
-          </select>
-        </div>
+            <section id="kick" class="config-card">
+              <header class="config-card-header">
+                <div>
+                  <p class="config-eyebrow">Kick</p>
+                  <h2>Kick 設定</h2>
+                </div>
+                <p class="config-help">聊天與訂閱事件需要 OAuth 應用程式。</p>
+              </header>
+              <div class="config-grid">
+                <div class="config-field">
+                  <label for="KICK_CLIENT_ID">KICK_CLIENT_ID</label>
+                  <input type="text" name="KICK_CLIENT_ID" id="KICK_CLIENT_ID" value="${KICK_CLIENT_ID}" class="config-input" autocomplete="off" spellcheck="false" />
+                </div>
+                <div class="config-field">
+                  <label for="KICK_CLIENT_SECRET">KICK_CLIENT_SECRET</label>
+                  <input type="password" name="KICK_CLIENT_SECRET" id="KICK_CLIENT_SECRET" value="${KICK_CLIENT_SECRET}" class="config-input" autocomplete="new-password" />
+                </div>
+                <div class="config-field">
+                  <label for="KICK_USER_NAME">KICK_USER_NAME</label>
+                  <input type="text" name="KICK_USER_NAME" id="KICK_USER_NAME" value="${KICK_USER_NAME}" class="config-input" autocomplete="off" spellcheck="false" />
+                  <p class="config-help">Kick 頻道名稱。</p>
+                </div>
+                <div class="config-field config-field-end">
+                  <a href="/kick-login" class="config-secondary-button">Kick OAuth 登入</a>
+                </div>
+              </div>
+            </section>
 
-        <hr class="my-6 border-gray-300" />
-        <h3 class="text-xl font-bold text-gray-800 mb-4">自動停止</h3>
-        <p class="text-sm text-gray-500 mb-4">
-          當所有支援結束偵測的平台（TikTok／Twitch）都結束後，延遲指定秒數自動停止聊天子程序。
-          同時啟用 Kick／Odysee／YouTube 時不會自動停止，因為目前沒有可靠的結束訊號。儲存後需重新啟動子程序。
-        </p>
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label for="AUTO_STOP_ENABLED" class="block text-gray-700 mb-2">AUTO_STOP_ENABLED:</label>
-            <select
-              name="AUTO_STOP_ENABLED"
-              id="AUTO_STOP_ENABLED"
-              data-value="${AUTO_STOP_ENABLED}"
-              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="0">停用</option>
-              <option value="1">啟用</option>
-            </select>
-          </div>
-          <div>
-            <label for="AUTO_STOP_GRACE_SEC" class="block text-gray-700 mb-2">AUTO_STOP_GRACE_SEC (秒):</label>
-            <input
-              type="number"
-              min="10"
-              max="600"
-              name="AUTO_STOP_GRACE_SEC"
-              id="AUTO_STOP_GRACE_SEC"
-              value="${AUTO_STOP_GRACE_SEC}"
-              class="w-full px-4 py-3 text-lg border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
+            <section id="autoclip" class="config-card">
+              <header class="config-card-header">
+                <div>
+                  <p class="config-eyebrow">AutoClip</p>
+                  <h2>Twitch 自動剪輯</h2>
+                </div>
+                <p class="config-help">以頻道近期平均為基準，觀眾與聊天速率同時出現高峰時建立剪輯。</p>
+              </header>
+              <div class="config-grid">
+                <div class="config-field">
+                  <label for="AUTO_CLIP_ENABLED">AUTO_CLIP_ENABLED</label>
+                  <select name="AUTO_CLIP_ENABLED" id="AUTO_CLIP_ENABLED" data-value="${AUTO_CLIP_ENABLED}" class="config-input">
+                    <option value="0">停用</option>
+                    <option value="1">啟用</option>
+                  </select>
+                  <p class="config-help">需同時啟用 Twitch 聊天室。</p>
+                </div>
+                <div class="config-field">
+                  <label for="AUTO_CLIP_MODE">AUTO_CLIP_MODE</label>
+                  <select name="AUTO_CLIP_MODE" id="AUTO_CLIP_MODE" data-value="${AUTO_CLIP_MODE}" class="config-input">
+                    <option value="shadow">影子模式：只記錄，不剪輯</option>
+                    <option value="live">正式模式：建立剪輯</option>
+                  </select>
+                  <p class="config-help text-amber-400">模式變更需停止後重新啟動子程序。</p>
+                </div>
+                <div class="config-field">
+                  <label for="AUTO_CLIP_W_VIEWERS">W_VIEWERS · 觀眾權重</label>
+                  <input type="number" step="0.1" name="AUTO_CLIP_W_VIEWERS" id="AUTO_CLIP_W_VIEWERS" value="${AUTO_CLIP_W_VIEWERS}" class="config-input" />
+                </div>
+                <div class="config-field">
+                  <label for="AUTO_CLIP_W_MSG">W_MSG · 訊息權重</label>
+                  <input type="number" step="0.1" name="AUTO_CLIP_W_MSG" id="AUTO_CLIP_W_MSG" value="${AUTO_CLIP_W_MSG}" class="config-input" />
+                </div>
+              </div>
 
-        <hr class="my-6 border-gray-300" />
-        <h3 class="text-xl font-bold text-gray-800 mb-4">平台 OAuth 重新授權</h3>
+              <details class="config-advanced">
+                <summary>進階門檻與冷卻</summary>
+                <div class="config-grid">
+                  <div class="config-field">
+                    <label for="AUTO_CLIP_SCORE_THRESHOLD">SCORE_THRESHOLD · 觸發門檻</label>
+                    <input type="number" step="0.1" name="AUTO_CLIP_SCORE_THRESHOLD" id="AUTO_CLIP_SCORE_THRESHOLD" value="${AUTO_CLIP_SCORE_THRESHOLD}" class="config-input" />
+                  </div>
+                  <div class="config-field">
+                    <label for="AUTO_CLIP_COOLDOWN_MIN">COOLDOWN_MIN · 冷卻（分鐘）</label>
+                    <input type="number" min="1" name="AUTO_CLIP_COOLDOWN_MIN" id="AUTO_CLIP_COOLDOWN_MIN" value="${AUTO_CLIP_COOLDOWN_MIN}" class="config-input" />
+                  </div>
+                  <div class="config-field">
+                    <label for="AUTO_CLIP_BASELINE_WINDOW_MIN">BASELINE_WINDOW_MIN · 基準窗口（分鐘）</label>
+                    <input type="number" min="5" name="AUTO_CLIP_BASELINE_WINDOW_MIN" id="AUTO_CLIP_BASELINE_WINDOW_MIN" value="${AUTO_CLIP_BASELINE_WINDOW_MIN}" class="config-input" />
+                  </div>
+                  <div class="config-field">
+                    <label for="AUTO_CLIP_RATE_WINDOW_MIN">RATE_WINDOW_MIN · 即時速率窗口（分鐘）</label>
+                    <input type="number" min="0.0834" step="any" name="AUTO_CLIP_RATE_WINDOW_MIN" id="AUTO_CLIP_RATE_WINDOW_MIN" value="${AUTO_CLIP_RATE_WINDOW_MIN}" class="config-input" />
+                  </div>
+                  <div class="config-field">
+                    <label for="AUTO_CLIP_FLOOR_VIEWERS">FLOOR_VIEWERS · 最低觀眾</label>
+                    <input type="number" min="1" name="AUTO_CLIP_FLOOR_VIEWERS" id="AUTO_CLIP_FLOOR_VIEWERS" value="${AUTO_CLIP_FLOOR_VIEWERS}" class="config-input" />
+                  </div>
+                  <div class="config-field">
+                    <label for="AUTO_CLIP_FLOOR_MSG_PER_MIN">FLOOR_MSG_PER_MIN · 最低訊息速率</label>
+                    <input type="number" step="0.1" name="AUTO_CLIP_FLOOR_MSG_PER_MIN" id="AUTO_CLIP_FLOOR_MSG_PER_MIN" value="${AUTO_CLIP_FLOOR_MSG_PER_MIN}" class="config-input" />
+                  </div>
+                  <div class="config-field">
+                    <label for="AUTO_CLIP_SUSTAIN_MIN">SUSTAIN_MIN · 持續達標（分鐘）</label>
+                    <input type="number" step="any" min="0.01" name="AUTO_CLIP_SUSTAIN_MIN" id="AUTO_CLIP_SUSTAIN_MIN" value="${AUTO_CLIP_SUSTAIN_MIN}" class="config-input" />
+                  </div>
+                  <div class="config-field">
+                    <label for="AUTO_CLIP_TITLE_PREFIX">AUTO_CLIP_TITLE_PREFIX <span class="config-optional">選填</span></label>
+                    <input type="text" name="AUTO_CLIP_TITLE_PREFIX" id="AUTO_CLIP_TITLE_PREFIX" value="${AUTO_CLIP_TITLE_PREFIX}" placeholder="例如：人氣高峰" class="config-input" />
+                    <p class="config-help">留空時使用直播標題。</p>
+                  </div>
+                </div>
+              </details>
+            </section>
 
-        <div class="mt-4">
-          <a href="/twitch-auth"
-            class="inline-block w-full text-center bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 transition font-bold">
-            🔄 Twitch OAuth 重新授權（補齊 scope）
-          </a>
-        </div>
+            <section id="tiktok" class="config-card">
+              <header class="config-card-header">
+                <div>
+                  <p class="config-eyebrow">TikTok</p>
+                  <h2>TikTok 聊天來源</h2>
+                </div>
+                <p class="config-help">沒有 EulerStream 時，可改用專用瀏覽器與 TikTokChat userscript。</p>
+              </header>
+              <div class="config-field">
+                <label for="TIKTOK_CHAT_SOURCE">TIKTOK_CHAT_SOURCE</label>
+                <select name="TIKTOK_CHAT_SOURCE" id="TIKTOK_CHAT_SOURCE" data-value="${TIKTOK_CHAT_SOURCE}" class="config-input">
+                  <option value="auto">自動：有簽名用原生，否則用瀏覽器</option>
+                  <option value="native">原生：EulerStream／Cookie／Direct Signer</option>
+                  <option value="browser">專用瀏覽器＋userscript</option>
+                </select>
+                <p class="config-help">browser 模式請在專用瀏覽器安裝一次 <code>TikTokChat.user.js</code>，不要再另開 Edge 掛同一支腳本。此模式沒有可靠的觀眾數與 AutoStop。</p>
+              </div>
+            </section>
 
-        <div class="mt-4">
-          <a href="/youtube-auth"
-            class="inline-block w-full text-center bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition font-bold">
-            🎬 Youtube OAuth 重新授權
-          </a>
-        </div>
+            <section id="autostop" class="config-card">
+              <header class="config-card-header">
+                <div>
+                  <p class="config-eyebrow">Runtime</p>
+                  <h2>自動停止</h2>
+                </div>
+                <p class="config-help">TikTok 與 Twitch 都觀測到結束後，延遲指定秒數停止子程序。</p>
+              </header>
+              <div class="config-grid">
+                <div class="config-field">
+                  <label for="AUTO_STOP_ENABLED">AUTO_STOP_ENABLED</label>
+                  <select name="AUTO_STOP_ENABLED" id="AUTO_STOP_ENABLED" data-value="${AUTO_STOP_ENABLED}" class="config-input">
+                    <option value="0">停用</option>
+                    <option value="1">啟用</option>
+                  </select>
+                </div>
+                <div class="config-field">
+                  <label for="AUTO_STOP_GRACE_SEC">AUTO_STOP_GRACE_SEC · 秒</label>
+                  <input type="number" min="10" max="600" name="AUTO_STOP_GRACE_SEC" id="AUTO_STOP_GRACE_SEC" value="${AUTO_STOP_GRACE_SEC}" class="config-input" />
+                </div>
+              </div>
+              <p class="config-help">同時啟用 Kick／Odysee／YouTube，或 TikTok 使用 browser 模式時，不會自動停止。</p>
+            </section>
 
-        <div class="flex space-x-4 mt-4">
-          <button
-            type="submit"
-            class="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition"
-          >
-            儲存
-          </button>
-          <button
-            type="button"
-            onclick="logout()"
-            class="flex-1 bg-gray-400 text-white py-2 rounded-lg hover:bg-gray-500 transition"
-          >
-            登出
-          </button>
-          <button
-            type="button"
-            onclick="back_home()"
-            class="flex-1 bg-gray-400 text-white py-2 rounded-lg hover:bg-gray-500 transition"
-          >
-            回主頁
-          </button>
-        </div>
-      </form>
-    </div>
+            <section id="oauth" class="config-card">
+              <header class="config-card-header">
+                <div>
+                  <p class="config-eyebrow">OAuth</p>
+                  <h2>平台授權</h2>
+                </div>
+                <p class="config-help">重新授權可補齊 scope 或更新失效的 token。</p>
+              </header>
+              <div class="config-auth-actions">
+                <a href="/twitch-auth" class="config-secondary-button">重新授權 Twitch</a>
+                <a href="/youtube-auth" class="config-secondary-button">重新授權 YouTube</a>
+              </div>
+            </section>
+
+            <div class="config-save-bar">
+              <div class="config-save-status">
+                <span id="saveState" class="config-save-state" role="status" aria-live="polite">尚未修改</span>
+                <span class="config-help">部分設定需要重新啟動直播子程序。</span>
+              </div>
+              <div class="config-save-actions">
+                <button type="submit" class="config-primary-button">儲存設定</button>
+              </div>
+            </div>
+          </form>
+        </main>
+      </div>
     </div>
 
     <script>
-        function confirmSafety() {
-            document.getElementById('safetyOverlay').classList.add('hidden');
-            document.getElementById('configContent').classList.remove('hidden');
+      function confirmSafety() {
+        document.getElementById('safetyOverlay').classList.add('hidden');
+        document.getElementById('configContent').classList.remove('hidden');
+        window.scrollTo(0, 0);
+      }
+
+      document.addEventListener('DOMContentLoaded', () => {
+        const mode = document.getElementById('AUTO_CLIP_MODE');
+        if (mode) mode.value = mode.dataset.value || 'shadow';
+        for (const [id, fallback] of [
+          ['AUTO_CLIP_ENABLED', '0'],
+          ['AUTO_STOP_ENABLED', '0'],
+          ['TIKTOK_CHAT_SOURCE', 'auto']
+        ]) {
+          const element = document.getElementById(id);
+          if (element) element.value = element.dataset.value || fallback;
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            const mode = document.getElementById('AUTO_CLIP_MODE');
-            mode.value = mode.dataset.value;
-            const sel = document.getElementById('AUTO_CLIP_ENABLED');
-            if (sel) sel.value = sel.dataset.value || '0';
-            const autoStop = document.getElementById('AUTO_STOP_ENABLED');
-            if (autoStop) autoStop.value = autoStop.dataset.value || '0';
-            const tiktokSource = document.getElementById('TIKTOK_CHAT_SOURCE');
-            if (tiktokSource) tiktokSource.value = tiktokSource.dataset.value || 'auto';
+        const form = document.getElementById('configForm');
+        const saveState = document.getElementById('saveState');
+        let dirty = false;
+        let submitting = false;
+        const markDirty = () => {
+          if (dirty) return;
+          dirty = true;
+          saveState.textContent = '有未儲存變更';
+          saveState.classList.add('is-dirty');
+        };
+        form?.addEventListener('input', markDirty);
+        form?.addEventListener('change', markDirty);
+        form?.addEventListener('submit', () => {
+          submitting = true;
+          dirty = false;
+          saveState.textContent = '儲存中…';
+          saveState.classList.remove('is-dirty');
+          saveState.classList.add('is-saving');
+        });
+        window.addEventListener('beforeunload', event => {
+          if (!dirty || submitting) return;
+          event.preventDefault();
+          event.returnValue = '';
         });
 
-        async function logout() {
-            try {
-            await fetch("/logout", { method: "GET", credentials: "include" });
-            // 清除後端 Cookie 後，導回登入頁
-            window.location.href = "/config";
-            } catch (err) {
-            console.error(err);
-            alert("登出失敗");
-            }
+        const links = [...document.querySelectorAll('[data-section-link]')];
+        const sections = [...document.querySelectorAll('.config-card[id]')];
+        const setActive = id => {
+          for (const link of links) {
+            const active = link.getAttribute('href') === '#' + id;
+            link.classList.toggle('is-active', active);
+            if (active) link.setAttribute('aria-current', 'location');
+            else link.removeAttribute('aria-current');
+          }
+        };
+        if ('IntersectionObserver' in window) {
+          const observer = new IntersectionObserver(entries => {
+            const visible = entries.filter(entry => entry.isIntersecting)
+              .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+            if (visible?.target?.id) setActive(visible.target.id);
+          }, { rootMargin: '-20% 0px -65% 0px', threshold: 0 });
+          sections.forEach(section => observer.observe(section));
+          if (sections[0]) setActive(sections[0].id);
         }
+      });
 
-        async function back_home() {
-            window.location.href = "/";
+      async function logout() {
+        try {
+          await fetch('/logout', { method: 'GET', credentials: 'include' });
+          window.location.href = '/config';
+        } catch (err) {
+          console.error(err);
+          alert('登出失敗');
         }
-
+      }
     </script>
   </body>
 </html>

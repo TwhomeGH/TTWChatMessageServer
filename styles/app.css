@@ -13,9 +13,110 @@
 .page-header h1 { flex-shrink: 0; }
 .app-ui .flex > *, .app-ui .grid > * { min-width: 0; }
 .app-ui [role='dialog'], .app-ui #safetyOverlay > div { max-height: calc(100dvh - 32px); overflow-y: auto; }
+/* Settings and login share the dark operational theme. */
+.config-page,
+.login-page {
+  color-scheme: dark;
+  --config-bg: #070b12;
+  --config-surface: #0f172a;
+  --config-surface-2: #111c31;
+  --config-border: #243147;
+  --config-text: #e5edf8;
+  --config-muted: #94a3b8;
+  --config-accent: #3b82f6;
+  background: var(--config-bg);
+  color: var(--config-text);
+}
 .config-page { display: block; padding: clamp(12px, 3vw, 32px); }
-.config-page #configContent { width: 100%; max-width: 1000px; margin: auto; }
-.config-page #configContent > div { max-width: none; padding: clamp(16px, 3vw, 32px); }
+.config-page #configContent { width: 100%; max-width: 1180px; margin: auto; }
+.config-shell { display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: 24px; align-items: start; }
+.config-sidebar { position: sticky; top: 20px; display: grid; gap: 18px; }
+.config-brand { display: flex; gap: 10px; align-items: center; padding: 2px 4px; }
+.config-brand-mark { display: inline-flex; width: 38px; height: 38px; align-items: center; justify-content: center; border-radius: 12px; background: #1d4ed8; color: #eff6ff; font-size: 12px; font-weight: 800; letter-spacing: .06em; }
+.config-brand strong { display: block; color: #f8fafc; font-size: 14px; }
+.config-brand span { display: block; color: var(--config-muted); font-size: 12px; }
+.config-nav { display: grid; gap: 4px; }
+.config-nav a { display: flex; align-items: center; min-height: 38px; padding: 8px 10px; border: 1px solid transparent; border-radius: 9px; color: var(--config-muted); font-size: 13px; text-decoration: none; }
+.config-nav a:hover { border-color: var(--config-border); background: var(--config-surface-2); color: #e2e8f0; }
+.config-nav a.is-active { border-color: #1d4ed8; background: #172554; color: #dbeafe; }
+.config-sidebar-note { margin: 0; padding: 12px; border: 1px solid var(--config-border); border-radius: 10px; color: var(--config-muted); font-size: 12px; line-height: 1.6; }
+.config-main { min-width: 0; }
+.config-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+.config-header h1 { margin: 2px 0 4px; color: #f8fafc; font-size: clamp(24px, 4vw, 32px); line-height: 1.2; }
+.config-eyebrow { margin: 0; color: #60a5fa; font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.config-subtitle { margin: 0; max-width: 62ch; color: var(--config-muted); font-size: 13px; line-height: 1.6; }
+.config-header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.config-mobile-nav { display: none; gap: 6px; overflow-x: auto; margin-bottom: 14px; padding-bottom: 2px; }
+.config-mobile-nav a { flex: none; padding: 7px 10px; border: 1px solid var(--config-border); border-radius: 999px; color: var(--config-muted); font-size: 12px; text-decoration: none; }
+.config-mobile-nav a.is-active { border-color: #1d4ed8; background: #172554; color: #dbeafe; }
+.config-card { margin-bottom: 16px; padding: clamp(16px, 2.4vw, 24px); border: 1px solid var(--config-border); border-radius: 16px; background: var(--config-surface); scroll-margin-top: 18px; }
+.config-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+.config-card h2 { margin: 2px 0 0; color: #f8fafc; font-size: 18px; }
+.config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+.config-span-2 { grid-column: span 2; }
+.config-field { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.config-field label { color: #cbd5e1; font-size: 12px; font-weight: 650; letter-spacing: .01em; }
+.config-field-end { align-content: end; }
+.config-optional { color: #64748b; font-size: 10px; font-weight: 500; }
+.config-help { margin: 0; color: var(--config-muted); font-size: 11px; line-height: 1.55; }
+.config-card-header > .config-help { max-width: 34ch; text-align: right; }
+.config-input { width: 100%; min-height: 40px; padding: 9px 11px; border: 1px solid var(--config-border); border-radius: 8px; background: #0b1220; color: var(--config-text); font: inherit; font-size: 13px; }
+.config-input:hover { border-color: #334155; }
+.config-input:focus, .config-input:focus-visible { border-color: var(--config-accent); outline: none; box-shadow: 0 0 0 3px rgb(59 130 246 / .18); }
+.config-input::placeholder { color: #64748b; }
+.config-select { appearance: auto; }
+.config-textarea { min-height: 84px; resize: vertical; }
+.config-input option { background: #0f172a; color: var(--config-text); }
+.config-input code, .config-help code { padding: 1px 4px; border: 1px solid var(--config-border); border-radius: 4px; background: #0b1220; color: #bfdbfe; font-size: 10px; }
+.config-advanced { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--config-border); }
+.config-advanced summary { color: #93c5fd; cursor: pointer; font-size: 12px; font-weight: 650; }
+.config-advanced summary:hover { color: #bfdbfe; }
+.config-advanced .config-grid { margin-top: 14px; }
+.config-auth-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.config-primary-button, .config-secondary-button { display: inline-flex; align-items: center; justify-content: center; min-height: 38px; padding: 8px 14px; border: 1px solid transparent; border-radius: 8px; font: inherit; font-size: 12px; font-weight: 650; text-decoration: none; cursor: pointer; transition: background-color .15s ease, border-color .15s ease; }
+.config-primary-button { background: #2563eb; color: #fff; }
+.config-primary-button:hover { background: #1d4ed8; }
+.config-secondary-button { border-color: var(--config-border); background: var(--config-surface-2); color: #dbe4f0; }
+.config-secondary-button:hover { border-color: #475569; background: #1e293b; }
+.config-save-bar { position: sticky; bottom: 10px; z-index: 20; display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 4px; padding: 12px 14px; border: 1px solid var(--config-border); border-radius: 14px; background: rgb(15 23 42 / .94); box-shadow: 0 12px 32px rgb(0 0 0 / .35); backdrop-filter: blur(12px); }
+.config-save-status { display: grid; gap: 2px; }
+.config-save-state { color: #cbd5e1; font-size: 12px; font-weight: 650; }
+.config-save-state.is-dirty { color: #fbbf24; }
+.config-save-state.is-saving { color: #93c5fd; }
+.config-save-actions { display: flex; flex: none; gap: 8px; }
+.config-safety-card { width: min(100%, 460px); padding: 28px; border: 1px solid var(--config-border); border-radius: 18px; background: var(--config-surface); box-shadow: 0 24px 80px rgb(0 0 0 / .5); }
+.config-safety-card h1 { margin: 4px 0 8px; color: #f8fafc; font-size: 22px; line-height: 1.25; }
+.config-safety-card .config-subtitle { font-size: 13px; }
+.login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; background: radial-gradient(circle at 50% 0%, #13213b 0, var(--config-bg) 48%); }
+.login-card { width: 100%; max-width: 380px; padding: 30px; border: 1px solid var(--config-border); border-radius: 18px; background: var(--config-surface); box-shadow: 0 24px 80px rgb(0 0 0 / .45); }
+.login-card h1 { margin: 0 0 4px; color: #f8fafc; font-size: 22px; }
+.login-hint { margin: 0 0 20px; color: var(--config-muted); font-size: 12px; line-height: 1.6; }
+.login-field { display: grid; gap: 6px; }
+.login-field label { color: #cbd5e1; font-size: 12px; font-weight: 650; }
+.login-error { min-height: 18px; margin: 12px 0 0; color: #f87171; font-size: 12px; }
+@media (max-width: 960px) {
+  .config-shell { grid-template-columns: 1fr; gap: 0; }
+  .config-sidebar { display: none; }
+  .config-mobile-nav { display: flex; }
+  .config-header { margin-bottom: 14px; }
+  .config-card { scroll-margin-top: 58px; }
+}
+@media (max-width: 640px) {
+  .config-page { padding: 12px; }
+  .config-header { flex-direction: column; }
+  .config-header-actions { width: 100%; }
+  .config-header-actions > * { flex: 1; }
+  .config-grid { grid-template-columns: 1fr; }
+  .config-span-2 { grid-column: span 1; }
+  .config-card-header { flex-direction: column; gap: 6px; }
+  .config-card-header > .config-help { max-width: none; text-align: left; }
+  .config-save-bar { flex-direction: row; align-items: center; bottom: 0; padding: 10px 12px; border-radius: 12px 12px 0 0; }
+  .config-save-status .config-help { display: none; }
+  .config-save-actions { flex: none; }
+  .config-save-actions .config-primary-button { width: auto; }
+  .login-page { padding: 16px; }
+  .login-card { padding: 24px; }
+}
 .console-panel { height: calc(100dvh - 32px); min-height: 360px; padding: clamp(12px, 2vw, 24px); }
 .console-panel pre { min-height: 0; overflow-wrap: anywhere; }
 .app-ui pre { tab-size: 4; }

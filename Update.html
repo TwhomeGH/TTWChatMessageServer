@@ -2,28 +2,19 @@
 <html lang="zh-TW">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>更新完成</title>
-    <link rel="stylesheet" href="/assets/app.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>更新完成 · TTW Chat Message Server</title>
+    <link rel="stylesheet" href="/assets/app.css" />
   </head>
-  <body class="app-ui bg-gray-100 flex items-center justify-center min-h-screen">
-    <div class="bg-white shadow-lg rounded-lg p-8 w-full max-w-md text-center">
-      <h2 class="text-2xl font-bold text-gray-800 mb-6">更新完成！</h2>
-
-      <div class="space-y-4">
-        <a
-          href="/config"
-          class="block bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition"
-        >
-          回到設定頁面
-        </a>
-        <a
-          href="/"
-          class="block bg-gray-400 text-white py-2 rounded-lg hover:bg-gray-500 transition"
-        >
-          回到主頁
-        </a>
+  <body class="app-ui login-page">
+    <main class="login-card text-center">
+      <p class="config-eyebrow">Completed</p>
+      <h1>更新完成</h1>
+      <p class="login-hint">設定已儲存。部分服務設定可能需要重新啟動直播子程序。</p>
+      <div class="grid gap-3 mt-6">
+        <a href="/config" class="config-primary-button w-full">回到設定頁面</a>
+        <a href="/" class="config-secondary-button w-full">回到主頁</a>
       </div>
-    </div>
+    </main>
   </body>
 </html>

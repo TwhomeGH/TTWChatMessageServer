@@ -1,68 +1,76 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-TW">
-<head>
-  <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>登入頁面</title>
-  <link rel="stylesheet" href="/assets/app.css">
-</head>
-<body class="app-ui bg-gray-100 flex items-center justify-center min-h-screen">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>登入 · TTW Chat Message Server</title>
+    <link rel="stylesheet" href="/assets/app.css" />
+  </head>
+  <body class="app-ui login-page">
+    <main class="login-card">
+      <p class="config-eyebrow">TTW Chat Message Server</p>
+      <h1>系統登入</h1>
+      <p class="login-hint">輸入控制台密碼。登入狀態會保留在 HttpOnly cookie。</p>
 
-  <div class="bg-white shadow-lg rounded-lg p-8 w-full max-w-sm">
-    <h2 class="text-2xl font-bold text-center text-gray-800 mb-6">系統登入</h2>
+      <form id="loginForm" class="space-y-4">
+        <div class="login-field">
+          <label for="password">密碼</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            placeholder="請輸入密碼"
+            autocomplete="current-password"
+            autofocus
+            class="config-input"
+          />
+        </div>
+        <button type="submit" class="config-primary-button w-full">登入</button>
+      </form>
 
-    <div class="space-y-4">
-      <input 
-        type="password" 
-        id="password" 
-        placeholder="請輸入密碼" 
-        class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-      >
-      <button 
-        onclick="login()" 
-        class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">
-        登入
-      </button>
-    </div>
+      <p id="error" class="login-error" role="alert"></p>
+    </main>
 
-    <p id="error" class="text-red-500 text-center mt-4"></p>
-  </div>
+    <script>
+      async function login() {
+        const password = document.getElementById('password').value.trim();
+        const errorBox = document.getElementById('error');
+        errorBox.textContent = '';
 
-  <script>
-    async function login() {
-      const password = document.getElementById('password').value.trim();
-      const errorBox = document.getElementById('error');
-      errorBox.textContent = '';
-
-      if (!password) {
-        errorBox.textContent = '請輸入密碼';
-        return;
-      }
-
-      try {
-        const res = await fetch('/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password }),
-          credentials: 'include'
-        });
-
-        if (!res.ok) {
-          errorBox.textContent = '登入失敗，密碼錯誤';
+        if (!password) {
+          errorBox.textContent = '請輸入密碼';
           return;
         }
 
-        const data = await res.json();
-        if (data.success) {
-          window.location.href = typeof REDIRECT_AFTER_LOGIN !== 'undefined' ? REDIRECT_AFTER_LOGIN : '/config';
-        } else {
-          errorBox.textContent = '登入失敗';
+        try {
+          const res = await fetch('/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password }),
+            credentials: 'include'
+          });
+
+          if (!res.ok) {
+            errorBox.textContent = '登入失敗，密碼錯誤';
+            return;
+          }
+
+          const data = await res.json();
+          if (data.success) {
+            window.location.href = typeof REDIRECT_AFTER_LOGIN !== 'undefined' ? REDIRECT_AFTER_LOGIN : '/config';
+          } else {
+            errorBox.textContent = '登入失敗';
+          }
+        } catch (err) {
+          console.error(err);
+          errorBox.textContent = '登入過程發生錯誤';
         }
-      } catch (err) {
-        console.error(err);
-        errorBox.textContent = '登入過程發生錯誤';
       }
-    }
-  </script>
-</body>
+
+      document.getElementById('loginForm').addEventListener('submit', event => {
+        event.preventDefault();
+        login();
+      });
+    </script>
+  </body>
 </html>

@@ -1,5 +1,32 @@
 # ChangeHistory
 
+## 2026.10.23 13:10 設定與登入頁深色優先重排
+
+**類型**: 介面 · **檔案**: `config.html`、`login.html`、`Update.html`、`styles/app.css`、`Docs/WEB_UI.md`
+
+### 問題 - 設定／登入是亮色，其他營運頁是深色；設定頁仍是沒有導覽的長表單
+
+設定頁與登入頁使用 `bg-gray-100`／`bg-white`，但 monitor、traffic、autoclip、audience 都是深色。設定頁雖然已置中，仍把通知、Kick、剪輯、TikTok、自動停止與 OAuth 串成一大張表單，沒有分區導覽與儲存回饋。
+
+### 根因 - 各頁硬編碼顏色，沒有共用主題；設定頁沒有資訊架構
+
+### 修改
+
+- 設定頁改為深色分區卡片：連線與通知、Kick、Twitch 自動剪輯、TikTok、自動停止、平台授權。
+- 桌面使用 sticky 側邊導覽，手機使用水平分區膠囊；捲動時同步目前區段。
+- 剪輯進階門檻收進 `<details>`，常用欄位留在上層。
+- 底部 sticky 儲存列顯示「尚未修改／有未儲存變更／儲存中」，離頁前提示未儲存。
+- 登入頁改為深色卡片、表單 Enter 送出、`role="alert"` 錯誤與 autofocus。
+- 更新完成頁改用同一組深色結果卡與主要／次要動作。
+- 設定/登入使用頁面區域 CSS 變數；目前是深色優先，**沒有**淺／深切換。未來若要切換需全站 token 與 `data-theme`。
+- 既有欄位 ID／name／placeholder 全部保留，Server 的 `/config` POST 不需改。
+
+### 驗證
+
+`npm run build:css`、`check:css`、`lint`、`test:ci` 全過；以本機靜態預覽檢查 1280 與 390 寬度、登入頁、未儲存狀態與分區導覽。
+
+---
+
 ## 2026.10.23 12:10 TikTok 無簽名時的專用瀏覽器聊天來源
 
 **類型**: 功能 · **檔案**: `ScriptLib/tiktok/source.cjs`、`ScriptLib/browser/controller.cjs`、`BrowserRoutes.cjs`、`Server.js`、`TikTok.js`、`config.html`、`Test/tiktok_source.test.cjs`、`Test/browser_session.test.mjs`、`Docs/BROWSER.md`
