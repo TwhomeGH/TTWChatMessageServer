@@ -1,5 +1,30 @@
 # ChangeHistory
 
+## 2026.10.23 16:10 更新間接依賴安全修補
+
+**類型**: 安全 · **檔案**: `package-lock.json`、`assets/app.css.build.json`
+
+### 問題 - Dependabot 回報 follow-redirects 1.16.0 的 sensitiveHeaders 正規表示式缺陷
+
+`follow-redirects` 1.16.0 的 `sensitiveHeaders` 會把自訂敏感 header 名稱串成正規表示式，但只跳脫部分元字元，漏掉 `^`、`|`、`[`、`{`、`}`。header 名稱可合法包含 `^` 與 `|`，因此 `X-Api^Key`、`X-Token|Secret` 這類名稱在跨來源重新導向時不會被剝除，憑證可能被送到攻擊者；在 `beforeRedirect` 才加入的名稱也不會生效。內建的 Authorization／Proxy-Authorization／Cookie 不受影響。
+
+### 根因 - 上游 1.16.0 的過濾器快照與不完整跳脫
+
+### 修改
+
+- 將 `follow-redirects` 從 1.16.0 更新到 1.16.1（axios 的 `^1.16.0` 範圍可直接相容；`tiktok-live-connector` 維持 2.4.0）。
+- 一併由 `npm audit fix` 更新兩個 transitive 高風險項目：
+  - `http-cache-semantics` 4.2.0 → 4.3.0（經 got／cacheable-request）
+  - `source-map-js` 1.2.1 → 1.2.2（Tailwind 建置鏈）
+- `npm audit --omit=dev` 為 0 vulnerabilities；未改動直接依賴版本。
+- 本專案目前沒有使用 `follow-redirects` 的 `sensitiveHeaders` 自訂選項，內建敏感 header 清單不受此缺陷影響；仍更新以消除供應鏈風險。
+
+### 驗證
+
+`npm audit --omit=dev`、`npm run test:ci`、`check:css` 指紋檢查全過。
+
+---
+
 ## 2026.10.23 15:40 運行狀態頁卡片、來源模式與 toast
 
 **類型**: 介面 · **檔案**: `runtime.html`、`assets/runtime-start.js`、`RuntimeRoutes.cjs`、`styles/app.css`、`lang/zh-TW.json`、`lang/en.json`、`Test/runtime_ui.cjs`、`Docs/RUNTIME.md`
