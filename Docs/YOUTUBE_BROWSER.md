@@ -13,6 +13,7 @@
 - 在頁面的 `/live_chat` iframe（沒有 iframe 時在主頁面）注入 relay，監聽
   `yt-live-chat-text-message-renderer`；訊息透過 Puppeteer binding 回到 Node，
   不依賴 `GM_xmlhttpRequest` 或瀏覽器 CORS。
+- 這裡的 browser fallback 是**程式自己的 headless profile ＋內建 relay**，不是你的日常 Edge，也不需要 Tampermonkey。若要在自己的 Edge 手動掛 userscript，屬於尚未提供的 `manual` 模式；同時開啟會重複送出。
 - 瀏覽器訊息和原生 API 走同一條管線：主播歸屬、過濾、表情、翻譯、
   AutoClip、人流統計與 `sendChat`。
 - 觀眾數：有 API Key 時由 `videos.list` 每 60 秒更新；完全沒有 API Key 時不提供可靠的

@@ -34,10 +34,11 @@ Windows profile 固定保存在 LOCALAPPDATA/TTWChatMessageServer/browser-profil
 | --- | --- |
 | `auto` | 有 `SIGN_API_KEY`／`TIKTOK_COOKIES`／`SESSION_ID`／`DIRECT_SIGNER_ENABLED=1` 時用原生；否則用專用瀏覽器 |
 | `native` | 強制原生 TikTok 連線，需要可用的簽名設定 |
-| `browser` | 不啟動原生 TikTok 聊天；由專用瀏覽器開啟 `tiktok.com/@handle/live`，TikTokChat userscript 送到 `/chat` |
+| `browser` | 不啟動原生 TikTok 聊天；由**程式的專用瀏覽器**（不是日常 Edge）開啟 `tiktok.com/@handle/live`，TikTokChat userscript 送到 `/chat` |
+| `manual` | 尚未提供。若你自己在 Edge 掛 userscript，程式無法偵測；這不是 `browser`，也請不要同時開啟 `browser`，否則會重複送出 |
 
-- `browser` 模式不需要 EulerStream；請在**同一個專用瀏覽器 profile** 安裝一次 Tampermonkey 與 `UserScript/TikTokChat.user.js`。
-- runtime 啟動 TikTok 且來源為 browser 時，主服務會在專用瀏覽器開啟（或重用）直播分頁；不要另外開 Edge 掛同一支腳本，否則會有兩份來源。
+- `browser` 模式不需要 EulerStream；請在**同一個專用瀏覽器 profile** 安裝一次 Tampermonkey 與 `UserScript/TikTokChat.user.js`。這個 profile 由程式管理，**不是**你的日常 Edge。
+- runtime 啟動 TikTok 且來源為 browser 時，主服務會在專用瀏覽器開啟（或重用）直播分頁；不要另外開 Edge 掛同一支腳本，否則會有兩份來源。自己開 Edge 屬於尚未提供的 `manual` 模式。
 - 此模式沒有可靠的 TikTok 觀眾數，AutoStop 也會停用（瀏覽器端沒有可信的直播結束訊號）。
 - 聊天訊息仍會經 `/chat` 進入 TikTok 子程序、過濾、翻譯、AutoClip 與 socket。
 

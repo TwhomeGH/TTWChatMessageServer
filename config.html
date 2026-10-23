@@ -209,11 +209,11 @@
               <div class="config-field">
                 <label for="TIKTOK_CHAT_SOURCE">TIKTOK_CHAT_SOURCE</label>
                 <select name="TIKTOK_CHAT_SOURCE" id="TIKTOK_CHAT_SOURCE" data-value="${TIKTOK_CHAT_SOURCE}" class="config-input">
-                  <option value="auto">自動：有簽名用原生，否則用瀏覽器</option>
+                  <option value="auto">自動：有簽名用原生，否則用程式專用瀏覽器</option>
                   <option value="native">原生：EulerStream／Cookie／Direct Signer</option>
-                  <option value="browser">專用瀏覽器＋userscript</option>
+                  <option value="browser">程式專用瀏覽器（不是日常 Edge）＋userscript</option>
                 </select>
-                <p class="config-help">browser 模式請在專用瀏覽器安裝一次 <code>TikTokChat.user.js</code>，不要再另開 Edge 掛同一支腳本。此模式沒有可靠的觀眾數與 AutoStop。</p>
+                <p class="config-help"><strong class="text-gray-200">browser</strong> 是程式管理的專用 profile，不是你的日常 Edge；第一次請在該 profile 安裝一次 <code>TikTokChat.user.js</code>，程式會幫你開直播頁。若你要自己用 Edge 掛腳本，那屬於 <strong class="text-gray-200">manual</strong>（目前尚未提供）；兩者同時開會重複送出訊息。browser 模式沒有可靠的觀眾數與 AutoStop。</p>
               </div>
             </section>
 

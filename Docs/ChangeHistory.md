@@ -1,5 +1,28 @@
 # ChangeHistory
 
+## 2026.10.23 14:30 釐清 browser 與 manual 聊天來源
+
+**類型**: 文件／文案 · **檔案**: `config.html`、`Docs/BROWSER.md`、`Docs/YOUTUBE_BROWSER.md`
+
+### 問題 - `browser` 被誤解成「自己開 Edge 掛 userscript」
+
+TikTok 的 `browser` 其實是程式管理的專用 profile；YouTube 的 browser fallback 則是程式自己的 headless 瀏覽器＋內建 relay。兩者都不是日常 Edge，但原本文案沒有把 browser／manual 的界線寫清楚。
+
+### 根因 - 同一個詞在不同平台代表不同托管方式，且沒有定義 manual
+
+### 修改
+
+- 設定頁 TikTok 選項與說明改為：「程式專用瀏覽器（不是日常 Edge）」；browser 仍要在該專用 profile 安裝 userscript。
+- 明確標示 `manual` 是「自己用 Edge／Tampermonkey 掛腳本」，目前尚未提供；手動 Edge 與 browser 同時開會重複。
+- BROWSER 文件新增 manual 列與 browser／manual 差異。
+- YOUTUBE_BROWSER 文件標明 browser fallback 是程式 headless＋內建 relay，不需要 userscript。
+
+### 驗證
+
+`build:css`、`check:css`、`lint`、`test:ci` 全過；未改變實際來源選擇行為。
+
+---
+
 ## 2026.10.23 14:10 設定／登入 UI 冒煙測試
 
 **類型**: 測試 · **檔案**: `Test/config_login_ui.cjs`、`Docs/WEB_UI.md`、`Docs/TEST_FILES_REFERENCE.md`
