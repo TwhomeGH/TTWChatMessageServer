@@ -2,6 +2,22 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { options, startURL } = require('./ScriptLib/runtime/options.cjs');
 const { readJson, sendJson } = require('./ScriptLib/emoji/http.cjs');
+const { tiktokChatSource } = require('./ScriptLib/tiktok/source.cjs');
+const { youtubeChatSource } = require('./ScriptLib/youtube/source.cjs');
+
+/** 運行頁顯示的聊天來源；auto 會依目前簽名／認證設定解析。 */
+function runtimeSources() {
+    const tiktokConfigured = ['auto', 'native', 'browser', 'manual'].includes(process.env.TIKTOK_CHAT_SOURCE) ? process.env.TIKTOK_CHAT_SOURCE : 'auto';
+    const youtubeConfigured = youtubeChatSource();
+    return {
+        tiktok: { configured: tiktokConfigured, effective: tiktokChatSource() },
+        youtube: {
+            configured: youtubeConfigured,
+            effective: youtubeConfigured,
+            browserFallback: process.env.YOUTUBE_BROWSER_FALLBACK !== '0'
+        }
+    };
+}
 /** 共用啟停結果與運行狀態頁，頁面不直接插入 query 或日誌。 */
 function sendRuntimePage(res) {
     fs.readFile(path.join(__dirname, 'runtime.html'), (error, html) => {
@@ -26,8 +42,10 @@ function serveRuntime(req, res, runtime, start) {
     if (req.method !== 'GET') { res.writeHead(405); res.end(); return true; }
     if (pathname === '/runtime') sendRuntimePage(res);
     else {
+        const snapshot = runtime.snapshot();
+        snapshot.sources = runtimeSources();
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-        res.end(JSON.stringify(runtime.snapshot()));
+        res.end(JSON.stringify(snapshot));
     }
     return true;
 }

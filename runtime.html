@@ -1,28 +1,197 @@
 <!doctype html>
-<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title data-i18n="runtime.title">運行狀態</title><link rel="stylesheet" href="/assets/app.css"></head>
-<body class="app-ui bg-gray-900 text-gray-200 min-h-screen p-4"><main class="max-w-4xl mx-auto">
-<nav class="flex flex-wrap gap-4 mb-6"><a href="/" data-i18n="common.logs">主控台／日誌</a><a href="/browser" data-i18n="common.browser">專用瀏覽器</a><label style="display:inline-flex;gap:8px;align-items:center"><span data-i18n="common.language">語言</span><select data-language-select style="background:#374151;color:#fff;border-radius:6px;padding:6px"><option value="zh-TW">繁體中文</option></select></label></nav>
-<h1 class="text-2xl font-bold mb-4" data-i18n="runtime.title">運行狀態</h1>
-<section class="bg-gray-800 rounded-lg p-6"><h2 id="state" class="text-xl font-bold" role="status" data-i18n="runtime.checking">正在確認程序狀態…</h2><p id="description" class="my-4" data-i18n="runtime.loading">正在讀取主服務資料</p>
-<dl class="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><dt data-i18n="runtime.process">程序</dt><dd>TikTok.js</dd></div><div><dt>PID</dt><dd id="pid">—</dd></div><div><dt data-i18n="runtime.platforms">啟用平台</dt><dd id="platforms">—</dd></div><div><dt data-i18n="runtime.uptime">運行時間</dt><dd id="uptime">—</dd></div><div><dt data-i18n="runtime.started">開始時間</dt><dd id="started">—</dd></div><div><dt data-i18n="runtime.exit">退出結果</dt><dd id="exit">—</dd></div><div><dt data-i18n="runtime.cpu">CPU（單核心基準）</dt><dd id="cpu">—</dd></div><div><dt data-i18n="runtime.ram">RAM（RSS）</dt><dd id="ram">—</dd></div></dl><p class="text-sm text-gray-400 mt-4" data-i18n="runtime.resourcesNote">每 2 秒取樣聊天子程序；不含主服務或瀏覽器。CPU 100% 代表一個核心，逾 10 秒未回報顯示 —。</p>
-<p id="error" class="text-red-400 mt-4" role="alert"></p><p id="updated" class="text-gray-400 text-sm mt-4"></p>
-<div class="flex flex-wrap gap-4 mt-6"><a href="/config" class="bg-blue-600 rounded-lg px-4 py-2" data-i18n="runtime.start">開啟設定</a><form action="/close" method="post"><button id="stop" disabled class="bg-red-700 rounded-lg px-4 py-2 disabled:opacity-50" data-i18n="runtime.stop">停止程序</button></form><button id="refresh" class="bg-gray-700 rounded-lg px-4 py-2" data-i18n="common.check">重新檢查</button></div></section>
-<section class="bg-gray-800 rounded-lg p-6 mt-4"><h2 class="text-xl font-bold" data-i18n="runtime.options">啟動選項</h2><p class="my-4" data-i18n="runtime.optionsNote">勾選平台或功能；帳號留空沿用現有設定。選擇只儲存在此瀏覽器。</p><fieldset id="launch-options" disabled><div class="grid grid-cols-1 sm:grid-cols-2 gap-6"><section><h3 class="font-bold mb-3" data-i18n="runtime.platformGroup">聊天平台</h3><div id="launch-platforms" class="grid gap-3"></div></section><section><h3 class="font-bold mb-3" data-i18n="runtime.transportGroup">收發與通知</h3><p class="text-sm text-gray-400 mb-3" data-i18n="runtime.transportNote">Socket：訊息轉接；Bark：推播通知。</p><div id="launch-transport" class="grid gap-3"></div></section></div></fieldset><div class="flex flex-wrap gap-4 mt-4"><button id="launch" disabled class="bg-blue-600 rounded-lg px-4 py-2 disabled:opacity-50" data-i18n="runtime.launch">啟動服務</button><button id="reset-options" disabled class="bg-gray-700 rounded-lg px-4 py-2" data-i18n="runtime.reset">恢復預設</button></div><p id="launch-error" role="alert" class="text-red-400 mt-4"></p><p id="active-features" class="mt-4"></p></section>
-<p class="text-gray-400 mt-4" data-i18n="runtime.note">此處顯示程序生命週期。各平台登入、直播連線與收訊情況請查看日誌；瀏覽器狀態請到專用瀏覽器頁。</p></main>
-<script src="/assets/i18n.js"></script>
-<script src="/assets/runtime-start.js"></script>
-<script>
-const i18n = window.TTWI18n;
-const t = (...args) => i18n.t(...args);
-// 啟停結果仍留在本頁；改成唯讀網址，避免重新整理重送 /open 或 /close。
-if (location.pathname !== '/runtime') history.replaceState(null, '', '/runtime');
-const stateLabels = {"stopped":"已停止","starting":"啟動中","running":"程序執行中","stopping":"停止中","failed":"啟動失敗／異常退出"};
-const stateDescriptions = {"stopped":"目前沒有執行中的聊天程序，可至啟動設定選擇平台。","starting":"主服務已接受啟動要求，正在等待程序建立。","running":"程序已建立；平台連線及初始化仍以日誌為準。","stopping":"已送出停止要求，正在等待程序完成清理。","failed":"程序未能正常啟動或已異常退出，請查看日誌確認原因。"};
-let loading = false;
-async function refresh() {
-    if (loading) return;
-    loading = true;
-    try {
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title data-i18n="runtime.title">運行狀態</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body class="app-ui runtime-page bg-gray-900 text-gray-200 min-h-screen p-4">
+  <main class="max-w-5xl mx-auto">
+    <header class="page-header mb-5">
+      <div>
+        <p class="text-xs uppercase tracking-widest text-blue-300">Runtime</p>
+        <h1 class="text-2xl font-bold" data-i18n="runtime.title">運行狀態</h1>
+        <p class="text-sm text-gray-400 mt-1" data-i18n="runtime.subtitle">程序生命週期、聊天來源與啟動選項。</p>
+      </div>
+      <nav class="flex flex-wrap items-center gap-3 text-sm" aria-label="頁面導覽">
+        <a href="/" data-i18n="common.logs">主控台／日誌</a>
+        <a href="/browser" data-i18n="common.browser">專用瀏覽器</a>
+        <a href="/config" data-i18n="common.config">啟動設定</a>
+        <label class="inline-flex items-center gap-2">
+          <span data-i18n="common.language">語言</span>
+          <select data-language-select class="bg-gray-800 text-gray-100 border border-gray-700 rounded-md px-2 py-1">
+            <option value="zh-TW">繁體中文</option>
+          </select>
+        </label>
+      </nav>
+    </header>
+
+    <section class="runtime-card" aria-labelledby="state">
+      <div class="runtime-card-head">
+        <div class="flex items-start gap-3 min-w-0">
+          <span id="stateDot" class="runtime-state-dot" aria-hidden="true"></span>
+          <div class="min-w-0">
+            <h2 id="state" class="text-xl font-bold" role="status" data-i18n="runtime.checking">正在確認程序狀態…</h2>
+            <p id="description" class="text-sm text-gray-400 mt-1" data-i18n="runtime.loading">正在讀取主服務資料</p>
+          </div>
+        </div>
+        <div class="runtime-actions">
+          <a href="/config" class="runtime-button runtime-button-secondary" data-i18n="runtime.start">開啟設定</a>
+          <form id="stopForm" action="/close" method="post">
+            <button id="stop" disabled class="runtime-button runtime-button-danger" data-i18n="runtime.stop">停止程序</button>
+          </form>
+          <button id="refresh" type="button" class="runtime-button runtime-button-secondary" data-i18n="common.check">重新檢查</button>
+        </div>
+      </div>
+
+      <div class="runtime-metric-grid">
+        <div class="runtime-metric"><span data-i18n="runtime.process">程序</span><strong>TikTok.js</strong></div>
+        <div class="runtime-metric"><span>PID</span><strong id="pid">—</strong></div>
+        <div class="runtime-metric"><span data-i18n="runtime.platforms">啟用平台</span><strong id="platforms">—</strong></div>
+        <div class="runtime-metric"><span data-i18n="runtime.uptime">運行時間</span><strong id="uptime">—</strong></div>
+        <div class="runtime-metric"><span data-i18n="runtime.started">開始時間</span><strong id="started">—</strong></div>
+        <div class="runtime-metric"><span data-i18n="runtime.exit">退出結果</span><strong id="exit">—</strong></div>
+        <div class="runtime-metric"><span data-i18n="runtime.cpu">CPU（單核心基準）</span><strong id="cpu">—</strong></div>
+        <div class="runtime-metric"><span data-i18n="runtime.ram">RAM（RSS）</span><strong id="ram">—</strong></div>
+      </div>
+      <p class="text-xs text-gray-500 mt-3" data-i18n="runtime.resourcesNote">每 2 秒取樣聊天子程序；不含主服務或瀏覽器。CPU 100% 代表一個核心，逾 10 秒未回報顯示 —。</p>
+      <p id="error" class="text-red-400 text-sm mt-3" role="alert"></p>
+      <p id="updated" class="text-gray-400 text-xs mt-3"></p>
+    </section>
+
+    <section class="runtime-card" aria-labelledby="sourcesTitle">
+      <div class="runtime-card-head">
+        <div>
+          <p class="text-xs uppercase tracking-widest text-blue-300">Sources</p>
+          <h2 id="sourcesTitle" class="text-xl font-bold" data-i18n="runtime.sources">聊天來源</h2>
+          <p class="text-sm text-gray-400 mt-1" data-i18n="runtime.sourcesNote">顯示設定與目前預期來源；變更後請重新啟動子程序。</p>
+        </div>
+        <a href="/config" class="runtime-button runtime-button-secondary" data-i18n="runtime.start">開啟設定</a>
+      </div>
+      <div class="runtime-source-grid">
+        <article class="runtime-source">
+          <div class="flex items-center justify-between gap-3">
+            <strong>TikTok</strong>
+            <span id="mode-tiktok-badge" class="runtime-mode-badge">—</span>
+          </div>
+          <p id="mode-tiktok" class="runtime-source-title">—</p>
+          <p id="mode-tiktok-detail" class="runtime-source-detail">—</p>
+        </article>
+        <article class="runtime-source">
+          <div class="flex items-center justify-between gap-3">
+            <strong>YouTube</strong>
+            <span id="mode-youtube-badge" class="runtime-mode-badge">—</span>
+          </div>
+          <p id="mode-youtube" class="runtime-source-title">—</p>
+          <p id="mode-youtube-detail" class="runtime-source-detail">—</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="runtime-card" aria-labelledby="launchTitle">
+      <div class="runtime-card-head">
+        <div>
+          <p class="text-xs uppercase tracking-widest text-blue-300">Launch</p>
+          <h2 id="launchTitle" class="text-xl font-bold" data-i18n="runtime.options">啟動選項</h2>
+          <p class="text-sm text-gray-400 mt-1" data-i18n="runtime.optionsNote">勾選平台或功能；帳號留空沿用現有設定。選擇只儲存在此瀏覽器。</p>
+        </div>
+      </div>
+      <fieldset id="launch-options" disabled>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <section>
+            <h3 class="font-bold mb-3" data-i18n="runtime.platformGroup">聊天平台</h3>
+            <div id="launch-platforms" class="grid gap-3"></div>
+          </section>
+          <section>
+            <h3 class="font-bold mb-3" data-i18n="runtime.transportGroup">收發與通知</h3>
+            <p class="text-sm text-gray-400 mb-3" data-i18n="runtime.transportNote">Socket：訊息轉接；Bark：推播通知。</p>
+            <div id="launch-transport" class="grid gap-3"></div>
+          </section>
+        </div>
+      </fieldset>
+      <div class="flex flex-wrap gap-3 mt-4">
+        <button id="launch" disabled class="runtime-button runtime-button-primary" data-i18n="runtime.launch">啟動服務</button>
+        <button id="reset-options" disabled class="runtime-button runtime-button-secondary" data-i18n="runtime.reset">恢復預設</button>
+      </div>
+      <p id="launch-error" role="alert" class="text-red-400 text-sm mt-3"></p>
+      <p id="active-features" class="text-sm text-gray-300 mt-3"></p>
+    </section>
+
+    <p class="text-gray-500 text-sm mt-4" data-i18n="runtime.note">此處顯示程序生命週期。各平台登入、直播連線與收訊情況請查看日誌；瀏覽器狀態請到專用瀏覽器頁。</p>
+  </main>
+
+  <div id="toast-region" class="runtime-toast-region" role="status" aria-live="polite" aria-atomic="false"></div>
+
+  <script src="/assets/i18n.js"></script>
+  <script src="/assets/runtime-start.js"></script>
+  <script>
+    const i18n = window.TTWI18n;
+    const t = (...args) => i18n.t(...args);
+    // 啟停結果仍留在本頁；改成唯讀網址，避免重新整理重送 /open 或 /close。
+    if (location.pathname !== '/runtime') history.replaceState(null, '', '/runtime');
+    const stateLabels = {stopped:'已停止', starting:'啟動中', running:'程序執行中', stopping:'停止中', failed:'啟動失敗／異常退出'};
+    const stateDescriptions = {stopped:'目前沒有執行中的聊天程序，可至啟動設定選擇平台。', starting:'主服務已接受啟動要求，正在等待程序建立。', running:'程序已建立；平台連線及初始化仍以日誌為準。', stopping:'已送出停止要求，正在等待程序完成清理。', failed:'程序未能正常啟動或已異常退出，請查看日誌確認原因。'};
+    let loading = false;
+    let lastError = '';
+    let lastFetchError = '';
+
+    function showToast(message, tone = 'info') {
+      if (!message) return;
+      const region = document.getElementById('toast-region');
+      if (!region) return;
+      const item = document.createElement('div');
+      item.className = 'runtime-toast runtime-toast-' + tone;
+      item.textContent = message;
+      region.appendChild(item);
+      while (region.children.length > 3) region.firstElementChild.remove();
+      setTimeout(() => item.remove(), tone === 'error' ? 6000 : 4000);
+    }
+    window.runtimeToast = showToast;
+
+    function modeLabel(mode) {
+      return t('runtime.mode.' + mode, {}, mode);
+    }
+
+    function sourceDetail(source) {
+      if (source === 'native') return t('runtime.source.nativeDetail', {}, '原生 API／連線；需要有效認證。');
+      if (source === 'browser') return t('runtime.source.browserDetail', {}, '程式管理的專用瀏覽器；不是日常 Edge。');
+      if (source === 'manual') return t('runtime.source.manualDetail', {}, '只收你自己 Edge／Tampermonkey 的 userscript；程式不開來源。');
+      return t('runtime.source.autoDetail', {}, '自動：有認證用原生，否則用程式瀏覽器。');
+    }
+
+    function renderSource(prefix, data, state, platform) {
+      const badge = document.getElementById('mode-' + prefix + '-badge');
+      const title = document.getElementById('mode-' + prefix);
+      const detail = document.getElementById('mode-' + prefix + '-detail');
+      if (!badge || !title || !detail || !data) return;
+      const effective = data.effective || data.configured || 'auto';
+      const isAuto = data.configured === 'auto';
+      if (isAuto && effective !== 'auto') {
+        title.textContent = t('runtime.mode.autoResolved', {mode: modeLabel(effective)}, '自動 → {mode}');
+        detail.textContent = t('runtime.source.configured', {mode: data.configured}, '設定：{mode}') + ' · ' + sourceDetail(effective);
+      } else if (isAuto) {
+        title.textContent = modeLabel('auto');
+        detail.textContent = t('runtime.source.configured', {mode: data.configured}, '設定：{mode}') + ' · ' + sourceDetail('auto');
+      } else {
+        title.textContent = modeLabel(effective);
+        detail.textContent = t('runtime.source.configured', {mode: data.configured}, '設定：{mode}') + ' · ' + sourceDetail(effective);
+      }
+      badge.textContent = modeLabel(effective);
+      badge.dataset.mode = effective;
+      const active = Array.isArray(state?.platforms) && state.platforms.map(p => String(p).toLowerCase()).includes(platform);
+      if (state && ['running','starting'].includes(state.state) && !active) {
+        detail.textContent += ' · ' + t('runtime.source.notEnabled', {}, '本次執行未啟用');
+      }
+      if (prefix === 'youtube' && effective === 'auto' && data.browserFallback === false) {
+        detail.textContent += ' · ' + t('runtime.source.fallbackDisabled', {}, '瀏覽器 fallback 已停用');
+      }
+    }
+
+    async function refresh(manual = false) {
+      if (loading) return;
+      loading = true;
+      try {
         const response = await fetch('/api/runtime', {cache:'no-store'});
         if (!response.ok) throw Error(t('runtime.queryError', {status:response.status}, '狀態查詢失敗：{status}'));
         const state = await response.json();
@@ -32,6 +201,7 @@ async function refresh() {
         document.getElementById('ram').textContent = resources ? (resources.rssBytes / 1048576).toFixed(1) + ' MiB' : '—';
         document.getElementById('state').textContent = t('runtime.state.' + state.state, {}, stateLabels[state.state] || '未知狀態');
         document.getElementById('description').textContent = state.stopDelayed ? t('runtime.delayed', {}, '停止等待已超過 15 秒，程序尚未退出，請查看日誌。') : t('runtime.description.' + state.state, {}, t('common.unknown'));
+        document.getElementById('stateDot').dataset.state = state.state || 'stopped';
         document.getElementById('pid').textContent = state.pid ?? '—';
         document.getElementById('platforms').textContent = new Intl.ListFormat(i18n.language).format(state.platforms) || t('common.unspecified', {}, '未指定');
         document.getElementById('uptime').textContent = t('common.seconds', {seconds:Math.floor(state.uptimeMs / 1000)}, '{seconds} 秒');
@@ -40,16 +210,46 @@ async function refresh() {
         document.getElementById('error').textContent = state.error || '';
         document.getElementById('stop').disabled = !['running','starting'].includes(state.state);
         document.getElementById('updated').textContent = t('common.updated', {time:new Date().toLocaleTimeString(i18n.language)}, '更新於 {time}');
-    } catch (error) {
+        if (state.sources) {
+          renderSource('tiktok', state.sources.tiktok, state, 'tiktok');
+          renderSource('youtube', state.sources.youtube, state, 'youtube');
+        }
+        lastFetchError = '';
+        if (state.error && state.error !== lastError) {
+          showToast(state.error, 'error');
+          lastError = state.error;
+        } else if (!state.error) {
+          lastError = '';
+        }
+        if (manual) showToast(t('runtime.toast.refreshed', {}, '狀態已更新'), 'success');
+      } catch (error) {
         window.runtimeStart.update(null);
         document.getElementById('cpu').textContent = document.getElementById('ram').textContent = '—';
         document.getElementById('state').textContent = t('runtime.unavailable', {}, '無法確認運行狀態');
         document.getElementById('error').textContent = t('runtime.serviceError', {message:error.message}, '{message}，主服務可能已停止。');
         document.getElementById('stop').disabled = true;
-    } finally { loading = false; }
-}
-document.getElementById('refresh').onclick = refresh;
-document.querySelector('form').onsubmit = () => { document.getElementById('stop').disabled = true; };
-document.addEventListener('languagechange', refresh);
-i18n.ready.then(() => { setInterval(refresh, 2000); refresh(); });
-</script></body></html>
+        if (lastFetchError !== error.message) {
+          showToast(document.getElementById('error').textContent, 'error');
+          lastFetchError = error.message;
+        }
+      } finally { loading = false; }
+    }
+    window.runtimeRefresh = refresh;
+    document.getElementById('refresh').onclick = () => refresh(true);
+    document.getElementById('stopForm').onsubmit = async event => {
+      event.preventDefault();
+      document.getElementById('stop').disabled = true;
+      showToast(t('runtime.toast.stopRequested', {}, '已送出停止要求'), 'info');
+      try {
+        const response = await fetch('/close', { method: 'POST', credentials: 'include' });
+        if (!response.ok) throw Error(t('runtime.queryError', {status:response.status}, '狀態查詢失敗：{status}'));
+        await refresh(false);
+      } catch (error) {
+        showToast(error.message, 'error');
+      }
+    };
+    document.addEventListener('languagechange', () => refresh());
+    i18n.ready.then(() => { setInterval(refresh, 2000); refresh(); });
+  </script>
+</body>
+</html>

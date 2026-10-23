@@ -8,10 +8,14 @@
 程序執行中只表示作業系統已建立程序，登入與收訊需查看日誌。停止先送 EXIT 讓子程序優雅收尾；超過 15 秒仍未退出會強制終止（SIGKILL），子程序本身也在 8 秒後硬性退出。這是為了避免子程序卡在收尾（網路或 Puppeteer）而永遠停在停止中、讓之後的啟動永遠回 409。強制終止會寫入日誌。
 重複停止不重送 EXIT，啟動已執行程序也只回傳狀態頁。停止中不可直接再次啟動。/close 與關機走同一段有界停止邏輯。
 
+頁面使用狀態卡、指標格線、聊天來源卡與啟動選項卡；桌面寬度較寬，手機改成單欄。`GET /api/runtime` 除程序摘要外會附上 `sources`（TikTok／YouTube 的 configured／effective 模式），不包含環境變數值、認證或完整啟動 query。TikTok `auto` 會依簽名設定解析成 native／browser；YouTube `auto` 表示依 OAuth 決定，頁面以「自動」顯示。
+
+重新檢查、啟動、停止與恢復預設會顯示右下角 toast；手動重新整理顯示「狀態已更新」，停止不再直接換頁，而是送出 `POST /close` 後留在原頁更新狀態。狀態查詢失敗只提示一次，避免自動輪詢洗版。
+
 /runtime 與 /api/runtime 沿用原啟停／日誌端點的公開存取範圍，只回傳程序摘要，不提供環境變數、完整啟動 query 或日誌。
 原 /status 純文字及 /status/stream 日誌介面保持相容；需要純文字的外部工具可改查 /status。
 
-驗證：node --test Test/runtime_state.test.cjs；測試使用假程序，不啟動直播或通知。
+驗證：node --test Test/runtime_state.test.cjs；測試使用假程序，不啟動直播或通知。`node Test/runtime_ui.cjs` 使用 mock API 檢查來源卡、toast、390px 寬度並輸出 `output/playwright/runtime-desktop.png`、`runtime-mobile.png`（需 Chrome／Edge，不在 `test:ci`）。
 
 ## 可視化啟動
 

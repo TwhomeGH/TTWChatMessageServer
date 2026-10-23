@@ -3,6 +3,7 @@
     const launch = document.getElementById('launch'), reset = document.getElementById('reset-options');
     const error = document.getElementById('launch-error'), key = 'ttw.runtime.options';
     let options = [], state = null, busy = false;
+    function toast(message, tone = 'info') { window.runtimeToast?.(message, tone); }
     /** 僅讀寫白名單欄位；儲存不可用時仍能在當頁啟動。 */
     function values() {
         const result = {};
@@ -31,13 +32,15 @@
             let saved = {}; try { saved = JSON.parse(localStorage.getItem(key)) || {}; } catch (err) { console.warn('無法讀取啟動選項:', err?.message || err); }
             for (const option of options) {
                 const row = document.createElement('div'), label = document.createElement('label');
+                row.className = 'runtime-option';
+                label.className = 'runtime-option-label';
                 const input = document.createElement('input'); input.type = 'checkbox'; input.id = 'option-' + option.key;
                 input.checked = typeof saved[option.key] === 'boolean' ? saved[option.key] : option.default;
-                label.append(input, document.createTextNode(' ' + option.label)); row.append(label);
+                label.append(input, document.createTextNode(option.label)); row.append(label);
                 if (option.account) {
                     const account = document.createElement('input'); account.type = 'text'; account.id = 'option-' + option.account;
                     account.maxLength = 200; account.setAttribute('aria-label', option.label + ' account / channel');
-                    account.className = 'bg-gray-700 rounded p-2 w-full mt-2';
+                    account.className = 'runtime-account';
                     account.value = typeof saved[option.account] === 'string' ? saved[option.account].slice(0, 200) : '';
                     account.hidden = !input.checked;
                     input.addEventListener('change', () => { account.hidden = !input.checked; }); row.append(account);
@@ -45,7 +48,10 @@
                 document.getElementById('launch-' + option.group).append(row);
             }
             update(state);
-        } catch (failure) { error.textContent = failure.message; }
+        } catch (failure) {
+            error.textContent = failure.message;
+            toast(failure.message, 'error');
+        }
     }
     box.addEventListener('input', () => { save(); update(state); });
     reset.onclick = () => {
@@ -54,6 +60,7 @@
             if (option.account) { const input = document.getElementById('option-' + option.account); input.value = ''; input.hidden = !option.default; }
         }
         save(); update(state);
+        toast(i18n.t('runtime.toast.reset', {}, '已恢復預設啟動選項'), 'info');
     };
     launch.onclick = async () => {
         if (launch.disabled) return;
@@ -63,8 +70,12 @@
             const result = await response.json();
             if (!response.ok) throw Error(i18n.t('error.' + result.code, {}, result.error));
             state = result;
-        } catch (failure) { error.textContent = failure.message; }
-        finally { busy = false; update(state); document.getElementById('refresh').click(); }
+            toast(i18n.t('runtime.toast.started', {}, '已送出啟動要求'), 'success');
+        } catch (failure) {
+            error.textContent = failure.message;
+            toast(i18n.t('runtime.toast.startFailed', {message: failure.message}, '啟動失敗：{message}'), 'error');
+        }
+        finally { busy = false; update(state); window.runtimeRefresh?.(false); }
     };
     window.runtimeStart = { update };
     document.addEventListener('languagechange', () => update(state));

@@ -1,5 +1,29 @@
 # ChangeHistory
 
+## 2026.10.23 15:40 運行狀態頁卡片、來源模式與 toast
+
+**類型**: 介面 · **檔案**: `runtime.html`、`assets/runtime-start.js`、`RuntimeRoutes.cjs`、`styles/app.css`、`lang/zh-TW.json`、`lang/en.json`、`Test/runtime_ui.cjs`、`Docs/RUNTIME.md`
+
+### 問題 - 運行頁只有一張狀態卡與原始清單，看不到目前聊天來源，啟停也沒有明確回饋
+
+原本 `/runtime` 只有 `<dl>` 指標與基本按鈕，沒有顯示 TikTok／YouTube 的 auto／native／browser／manual，也沒有 toast；停止是直接 POST 換頁。
+
+### 根因 - 頁面只渲染生命週期，沒有把來源設定與操作結果做成可讀狀態
+
+### 修改
+
+- 狀態卡改為指標格線，加入 state dot；聊天來源卡顯示 TikTok／YouTube 的 configured／effective 與 badge。
+- `/api/runtime` 增加 `sources`（不包含憑證）；TikTok auto 會解析成 native／browser，YouTube auto 顯示自動。
+- 啟動選項改為卡片列，checkbox 與帳號欄位在深色介面下可讀；執行中仍鎖定。
+- 新增右下角 toast：手動重新檢查、啟動、停止、恢復預設與錯誤；停止改成留在原頁 POST `/close` 後刷新。
+- 加入 zh-TW／en 文案與 `Test/runtime_ui.cjs`，輸出桌面／手機截圖。
+
+### 驗證
+
+`node Test/runtime_ui.cjs`、`build:css`、`check:css`、`lint`、`test:ci` 全過。
+
+---
+
 ## 2026.10.23 15:10 補上 TikTok／YouTube manual 聊天來源
 
 **類型**: 功能 · **檔案**: `ScriptLib/tiktok/source.cjs`、`ScriptLib/youtube/source.cjs`、`ScriptLib/youtube/chat.mjs`、`TikTok.js`、`Server.js`、`config.html`、`.env.example`、`Test/tiktok_source.test.cjs`、`Test/youtube_source.test.cjs`、`Test/config_login_ui.cjs`、`Docs/BROWSER.md`、`Docs/YOUTUBE_BROWSER.md`
