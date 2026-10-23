@@ -1,5 +1,30 @@
 # ChangeHistory
 
+## 2026.10.23 12:10 TikTok 無簽名時的專用瀏覽器聊天來源
+
+**類型**: 功能 · **檔案**: `ScriptLib/tiktok/source.cjs`、`ScriptLib/browser/controller.cjs`、`BrowserRoutes.cjs`、`Server.js`、`TikTok.js`、`config.html`、`Test/tiktok_source.test.cjs`、`Test/browser_session.test.mjs`、`Docs/BROWSER.md`
+
+### 問題 - 沒有 EulerStream 時沒有原生 TikTok 聊天，使用者只能自己開 Edge 掛 userscript
+
+原生 TikTok 需要簽名；沒有 `SIGN_API_KEY`／Cookie／Direct Signer 時連線失敗。手動再開一個瀏覽器掛 userscript 又可能和程式形成兩份來源。
+
+### 根因 - 聊天來源只有 native，專用瀏覽器只負責簽名，沒有聊天模式
+
+### 修改
+
+- 新增 `TIKTOK_CHAT_SOURCE=auto|native|browser`：
+  - `auto` 依簽名設定選擇；`browser` 強制專用瀏覽器；`native` 維持原本。
+- 主服務在 TikTok browser 模式啟動時，透過既有專用瀏覽器控制器開啟或重用 `tiktok.com/@handle/live`；避免多個直播分頁。
+- `TikTok.js` 在 browser 模式略過原生 TikTok 連線；userscript 的 `/chat` 訊息仍進入現有子程序、過濾、翻譯、AutoClip 與 socket。
+- 設定頁新增來源選單，並提示 browser 模式要安裝一次 `TikTokChat.user.js`、不要另開 Edge。
+- browser 模式停用 AutoStop（沒有可信的結束訊號），觀眾數不保證。
+
+### 驗證
+
+`Test/tiktok_source.test.cjs` 與 `Test/browser_session.test.mjs` 的 TikTok URL／來源選擇測試；`test:ci` 與 lint 全過。
+
+---
+
 ## 2026.10.23 11:10 控制台登入 token 日誌、cookie 與持久化
 
 **類型**: 修正／安全 · **檔案**: `Server.js`、`.env.example`

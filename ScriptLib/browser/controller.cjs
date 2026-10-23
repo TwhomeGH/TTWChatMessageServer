@@ -32,12 +32,40 @@ function launchArgs(config) {
     ];
 }
 
+/** 把 @handle 或 TikTok 頻道 URL 轉成直播頁；只接受 tiktok.com。 */
+function tiktokLiveUrl(input) {
+    const raw = String(input || '').trim();
+    if (!raw) throw Object.assign(new Error('缺少 TikTok 帳號'), { code: 'TIKTOK_HANDLE_REQUIRED' });
+    if (/^(https?:)?\/\//i.test(raw) || /^(www\.)?tiktok\.com\//i.test(raw)) {
+        const url = new URL(raw.startsWith('http') ? raw : `https://${raw}`);
+        if (!/(^|\.)tiktok\.com$/i.test(url.hostname)) {
+            throw Object.assign(new Error('只允許開啟 tiktok.com 頁面'), { code: 'TIKTOK_URL_INVALID' });
+        }
+        if (!/\/live\/?$/.test(url.pathname)) {
+            url.pathname = url.pathname.replace(/\/+$/, '') + '/live';
+        }
+        return url.toString();
+    }
+    const handle = raw.replace(/^@/, '').replace(/\/+$/, '');
+    if (!handle) throw Object.assign(new Error('缺少 TikTok 帳號'), { code: 'TIKTOK_HANDLE_REQUIRED' });
+    return `https://www.tiktok.com/@${encodeURIComponent(handle)}/live`;
+}
+
+function isTikTokLivePage(value) {
+    try {
+        const url = new URL(value);
+        return /(^|\.)tiktok\.com$/i.test(url.hostname) && /\/live\/?$/.test(url.pathname);
+    } catch {
+        return false;
+    }
+}
+
 /**
- * 建立對本機 CDP 的操作封裝（status／start／show）；每個操作都有逾時，
+ * 建立對本機 CDP 的操作封裝（status／start／show／openTikTokLive）；每個操作都有逾時，
  * 且錯誤訊息不含 Cookie 或完整頁面 URL。
  * @param {ReturnType<typeof browserConfig>} [config] 由 browserConfig() 產生。
  * @param {Object} [deps] 測試用注入（fetch、spawn、findBrowser、connect）。
- * @returns {{status: Function, start: Function, show: Function}}
+ * @returns {{status: Function, start: Function, show: Function, openTikTokLive: Function}}
  */
 function createController(config = browserConfig(), deps = {}) {
     const request = deps.fetch || fetch;
@@ -108,6 +136,27 @@ function createController(config = browserConfig(), deps = {}) {
         }
         else await cdp('/json/new?' + encodeURIComponent('https://www.tiktok.com/'), 'PUT');
     }
-    return { status, start, show };
+
+    /** 開啟（或重用）指定頻道的直播分頁；避免同時留下多個直播分頁。 */
+    async function openTikTokLive(handle) {
+        const targetUrl = tiktokLiveUrl(handle);
+        await start();
+        const pages = await tabs();
+        const target = pages.find(page => page.url === targetUrl);
+        if (target) {
+            await show(target.id);
+            return { id: target.id, url: targetUrl, reused: true };
+        }
+        for (const page of pages) {
+            if (!isTikTokLivePage(page.url)) continue;
+            try { await cdp('/json/close/' + encodeURIComponent(page.id)); } catch { /* ignore */ }
+        }
+        const response = await cdp('/json/new?' + encodeURIComponent(targetUrl), 'PUT');
+        const created = await response.json();
+        if (created?.id) await show(created.id);
+        return { id: created?.id || '', url: targetUrl, reused: false };
+    }
+
+    return { status, start, show, openTikTokLive };
 }
-module.exports = { createController, launchArgs, findBrowser };
+module.exports = { createController, launchArgs, findBrowser, tiktokLiveUrl };

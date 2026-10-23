@@ -106,6 +106,7 @@ var cacheKeywordDataAll = []
 var cacheAutoClipStats = { config: {}, stats: [] }
 var lastAutoClipStatsLogAt = 0 // 自動剪輯統計心跳節流（避免每次推播洗版）
 const { AutoClipHistory } = require('./ScriptLib/autoclip/history.cjs');
+const { tiktokChatSource } = require('./ScriptLib/tiktok/source.cjs');
 const autoClipHistory = new AutoClipHistory(path.join(__dirname, 'data', 'autoclip.sqlite'));
 try {
     autoClipHistory.importLegacy(path.join(__dirname, 'autoclip_stats.json'));
@@ -406,6 +407,22 @@ function startRuntime(url) {
         // Persist the parent baseline so a new child continues the same counts.
         SaveCacheKeywordDataAll();
         tiktokProcess = spawn(process.execPath, args, { stdio: ['pipe', 'pipe', 'pipe', 'ipc'] });
+
+        if (isTK && tiktokChatSource() === 'browser') {
+            const handle = user || process.env.TIKTOK_NAME || '';
+            if (!handle) {
+                pushLog('[BROWSER] TikTok browser 模式缺少帳號，無法開啟直播頁');
+            } else {
+                const { openTikTokLive } = require('./BrowserRoutes.cjs');
+                void openTikTokLive(handle).then(result => {
+                    pushLog('[BROWSER] 已開啟 TikTok 直播頁:', result.url);
+                    pushLog('[BROWSER] 請確認專用瀏覽器已安裝 TikTokChat.user.js；不要另開 Edge 掛同一支腳本。');
+                }).catch(error => {
+                    pushLog('[BROWSER] 開啟 TikTok 直播頁失敗:', error.message);
+                });
+            }
+        }
+
         const launchedProcess = tiktokProcess;
         launchedProcess.on('message', event => {
             if (tiktokProcess !== launchedProcess) return;
@@ -1187,6 +1204,7 @@ const server = http.createServer((req, res) => {
             .replace('${KICK_CLIENT_ID}', process.env.KICK_CLIENT_ID || '')
             .replace('${KICK_CLIENT_SECRET}', process.env.KICK_CLIENT_SECRET || '')
             .replace('${KICK_USER_NAME}', process.env.KICK_USER_NAME || '')
+            .replace('${TIKTOK_CHAT_SOURCE}', ['auto', 'native', 'browser'].includes(process.env.TIKTOK_CHAT_SOURCE) ? process.env.TIKTOK_CHAT_SOURCE : 'auto')
             .replace('${AUTO_CLIP_MODE}', process.env.AUTO_CLIP_MODE === 'live' ? 'live' : 'shadow')
             .replace('${AUTO_CLIP_ENABLED}', process.env.AUTO_CLIP_ENABLED || '0')
             .replace('${AUTO_CLIP_W_VIEWERS}', process.env.AUTO_CLIP_W_VIEWERS || '0.2')
@@ -1226,6 +1244,8 @@ const server = http.createServer((req, res) => {
             const newKickClientId = params.get('KICK_CLIENT_ID') || '';
             const newKickClientSecret = params.get('KICK_CLIENT_SECRET') || '';
             const newKickUserName = params.get('KICK_USER_NAME') || '';
+            const requestedTiktokSource = params.get('TIKTOK_CHAT_SOURCE');
+            const newTiktokChatSource = ['auto', 'native', 'browser'].includes(requestedTiktokSource) ? requestedTiktokSource : 'auto';
             const newAutoClipMode = params.get('AUTO_CLIP_MODE') === 'live' ? 'live' : 'shadow';
             const newAutoClipEnabled = params.get('AUTO_CLIP_ENABLED') || '0';
             const newAutoClipWViewers = params.get('AUTO_CLIP_W_VIEWERS') || '0.2';
@@ -1255,6 +1275,7 @@ const server = http.createServer((req, res) => {
             process.env.KICK_CLIENT_ID = newKickClientId;
             process.env.KICK_CLIENT_SECRET = newKickClientSecret;
             process.env.KICK_USER_NAME = newKickUserName;
+            process.env.TIKTOK_CHAT_SOURCE = newTiktokChatSource;
             process.env.AUTO_CLIP_MODE = newAutoClipMode;
             process.env.AUTO_CLIP_ENABLED = newAutoClipEnabled;
             process.env.AUTO_CLIP_W_VIEWERS = newAutoClipWViewers;
@@ -1298,6 +1319,7 @@ const server = http.createServer((req, res) => {
             updateEnv('KICK_CLIENT_ID', newKickClientId);
             updateEnv('KICK_CLIENT_SECRET', newKickClientSecret);
             updateEnv('KICK_USER_NAME', newKickUserName);
+            updateEnv('TIKTOK_CHAT_SOURCE', newTiktokChatSource);
             updateEnv('AUTO_CLIP_MODE', newAutoClipMode);
             updateEnv('AUTO_CLIP_ENABLED', newAutoClipEnabled);
             updateEnv('AUTO_CLIP_W_VIEWERS', newAutoClipWViewers);

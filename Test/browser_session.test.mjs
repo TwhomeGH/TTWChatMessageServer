@@ -61,6 +61,14 @@ test('只允許本機偵錯端點，專用 profile 與啟動參數不關閉 sand
     assert.equal(args.some(arg => arg.includes('headless') || arg.includes('no-sandbox')), false);
 });
 
+test('TikTok 直播頁只接受 tiktok.com，並支援 @handle 或頻道 URL', () => {
+    assert.equal(controllerModule.tiktokLiveUrl('@user'), 'https://www.tiktok.com/@user/live');
+    assert.equal(controllerModule.tiktokLiveUrl('user'), 'https://www.tiktok.com/@user/live');
+    assert.equal(controllerModule.tiktokLiveUrl('https://www.tiktok.com/@user'), 'https://www.tiktok.com/@user/live');
+    assert.equal(controllerModule.tiktokLiveUrl('https://www.tiktok.com/@user/live'), 'https://www.tiktok.com/@user/live');
+    assert.throws(() => controllerModule.tiktokLiveUrl('https://evil.example/@user/live'), /tiktok\.com/);
+});
+
 test('控制台只回傳頁面摘要，不包含簽名 query 或 Cookie', async () => {
     const controller = controllerModule.createController({ browserURL: 'http://127.0.0.1:9222', profile: '/profile' }, {
         fetch: async () => ({ ok: true, json: async () => [

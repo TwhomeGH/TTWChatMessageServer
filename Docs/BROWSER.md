@@ -26,6 +26,21 @@ Windows profile 固定保存在 LOCALAPPDATA/TTWChatMessageServer/browser-profil
 控制台沿用主服務的監聽位址與登入驗證，寫入操作另驗證相同 Origin。瀏覽器 CDP 仍只限本機。CDP 可控制已登入瀏覽器，不要轉發偵錯埠到網際網路或區網。
 若自行提供 CDP 瀏覽器，控制台顯示的 profile 路徑是啟動器設定，不能證明外部程序實際使用的資料夾。
 
+## TikTok 聊天來源（無 EulerStream 時）
+
+`TIKTOK_CHAT_SOURCE` 控制聊天從哪裡來：
+
+| 值 | 行為 |
+| --- | --- |
+| `auto` | 有 `SIGN_API_KEY`／`TIKTOK_COOKIES`／`SESSION_ID`／`DIRECT_SIGNER_ENABLED=1` 時用原生；否則用專用瀏覽器 |
+| `native` | 強制原生 TikTok 連線，需要可用的簽名設定 |
+| `browser` | 不啟動原生 TikTok 聊天；由專用瀏覽器開啟 `tiktok.com/@handle/live`，TikTokChat userscript 送到 `/chat` |
+
+- `browser` 模式不需要 EulerStream；請在**同一個專用瀏覽器 profile** 安裝一次 Tampermonkey 與 `UserScript/TikTokChat.user.js`。
+- runtime 啟動 TikTok 且來源為 browser 時，主服務會在專用瀏覽器開啟（或重用）直播分頁；不要另外開 Edge 掛同一支腳本，否則會有兩份來源。
+- 此模式沒有可靠的 TikTok 觀眾數，AutoStop 也會停用（瀏覽器端沒有可信的直播結束訊號）。
+- 聊天訊息仍會經 `/chat` 進入 TikTok 子程序、過濾、翻譯、AutoClip 與 socket。
+
 ## 生命週期與模組
 
 - ScriptLib/browser/config.cjs：本機端點及專用 profile。
