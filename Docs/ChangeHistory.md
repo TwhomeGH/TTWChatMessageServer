@@ -1,5 +1,31 @@
 # ChangeHistory
 
+## 2026.10.25 00:30 跳過 userscript 頁面刷新時的舊聊天重播
+
+**類型**: 修正 · **檔案**: `UserScript/TikTokChat.user.js`、`UserScript/liveCenter.user.js`、`Docs/USERSCRIPT_SOURCES.md`
+
+### 問題 - 頁面刷新後舊聊天被重送到 `/chat`，AutoClip 可能被重複訊息觸發
+
+TikTokChat／liveCenter 的 MutationObserver 啟動時，聊天室可能還在補上重新載入前的舊訊息；這些節點被當成新訊息送出，且 TikTok 聊天沒有穩定 msgId／sentAt，導致 `/chat` 與 AutoClip 收到重播的聊天。樣本中 6 則舊訊息／3 位使用者剛好觸發 AutoClip。
+
+### 根因 - 觀察器只處理「新增節點」，沒有區分頁面 hydration 補齊與真正的新訊息
+
+### 修改
+
+- 兩個 userscript 在觀察器啟動時先標記既有聊天節點，並在之後 4 秒內忽略新增節點（`HYDRATION_MS`），避免刷新補齊期重播。
+- 聊天節點沒有 `data-msg-id`／`data-message-id` 時，最後才使用節點 `id` 作為 msgId；仍保留 null，不偽造時間。
+- 版本：TikTokChat 2.10 → 2.11、liveCenter 1.17 → 1.18。
+
+### 限制
+
+- 只處理頁面重新載入造成的初始補齊；若同時開啟兩支 userscript、或聊天室在 4 秒後才虛擬化重畫舊訊息，仍可能重複。不要同時啟用兩個來源。
+
+### 驗證
+
+`Test/userscript_source.test.mjs`、`lint`、`test:ci` 全過。
+
+---
+
 ## 2026.10.23 17:10 修正 keyword 規則產生器的字串跳脫
 
 **類型**: 修正／安全 · **檔案**: `assets/keyword.js`

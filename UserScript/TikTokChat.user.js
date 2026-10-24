@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      2.10
+// @version      2.11
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像；新增目標直播間鎖定，避免亂逛誤送）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
@@ -70,6 +70,10 @@
 
     // 只發送一次的訊息 Set
     const sentMessages = new WeakSet();
+    // 頁面刷新時聊天室會先補上舊訊息；觀察器啟動後短暫忽略新增節點，避免重播。
+    const HYDRATION_MS = 4000;
+    let hydrateUntil = 0;
+    function isHydrating() { return Date.now() < hydrateUntil; }
     var View = 0
     var ViewUserList = []
     var FailCount = 0
@@ -253,6 +257,7 @@ function hasContent(el) {
     // 監控聊天室新訊息
     function getNewChatMessages(node) {
         if (sentMessages.has(node)) return;
+        if (isHydrating()) { sentMessages.add(node); return; }
 
         const userName = node.querySelector('[data-e2e="message-owner-name"]')?.innerText?.trim();
         const text = node.querySelector('div.w-full.break-words.align-middle')?.innerText?.trim();
@@ -260,7 +265,7 @@ function hasContent(el) {
             || node.querySelector('img')?.src;
 
         if (userName && text) {
-            sendSocketMessage(userName, text, avatar, null, true, View, null, { msgId: node.getAttribute('data-msg-id') || node.getAttribute('data-message-id') || null, sentAt: node.querySelector('time[datetime]')?.getAttribute('datetime') || null });
+            sendSocketMessage(userName, text, avatar, null, true, View, null, { msgId: node.getAttribute('data-msg-id') || node.getAttribute('data-message-id') || node.id || null, sentAt: node.querySelector('time[datetime]')?.getAttribute('datetime') || null });
             sentMessages.add(node);
             console.log("New message sent:", { userName, text, avatar });
         }
@@ -298,6 +303,7 @@ function hasContent(el) {
     }
 
     function getNewGiftMessages(container) {
+        if (isHydrating()) { sentMessages.add(container); return; }
         const userName = container.querySelector('[data-e2e="message-owner-name"]')?.innerText?.trim();
         if (!userName) return;
 
@@ -318,6 +324,7 @@ function hasContent(el) {
 
     // 監控觀眾進入訊息
     function getNewEnterMessages(node) {
+        if (isHydrating()) return;
         // node 為新增的 chat message
         //console.log("Processing enter message node:", node);
     
@@ -484,11 +491,16 @@ function hasContent(el) {
     setTimeout(() => {
         // 初次抓取觀眾列表
         console.log("Current viewers after 5s:", getViewers());
-    
-    // 監控聊天室新訊息
-    onElementAdded('div[data-e2e="chat-message"]', getNewChatMessages);
-    // 監控送禮訊息
-    watchGiftMessages(getNewGiftMessages);
+
+        // 先標記已存在的訊息，再忽略觀察器啟動後的短暫補齊期，避免刷新重播。
+        document.querySelectorAll('div[data-e2e="chat-message"]')
+            .forEach(node => sentMessages.add(node));
+        hydrateUntil = Date.now() + HYDRATION_MS;
+
+        // 監控聊天室新訊息
+        onElementAdded('div[data-e2e="chat-message"]', getNewChatMessages);
+        // 監控送禮訊息
+        watchGiftMessages(getNewGiftMessages);
 
     }, 5000);
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat → Socket Bridge
 // @namespace    pip-chat-bridge
-// @version      1.17
+// @version      1.18
 // @description  Listen TikTok live chat and forward to socket server
 // @author       Nuclear0709
 // @match        https://livecenter.tiktok.com/*
@@ -49,6 +49,9 @@
 
     // 已處理過的訊息集合
     const processedMessages = new WeakSet();
+// 頁面刷新時聊天室會先補上舊訊息；觀察器啟動後短暫忽略新增節點，避免重播。
+const HYDRATION_MS = 4000;
+let hydrateUntil = 0;
 
     var FailCount = 0;
     const MaxFail = 5;
@@ -175,12 +178,13 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 
 
         // 同一 DOM 節點只處理一次，新節點的相同留言仍可傳送。
         if (processedMessages.has(element)) return;
+        if (Date.now() < hydrateUntil) { processedMessages.add(element); return; }
         processedMessages.add(element);
 
         console.log("📩 新訊息:", username, message);
 
         console.log(`已送出 ${username} ${message} ${avatarUrl} 人數:${users.length} ${users}`)
-        sendSocketMessage(username, message, avatarUrl, null, true, users.length, users, { msgId: element.getAttribute('data-msg-id') || element.getAttribute('data-message-id') || null, sentAt: element.querySelector('time[datetime]')?.getAttribute('datetime') || null });
+        sendSocketMessage(username, message, avatarUrl, null, true, users.length, users, { msgId: element.getAttribute('data-msg-id') || element.getAttribute('data-message-id') || element.id || null, sentAt: element.querySelector('time[datetime]')?.getAttribute('datetime') || null });
         sendAudienceUpdate(users.length, users);
     }
 
@@ -216,6 +220,11 @@ function getTopFanUsers() {
      **********************/
     let observer = null;
     function startObserver() {
+        // 先標記已存在的訊息，再忽略觀察器啟動後的短暫補齊期，避免刷新重播。
+        document.querySelectorAll('[data-e2e="chat-message"]')
+            .forEach(element => processedMessages.add(element));
+        hydrateUntil = Date.now() + HYDRATION_MS;
+
         observer = new MutationObserver((mutations) => {
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {

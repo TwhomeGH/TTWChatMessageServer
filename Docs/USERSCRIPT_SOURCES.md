@@ -28,14 +28,13 @@ API＋Userscript 是同一個平台的兩個入口，不拆成兩份平台分數
 
 | 檔案 | 新版 |
 | --- | --- |
-| TikTokChat.user.js | 2.10 |
-| liveCenter.user.js | 1.17 |
+| TikTokChat.user.js | 2.11 |
+| liveCenter.user.js | 1.18 |
 | youtube-chat-userscript.user.js | 1.7 |
 | TestCenter.user.js | 1.5 |
 | ws-relay.user.js | 1.3（已合併 ws-relay.js） |
 
-聊天 DOM 沒有可靠 ID／時間欄位時保留 null。WS relay 附帶來源欄位，但仍維持原本
-的原始資料轉接流程，沒有新增解碼功能。未修改功能的其他腳本不更動版本。
+聊天 DOM 沒有可靠 ID／時間欄位時保留 null。TikTokChat／liveCenter 2.11／1.18 會在頁面載入後先標記既有聊天節點，並在觀察器啟動後短暫跳過補齊期，避免頁面刷新把舊聊天重播到 `/chat`；同時把節點 `id` 當成最後的 msgId fallback。WS relay 附帶來源欄位，但仍維持原本的原始資料轉接流程，沒有新增解碼功能。未修改功能的其他腳本不更動版本。
 
 需要更新瀏覽器中安裝的腳本，並重新啟動伺服器與聊天程序。
 
