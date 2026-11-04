@@ -1,5 +1,34 @@
 # ChangeHistory
 
+## 2026.11.05 05:04 人流頁新增每小時觀看時段
+
+**類型**: 功能 · **檔案**: `ScriptLib/traffic/database.cjs`、`TrafficRoutes.cjs`、`assets/traffic-history.js`、`traffic.html`、`lang/zh-TW.json`、`lang/en.json`、`Test/traffic.test.cjs`、`Test/traffic_history_ui.cjs`、`Docs/TRAFFIC.md`、`Docs/WEB_UI.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 問題 - 沒有開播時間或開播時段不足時，長場次的觀看無法形成建議
+
+原本排名只以場次開播時間分桶；沒有 `actualStarted` 的場次、或開播時段樣本不足時，長場次跨到其他小時的觀看只進熱圖，不會進入任何建議。
+
+### 修改
+
+- `TrafficDatabase.hourlyViewing()`：以 `minutes` 依當地星期／小時彙總；每個日期先算該小時平均（至少 10 分鐘才計入），再跨日期取中位數與平均。
+- 長場次自然貢獻多個小時；不需要開播時間，可作為開播時段不足時的 fallback。
+- `/api/traffic/history` 新增 `hourly`；回傳 `cells`、`qualified`（≥3 天）、`provisional`（未達 3 天）。
+- 歷史頁新增「觀看時段（每小時平均）」表：列出中位數最高的時段、天數、有效分鐘與最近觀測；未達 3 天時列暫定時段並標示樣本不足。只用觀看樣本，不用進房或人數變化推估。
+- 暫定時段先依天數排序，再看中位數，避免只有 1 天的時段排在多天時段前面。
+
+### 限制
+
+- `minutes` 是平台層級；同平台多主播時可能混入，不是單一主播的保證。
+- 固定每個日期至少 10 分鐘、3 天門檻與最多 8 列，尚無自訂。
+- 這是觀看時段，不是開播時段；不會寫入開播排名或 planner。
+
+### 驗證
+
+- 新增 `hourlyViewing` 測試：3 個日期、長場次跨 20:00／21:00、邊緣 5 分鐘不計、單日時段留在 provisional。
+- UI smoke 檢查正式／暫定表、空狀態與語言鍵。
+
+---
+
 ## 2026.11.05 04:41 人流頁新增場次開場比較
 
 **類型**: 功能 · **檔案**: `ScriptLib/traffic/database.cjs`、`TrafficRoutes.cjs`、`assets/traffic-history.js`、`assets/traffic.css`、`traffic.html`、`lang/zh-TW.json`、`lang/en.json`、`Test/traffic.test.cjs`、`Test/traffic_history_ui.cjs`、`Docs/TRAFFIC.md`、`Docs/WEB_UI.md`、`Docs/TEST_FILES_REFERENCE.md`

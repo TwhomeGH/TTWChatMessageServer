@@ -4,6 +4,10 @@
     const el = id => document.getElementById(id);
     const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const weekday = index => new Intl.DateTimeFormat(window.TTWI18n.language, {weekday:'short', timeZone:'UTC'}).format(Date.UTC(2026, 0, 5 + index));
+    const slotKeyLabel = key => {
+        const [day, hour] = key.split(' ');
+        return `${weekday(WEEKDAYS.indexOf(day))} ${hour}:00`;
+    };
     let busy = false, rerun = false, pollTimer, selectedCell = null;
     const rendered = new Map();
     function changed(key, value) {
@@ -583,6 +587,50 @@
         card.append(details);
     }
 
+    /**
+     * 每小時觀看軌：以每個日期的該小時平均再跨日期取中位數。
+     * 長場次自然貢獻多個小時，也不需要開播時間；是觀看時段參考，不是開播排名。
+     */
+    function renderHourly(hourly) {
+        const table = el('hourly'), empty = el('hourly-empty'), note = el('hourly-provisional');
+        const context = el('hourly-context');
+        const minDays = hourly?.minDays ?? 3;
+        const qualified = hourly?.qualified ?? [];
+        const provisional = hourly?.provisional ?? [];
+        const rows = qualified.length ? qualified.slice(0, 8) : provisional.slice(0, 5);
+        context.textContent = hourly?.days
+            ? t('hourly.context', { days: hourly.days, minutes: hourly.minMinutesPerDate ?? 10 })
+            : '';
+        if (!rows.length) {
+            table.hidden = true;
+            empty.hidden = false;
+            note.hidden = true;
+            return;
+        }
+        empty.hidden = true;
+        note.hidden = qualified.length > 0;
+        if (!note.hidden) note.textContent = t('hourly.provisional', { days: minDays });
+        const lastText = value => {
+            if (!value) return '—';
+            const options = { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false };
+            if (hourly?.timezone) options.timeZone = hourly.timezone;
+            return new Date(value).toLocaleString(window.TTWI18n.language, options);
+        };
+        updateTable('hourly', [
+            [t('hourly.slot'), t('hourly.median'), t('hourly.mean'), t('hourly.days'),
+                t('hourly.minutes'), t('hourly.last')],
+            ...rows.map(cell => [
+                slotKeyLabel(cell.key),
+                format(cell.median),
+                format(cell.mean),
+                cell.days,
+                cell.observedMinutes,
+                lastText(cell.lastAt)
+            ])
+        ]);
+        table.hidden = false;
+    }
+
     /** 重新抓取歷史並更新熱圖、每日統計與時段排名。 */
     async function refresh() {
         clearTimeout(pollTimer);
@@ -611,6 +659,7 @@
             if (changed('metrics', [context, data.metrics])) renderMetrics(data.metrics);
             if (changed('compare', [context, data.comparison])) renderComparison(data.comparison);
             if (changed('ranking', [context, data.rankings])) renderRanking(data.rankings);
+            if (changed('hourly', [context, data.hourly])) renderHourly(data.hourly);
         } catch (error) {
             console.error('[traffic] history refresh failed:', error);
             setText(el('history-status'), t('history.error'));

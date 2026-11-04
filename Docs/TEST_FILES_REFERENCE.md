@@ -60,7 +60,7 @@ node Test/xxx.mjs
 | `Test/monitor_audience_ui.cjs` | 監控聊天列的常客標記與「只看常客」篩選 |
 | `Test/traffic_planner_ui.cjs` | 人流分類、批次補分類、預覽／套用／復原與手機寬度 |
 | `Test/traffic_planner_collecting_ui.cjs` | 資料累積建議、時段分組提醒與一週計畫 UI |
-| `Test/traffic_history_ui.cjs` | 開播時段排名、下一步指引、時段累積進度、場次開場比較與樣本不足狀態 |
+| `Test/traffic_history_ui.cjs` | 開播時段排名、下一步指引、時段累積進度、場次開場比較、每小時觀看時段與樣本不足狀態 |
 | `Test/youtube_browser_ui.mjs` | 無 OAuth 時從頻道 `/live` discovery 後注入聊天 iframe |
 
 截圖寫入 `output/playwright/`，該目錄已在 `.gitignore`，只作本機展示與版本比較。

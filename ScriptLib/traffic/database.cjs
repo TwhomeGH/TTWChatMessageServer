@@ -690,6 +690,71 @@ class TrafficDatabase {
     }
 
     /**
+     * 每小時觀看軌：以 minutes 的每小時資料，先算每個日期的該小時平均，
+     * 再跨日期取中位數／平均。長場次自然貢獻多個小時。
+     * 這不是開播時段；minutes 是平台層級，同平台多主播時可能混入。
+     */
+    hourlyViewing(platform, days, now, timezone, { minDays = 3, minMinutesPerDate = 10 } = {}) {
+        const platforms = this.platforms();
+        platform = platforms.includes(platform) ? platform : platforms[0];
+        const rows = this.db.prepare(`SELECT time,viewerSum,viewerCount FROM minutes
+            WHERE platform=? AND time>=? AND time<? ORDER BY time`)
+            .all(platform || '', now - days * 86400000, Math.floor(now / 60000) * 60000);
+
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone, weekday: 'short', hour: '2-digit', hourCycle: 'h23',
+            year: 'numeric', month: '2-digit', day: '2-digit'
+        });
+
+        const buckets = new Map();
+        for (const row of rows) {
+            if (!row.viewerCount) continue;
+            const parts = Object.fromEntries(formatter.formatToParts(row.time).map(part => [part.type, part.value]));
+            const key = parts.weekday + ' ' + parts.hour;
+            const date = parts.year + '-' + parts.month + '-' + parts.day;
+            if (!buckets.has(key)) buckets.set(key, { key, dates: new Map(), lastAt: 0 });
+            const bucket = buckets.get(key);
+            if (!bucket.dates.has(date)) bucket.dates.set(date, { sum: 0, count: 0 });
+            const day = bucket.dates.get(date);
+            day.sum += row.viewerSum / row.viewerCount;
+            day.count += 1;
+            bucket.lastAt = Math.max(bucket.lastAt, row.time);
+        }
+
+        const cells = [];
+        for (const bucket of buckets.values()) {
+            const daily = [...bucket.dates.entries()]
+                .filter(([, day]) => day.count >= minMinutesPerDate)
+                .map(([date, day]) => ({ date, average: day.sum / day.count, minutes: day.count }));
+            if (!daily.length) continue;
+            const values = daily.map(day => day.average).sort((a, b) => a - b);
+            const n = values.length;
+            const median = n % 2 ? values[(n - 1) / 2] : (values[n / 2 - 1] + values[n / 2]) / 2;
+            const mean = values.reduce((sum, value) => sum + value, 0) / n;
+            // 中位數低於 0.05 的時段視為幾乎沒人，不列為觀看建議。
+            if (median < 0.05) continue;
+            cells.push({
+                key: bucket.key,
+                median,
+                mean,
+                days: n,
+                observedMinutes: daily.reduce((sum, day) => sum + day.minutes, 0),
+                lastAt: bucket.lastAt
+            });
+        }
+        cells.sort((a, b) => b.median - a.median || b.days - a.days || b.observedMinutes - a.observedMinutes);
+        const provisional = cells.filter(cell => cell.days < minDays)
+            .sort((a, b) => b.days - a.days || b.median - a.median || b.observedMinutes - a.observedMinutes);
+
+        return {
+            platform, platforms, days, timezone, minDays, minMinutesPerDate,
+            cells,
+            qualified: cells.filter(cell => cell.days >= minDays),
+            provisional
+        };
+    }
+
+    /**
      * 場次開場對齊比較：以 actualStarted（沒有時用 started）為 0 分，
      * 取前 windowMinutes 的每 bucket 平均觀看；只回傳最近 limit 場。
      * 缺值保留 null，不補 0。

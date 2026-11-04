@@ -136,6 +136,22 @@
       <h4 id="ranking-progress-title" class="ranking-provisional-title" data-i18n="traffic.ranking.progressTitle" hidden>時段累積進度（尚未達標）</h4>
       <p id="ranking-progress-note" class="ranking-provisional-note" data-i18n="traffic.ranking.progressNote" hidden>列出尚在累積的時段；late／approx／estimated 也能達標，estimated 可能因晚連線而偏移。</p>
       <div id="ranking-progress" class="table-wrap" hidden></div>
+
+      <h3><span data-i18n="traffic.hourly.title">觀看時段（每小時平均）</span></h3>
+      <p><span data-i18n="traffic.hourly.note">每個「星期幾＋整點」的觀看人數；只用觀看樣本，不用進房或人數變化。</span></p>
+      <p id="hourly-context" class="text-gray-400 text-xs"></p>
+      <div id="hourly" class="table-wrap" hidden></div>
+      <p id="hourly-empty" class="text-gray-500 text-xs" hidden data-i18n="traffic.hourly.empty">還沒有足夠的每小時觀看資料。</p>
+      <p id="hourly-provisional" class="ranking-provisional-note" hidden>樣本不足（未達 3 天）；先列出目前累積最多的時段。</p>
+      <details class="hourly-details">
+        <summary data-i18n="traffic.hourly.details">計算方式與限制</summary>
+        <ul>
+          <li data-i18n="traffic.hourly.detailAveraging">每個日期先算該小時平均（至少 10 分鐘），再跨日期取中位數；長場次跨到幾個小時就各算一次。</li>
+          <li data-i18n="traffic.hourly.detailThreshold">中位數低於 0.05 不列；達 3 天列正式，未達列暫定。</li>
+          <li data-i18n="traffic.hourly.detailCaveat">這是觀看時段，不是開播時段；高觀看可能是前一小時的觀眾延續，開播決策仍看開播時段排名。</li>
+          <li data-i18n="traffic.hourly.detailScope">平台層級資料，同平台多主播時可能混入。</li>
+        </ul>
+      </details>
     </section>
 
     <section class="panel">

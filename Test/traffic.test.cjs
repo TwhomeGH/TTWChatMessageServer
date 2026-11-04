@@ -292,6 +292,47 @@ test('場次開場比較依 actualStarted 對齊、保留缺值並只取自己�
     db.close();
 });
 
+test('每小時觀看軌以每天平均跨日期彙總，長場次貢獻多個小時', () => {
+    const db = new TrafficDatabase(':memory:');
+    const now = Date.parse('2026-10-20T12:00:00Z');
+    const insertMinute = db.db.prepare('INSERT INTO minutes(platform,time,viewerSum,viewerCount) VALUES(?,?,?,1)');
+    const dates = ['2026-10-01', '2026-10-08', '2026-10-15'];
+    dates.forEach((date, index) => {
+        const start = Date.parse(date + 'T20:00:00Z');
+        const value = [10, 20, 30][index];
+        for (let i = 0; i < 60; i++) insertMinute.run('TikTok', start + i * 60000, value);
+        // 21:00 只有 30 分鐘；一場長直播同時貢獻 20:00 與 21:00。
+        for (let i = 0; i < 30; i++) insertMinute.run('TikTok', start + (60 + i) * 60000, value / 2);
+    });
+    // 只有 5 分鐘的邊緣小時不列入該日期。
+    const edge = Date.parse('2026-10-01T22:00:00Z');
+    for (let i = 0; i < 5; i++) insertMinute.run('TikTok', edge + i * 60000, 99);
+    // 只有 1 天的時段仍是暫定，不進 qualified。
+    const late = Date.parse('2026-10-02T23:00:00Z');
+    for (let i = 0; i < 60; i++) insertMinute.run('TikTok', late + i * 60000, 7);
+    // 中位數 0 的時段不列為觀看建議。
+    const zero = Date.parse('2026-10-02T22:00:00Z');
+    for (let i = 0; i < 60; i++) insertMinute.run('TikTok', zero + i * 60000, 0);
+
+    const result = db.hourlyViewing('TikTok', 30, now, 'UTC');
+    const main = result.cells.find(cell => cell.key === 'Thu 20');
+    assert.equal(main.days, 3);
+    assert.equal(main.median, 20);
+    assert.equal(main.mean, 20);
+    assert.equal(main.observedMinutes, 180);
+    const crossing = result.cells.find(cell => cell.key === 'Thu 21');
+    assert.equal(crossing.days, 3);
+    assert.equal(crossing.median, 10);
+    assert.equal(crossing.observedMinutes, 90);
+    assert.equal(result.cells.some(cell => cell.key === 'Thu 22'), false);
+    assert.equal(result.cells.some(cell => cell.key === 'Fri 22'), false);
+    const provisional = result.cells.find(cell => cell.key === 'Fri 23');
+    assert.equal(provisional.days, 1);
+    assert.ok(!result.qualified.includes(provisional));
+    assert.ok(result.provisional.includes(provisional));
+    db.close();
+});
+
 test('開播容差 15 分鐘會把 19:59 與 20:01 歸到同一個時段', () => {
     const db = new TrafficDatabase(':memory:');
     const insert = db.db.prepare(`INSERT INTO sessions(platform,started,actualStarted,lastSampleAt,
@@ -364,6 +405,10 @@ test('歷史排名 API 有 own 時只算自己，沒有時回退全來源並標�
             sessionComparison(platform, days, now, timezone, selection) {
                 return { scope: selection?.purposes ? 'own' : 'all', sessions: [], median: [] };
             }
+            hourlyViewing() {
+                return { platform: 'TikTok', platforms: ['TikTok'], cells: [], qualified: [], provisional: [],
+                    minDays: 3, minMinutesPerDate: 10 };
+            }
         }
         class FakeStore { record() {} heartbeat() {} }
         const context = { module: { exports: {} }, __dirname: path.resolve(__dirname, '..'), URL, console,
@@ -385,6 +430,7 @@ test('歷史排名 API 有 own 時只算自己，沒有時回退全來源並標�
     assert.equal(own.rankings.scope, 'own');
     assert.deepEqual(own.rankings.purposes, ['own']);
     assert.equal(own.comparison.scope, 'own');
+    assert.equal(own.hourly.minDays, 3);
     const fallback = await history(0);
     assert.equal(fallback.rankings.scope, 'all');
     assert.equal(fallback.rankings.purposes, null);

@@ -112,11 +112,12 @@ function serveTraffic(req, res, authorized = false) {
             const comparison = database.sessionComparison(platform, days, now, timezone, {
                 purposes: rankings.scope === 'own' ? ['own'] : null
             });
+            const hourly = database.hourlyViewing(platform, days, now, timezone);
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.end(JSON.stringify({
                 storageError,
                 ...database.distribution(platform, days, now, timezone),
-                rankings, comparison,
+                rankings, comparison, hourly,
                 metrics: database.metrics(platform, days, now, timezone)
             }));
         } catch {
