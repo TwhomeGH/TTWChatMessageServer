@@ -1,5 +1,34 @@
 # ChangeHistory
 
+## 2026.11.05 04:41 人流頁新增場次開場比較
+
+**類型**: 功能 · **檔案**: `ScriptLib/traffic/database.cjs`、`TrafficRoutes.cjs`、`assets/traffic-history.js`、`assets/traffic.css`、`traffic.html`、`lang/zh-TW.json`、`lang/en.json`、`Test/traffic.test.cjs`、`Test/traffic_history_ui.cjs`、`Docs/TRAFFIC.md`、`Docs/WEB_UI.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 問題 - 圖表只有單一時間線，看不出哪一場開場比較好
+
+原本的觀看圖一次只顯示所選區間；要看場次差異必須自己記住日期與形狀，`Docs/WEB_UI.md` 也把「場次比較與按開播時間對齊」列為未實作。
+
+### 修改
+
+- `/api/traffic/history` 新增 `comparison`：以 `actualStarted`（沒有時用 `started`）為 0 分，對齊前 120 分鐘。
+- 最多取最近 6 場自己的場次；每 5 分鐘一個點，回傳各場曲線與跨場中位數。
+- 每場提供開場平均（exact／estimated 30 分、late／approx 45 分）、最高分鐘、峰值後低點、峰值時間、觀測分鐘、開播信心與結束狀態。
+- 歷史頁新增 SVG 曲線圖與明細表；峰值加圓點，滑鼠移到圖上顯示十字線與當格各場數值，圖上另標全範圍最高；缺值保持 null，不補 0；只有 1 場時提示需要更多場次。
+- 進行中／已結束以 `ended` 或最後樣本超過 5 分鐘判斷，避免舊場次一直顯示進行中。
+- 補資料庫與 UI 冒煙測試。
+
+### 限制
+
+- 固定 5 分鐘桶、最近 6 場，尚無自訂桶寬或場次選擇。
+- 曲線取自 `minutes`（平台層級）；同平台同時有兩個主播的極端情況可能混入。
+- 場次長度不足 10 分鐘或開場觀測不足者不納入比較。
+
+### 驗證
+
+`node --test Test/traffic.test.cjs`、`node Test/traffic_history_ui.cjs`、`npm run lint`、`npm run check:css`。
+
+---
+
 ## 2026.11.05 04:16 AutoClip 門檻自適應，歷史場次顯示本場最高
 
 **類型**: 改善 · **檔案**: `AutoClipV2.mjs`、`ScriptLib/autoclip/metrics.mjs`、`ScriptLib/autoclip/evidence.mjs`、`ScriptLib/autoclip/history.cjs`、`assets/autoclip.js`、`TikTok.js`、`Test/autoclip_v2.test.mjs`、`Test/autoclip_history.test.cjs`、`Docs/KEYWORD_AUTOCLIP_V2.md`、`Docs/envExample`

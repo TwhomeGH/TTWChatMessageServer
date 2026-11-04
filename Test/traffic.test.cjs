@@ -231,6 +231,67 @@ test('時段排名取開場平均並做收縮與樣本門檻', () => {
     db.close();
 });
 
+test('場次開場比較依 actualStarted 對齊、保留缺值並只取自己的場次', () => {
+    const db = new TrafficDatabase(':memory:');
+    const now = Date.parse('2026-10-15T12:00:00Z');
+    const insertSession = db.db.prepare(`INSERT INTO sessions(platform,stream,broadcaster,started,actualStarted,ended,
+        lastSampleAt,earlySpanMs,lateSpanMs,sampleCount,purpose) VALUES(?,?,?,?,?,?,?,?,?,?,?)`);
+    const insertMinute = db.db.prepare('INSERT INTO minutes(platform,time,viewerSum,viewerCount) VALUES(?,?,?,1)');
+
+    const aStart = Date.parse('2026-10-01T12:00:00Z');
+    insertSession.run('TikTok', 'a', 'own', aStart, aStart, aStart + 40 * 60000,
+        aStart + 10 * 60000, 45 * 60000, 45 * 60000, 100, 'own');
+    for (let i = 0; i < 10; i++) insertMinute.run('TikTok', aStart + i * 60000, i + 1);
+
+    const bStart = Date.parse('2026-10-02T11:00:00Z');
+    insertSession.run('TikTok', 'b', 'own', bStart, null, bStart + 30 * 60000,
+        bStart + 5 * 60000, 30 * 60000, 0, 50, 'own');
+    for (let i = 0; i < 5; i++) insertMinute.run('TikTok', bStart + i * 60000, 4);
+
+    const cStart = Date.parse('2026-10-03T12:00:00Z');
+    insertSession.run('TikTok', 'c', 'own', cStart, cStart, cStart + 20 * 60000,
+        cStart + 5 * 60000, 5 * 60000, 5 * 60000, 20, 'own');
+    const dStart = Date.parse('2026-10-04T12:00:00Z');
+    insertSession.run('TikTok', 'd', 'test', dStart, dStart, dStart + 40 * 60000,
+        dStart + 10 * 60000, 45 * 60000, 45 * 60000, 100, 'test');
+
+    const own = db.sessionComparison('TikTok', 30, now, 'UTC', { purposes: ['own'] });
+    assert.equal(own.scope, 'own');
+    assert.equal(own.slots, 24);
+    assert.equal(own.bucketMs, 5 * 60000);
+    assert.deepEqual(own.sessions.map(item => item.stream), ['b', 'a']);
+    const a = own.sessions.find(item => item.stream === 'a');
+    assert.equal(a.confidence, 'late');
+    assert.equal(a.earlyMinutes, 45);
+    assert.equal(a.date, '2026-10-01');
+    assert.equal(a.localTime, '12:00');
+    assert.equal(a.openingAverage, 5.5);
+    assert.equal(a.peak, 10);
+    assert.equal(a.peakMinute, 9);
+    assert.equal(a.low, 1);
+    assert.equal(a.lowMinute, 0);
+    assert.equal(a.postPeakLow, null);
+    assert.deepEqual(a.points.slice(0, 3), [3, 8, null]);
+    const b = own.sessions.find(item => item.stream === 'b');
+    assert.equal(b.confidence, 'estimated');
+    assert.equal(b.earlyMinutes, 30);
+    assert.equal(b.openingAverage, 4);
+    assert.equal(b.peakMinute, 0);
+    assert.equal(b.low, 4);
+    assert.equal(b.lowMinute, 0);
+    assert.equal(b.postPeakLow, 4);
+    assert.equal(b.postPeakLowMinute, 1);
+    assert.deepEqual(b.points.slice(0, 2), [4, null]);
+    assert.deepEqual(own.median.slice(0, 3), [3.5, 8, null]);
+
+    const all = db.sessionComparison('TikTok', 30, now, 'UTC');
+    assert.equal(all.scope, 'all');
+    assert.equal(all.sessions.some(item => item.stream === 'd'), false);
+    assert.deepEqual(db.sessionComparison('TikTok', 30, now, 'UTC', { purposes: ['own'], limit: 1 })
+        .sessions.map(item => item.stream), ['b']);
+    db.close();
+});
+
 test('開播容差 15 分鐘會把 19:59 與 20:01 歸到同一個時段', () => {
     const db = new TrafficDatabase(':memory:');
     const insert = db.db.prepare(`INSERT INTO sessions(platform,started,actualStarted,lastSampleAt,
@@ -300,6 +361,9 @@ test('歷史排名 API 有 own 時只算自己，沒有時回退全來源並標�
                 return { purposes: null, totalSessions: 6, sessionCount: 0, cells: [], excluded: {} };
             }
             metrics() { return { daily: [] }; }
+            sessionComparison(platform, days, now, timezone, selection) {
+                return { scope: selection?.purposes ? 'own' : 'all', sessions: [], median: [] };
+            }
         }
         class FakeStore { record() {} heartbeat() {} }
         const context = { module: { exports: {} }, __dirname: path.resolve(__dirname, '..'), URL, console,
@@ -320,10 +384,12 @@ test('歷史排名 API 有 own 時只算自己，沒有時回退全來源並標�
     const own = await history(3);
     assert.equal(own.rankings.scope, 'own');
     assert.deepEqual(own.rankings.purposes, ['own']);
+    assert.equal(own.comparison.scope, 'own');
     const fallback = await history(0);
     assert.equal(fallback.rankings.scope, 'all');
     assert.equal(fallback.rankings.purposes, null);
     assert.equal(fallback.rankings.totalSessions, 6);
+    assert.equal(fallback.comparison.scope, 'all');
 });
 
 test('排名回報互斥的排除原因與全部場次，包括只有一筆取樣的場次', () => {

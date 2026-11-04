@@ -71,6 +71,10 @@
 
 說明卡片分開顯示範圍內總場次、可用場次、達標時段與各時段進度。場次以來源開播時間歸屬查詢區間；缺開播時間時，以首次觀測時間歸屬。未納入原因依序分為缺少開播時間且無樣本、開播未滿窗口、開場觀測不足，每場只計一次，含只有一筆取樣或只有成效的場次。API 的 `totalSessions` 是總數，`sessionCount` 維持可用場次數，`excluded` 提供分類計數。
 
+「場次開場比較」以 `actualStarted`（沒有時用 `started`）為 0 分，對齊前 120 分鐘；最多取最近 6 場，每 5 分鐘一個點，曲線為各場、粗線為跨場中位數（至少 3 場時顯示）。開場平均依開播信心取前 30 分（exact／estimated）或 45 分（late／approx）；最高分鐘、峰值時間與峰值後低點取前 120 分。圖上點為 5 分鐘平均，表格最高／最低為原始分鐘平均；峰值有圓點，滑鼠移到圖上會顯示十字線與當格各場數值，圖上另標全範圍最高。缺值保持 null，不補 0；只計自己的場次，沒有 own 時才回退全來源並標示。場次需有至少 10 分鐘開場觀測；曲線取自平台層級的 `minutes`，同平台同時有兩個主播的極端情況可能混入。
+
+`GET /api/traffic/history` 另外回傳 `comparison`：`windowMinutes`、`bucketMs`、`slots`、`sessions`、`median`；每場包含 `anchor`、`confidence`、`points`、`openingAverage`、`peak`、`peakMinute`、`observedMinutes`、`ended`。
+
 星期 × 小時的 3 日期門檻需要跨 3 週累積；最近 7 天不能達標，卡片會提示切換最近 30 天。至少 2 個時段達標才顯示排名；只有 1 個達標時段只顯示數據。未達 3 場／3 日期、但已有 2 場／2 日期的時段會以「暫定觀察」顯示，明確標示樣本不足，不進入排名；排名仍需 3 場／3 日期。這些門檻是最低資料量要求，並非統計顯著性或因果判斷。
 
 原生 TikTok 提供 MEMBER（進房）與 CHAT；Twitch／Kick／Odysee／YouTube 的原生聊天也回報為 chat（先前只進熱度／關鍵字統計）。**進房事件只有 TikTok 有**——其他平台沒有「觀眾進房」這種事件，所以那些平台的進房次數與明細本來就會是空的。觀看取樣目前由 TikTok、Twitch 原生提供。其他來源 /chat 可送 eventType: join/chat，platform、transport、userId、msgId、sentAt；userscript 的聊天以 type:'StreamMessage' 送出（沒有 eventType）也計為 chat；觀看數使用 type: audience 與數字 userNum。Unknown 仍計數，測試資料排除，不依留言包含「來了」判斷進房。聊天事件未套用剪輯有效互動過濾。

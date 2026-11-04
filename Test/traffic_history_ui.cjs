@@ -14,15 +14,38 @@ const HTML = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewp
 <select id="history-days"><option>30</option></select>
 <select id="timezone"><option>UTC</option></select>
 <p id="history-status"></p><div id="heatmap"></div><div id="daily"></div><div id="metrics"></div>
+<h3 data-i18n="traffic.compare.title">場次開場比較</h3><p data-i18n="traffic.compare.note">以開播後 0–120 分鐘對齊。</p><p id="compare-context"></p><p id="compare-highlight"></p><div id="compare-chart" class="compare-chart" hidden></div><p id="compare-empty" hidden data-i18n="traffic.compare.empty">尚無足夠的場次可比較。</p><p id="compare-note" hidden data-i18n="traffic.compare.onlyOne">只有 1 場。</p><div id="compare-table" class="table-wrap" hidden></div><p data-i18n="traffic.compare.openingNote">開場平均。</p>
 <div id="ranking-note" class="ranking-note" role="status"></div><div id="ranking" class="table-wrap"></div>
 <h4 id="ranking-provisional-title" data-i18n="traffic.ranking.provisionalTitle" hidden>暫定觀察（樣本不足）</h4><p id="ranking-provisional-note" data-i18n="traffic.ranking.provisionalNote" hidden>2 場／2 日期僅供參考；達標仍需 3 場／3 日期，且至少 2 個時段達標。</p><div id="ranking-provisional" class="table-wrap" hidden></div><h4 id="ranking-progress-title" data-i18n="traffic.ranking.progressTitle" hidden>時段累積進度（尚未達標）</h4><p id="ranking-progress-note" data-i18n="traffic.ranking.progressNote" hidden>列出尚在累積的時段。</p><div id="ranking-progress" class="table-wrap" hidden></div>
 </main><script src="/assets/i18n.js"></script><script src="/assets/traffic-history.js"></script></body></html>`;
+
+const comparePoints = (values) => Array.from({ length: 24 }, (_, index) => values[index] ?? null);
+const COMPARISON = {
+    platform: 'TikTok', days: 30, scope: 'own', windowMinutes: 120, bucketMs: 300000,
+    slots: 24, limit: 6, minOpeningMinutes: 10,
+    sessions: [
+        {
+            id: 2, date: '2026-10-02', localTime: '20:00', confidence: 'late', ended: true,
+            openingAverage: 5.5, peak: 10, peakMinute: 9, low: 0.5, lowMinute: 12,
+            postPeakLow: null, postPeakLowMinute: null, observedMinutes: 24,
+            points: comparePoints(Array.from({ length: 10 }, (_, index) => index + 1))
+        },
+        {
+            id: 1, date: '2026-10-01', localTime: '20:30', confidence: 'estimated', ended: true,
+            openingAverage: 4, peak: 6, peakMinute: 3, low: 3, lowMinute: 0,
+            postPeakLow: 4, postPeakLowMinute: 1, observedMinutes: 18,
+            points: comparePoints(Array.from({ length: 6 }, () => 4))
+        }
+    ],
+    median: comparePoints([4, 4, 4, 4, 4, 4, 7, 8, 9, 10])
+};
 
 const DATA = {
     platform: 'TikTok',
     cells: [],
     daily: [],
     metrics: { daily: [] },
+    comparison: COMPARISON,
     rankings: {
         scope: 'own', platform: 'TikTok', totalSessions: 9, sessionCount: 2, minSessions: 3, minDays: 3,
         earlyMinutes: 30, minObservedMinutes: 20, days: 30,
@@ -143,6 +166,27 @@ async function main() {
         assert.equal(await page.$$eval('.ranking-why .ranking-criteria li', nodes => nodes.length), 2);
         assert.match(await page.$eval('.ranking-slot-boundary', node => node.textContent), /19:45/);
 
+        await page.waitForFunction(() => !document.querySelector('#compare-chart').hidden);
+        assert.equal(await page.$$eval('#compare-table tbody tr', rows => rows.length), 2);
+        assert.match(await page.$eval('#compare-context', node => node.textContent), /只計自己的場次/);
+        assert.match(await page.$eval('#compare-table tbody tr:first-child', node => node.textContent), /連線較晚/);
+        assert.match(await page.$eval('#compare-table tbody tr:last-child', node => node.textContent), /以連線時刻起算/);
+        assert.ok(await page.$$eval('#compare-chart svg path', nodes => nodes.length >= 2));
+        assert.ok(await page.$$eval('#compare-chart svg circle', nodes => nodes.length >= 2));
+        assert.match(await page.$eval('#compare-highlight', node => node.textContent), /圖上最高/);
+        assert.match(await page.$eval('#compare-table thead', node => node.textContent), /峰值後低點/);
+        assert.match(await page.$eval('#compare-table tbody tr:last-child', node => node.textContent), /4.0（開播後 1 分）/);
+        assert.match(await page.$eval('#compare-chart svg', node => node.textContent), /開播後（分）/);
+        assert.equal(await page.$eval('#compare-note', node => node.hidden), true);
+        await page.$eval('#compare-chart', node => node.scrollIntoView({ block: 'center' }));
+        const svg = await page.$('#compare-chart svg');
+        const svgBox = await svg.boundingBox();
+        await page.mouse.move(svgBox.x + svgBox.width / 2, svgBox.y + svgBox.height / 2);
+        await page.waitForFunction(() => !document.querySelector('.compare-tip').hidden);
+        const tipText = await page.$eval('.compare-tip', node => node.textContent);
+        assert.match(tipText, /2026-10-02/);
+        assert.match(tipText, /開播後/);
+
         fs.mkdirSync(path.join(__dirname, '../output/playwright'), { recursive: true });
         await page.screenshot({ path: path.join(__dirname, '../output/playwright/traffic-ranking-next.png'), fullPage: true });
 
@@ -177,7 +221,8 @@ async function main() {
 
         current = ASSISTED_READY;
         await page.reload();
-        await page.waitForFunction(() => !document.querySelector('#ranking').hidden);
+        await page.waitForFunction(() => !document.querySelector('#ranking').hidden
+            && document.querySelectorAll('#ranking tbody tr').length === 2);
         assert.equal(await page.$$eval('#ranking tbody tr', rows => rows.length), 2);
         assert.match(await page.$eval('#ranking-note > strong', node => node.textContent), /已有可比較時段/);
         assert.match(await page.$eval('#ranking tbody tr:first-child td:nth-child(3)', node => node.textContent), /連線較晚|以連線時刻起算/);

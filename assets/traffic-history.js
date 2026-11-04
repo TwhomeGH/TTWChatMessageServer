@@ -59,6 +59,23 @@
 
     const format = value => value == null ? '—' : value.toFixed(1);
 
+    const COMPARE_COLORS = ['#60a5fa', '#34d399', '#fbbf24', '#f472b6', '#a78bfa', '#fb923c'];
+    const compareEscape = value => String(value).replace(/[<>&"]/g, char => (
+        { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[char]
+    ));
+    function niceStep(value) {
+        if (!Number.isFinite(value) || value <= 0) return 1;
+        const power = Math.pow(10, Math.floor(Math.log10(value)));
+        const normalized = value / power;
+        const factor = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+        return factor * power;
+    }
+    const tickText = (value, step) => step >= 1 ? String(Math.round(value)) : String(Number(value.toFixed(3)));
+    const startTypeLabel = type => type === 'exact' ? t('ranking.startType.exact')
+        : type === 'late' ? t('ranking.startType.late')
+            : type === 'approx' ? t('ranking.startType.approx')
+                : t('ranking.startType.estimated');
+
     /** 用第一列當表頭建立表格（thead／tbody），其餘為資料列。 */
     function buildTable(rows) {
         const table = document.createElement('table');
@@ -141,6 +158,181 @@
         ]);
     }
 
+    /** 場次開場比較：以開播後 0–120 分鐘對齊，畫各場曲線與跨場中位數。 */
+    function renderComparison(comparison) {
+        const chart = el('compare-chart'), table = el('compare-table');
+        const empty = el('compare-empty'), note = el('compare-note'), context = el('compare-context');
+        const highlight = el('compare-highlight');
+        const sessions = comparison?.sessions ?? [];
+        if (!sessions.length) {
+            chart.hidden = true;
+            table.hidden = true;
+            note.hidden = true;
+            empty.hidden = false;
+            context.textContent = '';
+            highlight.textContent = '';
+            return;
+        }
+        empty.hidden = true;
+        const bucketMs = comparison.bucketMs ?? 300000;
+        const windowMinutes = comparison.windowMinutes ?? 120;
+        context.textContent = t('compare.context', {
+            days: comparison.days,
+            scope: comparison.scope === 'own' ? t('compare.scopeOwn') : t('compare.scopeAll'),
+            limit: comparison.limit,
+            window: windowMinutes
+        });
+        note.hidden = sessions.length > 1;
+
+        const slots = comparison.slots ?? 0;
+        const allPoints = [...sessions.flatMap(session => session.points ?? []), ...(comparison.median ?? [])]
+            .filter(value => value != null);
+        const maxValue = Math.max(1, ...allPoints);
+        const step = niceStep(maxValue / 4);
+        const top = Math.max(step, Math.ceil(maxValue / step) * step);
+        const ticks = [];
+        for (let i = 0; i * step <= top + step * 1e-9; i++) ticks.push(i * step);
+        const width = 720, height = 270, left = 38, right = 12, topPad = 16, bottom = 38;
+        const plotW = width - left - right, plotH = height - topPad - bottom;
+        const x = index => slots <= 1 ? left + plotW / 2 : left + index * plotW / (slots - 1);
+        const y = value => topPad + (1 - value / top) * plotH;
+        const drawPath = points => {
+            let d = '', open = false;
+            points.forEach((value, index) => {
+                if (value == null) { open = false; return; }
+                d += (open ? 'L' : 'M') + x(index).toFixed(1) + ' ' + y(value).toFixed(1) + ' ';
+                open = true;
+            });
+            return d.trim();
+        };
+
+        if (!allPoints.length) {
+            chart.innerHTML = `<p class="text-gray-500 text-xs">${compareEscape(t('compare.noSamples'))}</p>`;
+        } else {
+            const grid = ticks.map(value => {
+                const py = y(value).toFixed(1);
+                return `<line x1="${left}" y1="${py}" x2="${width - right}" y2="${py}" stroke="${value === 0 ? '#4b5563' : '#374151'}" stroke-width="1"/>`
+                    + `<text x="2" y="${Number(py) + 4}" fill="#9ca3af" font-size="11">${compareEscape(tickText(value, step))}</text>`;
+            }).join('');
+            const marks = [];
+            for (let minute = 0; minute <= windowMinutes; minute += 30) {
+                const index = Math.min(slots - 1, Math.round(minute / (bucketMs / 60000)));
+                marks.push(`<text x="${x(index).toFixed(1)}" y="${height - 18}" fill="#9ca3af" font-size="11" text-anchor="middle">${minute}</text>`);
+            }
+            const axisTitle = `<text x="${left + plotW / 2}" y="${height - 4}" fill="#6b7280" font-size="10" text-anchor="middle">${compareEscape(t('compare.axis'))}</text>`;
+            const lines = sessions.map((session, index) => (
+                `<path d="${drawPath(session.points ?? [])}" fill="none" stroke="${COMPARE_COLORS[index % COMPARE_COLORS.length]}" stroke-width="1.5" opacity=".55"/>`
+            )).join('');
+            const median = sessions.length >= 3 && comparison.median?.some(value => value != null)
+                ? `<path d="${drawPath(comparison.median)}" fill="none" stroke="#e5e7eb" stroke-width="3"/>` : '';
+            let highest = null;
+            const peakDots = sessions.map((session, index) => {
+                let bestIndex = -1, bestValue = null;
+                (session.points ?? []).forEach((value, position) => {
+                    if (value != null && (bestValue === null || value > bestValue)) {
+                        bestValue = value;
+                        bestIndex = position;
+                    }
+                });
+                if (bestIndex < 0) return '';
+                if (highest === null || bestValue > highest.value) {
+                    highest = { value: bestValue, session, index: bestIndex };
+                }
+                const title = `${format(bestValue)} · ${session.date} · `
+                    + t('compare.elapsed', { minutes: Math.round(bestIndex * (bucketMs / 60000)) });
+                return `<circle cx="${x(bestIndex).toFixed(1)}" cy="${y(bestValue).toFixed(1)}" r="3.5"`
+                    + ` fill="${COMPARE_COLORS[index % COMPARE_COLORS.length]}" stroke="#111827" stroke-width="1.5">`
+                    + `<title>${compareEscape(title)}</title></circle>`;
+            }).join('');
+            const legend = [
+                median ? `<span><i style="background:#e5e7eb"></i>${compareEscape(t('compare.median'))}</span>` : '',
+                ...sessions.map((session, index) => (
+                    `<span><i style="background:${COMPARE_COLORS[index % COMPARE_COLORS.length]}"></i>${compareEscape(session.date)} ${compareEscape(session.localTime)}</span>`
+                ))
+            ].join('');
+            chart.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${compareEscape(t('compare.title'))}">`
+                + `<rect x="${left}" y="${topPad}" width="${plotW}" height="${plotH}" fill="#111827" stroke="#4b5563"/>`
+                + grid + marks + axisTitle + lines + median + peakDots
+                + `<line class="compare-cursor" x1="${left}" y1="${topPad}" x2="${left}" y2="${topPad + plotH}"`
+                + ` stroke="#e5e7eb" stroke-width="1" stroke-dasharray="3 3" opacity=".65" visibility="hidden"/>`
+                + `</svg><div class="compare-legend">${legend}</div><div class="compare-tip" hidden></div>`;
+            highlight.textContent = highest ? t('compare.highest', {
+                value: format(highest.value),
+                date: highest.session.date,
+                minutes: Math.round(highest.index * (bucketMs / 60000))
+            }) : '';
+        }
+        if (!allPoints.length) highlight.textContent = '';
+        chart.hidden = false;
+
+        if (allPoints.length) {
+            const svg = chart.querySelector('svg');
+            const tip = chart.querySelector('.compare-tip');
+            const cursor = chart.querySelector('.compare-cursor');
+            if (svg && tip && cursor) {
+                const hideTip = () => {
+                    tip.hidden = true;
+                    cursor.setAttribute('visibility', 'hidden');
+                };
+                chart.onpointermove = event => {
+                    const rect = svg.getBoundingClientRect();
+                    if (event.clientX < rect.left || event.clientX > rect.right
+                        || event.clientY < rect.top || event.clientY > rect.bottom) {
+                        hideTip();
+                        return;
+                    }
+                    const svgX = (event.clientX - rect.left) / rect.width * width;
+                    const index = Math.max(0, Math.min(slots - 1, Math.round((svgX - left) / plotW * (slots - 1))));
+                    const cx = x(index);
+                    cursor.setAttribute('x1', cx);
+                    cursor.setAttribute('x2', cx);
+                    cursor.setAttribute('visibility', 'visible');
+                    const rows = sessions.map((session, i) => (
+                        `<div class="row"><i style="background:${COMPARE_COLORS[i % COMPARE_COLORS.length]}"></i>`
+                        + `<span>${compareEscape(t('compare.sessionLabel', { date: session.date, time: session.localTime }))}</span>`
+                        + `<b>${compareEscape(format(session.points?.[index]))}</b></div>`
+                    ));
+                    if (sessions.length >= 3 && comparison.median?.some(value => value != null)) {
+                        rows.push(`<div class="row"><i style="background:#e5e7eb"></i><span>${compareEscape(t('compare.median'))}</span><b>${compareEscape(format(comparison.median[index]))}</b></div>`);
+                    }
+                    tip.innerHTML = `<strong>${compareEscape(t('compare.elapsed', { minutes: Math.round(index * (bucketMs / 60000)) }))}</strong>${rows.join('')}`;
+                    tip.hidden = false;
+                    const chartRect = chart.getBoundingClientRect();
+                    const tipWidth = 230;
+                    let leftPx = event.clientX - chartRect.left + 14;
+                    if (leftPx + tipWidth > chartRect.width) leftPx = event.clientX - chartRect.left - tipWidth - 14;
+                    tip.style.left = Math.max(4, leftPx) + 'px';
+                    tip.style.top = Math.max(4, Math.min(chartRect.height - 170, event.clientY - chartRect.top + 10)) + 'px';
+                };
+                chart.onpointerleave = hideTip;
+            }
+        } else {
+            chart.onpointermove = null;
+            chart.onpointerleave = null;
+        }
+
+        updateTable('compare-table', [
+            [t('compare.date'), t('compare.start'), t('compare.openingAverage'), t('compare.peak'),
+                t('compare.low'), t('compare.peakAt'), t('compare.observed'), t('compare.confidence'), t('compare.state')],
+            ...sessions.map(session => [
+                `● ${session.date}`,
+                session.localTime,
+                format(session.openingAverage),
+                format(session.peak),
+                session.postPeakLow == null ? '—' : `${format(session.postPeakLow)}（${t('compare.elapsed', { minutes: session.postPeakLowMinute })}）`,
+                session.peakMinute == null ? '—' : t('compare.elapsed', { minutes: session.peakMinute }),
+                t('compare.minutes', { minutes: session.observedMinutes }),
+                startTypeLabel(session.confidence),
+                session.ended ? t('compare.ended') : t('compare.ongoing')
+            ])
+        ]);
+        const tbody = table.querySelector('tbody');
+        for (const [index, row] of [...(tbody?.rows ?? [])].entries()) {
+            row.cells[0].style.color = COMPARE_COLORS[index % COMPARE_COLORS.length];
+        }
+        table.hidden = false;
+    }
+
         /**
      * 歷史時段排名：以「場次」為單位，取場次開場平均觀看。
      * 資格只看資料量（場次／日期／開場觀測）；開播信心只作標示，不是門檻。
@@ -162,10 +354,6 @@
             const [day, hour] = key.split(' ');
             return `${weekday(WEEKDAYS.indexOf(day))} ${hour}:00`;
         };
-        const startTypeLabel = type => type === 'exact' ? t('ranking.startType.exact')
-            : type === 'late' ? t('ranking.startType.late')
-                : type === 'approx' ? t('ranking.startType.approx')
-                    : t('ranking.startType.estimated');
         const startType = cell => (cell.startTypes ?? [])
             .map(startTypeLabel).join(' + ') || t('ranking.confidence');
         const needOf = cell => Math.max(0, minSessions - cell.n, minDays - cell.observedDays);
@@ -421,8 +609,10 @@
             if (changed('heatmap', [context, data.cells])) renderHeatmap(data.cells);
             if (changed('daily', [context, data.daily])) renderDaily(data.daily);
             if (changed('metrics', [context, data.metrics])) renderMetrics(data.metrics);
+            if (changed('compare', [context, data.comparison])) renderComparison(data.comparison);
             if (changed('ranking', [context, data.rankings])) renderRanking(data.rankings);
-        } catch {
+        } catch (error) {
+            console.error('[traffic] history refresh failed:', error);
             setText(el('history-status'), t('history.error'));
         } finally {
             busy = false;

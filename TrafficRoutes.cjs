@@ -109,11 +109,14 @@ function serveTraffic(req, res, authorized = false) {
             const rankings = own.totalSessions
                 ? { ...own, scope: 'own' }
                 : { ...database.rankings(platform, days, now, timezone), scope: 'all' };
+            const comparison = database.sessionComparison(platform, days, now, timezone, {
+                purposes: rankings.scope === 'own' ? ['own'] : null
+            });
             res.setHeader('Content-Type', 'application/json; charset=utf-8');
             res.end(JSON.stringify({
                 storageError,
                 ...database.distribution(platform, days, now, timezone),
-                rankings,
+                rankings, comparison,
                 metrics: database.metrics(platform, days, now, timezone)
             }));
         } catch {

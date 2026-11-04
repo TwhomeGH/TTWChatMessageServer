@@ -690,6 +690,127 @@ class TrafficDatabase {
     }
 
     /**
+     * 場次開場對齊比較：以 actualStarted（沒有時用 started）為 0 分，
+     * 取前 windowMinutes 的每 bucket 平均觀看；只回傳最近 limit 場。
+     * 缺值保留 null，不補 0。
+     */
+    sessionComparison(platform, days, now, timezone, {
+        purposes = null, limit = 6, windowMinutes = 120, bucketMs = 5 * 60000, minOpeningMinutes = 10
+    } = {}) {
+        const platforms = this.platforms();
+        platform = platforms.includes(platform) ? platform : platforms[0];
+        const profiles = new Map(this.db.prepare('SELECT broadcaster,purpose FROM traffic_profiles WHERE platform=?')
+            .all(platform || '').map(profile => [profile.broadcaster, profile.purpose]));
+        const purposeOf = session => session.purpose || profiles.get(session.broadcaster) || 'unknown';
+        let sessions = this.db.prepare(`SELECT * FROM sessions
+            WHERE platform=? AND COALESCE(actualStarted,started)>=? AND COALESCE(actualStarted,started)<=?
+            ORDER BY COALESCE(actualStarted,started) DESC`)
+            .all(platform || '', now - days * 86400000, now);
+        sessions = sessions.filter(session => purposes
+            ? purposes.includes(purposeOf(session))
+            : purposeOf(session) !== 'test');
+
+        // 同一 stream 可能因斷線有多列；保留最早的一列，開場資料最完整。
+        const byStream = new Map();
+        for (const session of sessions) {
+            const key = session.stream || `id:${session.id}`;
+            const anchor = session.actualStarted ?? session.started;
+            const existing = byStream.get(key);
+            const existingAnchor = existing ? (existing.actualStarted ?? existing.started) : Infinity;
+            if (!existing || anchor < existingAnchor || (anchor === existingAnchor && session.sampleCount > existing.sampleCount)) {
+                byStream.set(key, session);
+            }
+        }
+        sessions = [...byStream.values()]
+            .filter(session => {
+                const confidence = startConfidence(session);
+                if (confidence === 'missing') return false;
+                const anchor = session.actualStarted ?? session.started;
+                const span = confidence === 'late' || confidence === 'approx'
+                    ? (session.lateSpanMs || session.earlySpanMs) : session.earlySpanMs;
+                return session.sampleCount >= MIN_SESSION_SAMPLES
+                    && span >= minOpeningMinutes * 60000
+                    && anchor + minOpeningMinutes * 60000 <= now;
+            })
+            .sort((a, b) => (b.actualStarted ?? b.started) - (a.actualStarted ?? a.started))
+            .slice(0, limit);
+
+        const windowMs = windowMinutes * 60000;
+        const slots = Math.ceil(windowMs / bucketMs);
+        const formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone: timezone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit'
+        });
+        const result = [];
+        for (const session of sessions) {
+            const confidence = startConfidence(session);
+            const anchor = session.actualStarted ?? session.started;
+            const earlyMinutes = confidence === 'late' || confidence === 'approx'
+                ? LATE_WINDOW_MS / 60000 : EARLY_WINDOW_MS / 60000;
+            const earlyMs = earlyMinutes * 60000;
+            const rows = this.db.prepare(`SELECT time,viewerSum,viewerCount FROM minutes
+                WHERE platform=? AND time>=? AND time<? ORDER BY time`)
+                .all(platform || '', anchor - 60000, anchor + windowMs);
+            const points = new Array(slots).fill(null);
+            const bucketSum = new Array(slots).fill(0);
+            const bucketCount = new Array(slots).fill(0);
+            let earlySum = 0, earlyCount = 0, peak = null, peakMinute = null, low = null, lowMinute = null;
+            const minuteSamples = [];
+            for (const row of rows) {
+                if (!row.viewerCount || row.time + 60000 <= anchor) continue;
+                const value = row.viewerSum / row.viewerCount;
+                const elapsed = Math.max(0, row.time - anchor);
+                const index = Math.min(slots - 1, Math.floor(elapsed / bucketMs));
+                bucketSum[index] += value;
+                bucketCount[index] += 1;
+                if (elapsed < earlyMs) { earlySum += value; earlyCount += 1; }
+                if (peak === null || value > peak) { peak = value; peakMinute = Math.floor(elapsed / 60000); }
+                if (low === null || value < low) { low = value; lowMinute = Math.floor(elapsed / 60000); }
+                minuteSamples.push({ elapsed, value });
+            }
+            // 峰值後低點：峰值之後掉了多少，比整場最低 0 更有解讀價值。
+            let postPeakLow = null, postPeakLowMinute = null;
+            if (peakMinute != null) {
+                for (const sample of minuteSamples) {
+                    if (sample.elapsed <= peakMinute * 60000) continue;
+                    if (postPeakLow === null || sample.value < postPeakLow) {
+                        postPeakLow = sample.value;
+                        postPeakLowMinute = Math.floor(sample.elapsed / 60000);
+                    }
+                }
+            }
+            for (let i = 0; i < slots; i++) points[i] = bucketCount[i] ? bucketSum[i] / bucketCount[i] : null;
+            const parts = Object.fromEntries(formatter.formatToParts(anchor).map(part => [part.type, part.value]));
+            result.push({
+                id: session.id, stream: session.stream, broadcaster: session.broadcaster,
+                purpose: purposeOf(session), confidence, anchor,
+                date: `${parts.year}-${parts.month}-${parts.day}`,
+                localTime: `${parts.hour}:${parts.minute}`,
+                ended: session.ended != null || now - session.lastSampleAt > 5 * 60000,
+                samples: session.sampleCount,
+                observedMinutes: Math.min(windowMinutes, bucketCount.reduce((n, count) => n + count, 0)),
+                earlyMinutes,
+                openingAverage: earlyCount ? earlySum / earlyCount : null,
+                peak, peakMinute, low, lowMinute, postPeakLow, postPeakLowMinute,
+                points
+            });
+        }
+        const median = [];
+        for (let i = 0; i < slots; i++) {
+            const values = result.map(session => session.points[i]).filter(value => value != null).sort((a, b) => a - b);
+            if (!values.length) { median.push(null); continue; }
+            const mid = Math.floor(values.length / 2);
+            median.push(values.length % 2 ? values[mid] : (values[mid - 1] + values[mid]) / 2);
+        }
+        return {
+            platform, days, timezone, windowMinutes, bucketMs, slots,
+            minOpeningMinutes, limit,
+            scope: purposes ? (purposes.includes('own') ? 'own' : 'all') : 'all',
+            sessions: result, median
+        };
+    }
+
+    /**
      * 依場次「開始時間」分桶的歷史時段排名。
      *
      * 以「場次」而非「分鐘」為單位，避免長場次主宰排名；每桶取開場平均觀看，

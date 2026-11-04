@@ -117,6 +117,16 @@
       <p><span data-i18n="traffic.history.metricsNote">互動指標跨場次相加；累計觸及人數取最大值（同一批觀眾可能橫跨多場）。</span></p>
       <div id="metrics" class="table-wrap"></div>
 
+      <h3><span data-i18n="traffic.compare.title">場次開場比較</span></h3>
+      <p><span data-i18n="traffic.compare.note">以開播後 0–120 分鐘對齊；線條為各場開場觀看（5 分鐘平均），粗線為跨場中位數（至少 3 場時顯示），圓點為各場峰值；表格最高／最低為原始分鐘平均。缺值不補 0。</span></p>
+      <p id="compare-context" class="text-gray-400 text-xs"></p>
+      <p id="compare-highlight" class="text-gray-300 text-xs"></p>
+      <div id="compare-chart" class="compare-chart" hidden></div>
+      <p id="compare-empty" class="text-gray-500 text-xs" hidden data-i18n="traffic.compare.empty">尚無足夠的場次可比較。</p>
+      <p id="compare-note" class="text-gray-500 text-xs" hidden data-i18n="traffic.compare.onlyOne">目前只有 1 場可比；累積更多場次後曲線才有比較意義。</p>
+      <div id="compare-table" class="table-wrap" hidden></div>
+      <p class="text-gray-500 text-xs" data-i18n="traffic.compare.openingNote">開場平均：exact／estimated 取前 30 分，late／approx 取前 45 分。峰值後低點是峰值之後的最低分鐘平均，用來看掉得多快。</p>
+
       <h3><span data-i18n="traffic.ranking.title">開播時段比較（歷史參考）</span></h3>
       <div id="ranking-note" class="ranking-note" role="status"></div>
       <div id="ranking" class="table-wrap"></div>
