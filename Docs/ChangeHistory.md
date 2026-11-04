@@ -1,5 +1,26 @@
 # ChangeHistory
 
+## 2026.11.05 05:37 AutoClip 歷史 UI 冒煙測試
+
+**類型**: 測試 · **檔案**: `Test/autoclip_history_ui.cjs`、`assets/autoclip.js`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 問題 - 歷史頁的本場最高、單人門檻與觸發證據沒有自動化檢查
+
+歷史頁先前只用手動預覽確認；單人模式新增後，卡片門檻、`scoreThreshold`、觸發證據與範圍摘要都可能在改動中回歸。
+
+### 修改
+
+- 新增 `Test/autoclip_history_ui.cjs`：以假歷史資料與 Chart stub 載入真正的 `assets/autoclip.js`。
+- 檢查歷史場次選單、本場最高摘要、單人門檻（5 則／1 人、分數 2.5）、觸發證據（單人模式、每人 5 則）與切換到 10 分鐘範圍後的摘要。
+- 測試時發現並修正前端 `summarizeRows()` 缺少 `scoreThreshold`／`solo`／`recentDistinctUsers`；「所選範圍」摘要現在會沿用單人門檻。
+- 切回即時頁時確認歷史控制項隱藏、即時總覽顯示，且沒有 page error。
+
+### 驗證
+
+`node Test/autoclip_history_ui.cjs`。
+
+---
+
 ## 2026.11.05 05:29 AutoClip 單人活躍發言者模式
 
 **類型**: 功能 · **檔案**: `AutoClipV2.mjs`、`ScriptLib/autoclip/metrics.mjs`、`ScriptLib/autoclip/evidence.mjs`、`ScriptLib/autoclip/history.cjs`、`TikTok.js`、`assets/autoclip.js`、`.env.example`、`Docs/KEYWORD_AUTOCLIP_V2.md`、`Test/autoclip_v2.test.mjs`、`Test/autoclip_history.test.cjs`
@@ -14,6 +35,7 @@
 - 單人門檻：1 位發言人、5 則不同訊息、聊天倍率 3.0、分數 2.5、每人最多 5 則；同一人重複相同文字不累計。
 - `auto` 另外限制全平台觀眾 ≤ 20；`on` 忽略觀眾上限但仍要求 1 位發言者；`off` 停用。第二位發言者出現即回到一般門檻。
 - 狀態列、平台卡片、觸發證據與歷史摘要記錄 `solo`、`recentDistinctUsers`、有效分數門檻與每人上限。
+- 前端 `summarizeRows()` 同步複製 `scoreThreshold`／`solo`／`recentDistinctUsers`，讓「所選範圍」摘要沿用單人門檻。
 - 新增 `AUTO_CLIP_SOLO`、`AUTO_CLIP_SOLO_*` 設定。
 
 ### 限制
