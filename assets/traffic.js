@@ -6,6 +6,9 @@
     const timezone = () => el('timezone')?.value || Intl.DateTimeFormat().resolvedOptions().timeZone;
     const dateTime = value => new Date(value).toLocaleString(locale(), { timeZone: timezone(), hour12: false });
     const time = value => new Date(value).toLocaleTimeString(locale(), { timeZone: timezone(), hour12: false });
+    const minuteTime = value => new Date(value).toLocaleTimeString(locale(), {
+        timeZone: timezone(), hour12: false, hour: '2-digit', minute: '2-digit'
+    });
     let data = null;
     let busy = false, rerun = false;
     let selected = null;
@@ -248,6 +251,20 @@
         /** 共用桶時間繪製折線；缺值斷線，短線段與孤立樣本仍須清楚可見。 */
     let detailDrag=null, suppressChartClick=false;
     function draw(id, keys) {
+        /** 選擇 1／2／5×10^n 的刻度間距。 */
+        function niceStep(value) {
+            if (!Number.isFinite(value) || value <= 0) return 1;
+            const power = Math.pow(10, Math.floor(Math.log10(value)));
+            const normalized = value / power;
+            const factor = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+            return factor * power;
+        }
+
+        /** 刻度文字：整數不加小數，小數最多三位。 */
+        function tickText(value, step) {
+            return step >= 1 ? String(Math.round(value)) : String(Number(value.toFixed(3)));
+        }
+
         const canvas = el(id);
         const width = canvas.clientWidth;
         const height = canvas.clientHeight || 200;
@@ -262,8 +279,14 @@
             const minutes=Math.max(1,(Math.min(data.chartUntil??data.now,row.time+data.bucketMs)-Math.max(data.since,row.time))/60000);
             return {...row, joins:rate?row.joins/minutes:row.joins,chats:rate?row.chats/minutes:row.chats,activeUsers:rate?null:row.activeUsers};
         });
-        // 上下保留空間，避免 0／1 人的線與外框重疊。
-        const max = Math.max(1, ...rows.flatMap(row => keys.map(key => row[key] ?? 0))) * 1.2;
+        // 依資料挑選漂亮刻度；觀看數／筆數用整數，比率才用小數，避免 1.2／2.4 這種誤導刻度。
+        const rawMax = Math.max(0, ...rows.flatMap(row => keys.map(key => row[key] ?? 0)));
+        const integer = id === 'viewers' || (id === 'arrivals' && !rate);
+        const tickStep = integer ? Math.max(1, niceStep(rawMax / 4)) : niceStep(Math.max(rawMax, 1e-9) / 4);
+        const top = Math.max(tickStep, Math.ceil(rawMax / tickStep) * tickStep);
+        const max = top * 1.08;
+        const yTicks = [];
+        for (let i = 0; i * tickStep <= top + tickStep * 1e-9; i++) yTicks.push(i * tickStep);
         const plot = { left: 38, right: width - 10, top: 20, bottom: height - 30 };
         const baseline = plot.bottom - 6;
 
@@ -274,16 +297,16 @@
         ctx.lineWidth = 1;
         ctx.strokeRect(plot.left + 0.5, plot.top + 0.5, plot.right - plot.left - 1, plot.bottom - plot.top - 1);
 
-        // 水平格線與左側刻度（0／50%／100%）。
-        for (const level of [0, 0.5, 1]) {
-            const y = baseline - level * (baseline - plot.top);
-            ctx.strokeStyle = level === 0 ? '#4b5563' : '#374151';
+        // 水平格線與左側刻度（依資料使用整數或小數）。
+        for (const value of yTicks) {
+            const y = baseline - value / max * (baseline - plot.top);
+            ctx.strokeStyle = value === 0 ? '#4b5563' : '#374151';
             ctx.beginPath();
             ctx.moveTo(plot.left, y);
             ctx.lineTo(plot.right, y);
             ctx.stroke();
             ctx.fillStyle = '#9ca3af';
-            ctx.fillText(String(Number((max * level).toFixed(1))), 2, y + 4);
+            ctx.fillText(tickText(value, tickStep), 2, y + 4);
         }
 
         const pointX = i => rows.length === 1 ? (plot.left + plot.right) / 2 : plot.left + i * (plot.right - plot.left) / Math.max(1, rows.length - 1);
@@ -331,6 +354,23 @@
                 ctx.fill();
             });
         });
+
+        // 空圖不要只留格線：直接說明是沒有取樣，還是此區間沒有互動。
+        if (id === 'viewers' && rows.every(row => row.viewers == null)) {
+            ctx.fillStyle = '#9ca3af';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(t('chart.viewersEmpty'), (plot.left + plot.right) / 2, (plot.top + plot.bottom) / 2);
+            ctx.textAlign = 'left';
+            ctx.font = '11px sans-serif';
+        } else if (id === 'arrivals' && rows.every(row => !(row.joins > 0) && !(row.chats > 0) && !(row.activeUsers > 0))) {
+            ctx.fillStyle = '#9ca3af';
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(t('chart.arrivalsEmpty'), (plot.left + plot.right) / 2, (plot.top + plot.bottom) / 2);
+            ctx.textAlign = 'left';
+            ctx.font = '11px sans-serif';
+        }
 
         // 時間刻度：均勻取 5 個位置，格式隨桶寬改變。
         ctx.fillStyle = '#9ca3af';
@@ -484,9 +524,14 @@
                 blocked:blockedChats, chats, ads:data.adUsers ?? 0, active:data.activeUsers ?? 0
             }) : '');
             const observed = data.buckets.filter(bucket => bucket.viewers !== null);
-            setText(el('viewer-summary'), observed.length ? t('summary', {
-                count:observed.length, minutes:data.bucketMs / 60000,
-                from:dateTime(observed[0].time), to:dateTime(observed.at(-1).time)
+            const peakRow = data.buckets.reduce((best, row) =>
+                row.peak != null && (best == null || row.peak > best.peak) ? row : best, null);
+            setText(el('viewer-summary'), observed.length ? t('summary.insight', {
+                average: summary?.average == null ? '—' : summary.average.toFixed(2),
+                observed: observedMinutes,
+                peak: peakRow ? peakRow.peak.toFixed(2) : '—',
+                peakAt: peakRow ? minuteTime(peakRow.time) : '—',
+                samples: summary?.samples ?? 0
             }) : t('summary.empty'));
 
             const cards = [

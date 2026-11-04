@@ -1,5 +1,26 @@
 # ChangeHistory
 
+## 2026.11.05 04:00 人流指標卡改為 3×2、圖表刻度與摘要更易讀
+
+**類型**: 改善 · **檔案**: `assets/traffic.css`、`assets/traffic.js`、`lang/zh-TW.json`、`lang/en.json`、`Docs/TRAFFIC.md`
+
+### 問題 - 六張指標卡擠在一列，長標籤換行讓數值高低不齊；圖表刻度出現 1.2／2.4
+
+`平均觀看（有效取樣分鐘）` 在窄卡片內換行，其他卡片較矮，數值沒有對齊；觀看圖的 Y 軸用最大值 ×0.5 產生 1.2／2.4，但觀看數是整數，刻度反而比線更難讀。
+
+### 修改
+
+- 桌面改為 3 欄 × 2 列；卡片改用 flex，數值固定貼底，標籤長短不再讓數字忽高忽低。
+- 圖表依資料選擇整數或小數刻度：觀看數／筆數用 0、1、2 這類整數，比率才用小數。
+- 觀看圖下方摘要改為平均、最高分鐘與發生時間、有效分鐘與樣本數。
+- 沒有觀看取樣或沒有互動時，圖表中央直接顯示原因，不再只留空白格線。
+
+### 驗證
+
+`node Test/traffic_history_ui.cjs`、`npm run test:core`、`npm run lint`、`npm run check:css`。
+
+---
+
 ## 2026.11.05 01:50 開播時段排名不再要求精確開播時間，estimated 也能達標
 
 **類型**: 修正 · **檔案**: `assets/traffic-history.js`、`traffic.html`、`lang/zh-TW.json`、`lang/en.json`、`Test/traffic_history_ui.cjs`、`Docs/TRAFFIC.md`
