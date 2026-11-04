@@ -77,12 +77,13 @@ test('AutoClip 歷史彙整各平台本場最高與達標窗口', () => {
     const platform = (score, extra = {}) => ({
         platform: 'TikTok', score, windowMsgs: 1, uniqueUsers: 1, messageRatio: 1,
         viewers: 2, transports: ['api'], minMessages: 4, minUsers: 2, minMessageRatio: 1.5,
-        eligible: false, ...extra
+        scoreThreshold: 1.8, solo: false, distinctRecent: 0, eligible: false, ...extra
     });
     const rows = [
         { ...row(0, 0.2), platforms: [platform(0.2)] },
         { ...row(1, 1.8), platforms: [platform(1.8, {
-            windowMsgs: 2, messageRatio: 2, viewers: 3, transports: ['api', 'userscript']
+            windowMsgs: 2, messageRatio: 2, viewers: 3, transports: ['api', 'userscript'],
+            solo: true, distinctRecent: 1, scoreThreshold: 2.5
         })] },
         { ...row(2, 0.5), platforms: [platform(0.5, { eligible: true })] }
     ];
@@ -98,5 +99,8 @@ test('AutoClip 歷史彙整各平台本場最高與達標窗口', () => {
     assert.deepEqual([...tiktok.transports].sort(), ['api', 'userscript']);
     assert.equal(tiktok.at, rows[1].t);
     assert.equal(tiktok.maxMessages, 2);
+    assert.equal(tiktok.solo, true);
+    assert.equal(tiktok.recentDistinctUsers, 1);
+    assert.equal(tiktok.scoreThreshold, 2.5);
     history.close();
 });

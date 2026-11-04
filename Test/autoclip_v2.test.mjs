@@ -21,7 +21,7 @@ test('warmup, shadow burst timing and cooldown without API requests', () => {
     assert.equal(f.advance(5000).triggered, false);
 });
 test('single-user spam, cross-platform, old and repeated messages do not inflate heat', () => {
-    const f = setup(); f.warm();
+    const f = setup({ solo: 'off' }); f.warm();
     for (let i = 0; i < 100; i++) f.chat('one');
     assert.equal(f.manager.getStats(f.now()).windowMsgs, 3);
     assert.equal(f.chat('two', { platform: 'TikTok' }), true);
@@ -92,7 +92,7 @@ for (const platform of ['TikTok', 'Kick', 'Odysee', 'Youtube', 'Unknown']) {
     });
 }
 test('same user IDs on different platforms do not share spam limits or dedup keys', () => {
-    const f = setup(); f.warm();
+    const f = setup({ solo: 'off' }); f.warm();
     for (let i = 0; i < 3; i++) {
         assert.equal(f.chat('same', { id: 'shared' + i, platform: 'Twitch' }), true);
         assert.equal(f.chat('same', { id: 'shared' + i, platform: 'TikTok' }), true);
@@ -120,7 +120,7 @@ test('configured platform delay adjusts evidence time and rejects reactions now 
 
 // 集中度：分辨「很多人各一則」與「一個人洗頻」。
 test('topUserMsgs 反映集中度（單人洗頻 vs 多人各一則）', () => {
-    const f = setup(); f.warm();
+    const f = setup({ solo: 'off' }); f.warm();
     for (let i = 0; i < 5; i++) f.chat('spammer');   // maxPerUser=3，只計 3 則
     for (const user of ['a', 'b', 'c']) f.chat(user);
     const stats = f.manager.getStats(f.now());
@@ -152,15 +152,49 @@ test('自適應門檻：小台 2 人／4 則可觸發，固定 6／3 不會', ()
     assert.equal(fixed.advance(15000).triggered, false);
 });
 
-test('自適應門檻：仍不會讓單人洗頻觸發', () => {
+test('單人模式：3 則不足，5 則不同訊息可觸發', () => {
     const f = setup({ adaptiveThresholds: true }); f.warm();
-    for (let i = 0; i < 3; i++) f.chat('solo'); // maxPerUser=3，仍不到 4 則與 2 人
-    const stats = f.manager.getStats(f.now());
-    const twitch = stats.platforms.find(p => p.platform === 'Twitch');
-    assert.equal(twitch.minUsers, 2);
-    assert.equal(twitch.minMessages, 4);
+    for (let i = 0; i < 3; i++) f.chat('solo', { message: 'm' + i });
+    const twitch = f.manager.getStats(f.now()).platforms.find(p => p.platform === 'Twitch');
+    assert.equal(twitch.solo, true);
+    assert.equal(twitch.minUsers, 1);
+    assert.equal(twitch.minMessages, 5);
+    f.advance(5000);
+    assert.equal(f.advance(5000).triggered, false);
+
+    f.chat('solo', { message: 'm3' });
+    f.chat('solo', { message: 'm4' });
+    f.advance(5000);
+    const result = f.advance(15000);
+    assert.equal(result.triggered, true);
+    assert.equal(result.stats.evidence.solo, true);
+    assert.equal(result.stats.evidence.maxPerUser, 5);
+});
+
+test('單人模式：重複相同文字不算不同訊息', () => {
+    const f = setup({ adaptiveThresholds: true }); f.warm();
+    for (let i = 0; i < 5; i++) f.chat('solo', { message: '一樣' });
+    const twitch = f.manager.getStats(f.now()).platforms.find(p => p.platform === 'Twitch');
+    assert.equal(twitch.solo, true);
+    assert.equal(twitch.windowMsgs, 1);
     f.advance(5000);
     assert.equal(f.advance(15000).triggered, false);
+});
+
+test('單人模式 auto 受觀眾上限保護，on 可忽略上限', () => {
+    const auto = setup({ solo: 'auto', soloMaxViewers: 5 }); auto.warm();
+    for (let i = 0; i < 5; i++) auto.chat('solo', { message: 'a' + i });
+    const autoTwitch = auto.manager.getStats(auto.now()).platforms.find(p => p.platform === 'Twitch');
+    assert.equal(autoTwitch.solo, false);
+    auto.advance(5000);
+    assert.equal(auto.advance(15000).triggered, false);
+
+    const forced = setup({ solo: 'on', soloMaxViewers: 5 }); forced.warm();
+    for (let i = 0; i < 5; i++) forced.chat('solo', { message: 'b' + i });
+    const forcedTwitch = forced.manager.getStats(forced.now()).platforms.find(p => p.platform === 'Twitch');
+    assert.equal(forcedTwitch.solo, true);
+    forced.advance(5000);
+    assert.equal(forced.advance(15000).triggered, true);
 });
 
 test('自適應門檻：活躍聊天會把門檻維持在設定的 6／3', () => {

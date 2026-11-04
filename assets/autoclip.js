@@ -94,6 +94,8 @@ function summarizeRows(rows) {
                     windowMsgs: 0, uniqueUsers: 0, messageRatio: 0, viewers: 0,
                     maxMessages: 0, maxUsers: 0, maxRatio: 0, maxViewers: 0,
                     minMessages: p.minMessages, minUsers: p.minUsers, minMessageRatio: p.minMessageRatio,
+                    scoreThreshold: p.scoreThreshold, solo: p.solo,
+                    recentDistinctUsers: p.distinctRecent ?? p.recentDistinctUsers,
                     eligibleCount: 0, samples: 0, transports: new Set()
                 };
                 byPlatform.set(p.platform, item);
@@ -110,6 +112,9 @@ function summarizeRows(rows) {
                 item.minMessages = p.minMessages ?? item.minMessages;
                 item.minUsers = p.minUsers ?? item.minUsers;
                 item.minMessageRatio = p.minMessageRatio ?? item.minMessageRatio;
+                item.scoreThreshold = p.scoreThreshold ?? item.scoreThreshold;
+                item.solo = p.solo ?? item.solo;
+                item.recentDistinctUsers = (p.distinctRecent ?? p.recentDistinctUsers) ?? item.recentDistinctUsers;
             }
             item.maxMessages = Math.max(item.maxMessages, Number(p.windowMsgs) || 0);
             item.maxUsers = Math.max(item.maxUsers, Number(p.uniqueUsers) || 0);
@@ -173,6 +178,7 @@ function renderPlatformCards() {
       const minMessages = p?.minMessages ?? limits?.minMessages ?? 6;
       const minUsers = p?.minUsers ?? limits?.minUsers ?? 3;
       const minRatio = p?.minMessageRatio ?? limits?.minMessageRatio ?? 1.5;
+      const cardThreshold = p?.scoreThreshold ?? threshold;
       // 顯示「目前值/門檻」，直接看出差多少，而不是只看到「不足」。
       const missing = p ? [
         p.windowMsgs < minMessages ? `留言 ${p.windowMsgs}/${minMessages}` : '',
@@ -183,8 +189,9 @@ function renderPlatformCards() {
         ? (historical ? '未保存平台數據' : sessionSummary ? `${summaryScope}無樣本` : '尚無平台樣本')
         : sessionSummary
           ? (p.eligibleCount > 0 ? `${summaryScope} ${p.eligibleCount} 個窗口達標` : `${summaryScope} 0 個窗口達標`)
-          : winner ? '本次主導' : p.eligible ? '平台合格' : missing.join('、') || '未達平台門檻';
-      const hint = `觸發門檻：30 秒窗口內至少 ${minMessages} 筆留言、${minUsers} 位不同發言人，且聊天倍率（目前速率 ÷ 基準速率）至少 ${minRatio} 倍`;
+          : winner ? (p?.solo ? '本次主導（單人）' : '本次主導')
+            : p.eligible ? (p.solo ? '平台合格（單人）' : '平台合格') : missing.join('、') || '未達平台門檻';
+      const hint = `觸發門檻${p?.solo ? '（單人模式）' : ''}：30 秒窗口內至少 ${minMessages} 筆留言、${minUsers} 位不同發言人，且聊天倍率（目前速率 ÷ 基準速率）至少 ${minRatio} 倍`;
       const counts = !p ? '— 則 · — 人'
         : sessionSummary
           ? `最高 ${esc(p.windowMsgs)}/${esc(minMessages)} 則 · ${esc(p.uniqueUsers)}/${esc(minUsers)} 人 · ${Number(p.messageRatio).toFixed(1)}/${minRatio} 倍率`
@@ -195,7 +202,7 @@ function renderPlatformCards() {
       return `<button class="platform-card ${winner?'winner':''}" style="--platform-color:${platformColors[platform]}" data-platform="${platform}" aria-pressed="${focusedPlatform===platform}" title="${esc(hint)}">
         <div class="font-semibold">${sourceLabel(platform)}</div>
         <div class="text-xs text-gray-400">${esc(p?.transports?.map(transportLabel).join('＋') || '管道未記錄')}</div>
-        <div class="text-xl font-bold my-1">${numberText(p?.score)} <span class="text-xs text-gray-400">/ ${numberText(threshold)}</span></div>
+        <div class="text-xl font-bold my-1">${numberText(p?.score)} <span class="text-xs text-gray-400">/ ${numberText(cardThreshold)}</span></div>
         <div class="text-xs">${status}</div><div class="text-xs text-gray-400 mt-1">${counts}</div>
         <div class="text-xs text-gray-400">${footer}</div>
       </button>`;
@@ -290,9 +297,9 @@ function renderTriggerDetail() {
     const historyInfo=triggerHistoryInfo(row);
     if(!historyInfo.hasDetails){const p=document.createElement('p');p.textContent=historyInfo.explanation;detail.append(p);return;}
     const summary=document.createElement('p');summary.className='text-gray-400 my-2';
-    summary.textContent='統計窗口 '+fmtTime(ev.windowStart)+'–'+fmtTime(ev.windowEnd)+' · '+ev.total+' 則 / '+ev.uniqueUsers+' 位 · 最少 '+ev.minMessages+' 則 / '+ev.minUsers+' 位 · 分數 '+Number(row.score).toFixed(2)+' / 門檻 '+ev.threshold+' · 每人最多計入 '+ev.maxPerUser+' 則'+(ev.truncated?' · 僅保留最後 200 則':'');detail.append(summary);
+    summary.textContent='統計窗口 '+fmtTime(ev.windowStart)+'–'+fmtTime(ev.windowEnd)+' · '+ev.total+' 則 / '+ev.uniqueUsers+' 位 · 最少 '+ev.minMessages+' 則 / '+ev.minUsers+' 位 · 分數 '+Number(row.score).toFixed(2)+' / 門檻 '+ev.threshold+' · 每人最多計入 '+ev.maxPerUser+' 則'+(ev.solo?' · 單人模式':'')+(ev.truncated?' · 僅保留最後 200 則':'');detail.append(summary);
     const contribution=document.createElement('div');contribution.className='my-3 space-y-1 text-gray-300';
-    for(const p of ev.platforms||[]){const line=document.createElement('p');line.textContent=sourceLabel(p.platform)+' · '+((p.transports||[]).map(transportLabel).join('＋')||'管道未記錄')+' · '+p.windowMsgs+' 則 / '+p.uniqueUsers+' 位'+(p.topUserMsgs>1?'（最多 '+p.topUserMsgs+' 則/人）':'')+'（門檻 '+(cfg.minMessages??6)+' 則 / '+(cfg.minUsers??3)+' 位） · '+Number(p.msgRate).toFixed(1)+'/min，基準 '+Number(p.baseMsgRate).toFixed(1)+' · 平台分數 '+Number(p.score).toFixed(2)+' · '+(p.platform===ev.sourcePlatform?'觸發來源，採計 '+Number(p.contribution).toFixed(2):p.eligible?'合格，未高於來源平台':'未達最低反應門檻');contribution.append(line);}detail.append(contribution);
+    for(const p of ev.platforms||[]){const line=document.createElement('p');line.textContent=sourceLabel(p.platform)+' · '+((p.transports||[]).map(transportLabel).join('＋')||'管道未記錄')+' · '+p.windowMsgs+' 則 / '+p.uniqueUsers+' 位'+(p.topUserMsgs>1?'（最多 '+p.topUserMsgs+' 則/人）':'')+'（'+(p.solo?'單人 · ':'')+'門檻 '+(p.minMessages??cfg.minMessages??6)+' 則 / '+(p.minUsers??cfg.minUsers??3)+' 位） · '+Number(p.msgRate).toFixed(1)+'/min，基準 '+Number(p.baseMsgRate).toFixed(1)+' · 平台分數 '+Number(p.score).toFixed(2)+' · '+(p.platform===ev.sourcePlatform?'觸發來源，採計 '+Number(p.contribution).toFixed(2):p.eligible?'合格，未高於來源平台':'未達最低反應門檻');contribution.append(line);}detail.append(contribution);
     const list=document.createElement('div');list.className='max-h-72 overflow-y-auto space-y-2';
     for(const m of ev.messages||[]){const item=document.createElement('div');item.className='bg-gray-900 rounded-lg p-3';const meta=document.createElement('p');meta.className='text-xs text-gray-400';meta.textContent=fmtTime(m.t)+' · '+m.name+' · '+sourceLabel(m.platform)+' / '+transportLabel(m.transport)+' · '+(m.timeSource==='platform'?'平台時間':'接收時間')+(m.originalTime&&m.originalTime!==m.t?'（校準前 '+fmtTime(m.originalTime)+'）':'');const content=document.createElement('p');content.className='whitespace-pre-wrap break-words mt-1';content.textContent=m.message;item.append(meta,content);list.append(item);}detail.append(list);
 }
@@ -560,7 +567,8 @@ function renderConfig(configured = {}) {
     const live = runtimeMode === 'live';
     setModeBadge(pending ? configuredMode : runtimeMode, pending);
     document.getElementById('configInfo').textContent =
-        '上次執行模式：'+(live?'正式剪輯':'影子模式（不剪輯）')+' · 熱度：全平台 · 剪輯：Twitch'+' · 窗口 '+(cfg.rateWindowMin??0.5)+' 分 · 最少 '+(cfg.minUsers??3)+' 位發言人 / '+(cfg.minMessages??6)+' 筆 · 確認 '+Math.round((cfg.sustainMin??0.167)*60)+' 秒';
+        '上次執行模式：'+(live?'正式剪輯':'影子模式（不剪輯）')+' · 熱度：全平台 · 剪輯：Twitch'+' · 窗口 '+(cfg.rateWindowMin??0.5)+' 分 · 最少 '+(cfg.minUsers??3)+' 位發言人 / '+(cfg.minMessages??6)+' 筆 · 確認 '+Math.round((cfg.sustainMin??0.167)*60)+' 秒'
+        +' · 單人模式：'+(cfg.solo==='off'?'關閉':cfg.solo==='on'?'強制':'自動（≤'+(cfg.soloMaxViewers??20)+' 觀眾）');
     document.getElementById('cfgBaseline').textContent = cfg.baselineWindowMin ?? 30;
 }
 

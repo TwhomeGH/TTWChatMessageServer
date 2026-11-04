@@ -18,9 +18,11 @@ export function captureEvidence(state, stats, now) {
         minMessages: winner?.minMessages ?? state.minMessages,
         minUsers: winner?.minUsers ?? state.minUsers,
         minMessageRatio: winner?.minMessageRatio ?? state.minMessageRatio,
-        threshold: state.scoreThreshold,
+        threshold: winner?.scoreThreshold ?? stats.scoreThreshold ?? state.scoreThreshold,
+        solo: winner?.solo ?? false,
+        recentDistinctUsers: winner?.distinctRecent ?? 0,
         messageRatio: stats.messageRatio,
-        maxPerUser: state.maxPerUser,
+        maxPerUser: winner?.maxPerUser ?? state.maxPerUser,
         truncated: state.messages.length > 200,
         messages: state.messages.slice(-200)
             .map(m => ({ ...m }))

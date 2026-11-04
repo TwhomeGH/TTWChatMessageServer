@@ -17,10 +17,17 @@ const median = values => {
 export function calculateMetrics(state, now) {
     state.messages = state.messages.filter(m => m.t >= now - state.rateMs && m.t <= now + 3000);
     const recent = state.samples.filter(s => s.t >= now - state.baselineMs && s.t < now - state.rateMs);
-    const names = new Set([...state.platformViewers.keys(), ...state.messages.map(m => m.platform)]);
+    const platformViewers = state.platformViewers ?? new Map();
+    const totalViewers = [...platformViewers.values()]
+        .filter(item => now - item.at <= state.staleMs)
+        .reduce((sum, item) => sum + item.viewers, 0);
+    const recentChatters = state.recentChatters ?? new Map();
+    const soloSetting = state.solo ?? 'auto';
+    const soloWindowMs = state.soloWindowMs ?? 15 * MINUTE;
+    const names = new Set([...platformViewers.keys(), ...state.messages.map(m => m.platform)]);
     const platforms = [...names].map(platform => {
         const messages = state.messages.filter(m => m.platform === platform);
-        const v = state.platformViewers.get(platform);
+        const v = platformViewers.get(platform);
         const viewers = v && now - v.at <= state.staleMs ? v.viewers : 0;
         const baseViewers = median(recent.map(s => s.platforms?.find(p => p.platform === platform)?.viewers || 0));
         const baseMsgRate = median(recent.map(s => s.platforms?.find(p => p.platform === platform)?.msgRate || 0));
@@ -31,14 +38,27 @@ export function calculateMetrics(state, now) {
         // 相對門檻（messageRatio、score）不動，所以仍要求相對爆量。
         const recentMaxUsers = recent.reduce((max, sample) =>
             Math.max(max, Number(sample.platforms?.find(p => p.platform === platform)?.uniqueUsers) || 0), 0);
+        // 單人模式：近期剛好 1 位發言者；auto 再加全平台觀眾上限，避免大台單一聊天者誤用。
+        const distinctRecent = [...recentChatters]
+            .filter(([key, at]) => key.startsWith(platform + ':') && now - at <= soloWindowMs).length;
+        const solo = soloSetting !== 'off' && distinctRecent === 1
+            && (soloSetting === 'on' || totalViewers <= (state.soloMaxViewers ?? 20));
         const adaptive = state.adaptiveThresholds !== false;
-        const minUsers = adaptive
-            ? Math.min(state.minUsers ?? 3, Math.max(2, recentMaxUsers))
-            : (state.minUsers ?? 3);
-        const minMessages = adaptive
-            ? Math.min(state.minMessages ?? 6, Math.max(4, Math.ceil(baseMsgRate)))
-            : (state.minMessages ?? 6);
-        const minMessageRatio = state.minMessageRatio ?? 1.5;
+        const minUsers = solo
+            ? (state.soloMinUsers ?? 1)
+            : adaptive ? Math.min(state.minUsers ?? 3, Math.max(2, recentMaxUsers)) : (state.minUsers ?? 3);
+        const minMessages = solo
+            ? (state.soloMinMessages ?? 5)
+            : adaptive ? Math.min(state.minMessages ?? 6, Math.max(4, Math.ceil(baseMsgRate))) : (state.minMessages ?? 6);
+        const minMessageRatio = solo
+            ? (state.soloMinMessageRatio ?? 3)
+            : (state.minMessageRatio ?? 1.5);
+        const scoreThreshold = solo
+            ? (state.soloScoreThreshold ?? 2.5)
+            : (state.scoreThreshold ?? 1.8);
+        const perUserLimit = solo
+            ? (state.soloMaxPerUser ?? 5)
+            : (state.maxPerUser ?? 3);
         // 同一個人最多發了幾則：用來分辨「很多人各一則」與「一個人洗頻」。
         const perUser = new Map();
         for (const m of messages) perUser.set(m.user, (perUser.get(m.user) || 0) + 1);
@@ -50,9 +70,10 @@ export function calculateMetrics(state, now) {
             .filter(([, at]) => now - at <= state.staleMs).map(([transport]) => transport);
         return { platform, transports, viewers, baseViewers, msgRate, baseMsgRate, messageRatio,
             windowMsgs: messages.length, uniqueUsers, topUserMsgs, score,
-            recentMaxUsers, minMessages, minUsers, minMessageRatio,
+            recentMaxUsers, minMessages, minUsers, minMessageRatio, scoreThreshold,
+            solo, distinctRecent, maxPerUser: perUserLimit,
             eligible: messages.length >= minMessages && uniqueUsers >= minUsers
-                && messageRatio >= minMessageRatio };
+                && messageRatio >= minMessageRatio && topUserMsgs <= perUserLimit };
     });
     // 取獨立達標的最高分，避免安靜平台稀釋其他平台的突增。
     const winner = platforms.filter(p => p.eligible).sort((a, b) => b.score - a.score)[0];
@@ -66,6 +87,8 @@ export function calculateMetrics(state, now) {
         sampleCount: recent.length, windowMsgs: state.messages.length,
         uniqueUsers: new Set(state.messages.map(m => m.user)).size,
         topUserMsgs: perUserAll.size ? Math.max(...perUserAll.values()) : 0,
+        solo: winner?.solo ?? false, recentDistinctUsers: winner?.distinctRecent ?? 0,
+        scoreThreshold: winner?.scoreThreshold ?? state.scoreThreshold ?? 1.8,
         messageRatio: winner?.messageRatio || 0, score: winner?.score || 0,
         totalClips: state.totalClips, totalTriggers: state.totalTriggers, failedClips: state.failedClips,
         shadowTriggers: state.shadowTriggers, pending: state.pending,

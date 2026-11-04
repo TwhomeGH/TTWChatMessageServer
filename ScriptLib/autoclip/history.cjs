@@ -49,6 +49,8 @@ function summarizePlatforms(rows) {
                     windowMsgs: 0, uniqueUsers: 0, messageRatio: 0, viewers: 0,
                     maxMessages: 0, maxUsers: 0, maxRatio: 0, maxViewers: 0,
                     minMessages: p.minMessages, minUsers: p.minUsers, minMessageRatio: p.minMessageRatio,
+                    scoreThreshold: p.scoreThreshold, solo: p.solo,
+                    recentDistinctUsers: p.distinctRecent,
                     eligibleCount: 0, samples: 0, transports: new Set()
                 };
                 byPlatform.set(p.platform, item);
@@ -65,6 +67,9 @@ function summarizePlatforms(rows) {
                 item.minMessages = p.minMessages ?? item.minMessages;
                 item.minUsers = p.minUsers ?? item.minUsers;
                 item.minMessageRatio = p.minMessageRatio ?? item.minMessageRatio;
+                item.scoreThreshold = p.scoreThreshold ?? item.scoreThreshold;
+                item.solo = p.solo ?? item.solo;
+                item.recentDistinctUsers = p.distinctRecent ?? item.recentDistinctUsers;
             }
             item.maxMessages = Math.max(item.maxMessages, Number(p.windowMsgs) || 0);
             item.maxUsers = Math.max(item.maxUsers, Number(p.uniqueUsers) || 0);

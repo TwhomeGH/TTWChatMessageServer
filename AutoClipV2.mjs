@@ -14,15 +14,27 @@ export class AutoClipManager {
         cooldownMin = 15, sustainMin = 0.167, warmupMs = 180000,
         minMessages = 6, minUsers = 3, minMessageRatio = 1.5, adaptiveThresholds = true,
         maxPerUser = 3, staleMs = 90000,
+        solo = 'auto', soloWindowMin = 15, soloMaxViewers = 20,
+        soloMinMessages = 5, soloMinUsers = 1, soloMinMessageRatio = 3,
+        soloScoreThreshold = 2.5, soloMaxPerUser = 5,
         titlePrefix = '', log = console.log, now = Date.now, requestTimeoutMs = 60000,
         logIntervalMs = 60000 } = {}) {
         Object.assign(this, { onCreateClip, shadow, platform, delayOffsetsMs, wViewers, wMsg, scoreThreshold,
             floorViewers, floorMsgPerMin, warmupMs, minMessages, minUsers, minMessageRatio, adaptiveThresholds,
             maxPerUser, staleMs, titlePrefix, log, now, requestTimeoutMs, logIntervalMs });
+        // 單人活躍發言者模式：預設自動判斷；on 只看發言者數，off 完全停用。
+        this.solo = ['off', 'auto', 'on'].includes(solo) ? solo : 'auto';
+        this.soloMaxViewers = Math.max(1, soloMaxViewers);
+        this.soloMinMessages = Math.max(1, soloMinMessages);
+        this.soloMinUsers = Math.max(1, soloMinUsers);
+        this.soloMinMessageRatio = Math.max(1, soloMinMessageRatio);
+        this.soloScoreThreshold = Math.max(0, soloScoreThreshold);
+        this.soloMaxPerUser = Math.max(1, soloMaxPerUser);
         // 狀態列只在狀態改變、觸發或達到心跳間隔時輸出，避免每次評估（5 秒）洗版。
         this.lastLogReason = null;
         this.lastLogAt = 0;
         this.rateMs = Math.max(5000, rateWindowMin * MINUTE);
+        this.soloWindowMs = Math.max(this.rateMs, soloWindowMin * MINUTE);
         this.baselineMs = Math.max(this.rateMs * 2, baselineWindowMin * MINUTE);
         this.cooldownMs = cooldownMin * MINUTE;
         this.sustainMs = sustainMin * MINUTE;
@@ -50,6 +62,7 @@ export class AutoClipManager {
         this.startedAt = this.now();
         this.platformViewers = new Map();
         this.sourceActivity = new Map();
+        this.recentChatters = new Map();
     }
 
     /** 記錄有效來源最近活動，供平台卡片顯示接收管道。 */
@@ -82,11 +95,19 @@ export class AutoClipManager {
         while (this.ids.size > 10000) this.ids.delete(this.ids.keys().next().value);
         // 無身分留言共用一個使用者，避免虛增不同發言人數。
         const user = `${event.platform}:${event.userId || event.user || 'unknown'}`;
+        // 近期發言者只用來判斷單人模式；即使這則因每人上限沒計入，發言者仍算活躍。
+        this.recentChatters.set(user, now);
+        while (this.recentChatters.size > 10000) this.recentChatters.delete(this.recentChatters.keys().next().value);
+        const soloMode = this.soloModeFor(event.platform, now);
         this.messages = this.messages.filter(m => m.t >= now - this.rateMs);
-        if (this.messages.filter(m => m.user === user).length >= this.maxPerUser) return false;
+        const text = String(event.message || '').slice(0, 1000);
+        // 單人模式要求不同訊息；同一人重複相同文字不累積成 5 則。
+        if (soloMode && this.messages.some(m => m.user === user && m.message === text)) return false;
+        const perUserLimit = soloMode ? this.soloMaxPerUser : this.maxPerUser;
+        if (this.messages.filter(m => m.user === user).length >= perUserLimit) return false;
         this.messages.push({ t, originalTime, user, id: event.id || null,
             name: String(event.user || user).slice(0, 100),
-            message: String(event.message || '').slice(0, 1000),
+            message: text,
             platform: event.platform, transport: event.transport, receivedAt: event.receivedAt || now,
             timeSource: event.sentAt == null ? 'received' : 'platform' });
         if (this.messages.length > 10000) this.messages.shift();
@@ -108,8 +129,44 @@ export class AutoClipManager {
         if (Number.isFinite(viewers) && viewers >= 0) this.platformViewers.set(platform, { viewers, at: now });
     }
 
+    /** 清除超過單人判斷窗口的發言者。 */
+    pruneRecentChatters(now = this.now()) {
+        for (const [key, at] of this.recentChatters) {
+            if (now - at > this.soloWindowMs) this.recentChatters.delete(key);
+        }
+    }
+
+    /** 指定平台近期有發言的不同使用者數。 */
+    recentDistinctUsers(platform, now = this.now()) {
+        this.pruneRecentChatters(now);
+        const prefix = `${platform}:`;
+        let count = 0;
+        for (const key of this.recentChatters.keys()) if (key.startsWith(prefix)) count += 1;
+        return count;
+    }
+
+    /** 目前所有平台的新鮮觀眾總數；只用於單人模式的觀眾上限。 */
+    totalViewers(now = this.now()) {
+        let total = 0;
+        for (const item of this.platformViewers.values()) {
+            if (now - item.at <= this.staleMs) total += item.viewers;
+        }
+        return total;
+    }
+
+    /**
+     * 單人模式只在近期剛好 1 位發言者時成立；auto 再加觀眾上限，
+     * on 只忽略觀眾上限，仍要求 1 位發言者。
+     */
+    soloModeFor(platform, now = this.now()) {
+        if (this.solo === 'off') return false;
+        if (this.recentDistinctUsers(platform, now) !== 1) return false;
+        return this.solo === 'on' || this.totalViewers(now) <= this.soloMaxViewers;
+    }
+
     /** 更新有效窗口並取得平台分數；保留既有內部介面。 */
     _metrics(now) {
+        this.pruneRecentChatters(now);
         return calculateMetrics(this, now);
     }
 
@@ -133,7 +190,11 @@ export class AutoClipManager {
             floorViewers: this.floorViewers, floorMsgPerMin: this.floorMsgPerMin,
             minMessages: this.minMessages, minUsers: this.minUsers, minMessageRatio: this.minMessageRatio,
             adaptiveThresholds: this.adaptiveThresholds,
-            maxPerUser: this.maxPerUser, warmupMs: this.warmupMs };
+            maxPerUser: this.maxPerUser, warmupMs: this.warmupMs,
+            solo: this.solo, soloWindowMin: this.soloWindowMs / MINUTE, soloMaxViewers: this.soloMaxViewers,
+            soloMinMessages: this.soloMinMessages, soloMinUsers: this.soloMinUsers,
+            soloMinMessageRatio: this.soloMinMessageRatio, soloScoreThreshold: this.soloScoreThreshold,
+            soloMaxPerUser: this.soloMaxPerUser };
     }
 
     /** 推進暖機、持續熱度與冷卻狀態；每次記錄統計，符合條件才提交剪輯。 */
@@ -149,7 +210,7 @@ export class AutoClipManager {
         // sourcePlatform 只在某個平台自己的有效門檻都通過時才會有值；
         // 不可再用跨平台總留言／總人數判定，否則自適應門檻會被其他平台稀釋。
         else if (!s.sourcePlatform) reason = '平台未達留言／人數／倍率門檻';
-        else if (s.score < this.scoreThreshold) reason = '未達聊天突增門檻';
+        else if (s.score < (s.scoreThreshold ?? this.scoreThreshold)) reason = '未達聊天突增門檻';
         const qualified = !reason;
         if (!qualified) {
             this.aboveSince = null;
@@ -191,7 +252,7 @@ export class AutoClipManager {
         }
         // 狀態列節流：狀態改變、觸發，或距上次輸出達 logIntervalMs 時才輸出。
         if (reason !== this.lastLogReason || fire || now - this.lastLogAt >= this.logIntervalMs) {
-            this.log(`[AutoClip] ${reason} | 留言=${s.windowMsgs} 人數=${s.uniqueUsers} 分數=${s.score.toFixed(2)}`);
+            this.log(`[AutoClip]${s.solo ? ' [單人]' : ''} ${reason} | 留言=${s.windowMsgs} 人數=${s.uniqueUsers} 分數=${s.score.toFixed(2)}`);
             this.lastLogReason = reason;
             this.lastLogAt = now;
         }

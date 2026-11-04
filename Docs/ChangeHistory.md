@@ -1,5 +1,33 @@
 # ChangeHistory
 
+## 2026.11.05 05:29 AutoClip 單人活躍發言者模式
+
+**類型**: 功能 · **檔案**: `AutoClipV2.mjs`、`ScriptLib/autoclip/metrics.mjs`、`ScriptLib/autoclip/evidence.mjs`、`ScriptLib/autoclip/history.cjs`、`TikTok.js`、`assets/autoclip.js`、`.env.example`、`Docs/KEYWORD_AUTOCLIP_V2.md`、`Test/autoclip_v2.test.mjs`、`Test/autoclip_history.test.cjs`
+
+### 問題 - 只有 1 位發言者的小台永遠無法觸發
+
+一般自適應門檻最低仍要求 2 位不同發言人，且每人每 30 秒最多計入 3 則；因此長期只有 1 位觀眾聊天時，即使連續發言也無法達到 4 則／2 人。
+
+### 修改
+
+- 新增「近期發言者」追蹤：近 15 分鐘各平台只有 1 位不同發言者時，自動切換單人門檻。
+- 單人門檻：1 位發言人、5 則不同訊息、聊天倍率 3.0、分數 2.5、每人最多 5 則；同一人重複相同文字不累計。
+- `auto` 另外限制全平台觀眾 ≤ 20；`on` 忽略觀眾上限但仍要求 1 位發言者；`off` 停用。第二位發言者出現即回到一般門檻。
+- 狀態列、平台卡片、觸發證據與歷史摘要記錄 `solo`、`recentDistinctUsers`、有效分數門檻與每人上限。
+- 新增 `AUTO_CLIP_SOLO`、`AUTO_CLIP_SOLO_*` 設定。
+
+### 限制
+
+- 單人模式仍可能被單一洗頻帳號觸發；已用不同文字、3 倍聊天倍率、2.5 分與 10 秒持續降低誤觸，但無法完全區分惡意洗頻。
+- 目前沒有管理頁手動切換按鈕，只能透過環境變數 `off`／`auto`／`on`。
+
+### 驗證
+
+- 新增單人模式測試：3 則不足、5 則可觸發、重複文字不計、auto 觀眾上限與 on 覆寫。
+- 歷史摘要與一般模式測試維持通過。
+
+---
+
 ## 2026.11.05 05:04 人流頁新增每小時觀看時段
 
 **類型**: 功能 · **檔案**: `ScriptLib/traffic/database.cjs`、`TrafficRoutes.cjs`、`assets/traffic-history.js`、`traffic.html`、`lang/zh-TW.json`、`lang/en.json`、`Test/traffic.test.cjs`、`Test/traffic_history_ui.cjs`、`Docs/TRAFFIC.md`、`Docs/WEB_UI.md`、`Docs/TEST_FILES_REFERENCE.md`
