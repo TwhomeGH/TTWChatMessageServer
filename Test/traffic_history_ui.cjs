@@ -15,7 +15,7 @@ const HTML = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewp
 <select id="timezone"><option>UTC</option></select>
 <p id="history-status"></p><div id="heatmap"></div><div id="daily"></div><div id="metrics"></div>
 <div id="ranking-note" class="ranking-note" role="status"></div><div id="ranking" class="table-wrap"></div>
-<h4 id="ranking-provisional-title" data-i18n="traffic.ranking.provisionalTitle" hidden>暫定觀察（樣本不足）</h4><p id="ranking-provisional-note" data-i18n="traffic.ranking.provisionalNote" hidden>2 場／2 日期僅供參考；正式排名仍需 3 場／3 日期，且至少 2 個時段達標。</p><div id="ranking-provisional" class="table-wrap" hidden></div><h4 id="ranking-assisted-title" data-i18n="traffic.ranking.assistedTitle" hidden>輔助時段</h4><p id="ranking-assisted-note" data-i18n="traffic.ranking.assistedNote" hidden>不列入精確排名。</p><div id="ranking-assisted" class="table-wrap" hidden></div>
+<h4 id="ranking-provisional-title" data-i18n="traffic.ranking.provisionalTitle" hidden>暫定觀察（樣本不足）</h4><p id="ranking-provisional-note" data-i18n="traffic.ranking.provisionalNote" hidden>2 場／2 日期僅供參考；達標仍需 3 場／3 日期，且至少 2 個時段達標。</p><div id="ranking-provisional" class="table-wrap" hidden></div><h4 id="ranking-progress-title" data-i18n="traffic.ranking.progressTitle" hidden>時段累積進度（尚未達標）</h4><p id="ranking-progress-note" data-i18n="traffic.ranking.progressNote" hidden>列出尚在累積的時段。</p><div id="ranking-progress" class="table-wrap" hidden></div>
 </main><script src="/assets/i18n.js"></script><script src="/assets/traffic-history.js"></script></body></html>`;
 
 const DATA = {
@@ -78,6 +78,22 @@ const ASSISTED = {
         cells: [
             { key: 'Thu 20', n: 3, observedDays: 3, median: 12, mean: 12, shrunk: 12, insufficient: false, confidence: 'assisted', startTypes: ['late'] },
             { key: 'Sat 22', n: 2, observedDays: 2, median: 10, mean: 10, shrunk: 10, insufficient: true, confidence: 'assisted', startTypes: ['estimated'] }
+        ]
+    }
+};
+
+const ASSISTED_READY = {
+    platform: 'TikTok',
+    cells: [],
+    daily: [],
+    metrics: { daily: [] },
+    rankings: {
+        scope: 'own', platform: 'TikTok', totalSessions: 6, sessionCount: 6, minSessions: 3, minDays: 3,
+        earlyMinutes: 30, minObservedMinutes: 20, days: 30,
+        excluded: { missingStart: 0, pending: 0, insufficientCoverage: 0 },
+        cells: [
+            { key: 'Thu 20', n: 3, observedDays: 3, median: 12, mean: 12, shrunk: 12, insufficient: false, confidence: 'assisted', startTypes: ['late'] },
+            { key: 'Sat 22', n: 3, observedDays: 3, median: 10, mean: 10, shrunk: 10, insufficient: false, confidence: 'assisted', startTypes: ['estimated'] }
         ]
     }
 };
@@ -150,11 +166,22 @@ async function main() {
 
         current = ASSISTED;
         await page.reload();
-        await page.waitForFunction(() => !document.querySelector('#ranking-assisted').hidden);
-        assert.equal(await page.$$eval('#ranking-assisted tbody tr', rows => rows.length), 2);
-        assert.equal(await page.$eval('#ranking', node => node.hidden), true);
-        assert.match(await page.$eval('.ranking-next-head', node => node.textContent), /只有輔助資料/);
+        await page.waitForFunction(() => !document.querySelector('#ranking').hidden);
+        assert.equal(await page.$$eval('#ranking tbody tr', rows => rows.length), 1);
+        assert.match(await page.$eval('#ranking tbody tr td:nth-child(3)', node => node.textContent), /連線較晚/);
+        assert.equal(await page.$$eval('#ranking-provisional tbody tr', rows => rows.length), 1);
+        assert.match(await page.$eval('#ranking-provisional tbody tr td:nth-child(2)', node => node.textContent), /以連線時刻起算/);
+        assert.equal(await page.$eval('#ranking-progress', node => node.hidden), true);
+        assert.match(await page.$eval('.ranking-next-head', node => node.textContent), /再開 1 場/);
         await page.screenshot({ path: path.join(__dirname, '../output/playwright/traffic-ranking-assisted.png'), fullPage: true });
+
+        current = ASSISTED_READY;
+        await page.reload();
+        await page.waitForFunction(() => !document.querySelector('#ranking').hidden);
+        assert.equal(await page.$$eval('#ranking tbody tr', rows => rows.length), 2);
+        assert.match(await page.$eval('#ranking-note > strong', node => node.textContent), /已有可比較時段/);
+        assert.match(await page.$eval('#ranking tbody tr:first-child td:nth-child(3)', node => node.textContent), /連線較晚|以連線時刻起算/);
+        await page.screenshot({ path: path.join(__dirname, '../output/playwright/traffic-ranking-assisted-ready.png'), fullPage: true });
 
         assert.deepEqual(errors, []);
         console.log('Traffic ranking next-step UI passed: clear next step, scattered-schedule warning, slot progress, tips and expandable rules.');

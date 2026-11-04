@@ -1,5 +1,38 @@
 # ChangeHistory
 
+## 2026.11.05 01:50 開播時段排名不再要求精確開播時間，estimated 也能達標
+
+**類型**: 修正 · **檔案**: `assets/traffic-history.js`、`traffic.html`、`lang/zh-TW.json`、`lang/en.json`、`Test/traffic_history_ui.cjs`、`Docs/TRAFFIC.md`
+
+### 問題 - 沒有精確開播時間就永遠算不出建議時段
+
+歷史頁只把 `confidence === 'exact'` 當成可比較時段；TikTok 的 late、其他平台的 approx，以及沒有 actualStarted 的 estimated 全部被歸到「輔助時段」，即使已達 3 場／3 日期也不會進入比較。planner 卻已經用 `!cell.insufficient` 推薦同一個時段，兩邊結論矛盾。
+
+### 根因 - 把「開播信心」當成排名資格，而不是標籤
+
+`rankings()` 本身已把 estimated 放進 cells 並套用 3 場／3 日期門檻；問題只在 `assets/traffic-history.js` 的 `partial`／`enough` 只收 exact，並走到 assistedOnly 分支，跳過逐時段進度。
+
+### 修改
+
+- 排名資格改為只看資料量：3 場、3 個不同日期、開場觀測 ≥20 分鐘；開播信心只作表格標示。
+- 主排名表加入「開播信心」欄；late／approx／estimated 可正常達標。
+- 「下一步」與進度改用所有未達標時段計算，列出場次／日期與還差幾場。
+- 新增「時段累積進度」表；暫定觀察保留 2 場／2 日期預覽。
+- 時段界線文案改為 exact／late 15 分、approx／estimated 30 分；缺少開播時間但沒有樣本才標 missing。
+- 卡片明示長場次只歸開播時段，跨小時觀看要看熱圖。
+- 移除「正式排名需要 Twitch」的 assistedOnly 死路。
+
+### 限制
+
+- estimated 以第一次觀測估算；連線越晚，時段偏移越大，UI 會標示但無法自動修正。
+- 3 場／3 日期仍是最低資料量，不代表統計可靠。
+
+### 驗證
+
+`node Test/traffic_history_ui.cjs`、`npm run test:ci`、`npm run lint`（CSS 指紋已重建）。
+
+---
+
 ## 2026.11.05 00:53 觀眾數缺值不再歸零，避免跨平台人數亂跳
 
 **類型**: 修正 · **檔案**: `TikTok.js`、`ScriptLib/viewers/counts.mjs`、`ScriptLib/tiktok/connection.mjs`、`ScriptLib/tiktok/events.mjs`、`ScriptLib/twitch/events.mjs`、`Test/viewer_counts.test.mjs`、`Docs/MODULES.md`

@@ -141,9 +141,10 @@
         ]);
     }
 
-    /**
+        /**
      * 歷史時段排名：以「場次」為單位，取場次開場平均觀看。
-     * 顯示中位數、平均與收縮平均；樣本不足的時段不列入排名。
+     * 資格只看資料量（場次／日期／開場觀測）；開播信心只作標示，不是門檻。
+     * 顯示中位數、平均與收縮平均；樣本不足的時段列在進度表。
      */
     function renderRanking(rankings) {
         if (!rankings) return;
@@ -152,62 +153,63 @@
         const minDays = rankings.minDays ?? 3;
         const earlyMinutes = rankings.earlyMinutes ?? 30;
         const minObserved = rankings.minObservedMinutes ?? 20;
-        const enough = rankings.cells.filter(cell => !cell.insufficient && cell.confidence === 'exact');
-        const partial = rankings.cells.filter(cell => cell.insufficient && cell.confidence === 'exact');
-        const assisted = rankings.cells.filter(cell => cell.confidence !== 'exact');
-        const comparable = enough.length >= 2;
+        const qualified = rankings.cells.filter(cell => !cell.insufficient);
+        const incomplete = rankings.cells.filter(cell => cell.insufficient);
+        const comparable = qualified.length >= 2;
         const excluded = rankings.excluded ?? { missingStart: rankings.unstarted || 0 };
         const startPlatform = rankings.platform;
         const slotLabel = key => {
             const [day, hour] = key.split(' ');
             return `${weekday(WEEKDAYS.indexOf(day))} ${hour}:00`;
         };
-        const rows = [['#', t('timeSlot'), t('sessions'), t('median'), t('mean'), t('shrunk')]];
-
-        enough.forEach((cell, index) => {
-            rows.push([
-                comparable ? index + 1 : '—',
-                slotLabel(cell.key),
-                cell.n,
-                format(cell.median),
-                format(cell.mean),
-                format(cell.shrunk)
-            ]);
-        });
-
-        updateTable('ranking', rows);
-        el('ranking').hidden = !enough.length;
-
-        // 2 場／2 日期先提供暫定觀察，但不進入正式排名。
-        const provisional = partial.filter(cell => cell.n >= 2 && cell.observedDays >= 2)
-            .sort((a, b) => b.mean - a.mean || a.key.localeCompare(b.key));
-        updateTable('ranking-provisional', [
-            [t('timeSlot'), t('sessions'), t('ranking.provisionalDays'), t('mean'), t('median')],
-            ...provisional.map(cell => [slotLabel(cell.key), cell.n, cell.observedDays, format(cell.mean), format(cell.median)])
-        ]);
-        el('ranking-provisional').hidden = !provisional.length;
-        el('ranking-provisional-title').hidden = !provisional.length;
-        el('ranking-provisional-note').hidden = !provisional.length;
-
         const startTypeLabel = type => type === 'exact' ? t('ranking.startType.exact')
             : type === 'late' ? t('ranking.startType.late')
                 : type === 'approx' ? t('ranking.startType.approx')
                     : t('ranking.startType.estimated');
         const startType = cell => (cell.startTypes ?? [])
             .map(startTypeLabel).join(' + ') || t('ranking.confidence');
-        const assistedRows = [
-            [t('timeSlot'), t('ranking.confidence'), t('sessions'), t('ranking.provisionalDays'), t('mean'), t('median'), t('ranking.status')],
-            ...assisted.sort((a, b) => b.mean - a.mean || a.key.localeCompare(b.key))
-                .map(cell => [
-                    slotLabel(cell.key), startType(cell), cell.n, cell.observedDays,
-                    format(cell.mean), format(cell.median),
-                    t(cell.insufficient ? 'ranking.assistedStatus.partial' : 'ranking.assistedStatus.qualified')
-                ])
-        ];
-        updateTable('ranking-assisted', assistedRows);
-        el('ranking-assisted').hidden = !assisted.length;
-        el('ranking-assisted-title').hidden = !assisted.length;
-        el('ranking-assisted-note').hidden = !assisted.length;
+        const needOf = cell => Math.max(0, minSessions - cell.n, minDays - cell.observedDays);
+
+        const rows = [['#', t('timeSlot'), t('ranking.confidence'), t('sessions'), t('median'), t('mean'), t('shrunk')]];
+        qualified.forEach((cell, index) => {
+            rows.push([
+                comparable ? index + 1 : '—',
+                slotLabel(cell.key),
+                startType(cell),
+                cell.n,
+                format(cell.median),
+                format(cell.mean),
+                format(cell.shrunk)
+            ]);
+        });
+        updateTable('ranking', rows);
+        el('ranking').hidden = !qualified.length;
+
+        // 2 場／2 日期先提供暫定觀察，但不進入排名。
+        const provisional = incomplete.filter(cell => cell.n >= 2 && cell.observedDays >= 2)
+            .sort((a, b) => b.mean - a.mean || a.key.localeCompare(b.key));
+        updateTable('ranking-provisional', [
+            [t('timeSlot'), t('ranking.confidence'), t('sessions'), t('ranking.provisionalDays'), t('mean'), t('median')],
+            ...provisional.map(cell => [slotLabel(cell.key), startType(cell), cell.n, cell.observedDays, format(cell.mean), format(cell.median)])
+        ]);
+        el('ranking-provisional').hidden = !provisional.length;
+        el('ranking-provisional-title').hidden = !provisional.length;
+        el('ranking-provisional-note').hidden = !provisional.length;
+
+        // 其餘未達標時段：直接顯示還差多少，讓使用者知道何時會達標。
+        const progress = incomplete.filter(cell => !(cell.n >= 2 && cell.observedDays >= 2))
+            .sort((a, b) => b.n - a.n || b.observedDays - a.observedDays ||
+                (b.lastStarted || 0) - (a.lastStarted || 0) || a.key.localeCompare(b.key));
+        updateTable('ranking-progress', [
+            [t('timeSlot'), t('ranking.confidence'), t('sessions'), t('ranking.provisionalDays'), t('mean'), t('ranking.status')],
+            ...progress.map(cell => [
+                slotLabel(cell.key), startType(cell), cell.n, cell.observedDays, format(cell.mean),
+                t('ranking.nextNeed', { count: needOf(cell) })
+            ])
+        ]);
+        el('ranking-progress').hidden = !progress.length;
+        el('ranking-progress-title').hidden = !progress.length;
+        el('ranking-progress-note').hidden = !progress.length;
 
         const card = el('ranking-note');
         card.replaceChildren();
@@ -225,28 +227,27 @@
 
         // 先給「下一步」：用最接近達標的時段算出還要開幾場，再談規則細節。
         if (!comparable) {
-            const candidates = partial.map(cell => {
+            const candidates = incomplete.map(cell => {
                 const needSessions = Math.max(0, minSessions - cell.n);
                 const needDays = Math.max(0, minDays - cell.observedDays);
                 return { cell, needSessions, needDays, need: Math.max(needSessions, needDays) };
             }).filter(item => item.need > 0)
                 .sort((a, b) => a.need - b.need ||
                     b.cell.n - a.cell.n ||
-                    b.cell.observedDays - a.cell.observedDays);
+                    b.cell.observedDays - a.cell.observedDays ||
+                    (b.cell.lastStarted || 0) - (a.cell.lastStarted || 0) ||
+                    a.cell.key.localeCompare(b.cell.key));
 
-            const maxPartialN = partial.reduce((max, cell) => Math.max(max, cell.n), 0);
-            const dispersed = enough.length === 0 && partial.length >= 4 && maxPartialN <= 1;
+            const maxIncompleteN = incomplete.reduce((max, cell) => Math.max(max, cell.n), 0);
+            const dispersed = qualified.length === 0 && incomplete.length >= 4 && maxIncompleteN <= 1;
 
             let headline;
             let actionText;
             let selected = [];
-            if (enough.length === 0 && !candidates.length && assisted.length) {
-                headline = t('ranking.assistedOnly');
-                actionText = t('ranking.assistedOnlyAction');
-            } else if (dispersed) {
+            if (dispersed) {
                 headline = t('ranking.nextDispersed');
-                actionText = t('ranking.nextDispersedAction', { slots: partial.length });
-            } else if (enough.length === 1) {
+                actionText = t('ranking.nextDispersedAction', { slots: incomplete.length });
+            } else if (qualified.length === 1) {
                 const item = candidates[0];
                 if (item) {
                     selected = [item];
@@ -346,12 +347,17 @@
 
         addTo(card, t('ranking.summary', {
             total: rankings.totalSessions ?? rankings.sessionCount + (rankings.unstarted || 0),
-            usable: rankings.sessionCount, qualified: enough.length
+            usable: rankings.sessionCount, qualified: qualified.length
         }));
         if (rankings.scope === 'own') addTo(card, t('ranking.scopeOwn'));
         else if (rankings.scope === 'all') addTo(card, t('ranking.scopeAll'));
 
-        // 規則、排除原因與完整進度收進摺疊區，避免一次塞滿畫面。
+        const hasAssisted = [...qualified, ...incomplete].some(cell =>
+            (cell.startTypes ?? []).some(type => type !== 'exact'));
+        if (hasAssisted) addTo(card, t('ranking.confidenceNote'), 'ranking-confidence-note');
+        addTo(card, t('ranking.longStreamNote'), 'ranking-long-stream');
+
+        // 規則、排除原因收進摺疊區，避免一次塞滿畫面。
         const details = document.createElement('details');
         details.className = 'ranking-why';
         const why = document.createElement('summary');
@@ -361,8 +367,7 @@
         const criteria = document.createElement('ul');
         criteria.className = 'ranking-criteria';
         for (const line of t('ranking.criteria', {
-            minimum: minSessions, days: minDays,
-            window: earlyMinutes, observed: minObserved
+            minimum: minSessions, days: minDays, observed: minObserved
         }).split('\n')) {
             if (!line.trim()) continue;
             const item = document.createElement('li');
@@ -383,21 +388,6 @@
             reasons.append(item);
         }
         if (reasons.childElementCount) details.append(reasons);
-
-        if (partial.length) {
-            addTo(details, t('ranking.progress'), 'ranking-section-title');
-            const progress = document.createElement('ul');
-            for (const cell of [...partial].sort((a, b) => a.key.localeCompare(b.key))) {
-                const item = document.createElement('li');
-                item.textContent = t('ranking.progressItem', {
-                    slot: slotLabel(cell.key), sessions: cell.n, days: cell.observedDays,
-                    missingSessions: Math.max(0, minSessions - cell.n),
-                    missingDays: Math.max(0, minDays - cell.observedDays)
-                });
-                progress.append(item);
-            }
-            details.append(progress);
-        }
 
         if (rankings.days < 15) addTo(details, t('ranking.shortRange'));
         if (!comparable) addTo(details, t('ranking.comparison'));
