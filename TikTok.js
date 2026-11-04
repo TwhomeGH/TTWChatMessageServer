@@ -26,6 +26,7 @@ import { createSponsorStore } from './ScriptLib/sponsor/store.mjs';
 import { createAdScheduler } from './ScriptLib/sponsor/scheduler.mjs';
 import { createSentCache } from './ScriptLib/sponsor/sent-cache.mjs';
 import { TikTokChatGuard, chatMetadata } from './TikTokChatGuard.mjs';
+import { createViewerCounts } from './ScriptLib/viewers/counts.mjs';
 
 
 
@@ -143,6 +144,13 @@ if (platformsArg) {
     isTwitch = true
 }
 
+// 跨平台觀眾數收斂：缺值保留上次值、短暫 0 需確認，避免人數閃 0。
+const viewerCounts = createViewerCounts({
+    include: (platform) => ({
+        TikTok: isTK, Twitch: isTwitch, Kick: isKick, Odysee: isOdysee, Youtube: isYoutube,
+    })[platform] === true,
+});
+
 const tiktokSourceMode = isTK ? tiktokSource.tiktokChatSource() : 'native';
 const tiktokBrowserMode = tiktokSourceMode === 'browser';
 const tiktokManualMode = tiktokSourceMode === 'manual';
@@ -186,11 +194,9 @@ let autoClip = null;
 function applyRelayAudience(data) {
     const source = normalizeSource(data, 'userscript');
     if (!source.heatEligible || data.audienceKind === 'top-fans' || !Number.isFinite(data.userNum) || data.userNum < 0) return;
+    if (!['TikTok', 'Twitch', 'Odysee', 'Youtube'].includes(source.platform)) return;
     autoClip?.updatePlatformViewers(source.platform, data.userNum);
-    if (source.platform === 'TikTok') TikTokViewerCount = data.userNum;
-    else if (source.platform === 'Twitch') TwitchViewerCount = data.userNum;
-    else if (source.platform === 'Youtube') YoutubeViewerCount = data.userNum;
-    else if (source.platform === 'Odysee') OdyseeViewerCount = data.userNum;
+    viewerCounts.set(source.platform, data.userNum);
     updateCombinedViewerCount();
 }
 function recordChatHeat(message, metadata) {
@@ -323,10 +329,7 @@ const kickDeps = {
 const tiktokConn = createTikTokConnectionManager({
     getConnection: () => connection,
     tiktokName,
-    isTK, isTwitch,
-    getTwitchViewerCount: () => TwitchViewerCount,
-    setTikTokViewerCount: (n) => { TikTokViewerCount = n; },
-    setCacheUserNum: (n) => { CacheUserNum = n; },
+    setTikTokViewerCount: (n, force = false) => { viewerCounts.set('TikTok', n, { force }); return viewerCounts.get('TikTok'); },
     getCacheUserNum: () => CacheUserNum,
     getCacheUserList: () => CacheUserList,
     updateCombinedViewerCount,
@@ -831,11 +834,7 @@ const connection = new TikTokLiveConnection(tiktokName, connOpts)
 
 
 var CacheUserList = [] // 用於去重的用戶列表
-var CacheUserNum = 0 // 用於去重的用戶數量
-var TikTokViewerCount = 0
-var TwitchViewerCount = 0
-var OdyseeViewerCount = 0
-var YoutubeViewerCount = 0
+var CacheUserNum = 0 // 合併觀眾數（由 viewerCounts 計算）
 
 
 function sendAdOverylayMessage(user,text,iconURL,useTTS){
@@ -857,14 +856,11 @@ function sendAudienceUpdate() {
     socketHub.send(payload);
 }
 
-function updateCombinedViewerCount() {
-    let combined = 0
-    if (isTK) combined += TikTokViewerCount || 0
-    if (isTwitch) combined += TwitchViewerCount || 0
-    if (isOdysee) combined += OdyseeViewerCount || 0
-    if (isYoutube) combined += YoutubeViewerCount || 0
+function updateCombinedViewerCount(force = false) {
+    const combined = viewerCounts.combined()
+    const changed = combined !== CacheUserNum
     CacheUserNum = combined
-    sendAudienceUpdate()
+    if (changed || force) sendAudienceUpdate()
 }
 
 /**
@@ -959,8 +955,10 @@ registerTikTokEvents(connection, {
     tikTokChatGuard,
     giftNames, getGiftMapReady: () => giftMapReady,
     getCacheUserNum: () => CacheUserNum,
-    setCacheUserNum: (n) => { CacheUserNum = n; }, setCacheUserList: (n) => { CacheUserList = n; },
-    getAutoClip: () => autoClip, sendAudienceUpdate,
+    setTikTokViewerCount: (n, force = false) => { viewerCounts.set('TikTok', n, { force }); return viewerCounts.get('TikTok'); },
+    updateCombinedViewerCount,
+    setCacheUserList: (n) => { CacheUserList = n; },
+    getAutoClip: () => autoClip,
     isEnd: () => isEnd, getStreamEnded: () => streamEnded, setStreamEnded: () => { streamEnded = true; },
     onStreamEnd: () => autoStop.markEnded('TikTok'),
     stopViewCache: () => tiktokConn.stopViewCache(),
@@ -995,7 +993,8 @@ const twitchDeps = {
     notify,
     sendSystem: twitchSenders.system,
     sendNotice: twitchSenders.notice,
-    setViewerCount: (count) => { TwitchViewerCount = count; },
+    setViewerCount: (count) => { viewerCounts.set('Twitch', count); return viewerCounts.get('Twitch'); },
+    resetViewerCount: () => { viewerCounts.reset('Twitch'); },
     updateCombinedViewerCount,
     getUserIcon,
     logger: console,
@@ -1123,8 +1122,10 @@ if (isOdysee) {
         replaceEmojis,
         translate: (text) => Translate.TranslateText(text),
         onViewerCount: (count) => {
-            OdyseeViewerCount = count
-            autoClip?.updatePlatformViewers('Odysee', Number(count))
+            const viewers = Number(count)
+            if (!Number.isFinite(viewers) || viewers < 0) return
+            viewerCounts.set('Odysee', viewers)
+            autoClip?.updatePlatformViewers('Odysee', viewerCounts.get('Odysee'))
             updateCombinedViewerCount()
         },
     })
@@ -1149,8 +1150,10 @@ if (isYoutube) {
             if (typeof channelId === 'string' && channelId) youtubeBroadcasterId = channelId;
         },
         onViewerCount: (count) => {
-            YoutubeViewerCount = count
-            autoClip?.updatePlatformViewers('Youtube', Number(count))
+            const viewers = Number(count)
+            if (!Number.isFinite(viewers) || viewers < 0) return
+            viewerCounts.set('Youtube', viewers)
+            autoClip?.updatePlatformViewers('Youtube', viewerCounts.get('Youtube'))
             updateCombinedViewerCount()
         },
     })

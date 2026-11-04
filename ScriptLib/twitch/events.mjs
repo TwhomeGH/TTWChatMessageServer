@@ -13,7 +13,8 @@
  * @property {(title: string, body: string, icon?: string, url?: string) => Promise<void>} notify 推播通知。
  * @property {(text: string) => void} sendSystem 送出一則系統訊息到 socket。
  * @property {(user: string, text: string, icon: string) => void} sendNotice 送出一則使用者訊息到 socket。
- * @property {(count: number) => void} setViewerCount 更新 Twitch 觀眾數。
+ * @property {(count: number) => number} setViewerCount 更新 Twitch 觀眾數並回傳套用後的有效值（無效值會被忽略）。
+ * @property {() => void} resetViewerCount 明確離線時歸零。
  * @property {() => void} updateCombinedViewerCount 重算合併觀眾數並送出。
  * @property {(userId: string) => Promise<string>} getUserIcon 取得使用者頭像 URL。
  * @property {Console} [logger=console]
@@ -26,13 +27,24 @@
  * @returns {void}
  */
 export function onViewer(stream, deps) {
-    if (!stream) { deps.getAutoClip()?.reset(); return; }
-    deps.setViewerCount(stream.viewers);
-    deps.reportTraffic({ platform: 'Twitch', type: 'audience', userNum: stream.viewers, streamId: stream.id != null ? String(stream.id) : undefined, startedAt: stream.startDate?.toISOString() });
-    deps.getAutoClip()?.updateViewers(stream.viewers);
+    if (!stream) {
+        // 明確離線（Helix 查不到直播）才歸零；暫時查詢失敗不應清掉人數。
+        deps.resetViewerCount?.();
+        deps.updateCombinedViewerCount?.();
+        deps.getAutoClip()?.reset();
+        return;
+    }
+
+    const viewers = Number(stream.viewers);
+    if (!Number.isFinite(viewers) || viewers < 0) return; // 無效值保留上次已知人數
+
+    const effective = deps.setViewerCount(viewers);
+    const applied = Number.isFinite(effective) ? effective : viewers;
+    deps.reportTraffic({ platform: 'Twitch', type: 'audience', userNum: applied, streamId: stream.id != null ? String(stream.id) : undefined, startedAt: stream.startDate?.toISOString() });
+    deps.getAutoClip()?.updateViewers(applied);
     const DA = new Date();
-    deps.logger.log(`📊 Twitch 觀眾數: ${stream.viewers} ${DA.toLocaleString()}`);
-    deps.writeLog("Default", `Twitch 觀眾數: ${stream.viewers} ${DA.toLocaleString()}`, "Twitch View");
+    deps.logger.log(`📊 Twitch 觀眾數: ${applied} ${DA.toLocaleString()}`);
+    deps.writeLog("Default", `Twitch 觀眾數: ${applied} ${DA.toLocaleString()}`, "Twitch View");
     deps.updateCombinedViewerCount();
 }
 

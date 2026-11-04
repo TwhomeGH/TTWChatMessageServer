@@ -33,8 +33,9 @@ export function registerTikTokEvents(connection, deps) {
         replaceEmojis, recordChatHeat, chatMetadata, translate,
         tikTokChatGuard,
         giftNames, getGiftMapReady,
-        getCacheUserNum, setCacheUserNum, setCacheUserList,
-        getAutoClip, sendAudienceUpdate,
+        getCacheUserNum, setCacheUserList,
+        setTikTokViewerCount, updateCombinedViewerCount,
+        getAutoClip,
         isEnd, setStreamEnded, cancelReconnect, onStreamEnd,
         logger = console,
     } = deps;
@@ -185,7 +186,8 @@ export function registerTikTokEvents(connection, deps) {
     connection.on(WebcastEvent.ROOM_USER, data => {
         logRawEvent('ROOM_USER', data);
         const viewerCount = data.total ?? data.totalUser ?? connection.state?.roomInfo?.data?.user_count;
-        logger.log(`Viewer Count: ${viewerCount}`);
+        const viewerNum = Number(viewerCount);
+        logger.log(`Viewer Count: ${Number.isFinite(viewerNum) ? viewerNum : '未知'}`);
         const ranksList = data.ranks || [];
         const topGifter = ranksList[0];
         if (topGifter?.user) {
@@ -196,9 +198,12 @@ export function registerTikTokEvents(connection, deps) {
         }
 
         setCacheUserList(ranksList.map(item => item.user.nickname));
-        setCacheUserNum(viewerCount);
-        getAutoClip()?.updatePlatformViewers('TikTok', Number(viewerCount));
-        sendAudienceUpdate();
+        if (Number.isFinite(viewerNum) && viewerNum >= 0) {
+            const effective = setTikTokViewerCount(viewerNum);
+            getAutoClip()?.updatePlatformViewers('TikTok', effective);
+        }
+        // userList 可能改變，即使人數沒變也要送一次。
+        updateCombinedViewerCount(true);
     });
 
     connection.on(WebcastEvent.MEMBER, data => {
@@ -520,6 +525,9 @@ export function registerTikTokEvents(connection, deps) {
         // 直播真正結束：取消排程中的重連，不再自動重試
         setStreamEnded();
         cancelReconnect();
+        // 明確關台：強制歸零，不必等 0 值確認。
+        setTikTokViewerCount(0, true);
+        updateCombinedViewerCount(true);
         onStreamEnd?.();
     });
 }

@@ -32,8 +32,10 @@ function makeHarness(overrides = {}) {
         giftNames: { ensureGiftNameTranslation: async (n) => n },
         getGiftMapReady: () => Promise.resolve(),
         getCacheUserNum: () => 0, getCacheUserList: () => [],
-        setCacheUserNum: () => {}, setCacheUserList: () => {},
-        getAutoClip: () => null, sendAudienceUpdate: () => {},
+        setTikTokViewerCount: (n, force) => { calls.push(['viewer', n, force]); return n; },
+        updateCombinedViewerCount: (...a) => calls.push(['combined', ...a]),
+        setCacheUserList: () => {},
+        getAutoClip: () => null,
         isEnd: () => false, getStreamEnded: () => false,
         setStreamEnded: () => calls.push(['streamEnded']),
         cancelReconnect: () => calls.push(['cancelReconnect']),
@@ -87,9 +89,24 @@ test('GIFT：連擊進行中只送連擊進度', () => {
     }));
 });
 
-test('STREAM_END：設定 streamEnded 並取消重連', () => {
+test('STREAM_END：設定 streamEnded、取消重連並強制歸零', () => {
     const { conn, calls } = makeHarness();
     conn.handlers[WebcastEvent.STREAM_END]({ action: ControlAction.CONTROL_ACTION_STREAM_ENDED });
     assert.ok(calls.some(c => c[0] === 'streamEnded'));
     assert.ok(calls.some(c => c[0] === 'cancelReconnect'));
+    assert.ok(calls.some(c => c[0] === 'viewer' && c[1] === 0 && c[2] === true));
+    assert.ok(calls.some(c => c[0] === 'combined' && c[1] === true));
+});
+
+test('ROOM_USER：有有效人數才更新，缺值不送 0', () => {
+    const { conn, calls } = makeHarness();
+    conn.handlers[WebcastEvent.ROOM_USER]({ total: '12', ranks: [] });
+    assert.ok(calls.some(c => c[0] === 'viewer' && c[1] === 12));
+    assert.ok(calls.some(c => c[0] === 'combined' && c[1] === true));
+
+    calls.length = 0;
+    conn.state.roomInfo.data = {};
+    conn.handlers[WebcastEvent.ROOM_USER]({ ranks: [] });
+    assert.equal(calls.some(c => c[0] === 'viewer'), false);
+    assert.ok(calls.some(c => c[0] === 'combined' && c[1] === true));
 });

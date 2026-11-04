@@ -15,7 +15,8 @@ function makeDeps(overrides = {}) {
         notify: async (...a) => calls.push(['notify', ...a]),
         sendSystem: (t) => calls.push(['system', t]),
         sendNotice: (u, t, i) => calls.push(['notice', u, t, i]),
-        setViewerCount: (n) => calls.push(['viewers', n]),
+        setViewerCount: (n) => { calls.push(['viewers', n]); return n; },
+        resetViewerCount: () => calls.push(['resetViewer']),
         updateCombinedViewerCount: () => calls.push(['combined']),
         getUserIcon: async (id) => `icon:${id}`,
         logger: silent,
@@ -24,10 +25,12 @@ function makeDeps(overrides = {}) {
     return { deps, calls, autoClip };
 }
 
-test('onViewer：stream 為 null 時重置 autoClip', () => {
-    const { deps, autoClip } = makeDeps();
+test('onViewer：stream 為 null 時重置 autoClip 並歸零', () => {
+    const { deps, autoClip, calls } = makeDeps();
     onViewer(null, deps);
     assert.equal(autoClip.resets, 1);
+    assert.ok(calls.some(c => c[0] === 'resetViewer'));
+    assert.ok(calls.some(c => c[0] === 'combined'));
 });
 
 test('onViewer：更新觀眾數、回報流量、重算合併', () => {
@@ -37,6 +40,13 @@ test('onViewer：更新觀眾數、回報流量、重算合併', () => {
     assert.ok(calls.some(c => c[0] === 'viewers' && c[1] === 42));
     assert.ok(calls.some(c => c[0] === 'traffic' && c[1].streamId === '7'));
     assert.ok(calls.some(c => c[0] === 'combined'));
+});
+
+test('onViewer：使用收斂後的有效值（短暫 0 被保留）', () => {
+    const { deps, calls, autoClip } = makeDeps({ setViewerCount: () => 42 });
+    onViewer({ viewers: 0, id: 1 }, deps);
+    assert.deepEqual(autoClip.viewers, [42]);
+    assert.ok(calls.some(c => c[0] === 'traffic' && c[1].userNum === 42));
 });
 
 test('onFollow：取頭像、通知與系統訊息', async () => {

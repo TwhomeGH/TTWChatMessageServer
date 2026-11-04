@@ -17,16 +17,12 @@ function fakeConnection() {
 
 function makeDeps(overrides = {}) {
     const calls = [];
-    const state = { tikTokViewer: 0, cacheNum: 0 };
+    const state = { tikTokViewer: 0 };
     const deps = {
         getConnection: fakeConnection,
         tiktokName: 'chan',
-        isTK: true,
-        isTwitch: false,
-        getTwitchViewerCount: () => 0,
-        setTikTokViewerCount: (n) => { state.tikTokViewer = n; },
-        setCacheUserNum: (n) => { state.cacheNum = n; },
-        getCacheUserNum: () => state.cacheNum,
+        setTikTokViewerCount: (n) => { state.tikTokViewer = n; return n; },
+        getCacheUserNum: () => 0,
         getCacheUserList: () => [],
         updateCombinedViewerCount: () => calls.push(['combined']),
         notify: async (...a) => calls.push(['notify', ...a]),
@@ -53,7 +49,7 @@ test('onConnected：設定觀眾數、通知並啟動輪詢', async (t) => {
     mgr.onConnected({ roomId: 'r1' });
 
     assert.equal(state.tikTokViewer, 42);
-    assert.equal(state.cacheNum, 42);
+    assert.ok(calls.some(c => c[0] === 'combined'));
     assert.ok(calls.some(c => c[0] === 'notify' && String(c[1]).includes('連線成功')));
     assert.ok(calls.some(c => c[0] === 'resume'));
 
@@ -97,6 +93,23 @@ test('scheduleReconnect：已結束（isEnd）時不重連', () => {
     mgr.scheduleReconnect();
 
     assert.ok(!calls.some(c => c[0] === 'system'));
+});
+
+test('輪詢：fetchRoomInfo 沒有 user_count 時不更新、不送 0', async (t) => {
+    t.mock.timers.enable({ apis: ['setInterval'] });
+    const { deps, calls, state } = makeDeps({
+        getConnection: () => ({ ...fakeConnection(), fetchRoomInfo: async () => ({ data: {} }) }),
+    });
+    const mgr = createTikTokConnectionManager(deps);
+
+    mgr.onConnected({ roomId: 'r1' });
+    calls.length = 0;
+    t.mock.timers.tick(30000);
+    await tick();
+
+    assert.equal(state.tikTokViewer, 42); // 保留連線時的有效值
+    assert.equal(calls.some(c => c[0] === 'traffic'), false);
+    assert.equal(calls.some(c => c[0] === 'autoclip'), false);
 });
 
 test('stop：停止輪詢後不再抓取觀眾數', async (t) => {

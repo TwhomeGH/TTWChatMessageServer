@@ -1,5 +1,36 @@
 # ChangeHistory
 
+## 2026.11.05 00:53 觀眾數缺值不再歸零，避免跨平台人數亂跳
+
+**類型**: 修正 · **檔案**: `TikTok.js`、`ScriptLib/viewers/counts.mjs`、`ScriptLib/tiktok/connection.mjs`、`ScriptLib/tiktok/events.mjs`、`ScriptLib/twitch/events.mjs`、`Test/viewer_counts.test.mjs`、`Docs/MODULES.md`
+
+### 問題 - 短暫取不到觀眾數時 socket 直接送 0
+
+TikTok `ROOM_USER` 的 `total` 可能是 `"0"` 或缺少欄位，`fetchRoomInfo` 也可能暫時沒有 `user_count`；原本這些情況會被 `|| 0` 折成 0 並立即送出，造成疊層人數從 2 跳到 0 再跳回。
+
+### 根因 - 把「未知」當成「0」，且 `ROOM_USER` 直接覆寫合併數
+
+- `ScriptLib/tiktok/events.mjs` 的 `ROOM_USER` 直接 `setCacheUserNum(viewerCount)`，把 TikTok 單平台數寫進跨平台合併值，會蓋掉 Twitch／YouTube／Odysee。
+- `connection.mjs`、`TikTok.js` 多處用 `|| 0` 或 `Number(undefined)` 處理缺值。
+
+### 修改
+
+- 新增 `ScriptLib/viewers/counts.mjs`：只接受有限非負數；缺值保留上次值；正值變 0 需持續 60 秒才確認；明確離線用 `reset()` 立即歸零。
+- `ROOM_USER` 改走 `setTikTokViewerCount` + `updateCombinedViewerCount`，不再直接覆寫合併數；無效人數不更新。
+- Twitch `onViewer(null)`（明確離線）歸零；TikTok `STREAM_END` 強制歸零。
+- 合併值只在實際變動或需要更新 `userList` 時才送 socket；AutoClip 與 traffic 取樣也改用收斂後的有效值，不會收到短暫 0。
+
+### 限制
+
+- 真正掉到 0 人時，UI 最多延後約 60 秒（或下一次確認）才顯示 0。
+- 平台若在沒有離線事件的情況下停止更新，會保留最後已知人數。
+
+### 驗證
+
+`node --test Test/viewer_counts.test.mjs Test/tiktok_connection.test.mjs Test/tiktok_events.test.mjs Test/twitch_events.test.mjs`、`npm run test:core`（281 tests）、`npm run lint` 全過。
+
+---
+
 ## 2026.10.25 00:30 跳過 userscript 頁面刷新時的舊聊天重播
 
 **類型**: 修正 · **檔案**: `UserScript/TikTokChat.user.js`、`UserScript/liveCenter.user.js`、`Docs/USERSCRIPT_SOURCES.md`
@@ -537,7 +568,6 @@ refresh token 失效後，`getYoutubeAuthParams()` 每次呼叫都重新嘗試�
 **相關文件**: [TRAFFIC.md](TRAFFIC.md)
 
 ---
-
 
 ## 2026.10.22 00:05 一週累積計畫、2/2 暫定觀察與計畫介面
 

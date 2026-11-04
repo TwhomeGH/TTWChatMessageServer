@@ -11,11 +11,7 @@ import { roomStartTime, createStartTimeProbe } from './viewers.mjs';
  * @typedef {Object} TikTokConnectionDeps
  * @property {() => Object} getConnection 取得 TikTokLiveConnection。
  * @property {string} tiktokName 直播間名稱。
- * @property {boolean} isTK 是否啟用 TikTok（合併觀眾數用）。
- * @property {boolean} isTwitch 是否啟用 Twitch（合併觀眾數用）。
- * @property {() => number} getTwitchViewerCount 取得 Twitch 觀眾數。
- * @property {(n: number) => void} setTikTokViewerCount 設定 TikTok 觀眾數。
- * @property {(n: number) => void} setCacheUserNum 設定合併觀眾數。
+ * @property {(n: number) => number} setTikTokViewerCount 設定 TikTok 觀眾數，回傳套用後的有效值（無效值會被忽略）。
  * @property {() => number} getCacheUserNum 取得合併觀眾數（日誌用）。
  * @property {() => Array} getCacheUserList 取得用戶清單（日誌用）。
  * @property {() => void} updateCombinedViewerCount 重算合併觀眾數並送出。
@@ -43,8 +39,8 @@ import { roomStartTime, createStartTimeProbe } from './viewers.mjs';
  */
 export function createTikTokConnectionManager(deps) {
     const {
-        getConnection, tiktokName, isTK, isTwitch, getTwitchViewerCount,
-        setTikTokViewerCount, setCacheUserNum, getCacheUserNum, getCacheUserList,
+        getConnection, tiktokName,
+        setTikTokViewerCount, getCacheUserNum, getCacheUserList,
         updateCombinedViewerCount, notify, sendSystem, writeLog, reportTraffic,
         getAutoClip, tikTokChatGuard, adScheduler, handleExit, isEnd, getStreamEnded, onLive,
         retryBase = 15000, retryMax = 5, viewCacheIntervalMs = 30000, logger = console
@@ -66,7 +62,8 @@ export function createTikTokConnectionManager(deps) {
 
         getConnection().fetchRoomInfo(roomId).then(async (roomInfo) => {
             viewFailures = 0;
-            const Viewer = roomInfo.data.user_count;
+            const Viewer = roomInfo?.data?.user_count;
+            const viewerNum = Number(Viewer);
 
             if (writeViewCount > 100 && writeDebugView) {
                 writeLog("Default", `DEBUG View:\n${JSON.stringify(roomInfo)}`, "View統計");
@@ -77,9 +74,13 @@ export function createTikTokConnectionManager(deps) {
             writeViewCount += 1;
             const startedAt = roomStartTime(roomInfo);
             startTimeProbe.probe(roomInfo, startedAt);
-            reportTraffic({ platform: 'TikTok', type: 'audience', userNum: Number(Viewer), streamId: roomId != null ? String(roomId) : undefined, startedAt });
-            getAutoClip()?.updatePlatformViewers('TikTok', Number(Viewer));
-            setTikTokViewerCount(Viewer);
+            if (Number.isFinite(viewerNum) && viewerNum >= 0) {
+                const effective = setTikTokViewerCount(viewerNum);
+                reportTraffic({ platform: 'TikTok', type: 'audience', userNum: effective, streamId: roomId != null ? String(roomId) : undefined, startedAt });
+                getAutoClip()?.updatePlatformViewers('TikTok', effective);
+            } else {
+                logger.log('⚠️ fetchRoomInfo 未提供有效觀眾數，保留上次值');
+            }
             updateCombinedViewerCount();
 
         }).catch(err => {
@@ -100,9 +101,9 @@ export function createTikTokConnectionManager(deps) {
         roomId = state.roomId;
         const info = getConnection().state.roomInfo.data;
         const title = info.title || "未知直播間";
-        const viewerCount = info.user_count || 0;
-        setTikTokViewerCount(viewerCount);
-        setCacheUserNum((isTK && isTwitch) ? viewerCount + getTwitchViewerCount() : viewerCount);
+        const viewerCount = Number(info.user_count);
+        if (Number.isFinite(viewerCount) && viewerCount >= 0) setTikTokViewerCount(viewerCount);
+        updateCombinedViewerCount();
         notify("TikTok 直播間連線成功", `已連接到 ${tiktokName} 的直播間 ${title}`, "");
         sendSystem(`TikTok 直播間連線成功，已連接到 ${tiktokName} 的直播間 ${title}`);
         adScheduler.resume();
