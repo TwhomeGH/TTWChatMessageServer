@@ -130,3 +130,46 @@ test('topUserMsgs 反映集中度（單人洗頻 vs 多人各一則）', () => {
     assert.equal(stats.platforms[0].topUserMsgs, 3);
     assert.equal(stats.platforms[0].uniqueUsers, 4);
 });
+
+test('自適應門檻：小台 2 人／4 則可觸發，固定 6／3 不會', () => {
+    const small = () => {
+        const f = setup({ adaptiveThresholds: true, minMessages: 6, minUsers: 3 }); f.warm();
+        for (let i = 0; i < 2; i++) { f.chat('a'); f.chat('b'); }
+        return f;
+    };
+    const adaptive = small();
+    const stats = adaptive.manager.getStats(adaptive.now());
+    const twitch = stats.platforms.find(p => p.platform === 'Twitch');
+    assert.equal(twitch.recentMaxUsers, 0);
+    assert.equal(twitch.minMessages, 4);
+    assert.equal(twitch.minUsers, 2);
+    adaptive.advance(5000);
+    assert.equal(adaptive.advance(15000).triggered, true);
+
+    const fixed = setup({ adaptiveThresholds: false, minMessages: 6, minUsers: 3 }); fixed.warm();
+    for (let i = 0; i < 2; i++) { fixed.chat('a'); fixed.chat('b'); }
+    fixed.advance(5000);
+    assert.equal(fixed.advance(15000).triggered, false);
+});
+
+test('自適應門檻：仍不會讓單人洗頻觸發', () => {
+    const f = setup({ adaptiveThresholds: true }); f.warm();
+    for (let i = 0; i < 3; i++) f.chat('solo'); // maxPerUser=3，仍不到 4 則與 2 人
+    const stats = f.manager.getStats(f.now());
+    const twitch = stats.platforms.find(p => p.platform === 'Twitch');
+    assert.equal(twitch.minUsers, 2);
+    assert.equal(twitch.minMessages, 4);
+    f.advance(5000);
+    assert.equal(f.advance(15000).triggered, false);
+});
+
+test('自適應門檻：活躍聊天會把門檻維持在設定的 6／3', () => {
+    const f = setup({ adaptiveThresholds: true, minMessages: 6, minUsers: 3 });
+    for (let i = 0; i < 40; i++) {
+        for (const user of ['a', 'b', 'c']) f.chat(user);
+        f.advance(5000);
+    }
+    const twitch = f.manager.getStats(f.now()).platforms.find(p => p.platform === 'Twitch');
+    assert.equal(twitch.minUsers, 3);
+    assert.equal(twitch.minMessages, 6);
+});

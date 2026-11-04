@@ -12,12 +12,13 @@ export class AutoClipManager {
         rateWindowMin = 0.5, baselineWindowMin = 15, wViewers = 0.2, wMsg = 0.8,
         scoreThreshold = 1.8, floorViewers = 2, floorMsgPerMin = 2,
         cooldownMin = 15, sustainMin = 0.167, warmupMs = 180000,
-        minMessages = 6, minUsers = 3, minMessageRatio = 1.5, maxPerUser = 3, staleMs = 90000,
+        minMessages = 6, minUsers = 3, minMessageRatio = 1.5, adaptiveThresholds = true,
+        maxPerUser = 3, staleMs = 90000,
         titlePrefix = '', log = console.log, now = Date.now, requestTimeoutMs = 60000,
         logIntervalMs = 60000 } = {}) {
         Object.assign(this, { onCreateClip, shadow, platform, delayOffsetsMs, wViewers, wMsg, scoreThreshold,
-            floorViewers, floorMsgPerMin, warmupMs, minMessages, minUsers, minMessageRatio, maxPerUser,
-            staleMs, titlePrefix, log, now, requestTimeoutMs, logIntervalMs });
+            floorViewers, floorMsgPerMin, warmupMs, minMessages, minUsers, minMessageRatio, adaptiveThresholds,
+            maxPerUser, staleMs, titlePrefix, log, now, requestTimeoutMs, logIntervalMs });
         // 狀態列只在狀態改變、觸發或達到心跳間隔時輸出，避免每次評估（5 秒）洗版。
         this.lastLogReason = null;
         this.lastLogAt = 0;
@@ -131,6 +132,7 @@ export class AutoClipManager {
             wViewers: this.wViewers, wMsg: this.wMsg, scoreThreshold: this.scoreThreshold,
             floorViewers: this.floorViewers, floorMsgPerMin: this.floorMsgPerMin,
             minMessages: this.minMessages, minUsers: this.minUsers, minMessageRatio: this.minMessageRatio,
+            adaptiveThresholds: this.adaptiveThresholds,
             maxPerUser: this.maxPerUser, warmupMs: this.warmupMs };
     }
 
@@ -144,8 +146,10 @@ export class AutoClipManager {
             reason = '觀眾資料過期或斷線，重新暖機';
         } else if (now - this.startedAt < this.warmupMs || s.sampleCount < 3) reason = '暖機收集基準';
         else if (s.viewers < this.floorViewers) reason = '觀眾不足';
-        else if (s.windowMsgs < this.minMessages || s.uniqueUsers < this.minUsers) reason = '有效留言或不同發言人不足';
-        else if (s.messageRatio < this.minMessageRatio || s.score < this.scoreThreshold) reason = '未達聊天突增門檻';
+        // sourcePlatform 只在某個平台自己的有效門檻都通過時才會有值；
+        // 不可再用跨平台總留言／總人數判定，否則自適應門檻會被其他平台稀釋。
+        else if (!s.sourcePlatform) reason = '平台未達留言／人數／倍率門檻';
+        else if (s.score < this.scoreThreshold) reason = '未達聊天突增門檻';
         const qualified = !reason;
         if (!qualified) {
             this.aboveSince = null;

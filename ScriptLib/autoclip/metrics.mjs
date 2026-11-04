@@ -27,6 +27,18 @@ export function calculateMetrics(state, now) {
         const msgRate = messages.length / (state.rateMs / MINUTE);
         const messageRatio = msgRate / Math.max(baseMsgRate, state.floorMsgPerMin);
         const uniqueUsers = new Set(messages.map(m => m.user)).size;
+        // 自適應絕對門檻：只往下修到這個台近期真的出現過的量，避免小台永遠無法達標。
+        // 相對門檻（messageRatio、score）不動，所以仍要求相對爆量。
+        const recentMaxUsers = recent.reduce((max, sample) =>
+            Math.max(max, Number(sample.platforms?.find(p => p.platform === platform)?.uniqueUsers) || 0), 0);
+        const adaptive = state.adaptiveThresholds !== false;
+        const minUsers = adaptive
+            ? Math.min(state.minUsers ?? 3, Math.max(2, recentMaxUsers))
+            : (state.minUsers ?? 3);
+        const minMessages = adaptive
+            ? Math.min(state.minMessages ?? 6, Math.max(4, Math.ceil(baseMsgRate)))
+            : (state.minMessages ?? 6);
+        const minMessageRatio = state.minMessageRatio ?? 1.5;
         // 同一個人最多發了幾則：用來分辨「很多人各一則」與「一個人洗頻」。
         const perUser = new Map();
         for (const m of messages) perUser.set(m.user, (perUser.get(m.user) || 0) + 1);
@@ -38,8 +50,9 @@ export function calculateMetrics(state, now) {
             .filter(([, at]) => now - at <= state.staleMs).map(([transport]) => transport);
         return { platform, transports, viewers, baseViewers, msgRate, baseMsgRate, messageRatio,
             windowMsgs: messages.length, uniqueUsers, topUserMsgs, score,
-            eligible: messages.length >= state.minMessages && uniqueUsers >= state.minUsers
-                && messageRatio >= (state.minMessageRatio ?? 1.5) };
+            recentMaxUsers, minMessages, minUsers, minMessageRatio,
+            eligible: messages.length >= minMessages && uniqueUsers >= minUsers
+                && messageRatio >= minMessageRatio };
     });
     // 取獨立達標的最高分，避免安靜平台稀釋其他平台的突增。
     const winner = platforms.filter(p => p.eligible).sort((a, b) => b.score - a.score)[0];

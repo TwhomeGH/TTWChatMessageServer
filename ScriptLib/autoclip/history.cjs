@@ -31,6 +31,58 @@ function downsample(rows, maxPoints) {
 }
 
 /**
+ * 彙整一個場次／範圍內各平台的最高表現。
+ * 以最高分樣本代表「最接近觸發」的時刻；另保留獨立最大值與達標窗口數。
+ * @param {Object[]} rows 未降採樣的歷史列。
+ * @returns {Object[]}
+ */
+function summarizePlatforms(rows) {
+    const byPlatform = new Map();
+    for (const row of rows) {
+        if (!Array.isArray(row?.platforms)) continue;
+        for (const p of row.platforms) {
+            if (!p || !p.platform) continue;
+            let item = byPlatform.get(p.platform);
+            if (!item) {
+                item = {
+                    platform: p.platform, score: -Infinity, at: null,
+                    windowMsgs: 0, uniqueUsers: 0, messageRatio: 0, viewers: 0,
+                    maxMessages: 0, maxUsers: 0, maxRatio: 0, maxViewers: 0,
+                    minMessages: p.minMessages, minUsers: p.minUsers, minMessageRatio: p.minMessageRatio,
+                    eligibleCount: 0, samples: 0, transports: new Set()
+                };
+                byPlatform.set(p.platform, item);
+            }
+            const score = Number(p.score) || 0;
+            item.samples += 1;
+            if (score > item.score) {
+                item.score = score;
+                item.at = row.t;
+                item.windowMsgs = Number(p.windowMsgs) || 0;
+                item.uniqueUsers = Number(p.uniqueUsers) || 0;
+                item.messageRatio = Number(p.messageRatio) || 0;
+                item.viewers = Number(p.viewers) || 0;
+                item.minMessages = p.minMessages ?? item.minMessages;
+                item.minUsers = p.minUsers ?? item.minUsers;
+                item.minMessageRatio = p.minMessageRatio ?? item.minMessageRatio;
+            }
+            item.maxMessages = Math.max(item.maxMessages, Number(p.windowMsgs) || 0);
+            item.maxUsers = Math.max(item.maxUsers, Number(p.uniqueUsers) || 0);
+            item.maxRatio = Math.max(item.maxRatio, Number(p.messageRatio) || 0);
+            item.maxViewers = Math.max(item.maxViewers, Number(p.viewers) || 0);
+            if (p.eligible) item.eligibleCount += 1;
+            for (const transport of p.transports || []) item.transports.add(transport);
+        }
+    }
+    return [...byPlatform.values()].map(item => ({
+        ...item,
+        score: item.score === -Infinity ? 0 : item.score,
+        eligible: item.eligibleCount > 0,
+        transports: [...item.transports]
+    }));
+}
+
+/**
  * 自動剪輯的跨場次歷史。
  *
  * `samples` 保存每一次 5 秒評估的完整 payload；`sessions` 保存場次摘要。
@@ -159,12 +211,14 @@ class AutoClipHistory {
                 const data = JSON.parse(row.data);
                 return { ...data, t: data.t ?? row.t, triggered: Boolean(row.triggered) };
             });
+        const platforms = summarizePlatforms(rows);
         const sampled = downsample(rows, Math.max(100, Math.min(10000, maxPoints)));
         let config;
         try { config = JSON.parse(meta.config || '{}'); } catch { config = {}; }
         return {
             session: id,
             config,
+            platforms,
             rows: sampled.rows,
             truncated: sampled.truncated,
             meta: {
@@ -211,4 +265,4 @@ class AutoClipHistory {
     }
 }
 
-module.exports = { AutoClipHistory, downsample };
+module.exports = { AutoClipHistory, downsample, summarizePlatforms };

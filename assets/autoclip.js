@@ -1,6 +1,6 @@
 let viewerChart, msgChart, scoreChart;
 let cfg = {};
-let graphRows = [], selectedTrigger = null;
+let graphRows = [], selectedTrigger = null, historyPlatforms = null;
 let allRows = [], customRange = null;
 let viewMode = 'live';
 let historySessions = [];
@@ -81,55 +81,123 @@ let focusedPlatform = null;
 const platformOrder = ['TikTok','Twitch','Kick','Odysee','Youtube','Unknown'];
 const platformColors = { TikTok:'#22d3ee', Twitch:'#c084fc', Kick:'#4ade80', Odysee:'#fb923c', Youtube:'#fb7185', Unknown:'#94a3b8' };
 const numberText = value => typeof value === 'number' && Number.isFinite(value) ? value.toFixed(2) : '—';
+/** 依目前圖表範圍彙整各平台最高表現；伺服器已提供整場彙整時優先使用它。 */
+function summarizeRows(rows) {
+    const byPlatform = new Map();
+    for (const row of rows) {
+        for (const p of row.platforms || []) {
+            if (!p?.platform) continue;
+            let item = byPlatform.get(p.platform);
+            if (!item) {
+                item = {
+                    platform: p.platform, score: -Infinity, at: null,
+                    windowMsgs: 0, uniqueUsers: 0, messageRatio: 0, viewers: 0,
+                    maxMessages: 0, maxUsers: 0, maxRatio: 0, maxViewers: 0,
+                    minMessages: p.minMessages, minUsers: p.minUsers, minMessageRatio: p.minMessageRatio,
+                    eligibleCount: 0, samples: 0, transports: new Set()
+                };
+                byPlatform.set(p.platform, item);
+            }
+            const score = Number(p.score) || 0;
+            item.samples += 1;
+            if (score > item.score) {
+                item.score = score;
+                item.at = row.t;
+                item.windowMsgs = Number(p.windowMsgs) || 0;
+                item.uniqueUsers = Number(p.uniqueUsers) || 0;
+                item.messageRatio = Number(p.messageRatio) || 0;
+                item.viewers = Number(p.viewers) || 0;
+                item.minMessages = p.minMessages ?? item.minMessages;
+                item.minUsers = p.minUsers ?? item.minUsers;
+                item.minMessageRatio = p.minMessageRatio ?? item.minMessageRatio;
+            }
+            item.maxMessages = Math.max(item.maxMessages, Number(p.windowMsgs) || 0);
+            item.maxUsers = Math.max(item.maxUsers, Number(p.uniqueUsers) || 0);
+            item.maxRatio = Math.max(item.maxRatio, Number(p.messageRatio) || 0);
+            item.maxViewers = Math.max(item.maxViewers, Number(p.viewers) || 0);
+            if (p.eligible) item.eligibleCount += 1;
+            for (const transport of p.transports || []) item.transports.add(transport);
+        }
+    }
+    return [...byPlatform.values()].map(item => ({
+        ...item,
+        score: item.score === -Infinity ? 0 : item.score,
+        eligible: item.eligibleCount > 0,
+        transports: [...item.transports]
+    }));
+}
+
 function renderPlatformCards() {
     const historical = selectedTrigger !== null;
+    const historyMode = viewMode === 'history' && !historical;
+    const rangeAll = !customRange && document.getElementById('rangeSelect').value === 'all';
+    const sessionSummary = historyMode
+        ? (rangeAll && Array.isArray(historyPlatforms) ? historyPlatforms : summarizeRows(graphRows))
+        : null;
+    const summaryScope = rangeAll ? '本場' : '所選範圍';
+    const legacyThresholds = sessionSummary?.some(p => p.minMessages == null);
     let row = historical ? allRows.find(r => r.t === selectedTrigger) : allRows.at(-1);
     let fallback = false;
-    if (!historical && !(Array.isArray(row?.platforms) && row.platforms.length)) {
+    if (!historical && !sessionSummary && !(Array.isArray(row?.platforms) && row.platforms.length)) {
         const valid = [...allRows].reverse().find(r => Array.isArray(r.platforms) && r.platforms.length);
         if (valid) {
             row = valid;
             fallback = true;
         }
     }
-    const platforms = historical ? row?.evidence?.platforms ?? row?.platforms : row?.platforms;
-    const source = historical ? row?.evidence?.sourcePlatform ?? row?.sourcePlatform : row?.sourcePlatform;
+    const platforms = historical ? row?.evidence?.platforms ?? row?.platforms
+        : sessionSummary ?? row?.platforms;
+    const source = historical ? row?.evidence?.sourcePlatform ?? row?.sourcePlatform
+        : sessionSummary ? null : row?.sourcePlatform;
     const threshold = historical ? row?.evidence?.threshold : cfg.scoreThreshold ?? 1.8;
-    const historyMode = viewMode === 'history' && !historical;
+    const last = graphRows.at(-1);
     const stale = !historical && row && Date.now() - new Date(row.t).getTime() > 20000;
     document.getElementById('platformContext').textContent = historical
       ? '歷史快照 · '+fmtTime(row?.t)+(Array.isArray(platforms)?'':' · 此紀錄未保存平台數據')
-      : historyMode
-        ? fallback
-          ? `歷史場次 · 上次有效平台樣本 ${fmtTime(row?.t)}`
-          : row ? `歷史場次 · ${fmtTime(row.t)}` : '歷史場次沒有平台資料'
-        : fallback
-          ? `上次有效平台快照 · ${fmtTime(row?.t)}（目前沒有新的平台資料${source ? ' · 來源 '+sourceLabel(source) : ''}）`
-          : row
-            ? '即時評估 · '+fmtTime(row.t)+(stale?' · 資料已停止更新，以下為最後樣本':'')
-            : '等待評估資料';
+      : sessionSummary
+        ? `歷史場次 · ${summaryScope}最高${last ? '（最後樣本 '+fmtMinute(last.t)+'）' : ''}${legacyThresholds ? ' · 舊場次使用當時固定門檻' : ''}`
+        : historyMode
+          ? fallback
+            ? `歷史場次 · 上次有效平台樣本 ${fmtTime(row?.t)}`
+            : row ? `歷史場次 · ${fmtTime(row.t)}` : '歷史場次沒有平台資料'
+          : fallback
+            ? `上次有效平台快照 · ${fmtTime(row?.t)}（目前沒有新的平台資料${source ? ' · 來源 '+sourceLabel(source) : ''}）`
+            : row
+              ? '即時評估 · '+fmtTime(row.t)+(stale?' · 資料已停止更新，以下為最後樣本':'')
+              : '等待評估資料';
     document.getElementById('liveBtn').disabled = !historical && !customRange;
     document.getElementById('platformCards').innerHTML = platformOrder.map(platform => {
       const p = platforms?.find(p => p.platform === platform);
       const winner = p && source === platform;
       const limits = historical ? row?.evidence : cfg;
-      const minMessages = limits?.minMessages ?? 6;
-      const minUsers = limits?.minUsers ?? 3;
-      const minRatio = limits?.minMessageRatio ?? 1.5;
+      const minMessages = p?.minMessages ?? limits?.minMessages ?? 6;
+      const minUsers = p?.minUsers ?? limits?.minUsers ?? 3;
+      const minRatio = p?.minMessageRatio ?? limits?.minMessageRatio ?? 1.5;
       // 顯示「目前值/門檻」，直接看出差多少，而不是只看到「不足」。
       const missing = p ? [
         p.windowMsgs < minMessages ? `留言 ${p.windowMsgs}/${minMessages}` : '',
         p.uniqueUsers < minUsers ? `人數 ${p.uniqueUsers}/${minUsers}` : '',
         Number(p.messageRatio) < minRatio ? `聊天倍率 ${Number(p.messageRatio).toFixed(1)}/${minRatio}` : ''
       ].filter(Boolean) : [];
-      const status = !p ? historical?'未保存平台數據':'尚無平台樣本' : winner?'本次主導':p.eligible?'平台合格':missing.join('、')||'未達平台門檻';
+      const status = !p
+        ? (historical ? '未保存平台數據' : sessionSummary ? `${summaryScope}無樣本` : '尚無平台樣本')
+        : sessionSummary
+          ? (p.eligibleCount > 0 ? `${summaryScope} ${p.eligibleCount} 個窗口達標` : `${summaryScope} 0 個窗口達標`)
+          : winner ? '本次主導' : p.eligible ? '平台合格' : missing.join('、') || '未達平台門檻';
       const hint = `觸發門檻：30 秒窗口內至少 ${minMessages} 筆留言、${minUsers} 位不同發言人，且聊天倍率（目前速率 ÷ 基準速率）至少 ${minRatio} 倍`;
+      const counts = !p ? '— 則 · — 人'
+        : sessionSummary
+          ? `最高 ${esc(p.windowMsgs)}/${esc(minMessages)} 則 · ${esc(p.uniqueUsers)}/${esc(minUsers)} 人 · ${Number(p.messageRatio).toFixed(1)}/${minRatio} 倍率`
+          : `${esc(p.windowMsgs)} 則 · ${esc(p.uniqueUsers)} 人`+(p.topUserMsgs>1?'（最多 '+esc(p.topUserMsgs)+' 則/人）':'');
+      const footer = sessionSummary && p
+        ? `最高分於 ${p.at ? fmtMinute(p.at) : '—'}${p.maxViewers != null ? ' · 最高觀眾 '+esc(p.maxViewers) : ''}`
+        : `採計分數 ${numberText(p?.contribution)}`;
       return `<button class="platform-card ${winner?'winner':''}" style="--platform-color:${platformColors[platform]}" data-platform="${platform}" aria-pressed="${focusedPlatform===platform}" title="${esc(hint)}">
         <div class="font-semibold">${sourceLabel(platform)}</div>
         <div class="text-xs text-gray-400">${esc(p?.transports?.map(transportLabel).join('＋') || '管道未記錄')}</div>
         <div class="text-xl font-bold my-1">${numberText(p?.score)} <span class="text-xs text-gray-400">/ ${numberText(threshold)}</span></div>
-        <div class="text-xs">${status}</div><div class="text-xs text-gray-400 mt-1">${p ? esc(p.windowMsgs??'—')+' 則 · '+esc(p.uniqueUsers??'—')+' 人'+(p.topUserMsgs>1?'（最多 '+esc(p.topUserMsgs)+' 則/人）':''):'— 則 · — 人'}</div>
-        <div class="text-xs text-gray-400">採計分數 ${numberText(p?.contribution)}</div>
+        <div class="text-xs">${status}</div><div class="text-xs text-gray-400 mt-1">${counts}</div>
+        <div class="text-xs text-gray-400">${footer}</div>
       </button>`;
     }).join('');
 }
@@ -172,6 +240,11 @@ function esc(s) {
 function fmtTime(iso) {
     const d = new Date(iso);
     return isNaN(d) ? '' : d.toLocaleTimeString('zh-TW', { hour12: false });
+}
+
+function fmtMinute(iso) {
+    const d = new Date(iso);
+    return isNaN(d) ? '' : d.toLocaleTimeString('zh-TW', { hour12: false, hour: '2-digit', minute: '2-digit' });
 }
 
 function triggerColor(row) {
@@ -513,6 +586,7 @@ function setAutoclipView(mode) {
 async function loadHistorySessions() {
     const select = document.getElementById('historySession');
     const meta = document.getElementById('historyMeta');
+    historyPlatforms = null;
     try {
         const res = await fetch('/autoclip/sessions');
         const result = await res.json();
@@ -529,6 +603,7 @@ async function loadHistorySessions() {
         }
         if (!historySessions.length) {
             meta.textContent = '尚無歷史場次；啟動直播並收到評估資料後會累積。';
+            historyPlatforms = null;
             selectedTrigger = null;
             customRange = null;
             updateCharts([]);
@@ -543,11 +618,13 @@ async function loadHistorySessions() {
 
 async function loadHistorySession(sessionId) {
     const meta = document.getElementById('historyMeta');
+    historyPlatforms = null;
     try {
         const res = await fetch('/autoclip/history?session=' + encodeURIComponent(sessionId) + '&maxPoints=4000');
         const result = await res.json();
         if (!result.success) throw new Error(result.error || 'unknown');
         cfg = result.config || cfg;
+        historyPlatforms = Array.isArray(result.platforms) ? result.platforms : null;
         selectedTrigger = null;
         customRange = null;
         document.getElementById('triggerGroup').hidden = true;
@@ -564,6 +641,7 @@ async function loadHistorySession(sessionId) {
 
 async function load() {
     if (viewMode !== 'live') return;
+    historyPlatforms = null;
     try {
         const res = await fetch('/autoclip/data');
         const result = await res.json();

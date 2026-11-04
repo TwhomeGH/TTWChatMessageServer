@@ -1,5 +1,38 @@
 # ChangeHistory
 
+## 2026.11.05 04:16 AutoClip 門檻自適應，歷史場次顯示本場最高
+
+**類型**: 改善 · **檔案**: `AutoClipV2.mjs`、`ScriptLib/autoclip/metrics.mjs`、`ScriptLib/autoclip/evidence.mjs`、`ScriptLib/autoclip/history.cjs`、`assets/autoclip.js`、`TikTok.js`、`Test/autoclip_v2.test.mjs`、`Test/autoclip_history.test.cjs`、`Docs/KEYWORD_AUTOCLIP_V2.md`、`Docs/envExample`
+
+### 問題 - 小台永遠達不到 6 則／3 人；歷史卡片只顯示最後快照
+
+固定 `minMessages=6`、`minUsers=3` 對只有 1–2 位發言者的台幾乎不可能達標；歷史場次的平台卡片又只顯示最後一個有效樣本，最後一刻剛好 0 則時就會呈現「TikTok 0」，即使整場最高其實有 1.8 分。
+
+### 根因
+
+- 絕對門檻沒有跟著台的近期活躍度調整。
+- `evaluate` 用跨平台總留言／總人數判定，會稀釋單一平台的自適應門檻。
+- 歷史頁卡片取 `allRows.at(-1)`，不是整場彙整。
+
+### 修改
+
+- 自適應絕對門檻（預設開啟）：`minMessages = min(設定值, max(4, ceil(近期每分鐘訊息中位數)))`；`minUsers = min(設定值, max(2, 近期單一窗口最大發言人數))`。聊天倍率與分數門檻不變。
+- 觸發判定改用達標平台自己的有效門檻，不再用跨平台總數。
+- `AutoClipHistory.query()` 新增 `platforms` 彙整：最高分樣本、最高留言／人數／倍率／觀眾、達標窗口數、管道 union、最高分時間。
+- 歷史卡片改顯示「本場最高」與「本場 0 個窗口達標」，不再被最後一刻的 0 誤導。
+- 新增 `AUTO_CLIP_MIN_MESSAGES`、`AUTO_CLIP_MIN_USERS`、`AUTO_CLIP_MIN_MESSAGE_RATIO`、`AUTO_CLIP_ADAPTIVE_THRESHOLDS` 設定。
+
+### 限制
+
+- 真的只有 1 位發言者時仍不會觸發（`minUsers` 最低 2），避免單人洗頻誤觸。
+- 自適應只下修絕對門檻，不會降低聊天倍率或分數門檻；沒有相對爆量仍不會觸發。
+
+### 驗證
+
+`node --test Test/autoclip_v2.test.mjs Test/autoclip_history.test.cjs`、`npm run test:core`、`npm run lint`。
+
+---
+
 ## 2026.11.05 04:00 人流指標卡改為 3×2、圖表刻度與摘要更易讀
 
 **類型**: 改善 · **檔案**: `assets/traffic.css`、`assets/traffic.js`、`lang/zh-TW.json`、`lang/en.json`、`Docs/TRAFFIC.md`

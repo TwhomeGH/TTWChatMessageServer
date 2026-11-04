@@ -71,3 +71,32 @@ test('AutoClip 歷史可匯入舊 stats 並清理過期場次', () => {
     history.close();
     fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('AutoClip 歷史彙整各平台本場最高與達標窗口', () => {
+    const history = new AutoClipHistory(':memory:');
+    const platform = (score, extra = {}) => ({
+        platform: 'TikTok', score, windowMsgs: 1, uniqueUsers: 1, messageRatio: 1,
+        viewers: 2, transports: ['api'], minMessages: 4, minUsers: 2, minMessageRatio: 1.5,
+        eligible: false, ...extra
+    });
+    const rows = [
+        { ...row(0, 0.2), platforms: [platform(0.2)] },
+        { ...row(1, 1.8), platforms: [platform(1.8, {
+            windowMsgs: 2, messageRatio: 2, viewers: 3, transports: ['api', 'userscript']
+        })] },
+        { ...row(2, 0.5), platforms: [platform(0.5, { eligible: true })] }
+    ];
+    history.append('s3', {}, rows);
+    const result = history.query({ session: 's3' });
+    const tiktok = result.platforms.find(item => item.platform === 'TikTok');
+    assert.equal(tiktok.score, 1.8);
+    assert.equal(tiktok.windowMsgs, 2);
+    assert.equal(tiktok.uniqueUsers, 1);
+    assert.equal(tiktok.messageRatio, 2);
+    assert.equal(tiktok.eligibleCount, 1);
+    assert.equal(tiktok.eligible, true);
+    assert.deepEqual([...tiktok.transports].sort(), ['api', 'userscript']);
+    assert.equal(tiktok.at, rows[1].t);
+    assert.equal(tiktok.maxMessages, 2);
+    history.close();
+});

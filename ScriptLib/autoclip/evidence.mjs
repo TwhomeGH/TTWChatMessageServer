@@ -7,6 +7,7 @@
  * @returns {object} 可存入歷史紀錄的證據快照
  */
 export function captureEvidence(state, stats, now) {
+    const winner = stats.platforms.find(p => p.platform === stats.sourcePlatform);
     return {
         windowStart: now - state.rateMs,
         windowEnd: now,
@@ -14,8 +15,9 @@ export function captureEvidence(state, stats, now) {
         uniqueUsers: stats.uniqueUsers,
         platforms: stats.platforms.map(p => ({ ...p, transports: [...p.transports] })),
         sourcePlatform: stats.sourcePlatform,
-        minMessages: state.minMessages,
-        minUsers: state.minUsers,
+        minMessages: winner?.minMessages ?? state.minMessages,
+        minUsers: winner?.minUsers ?? state.minUsers,
+        minMessageRatio: winner?.minMessageRatio ?? state.minMessageRatio,
         threshold: state.scoreThreshold,
         messageRatio: stats.messageRatio,
         maxPerUser: state.maxPerUser,
