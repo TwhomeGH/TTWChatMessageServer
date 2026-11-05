@@ -545,24 +545,33 @@ process.stdin.on('data', async (chunk) => {
                 // 先存原始值供去重比對
                 const origUser = json.user;
                 const origMsg = json.message;
+                // 測試訊息常重複同一段文字；用頭貼區分，避免換圖仍被當成重複。
+                const dedupVariant = json.isTest === true ? 'test:' + String(json.img || '') : '';
 
                 json.message = replaceEmojis(json.message);
 
                 const fr = processFilter({ user: json.user, message: json.message });
                 if (fr.blocked) {
                     console.log('🚫 過濾器阻擋(來自Server):', json.user, json.message, `(規則: ${fr.reason})`);
+                    reportTestResult(json.testId, 'filtered');
                     return;
                 }
                 if (fr.modified && fr.user) json.user = fr.user;
                 if (fr.modified && fr.message) json.message = fr.message;
 
-                if (!recordChatHeat(json.message, { ...normalizeSource(json, 'userscript'), id: json.msgId || json.id, sentAt: json.sentAt || json.createTime, userId: json.userId, user: origUser, receivedAt: json.receivedAt || Date.now() })) return;
+                if (!recordChatHeat(json.message, { ...normalizeSource(json, 'userscript'), id: json.msgId || json.id, sentAt: json.sentAt || json.createTime, userId: json.userId, user: origUser, receivedAt: json.receivedAt || Date.now() })) {
+                    reportTestResult(json.testId, 'ignored');
+                    return;
+                }
 
                 applyRelayAudience(json);
 
-                sendSocketMessage(json.user, json.message, { img: json.img || '', giftImg: json.giftImg || '', category: 'chat', platform: 'tiktok', dedupUser: origUser, dedupMessage: origMsg });
+                const sent = sendSocketMessage(json.user, json.message, { img: json.img || '', giftImg: json.giftImg || '', category: 'chat', platform: 'tiktok', dedupUser: origUser, dedupMessage: origMsg, dedupVariant });
 
-                dedup.add(origUser, origMsg);
+                if (sent || json.isTest !== true) dedup.add(origUser, origMsg, dedupVariant);
+                if (json.isTest === true) {
+                    reportTestResult(json.testId, sent ? 'sent' : 'duplicate', dedup.remaining(origUser, origMsg, dedupVariant));
+                }
 
                 let Gift = json.giftImg || ''
 
@@ -877,10 +886,17 @@ function updateCombinedViewerCount(force = false) {
  * @param {string} [options.platform] 來源平台（tiktok／twitch／kick／youtube／odysee）。
  * @param {string} [options.dedupUser] 覆寫去重比對的使用者。
  * @param {string} [options.dedupMessage] 覆寫去重比對的訊息。
- * @returns {void}
+ * @param {string} [options.dedupVariant] 額外去重辨識（測試訊息用頭貼區分）。
+ * @returns {boolean} 是否實際送出（false = 被去重擋下）。
  */
-function sendSocketMessage(user, message, { img = '', giftImg = '', isMain = true, category, platform, dedupUser, dedupMessage } = {}) {
-    socketHub.sendMessage(user, message, { img, giftImg, isMain, userNum: CacheUserNum, userList: CacheUserList, category, platform, dedupUser, dedupMessage });
+function sendSocketMessage(user, message, { img = '', giftImg = '', isMain = true, category, platform, dedupUser, dedupMessage, dedupVariant = '' } = {}) {
+    return socketHub.sendMessage(user, message, { img, giftImg, isMain, userNum: CacheUserNum, userList: CacheUserList, category, platform, dedupUser, dedupMessage, dedupVariant });
+}
+
+/** 把測試訊息結果回報給主服務；沒有 testId 或 IPC 時安靜略過。 */
+function reportTestResult(testId, status, remainingMs = 0) {
+    if (!testId || typeof process.send !== 'function') return;
+    try { process.send({ type: 'TEST_RESULT', data: { testId, status, remainingMs } }); } catch { /* IPC 關閉 */ }
 }
 
 

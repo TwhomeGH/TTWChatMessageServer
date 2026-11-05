@@ -1,6 +1,10 @@
 # Socket 收發與壅塞處理
 
 `TikTok.js` 的聊天、廣告、觀眾更新與心跳統一由 `ScriptLib/socket/transport.mjs`（`SocketTransport`）發送；訊息去重、端點與扇出在 `ScriptLib/socket/`（`MessageDedup`、`SocketEndpoint`、`SocketHub`）。
+
+`MessageDedup` 除了使用者與第一行內容，可帶 opt-in `variant`。目前只有 `isTest` 測試訊息使用 `test:<頭貼 URL>`，讓同文同人但換頭貼的測試可以通過；一般訊息不帶 variant，維持原本跨路徑去重。
+
+`remaining(username, message, variant)` 回傳目前保護剩餘毫秒；測試訊息會把結果經 IPC 回主服務，並用 `testId` 對應到 `/status/stream/test-results`，因此能顯示精確的冷卻時間。重複的測試訊息不會再刷新 TTL。
 通訊格式維持 UTF-8 JSON，每筆以換行結尾，不需修改既有接收端協定。
 
 ## 預設限制

@@ -16,6 +16,15 @@ test('MessageDedup 只比對第一行原始文字，並受 TTL 與上限約束',
     assert.equal(dedup.size, 2);
     assert.equal(dedup.isDuplicate('a', 'hi'), false);
 
+    // variant 讓同文不同頭貼的測試訊息可以通過，但同 variant 仍去重。
+    const variant = new MessageDedup();
+    variant.add('u', 'hi', 'test:a');
+    assert.equal(variant.isDuplicate('u', 'hi', 'test:b'), false);
+    assert.equal(variant.isDuplicate('u', 'hi', 'test:a'), true);
+    const remaining = variant.remaining('u', 'hi', 'test:a');
+    assert.ok(remaining > 0 && remaining <= 60000);
+    assert.equal(variant.remaining('u', 'hi', 'test:b'), 0);
+
     const expired = new MessageDedup({ ttlMs: 1 });
     expired.add('a', 'hi');
     return new Promise(resolve => setTimeout(() => {
@@ -81,6 +90,11 @@ test('SocketHub.sendMessage 去重、套用 replaceEmojis 並帶上 category', (
     // dedupUser/dedupMessage 可覆寫比對依據，且無 category 時不帶該欄位
     assert.equal(hub.sendMessage('顯示名', '原文', { dedupUser: 'orig', dedupMessage: '原文' }), true);
     assert.equal('category' in endpoint.sent[1], false);
+
+    // 測試訊息用頭貼作為 variant：換圖可送，同圖仍被擋。
+    dedup.add('測試使用者', '哈拉', 'test:avatar-a');
+    assert.equal(hub.sendMessage('測試使用者', '哈拉', { dedupVariant: 'test:avatar-b' }), true);
+    assert.equal(hub.sendMessage('測試使用者', '哈拉', { dedupVariant: 'test:avatar-a' }), false);
 });
 
 test('createHub：停用時無端點；啟用時建立單一端點', () => {

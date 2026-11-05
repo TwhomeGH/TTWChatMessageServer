@@ -58,6 +58,9 @@
     let emojiMap = null;
     let emojiPattern = null;
     let savedTestPrefs = null;
+    let pendingTestId = null;
+    let pendingTestTimer = null;
+    let testCooldownTimer = null;
 
     const state = {
         entries: [],
@@ -192,6 +195,8 @@
     }
 
     function clearTestPrefs() {
+        clearTestPending();
+        clearTestCooldown();
         try { localStorage.removeItem(TEST_PREFS_KEY); } catch { /* ignore */ }
         savedTestPrefs = null;
         testUser.value = '';
@@ -247,6 +252,59 @@
         setTestStatus(t('monitor.test.added', {}, '已加入本機預覽；不會送出。'));
     }
 
+    function clearTestPending() {
+        if (pendingTestTimer) clearTimeout(pendingTestTimer);
+        pendingTestTimer = null;
+        pendingTestId = null;
+        testSend.disabled = false;
+    }
+
+    function clearTestCooldown() {
+        if (testCooldownTimer) clearInterval(testCooldownTimer);
+        testCooldownTimer = null;
+    }
+
+    function startTestCooldown(remainingMs, duplicate) {
+        clearTestCooldown();
+        const until = Date.now() + Math.max(0, Number(remainingMs) || 0);
+        const key = duplicate ? 'monitor.test.resultDuplicate' : 'monitor.test.resultSent';
+        const render = () => {
+            const seconds = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+            if (seconds <= 0) {
+                clearTestCooldown();
+                setTestStatus(t('monitor.test.cooldownDone', {}, '去重冷卻結束，可再次送出。'));
+                return;
+            }
+            setTestStatus(t(key, { seconds }, duplicate ? `重複；去重保護剩 ${seconds} 秒` : `已送出；去重保護剩 ${seconds} 秒`));
+        };
+        render();
+        if (Date.now() < until) testCooldownTimer = setInterval(render, 1000);
+    }
+
+    function handleTestResult(result) {
+        if (!result || result.testId !== pendingTestId) return;
+        clearTestPending();
+        switch (result.status) {
+            case 'sent':
+                startTestCooldown(result.remainingMs, false);
+                break;
+            case 'duplicate':
+                startTestCooldown(result.remainingMs, true);
+                break;
+            case 'filtered':
+                setTestStatus(t('monitor.test.resultFiltered', {}, '被過濾，未送 socket。'));
+                break;
+            case 'ignored':
+                setTestStatus(t('monitor.test.resultIgnored', {}, '未進入聊天統計（可能重複或未達條件）。'));
+                break;
+            case 'offline':
+                setTestStatus(t('monitor.test.resultOffline', {}, 'TikTok 子程序未運行，未送 socket。'));
+                break;
+            default:
+                setTestStatus(t('monitor.test.resultUnknown', { status: result.status }, '未知結果：' + result.status));
+        }
+    }
+
     async function sendSocketTest() {
         const message = testMessage.value;
         if (!message.trim()) {
@@ -260,13 +318,24 @@
         }
         if (!window.confirm(t('monitor.test.confirmSend', {}, '會送進 /chat 並經 socket；需要 TikTok 子程序。確定？'))) return;
         saveTestPrefs();
+        clearTestCooldown();
+        const testId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        pendingTestId = testId;
         testSend.disabled = true;
-        setTestStatus(t('monitor.test.sending', {}, '送出中…'));
+        setTestStatus(t('monitor.test.waiting', {}, '等待處理結果…'));
+        pendingTestTimer = setTimeout(() => {
+            if (!pendingTestId) return;
+            clearTestPending();
+            setTestStatus(t('monitor.test.resultTimeout', {}, '未收到處理結果；子程序或結果 SSE 可能中斷。'));
+        }, 5000);
         try {
             let runtime = null;
             try { runtime = await fetch('/api/runtime').then(response => response.ok ? response.json() : null); } catch { /* 檢查失敗仍嘗試送出 */ }
             if (runtime && runtime.running === false) {
-                setTestStatus(t('monitor.test.runtimeOff', {}, 'TikTok 子程序未運行，請先啟動。'));
+                if (pendingTestId === testId) {
+                    clearTestPending();
+                    setTestStatus(t('monitor.test.runtimeOff', {}, 'TikTok 子程序未運行，請先啟動。'));
+                }
                 return;
             }
             const response = await fetch('/chat', {
@@ -274,17 +343,17 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     type: 'StreamMessage', platform: testPlatform.value || 'unknown',
-                    transport: 'userscript', isTest: true,
+                    transport: 'userscript', isTest: true, testId,
                     user: testUser.value.trim() || t('monitor.test.userDefault', {}, '測試使用者'),
                     message, img: avatar, observedAt: Date.now()
                 })
             });
             if (!response.ok) throw new Error('HTTP ' + response.status);
-            setTestStatus(t('monitor.test.sent', {}, '已送出，等待 socket／監控回顯；若被過濾或去重可能不會出現。'));
         } catch (error) {
-            setTestStatus(t('monitor.test.sendFailed', { error: error.message }, '送出失敗：' + error.message));
-        } finally {
-            testSend.disabled = false;
+            if (pendingTestId === testId) {
+                clearTestPending();
+                setTestStatus(t('monitor.test.sendFailed', { error: error.message }, '送出失敗：' + error.message));
+            }
         }
     }
 
@@ -519,6 +588,11 @@
             renderAll();
         })
         .catch(() => { buildFilters(); buildTestCategories(); restoreTestCategory(); });
+
+    const testResultSource = new EventSource('/status/stream/test-results');
+    testResultSource.onmessage = event => {
+        try { handleTestResult(JSON.parse(event.data)); } catch { /* ignore malformed result */ }
+    };
 
     const source = new EventSource('/status/stream/messages');
     source.onopen = () => setStatus('monitor.connected');

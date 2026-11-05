@@ -14,6 +14,12 @@
 - [ ] WAF 修正後重啟主服務的實機驗證。
 - [ ] 集中式 endpoint 設定頁（可選；目前每個腳本各自設定）。
 
+## 訊息診斷後續（2026-11-06）
+
+- [x] monitor 測試訊息精確結果：`testId`、child IPC、`/status/stream/test-results`、sent／duplicate／filtered／ignored／offline 與去重倒數。
+- [ ] 獨立 `/dedup`（或 `/diagnostics/dedup`）診斷頁：最近 test results、其他送入訊息的去重狀態查詢與剩餘冷卻；由 monitor／runtime 提供入口。
+- [ ] 正式環境以實際 child 程序驗證 IPC 結果與倒數（目前 monitor UI 使用假 SSE／fake `/chat`）。
+
 ## 表情映射後續（2026-11-06）
 
 - [x] Phase 1：`emoji_map.json` 只讀預設；`emoji_map_local.json` 支援 `url`／`enabled`、停用預設、恢復預設、自訂刪除與管理頁開關。

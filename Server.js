@@ -100,6 +100,27 @@ function pushStreamMessage(payload) {
     }
 }
 
+// 測試訊息的精確結果（sent／duplicate／filtered／ignored／offline）；不含訊息本文。
+const MAX_TEST_RESULTS = 100;
+const testResults = [];
+const testResultClients = new Set();
+
+/** 推送測試結果給診斷 SSE；只保留最近 100 筆。 */
+function pushTestResult(payload) {
+    if (!payload || typeof payload !== 'object' || typeof payload.testId !== 'string' || !payload.testId) return;
+    const entry = {
+        t: Date.now(), testId: payload.testId,
+        status: typeof payload.status === 'string' ? payload.status : 'unknown',
+        remainingMs: Number.isFinite(payload.remainingMs) ? Math.max(0, payload.remainingMs) : 0
+    };
+    testResults.push(entry);
+    if (testResults.length > MAX_TEST_RESULTS) testResults.shift();
+    for (const client of testResultClients) {
+        try { client.write(`data: ${JSON.stringify(entry)}\n\n`); }
+        catch { testResultClients.delete(client); }
+    }
+}
+
 var cacheKeywordDataTop = []
 var cacheKeywordDataAll = []
 // 自動剪輯分析歷史：執行時存記憶體（由 TikTok.js 透過 stdout 推播），僅在 TikTok.js 結束時寫入磁碟
@@ -430,6 +451,7 @@ function startRuntime(url) {
             if (tiktokProcess !== launchedProcess) return;
             if (event?.type === 'TRAFFIC_EVENT') require('./TrafficRoutes.cjs').traffic.record(event.data);
             else if (event?.type === 'STREAM_MESSAGE') pushStreamMessage(event.data);
+            else if (event?.type === 'TEST_RESULT') pushTestResult(event.data);
         });
         runtimeState.attach(launchedProcess, activePlatforms);
         runtimeState.data.features = { isSocket, isBark, isNtfy };
@@ -592,6 +614,7 @@ const server = http.createServer((req, res) => {
 
                 const raw = JSON.parse(body);
                 const data = { ...raw, ...(messageFilter?.normalizeSource(raw, 'userscript') || { platform: 'Unknown', transport: 'userscript', isTest: raw.isTest === true, heatEligible: raw.isTest !== true }), receivedAt: Date.now() };
+                const testId = data.isTest === true && typeof data.testId === 'string' && data.testId ? data.testId : null;
 
                 const trafficRecorded = require('./TrafficRoutes.cjs').traffic.record(data);
                 // metrics 由主服務直接保存，與聊天及子程序生命週期無關。
@@ -617,6 +640,7 @@ const server = http.createServer((req, res) => {
                     // 另記一筆 filter 事件：只進攔截率／廣告比例，不算聊天數（chat 已在上面記過）。
                     require('./TrafficRoutes.cjs').traffic.record({ ...data, type: 'filter', rule: fr.reason, ad: fr.ad === true });
                     pushLog('🚫 過濾器阻擋(/chat):', user, message, `(規則: ${fr.reason})`);
+                    if (testId) pushTestResult({ testId, status: 'filtered', remainingMs: 0 });
                     res.writeHead(200);
                     res.end("Filtered");
                     return;
@@ -625,11 +649,13 @@ const server = http.createServer((req, res) => {
                 // 傳原始資料給 TikTok.js，讓它自己跑 filter + 去重
                 const payload = { type: 'StreamMessage', ...data };
 
+                const hadProcess = Boolean(tiktokProcess && !tiktokProcess.killed);
                 sendToTikTok(payload);
 
                 if (!tiktokProcess) recordMessageStat(fr.modified ? fr.message : message, {
                     ...data, id: data.msgId || data.id, sentAt: data.sentAt || data.createTime, user
                 });
+                if (testId && !hadProcess) pushTestResult({ testId, status: 'offline', remainingMs: 0 });
 
                 pushLog('📩 發送訊息:', fr.modified ? fr.user : user, fr.modified ? fr.message : message);
 
@@ -730,6 +756,19 @@ const server = http.createServer((req, res) => {
 
         messageClients.add(res);
         req.on('close', () => messageClients.delete(res));
+    }
+
+    // 測試訊息的精確去重／處理結果；不寫入正式訊息歷史。
+    else if (req.url === '/status/stream/test-results') {
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': '*'
+        });
+        testResults.slice(-20).forEach(entry => res.write(`data: ${JSON.stringify(entry)}\n\n`));
+        testResultClients.add(res);
+        req.on('close', () => testResultClients.delete(res));
     }
 
     // 供監控頁建立篩選按鈕的分類清單（單一來源：ScriptLib/messages/categories.cjs）。

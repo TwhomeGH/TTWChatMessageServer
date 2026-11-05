@@ -1,5 +1,69 @@
 # ChangeHistory
 
+## 2026.11.06 06:15 測試訊息精確結果與去重倒數
+
+**類型**: 功能 · **檔案**: `Server.js`、`TikTok.js`、`ScriptLib/socket/dedup.mjs`、`ScriptLib/socket/hub.mjs`、`assets/monitor.js`、`lang/zh-TW.json`、`lang/en.json`、`Test/socket_hub.test.mjs`、`Test/monitor_audience_ui.cjs`、`Docs/RUNTIME.md`、`Docs/CHAT_API.md`、`Docs/SOCKET_TRANSPORT.md`
+
+### 問題
+
+`/chat` 回 HTTP 200 不代表 SocketHub 真的送出；遇到去重、filter 或子程序未處理時，monitor 沒有提示，也不知道同文同頭貼的測試何時可以再送。
+
+### 修改
+
+- monitor 送測試時帶 `testId`；TikTok.js 在 filter／heat／`sendSocketMessage` 後以 IPC `TEST_RESULT` 回報狀態。
+- 主服務新增 `TEST_RESULT` IPC 處理與 `/status/stream/test-results` SSE；早退的 filter／offline 也由主服務回報。
+- `MessageDedup.remaining()` 提供實際剩餘保護時間；測試 duplicate 不刷新 TTL。
+- monitor 顯示 `sent`／`duplicate` 的去重倒數，以及 `filtered`／`ignored`／`offline`；5 秒沒有結果會提示。
+- 測試 UI fixture 回報 sent／duplicate，並驗證精確狀態。
+
+### 位置建議
+
+- 測試輸入與即時結果留在 `/monitor`，因為操作與訊息上下文在一起。
+- 若要瀏覽最近去重事件、查詢其他診斷訊息，建議另開獨立 `/dedup`（或 `/diagnostics/dedup`）頁；runtime 只保留程序生命週期與入口連結，不放去重管理。
+- 目前先完成 monitor 內的精確結果；獨立頁尚未實作。
+
+### 限制
+
+- 只涵蓋 monitor 送出的 `isTest` 測試；正式 `/chat` 不會自動產生結果事件。
+- 結果依賴 child→main IPC 與 SSE；子程序未回報時只能顯示 timeout。
+- 5 秒等待時間是 UI 上限，不代表伺服器沒有處理。
+
+### 驗證
+
+- `node --test Test/socket_hub.test.mjs`
+- `node Test/monitor_audience_ui.cjs`
+- `npm run test:core`、`npm run lint`、`npm run check:css`
+
+---
+
+## 2026.11.06 06:05 修正測試訊息換頭貼仍被去重
+
+**類型**: 修正 · **檔案**: `ScriptLib/socket/dedup.mjs`、`ScriptLib/socket/hub.mjs`、`TikTok.js`、`Test/socket_hub.test.mjs`、`Docs/CHAT_API.md`、`Docs/SOCKET_TRANSPORT.md`
+
+### 問題
+
+Socket 去重只用使用者＋第一行內容；`isTest` 測試訊息重複發送同文同人、只換頭貼時，第二次仍被 `MessageDedup` 當成重複而跳過，無法測試不同頭貼。
+
+### 修改
+
+- `MessageDedup.isDuplicate`／`add` 新增 opt-in `variant`；未帶時行為不變。
+- `SocketHub.sendMessage` 接受 `dedupVariant` 並傳入去重比對。
+- TikTok.js 的 `/chat` `isTest` 路徑使用 `test:<img>` 作為 variant：換頭貼可通過，同一頭貼仍去重。
+- 一般正式訊息不帶 variant，維持原本跨路徑／重連去重。
+
+### 限制
+
+- 這是針對測試訊息的最小變更；正式訊息若也要把頭貼納入去重，需另外評估跨管道頭貼 URL 不一致的風險。
+- 同文同人且同一頭貼的測試仍會在 TTL 內被去重。
+
+### 驗證
+
+- `node --test Test/socket_hub.test.mjs`：variant 與一般去重。
+- `npm run test:core`：304 項。
+- `npm run lint`。
+
+---
+
 ## 2026.11.06 03:53 監控頁本機測試訊息
 
 **類型**: 功能 · **檔案**: `monitor.html`、`assets/monitor.js`、`assets/monitor.css`、`EmojiRoutes.cjs`、`lang/zh-TW.json`、`lang/en.json`、`Test/monitor_audience_ui.cjs`、`Docs/RUNTIME.md`、`Docs/EMOJI_MAP.md`

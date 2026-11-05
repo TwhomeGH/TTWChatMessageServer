@@ -13,6 +13,16 @@ async function main() {
         '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489' +
         '0000000a49444154789c6360000002000154a24f8f0000000049454e44ae426082', 'hex');
     const posts = [];
+    const testResultClients = new Set();
+    let lastTestResult = null;
+    let chatCount = 0;
+    const emitTestResult = result => {
+        lastTestResult = result;
+        for (const client of testResultClients) {
+            try { client.write(`data: ${JSON.stringify(result)}\n\n`); }
+            catch { testResultClients.delete(client); }
+        }
+    };
     let base = '';
     const server = http.createServer((req, res) => {
         if (req.url === '/api/runtime') {
@@ -20,11 +30,27 @@ async function main() {
             res.end(JSON.stringify({ running: true }));
             return;
         }
+        if (req.url === '/status/stream/test-results') {
+            res.writeHead(200, {
+                'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive'
+            });
+            if (lastTestResult) res.write(`data: ${JSON.stringify(lastTestResult)}\n\n`);
+            testResultClients.add(res);
+            req.on('close', () => testResultClients.delete(res));
+            return;
+        }
         if (req.url === '/chat' && req.method === 'POST') {
             let body = '';
             req.on('data', chunk => { body += chunk; });
             req.on('end', () => {
-                posts.push({ url: '/chat', data: JSON.parse(body) });
+                const data = JSON.parse(body);
+                posts.push({ url: '/chat', data });
+                chatCount += 1;
+                emitTestResult({
+                    testId: data.testId,
+                    status: chatCount === 1 ? 'sent' : 'duplicate',
+                    remainingMs: chatCount === 1 ? 60000 : 59000
+                });
                 res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
                 res.end('OK');
             });
@@ -137,9 +163,18 @@ async function main() {
         assert.equal(posts[0].url, '/chat');
         assert.equal(posts[0].data.type, 'StreamMessage');
         assert.equal(posts[0].data.isTest, true);
+        assert.match(posts[0].data.testId, /\S+/);
         assert.equal(posts[0].data.user, 'Preview User');
         assert.equal(posts[0].data.message, 'hi [laughcry]');
         assert.match(posts[0].data.img, /avatar\.png$/);
+        assert.match(await page.$eval('#monTestStatus', node => node.textContent), /去重保護/);
+
+        // 第二次送同文同頭貼：fake 回報 duplicate，頁面應顯示剩餘冷卻。
+        await page.click('#monTestSend');
+        await page.waitForFunction(() => document.querySelector('#monTestStatus').textContent.includes('重複'));
+        assert.equal(posts.length, 2);
+        assert.notEqual(posts[1].data.testId, posts[0].data.testId);
+        assert.match(await page.$eval('#monTestStatus', node => node.textContent), /去重保護/);
 
         await page.reload({ waitUntil: 'load' });
         await page.waitForFunction(() => document.querySelectorAll('#monTestCategory option').length >= 2);
@@ -173,9 +208,9 @@ async function main() {
         assert.deepEqual(cleared, {
             user: '', avatar: '', platform: 'tiktok', category: 'chat', previewHidden: true, prefs: null
         });
-        assert.equal(posts.length, 1);
+        assert.equal(posts.length, 2);
         assert.deepEqual(errors, []);
-        console.log('Monitor UI passed: audience badges, emoji preview, local prefs, and explicit socket test POST.');
+        console.log('Monitor UI passed: audience badges, emoji preview, prefs, and exact sent/duplicate result feedback.');
     } finally {
         await browser?.close();
         await new Promise(resolve => server.close(resolve));

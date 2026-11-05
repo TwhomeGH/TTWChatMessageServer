@@ -57,7 +57,7 @@ node Test/xxx.mjs
 | `Test/config_login_ui.cjs` | 設定／登入頁深色主題、安全閘門、24 個欄位、桌面側欄／手機導覽、390px 無溢出、未儲存狀態、登入錯誤與成功；輸出 `output/playwright/config-desktop.png`、`config-mobile.png`、`login-desktop.png` |
 | `Test/runtime_ui.cjs` | 運行狀態頁的狀態卡、聊天來源 badge、manual／browser 顯示、重新檢查／停止 toast、390px 無溢出；輸出 `runtime-desktop.png`、`runtime-mobile.png` |
 | `Test/audience_ui.cjs` | 常客列表、分數組成、等級門檻、最近場次與手機寬度；輸出截圖 |
-| `Test/monitor_audience_ui.cjs` | 監控聊天列常客標記，以及本機測試訊息的頭貼選單／預覽、emoji、prefs、socket 測試 POST |
+| `Test/monitor_audience_ui.cjs` | 監控聊天列常客標記，以及本機測試訊息的頭貼選單／預覽、emoji、prefs、socket 測試與精確結果 |
 | `Test/traffic_planner_ui.cjs` | 人流分類、批次補分類、預覽／套用／復原與手機寬度 |
 | `Test/traffic_planner_collecting_ui.cjs` | 資料累積建議、時段分組提醒與一週計畫 UI |
 | `Test/traffic_history_ui.cjs` | 開播時段排名、下一步指引、時段累積進度、場次開場比較、每小時觀看時段與樣本不足狀態 |

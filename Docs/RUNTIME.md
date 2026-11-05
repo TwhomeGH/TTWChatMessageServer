@@ -35,6 +35,8 @@ Socket 使用既有 SOCKET_API 設定（可再用 SOCKET_APIS 加開多個端點
 
 另有「送 socket 測試」：確認後檢查 `/api/runtime`，再以 `isTest:true` POST `/chat`；需要 TikTok 子程序，會經過 filter／去重並可能被阻擋。頁面不會樂觀新增本機列，必須等 SSE 回顯；測試訊息仍由子程序處理，不直接偽造監控資料。
 
+測試訊息帶 `testId`；子程序處理後經 IPC 回報 `sent`／`duplicate`／`filtered`／`ignored`，主服務再推到 `/status/stream/test-results`。`duplicate` 會附上實際剩餘的 dedup 保護時間，monitor 顯示倒數；`sent` 也會從送出後開始顯示 60 秒保護。沒有結果時 5 秒後提示，不把 HTTP 200 當成已送達。
+
 ## 啟停日誌中的統計摘要
 
 子程序在停止時仍回傳完整關鍵字快照供主服務快取與保存；主控台只顯示一行，例如 `[OUT] 關鍵字統計已同步 (完整快照，123 種留言)`。平時 `top10` 亦使用筆數摘要，不再重複列印原始 JSON 與解析後物件，也不將 `recent` 使用者／聊天明細複製進日誌。完整資料仍由關鍵字頁面使用，並未刪除統計。

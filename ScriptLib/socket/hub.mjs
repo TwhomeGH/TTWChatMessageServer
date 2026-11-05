@@ -56,12 +56,14 @@ export class SocketHub {
      * @param {string} [options.platform] 來源平台（tiktok／twitch／kick／youtube／odysee）。
      * @param {string} [options.dedupUser] 覆寫去重比對的使用者。
      * @param {string} [options.dedupMessage] 覆寫去重比對的訊息。
+     * @param {string} [options.dedupVariant] 額外去重辨識（測試訊息可用頭貼區分）。
      * @returns {boolean} 是否實際送出（false = 被去重擋下）。
      */
-    sendMessage(user, message, { img = '', giftImg = '', isMain = true, userNum = 0, userList = [], category, platform, dedupUser, dedupMessage } = {}) {
+    sendMessage(user, message, { img = '', giftImg = '', isMain = true, userNum = 0, userList = [], category, platform,
+        dedupUser, dedupMessage, dedupVariant = '' } = {}) {
         const checkUser = String(dedupUser ?? user).trim();
         const checkMsg = String(dedupMessage ?? message).trim();
-        if (this.dedup.isDuplicate(checkUser, checkMsg)) {
+        if (this.dedup.isDuplicate(checkUser, checkMsg, dedupVariant)) {
             this.logger.log?.(`🚫內部 重複訊息跳過: ${user} ${message} (原始: ${checkUser} : ${checkMsg})`);
             return false;
         }
