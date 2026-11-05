@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Restream 指標</title>
+    <style>
+        :root { color-scheme: dark; --bg: #0f172a; --panel: #111827; --line: #334155; --muted: #94a3b8; --text: #e5e7eb; --good: #4ade80; --warn: #fbbf24; --bad: #f87171; }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 24px; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, sans-serif; }
+        main { max-width: 1200px; margin: 0 auto; }
+        header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+        h1 { margin: 0; font-size: 22px; }
+        a { color: #93c5fd; }
+        #status { color: var(--muted); min-height: 1.5em; }
+        .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+        table { width: 100%; border-collapse: collapse; min-width: 860px; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+        th { color: var(--muted); font-weight: 600; font-size: 12px; }
+        tr:last-child td { border-bottom: 0; }
+        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #1e293b; font-size: 12px; }
+        .good { color: var(--good); }
+        .warn { color: var(--warn); }
+        .bad { color: var(--bad); }
+        .muted { color: var(--muted); }
+        .empty { padding: 32px; text-align: center; color: var(--muted); }
+    </style>
+</head>
+<body>
+<main>
+    <header>
+        <div>
+            <h1>Restream 指標</h1>
+            <p class="muted">Health、Resolution、Bitrate、Frame rate、Keyframe interval；每 5 秒更新。</p>
+        </div>
+        <a href="/">回首頁</a>
+    </header>
+    <p id="status" role="status"></p>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>場次</th><th>Health</th><th>解析度</th><th>Bitrate</th><th>FPS</th><th>Keyframe</th>
+                    <th>擷取時間</th><th>收到時間</th><th>樣本</th>
+                </tr>
+            </thead>
+            <tbody id="rows"><tr><td colspan="9" class="empty">載入中…</td></tr></tbody>
+        </table>
+    </div>
+</main>
+<script>
+const rows = document.getElementById('rows');
+const status = document.getElementById('status');
+const fmtTime = value => value ? new Date(value).toLocaleTimeString() : '—';
+const fmtAge = value => {
+    if (!value) return '—';
+    const seconds = Math.max(0, Math.round((Date.now() - value) / 1000));
+    return seconds < 60 ? seconds + ' 秒前' : Math.floor(seconds / 60) + ' 分前';
+};
+const cell = (text, className = '') => {
+    const td = document.createElement('td');
+    td.textContent = text;
+    if (className) td.className = className;
+    return td;
+};
+function render(shows) {
+    rows.replaceChildren();
+    if (!shows.length) {
+        const tr = document.createElement('tr');
+        const td = cell('尚無 Restream 指標。請確認 Restream 助手已送出，且頁面在 show 頁。', 'empty');
+        td.colSpan = 9;
+        tr.append(td);
+        rows.append(tr);
+        return;
+    }
+    for (const show of shows) {
+        const latest = show.latest;
+        const values = latest.values || {};
+        const stale = Date.now() - latest.receivedAt > 30000;
+        const tr = document.createElement('tr');
+        tr.append(cell(show.showId, 'mono'));
+        tr.append(cell(values.health ?? '—', values.health ? (stale ? 'warn' : 'good') : 'muted'));
+        tr.append(cell(values.resolution ?? '—', 'mono'));
+        tr.append(cell(values.bitrateKbps == null ? '—' : values.bitrateKbps + ' Kbps', 'mono'));
+        tr.append(cell(values.fps == null ? '—' : values.fps + ' fps', 'mono'));
+        tr.append(cell(values.keyframeSec == null ? '—' : values.keyframeSec + ' s', 'mono'));
+        tr.append(cell(fmtTime(latest.capturedAt)));
+        const received = cell(fmtTime(latest.receivedAt));
+        if (stale) { received.className = 'warn'; received.title = '超過 30 秒沒有更新'; }
+        tr.append(received);
+        tr.append(cell(String(show.sampleCount ?? 0), 'muted'));
+        rows.append(tr);
+    }
+}
+async function load() {
+    try {
+        const response = await fetch('/restream/metrics', { cache: 'no-store' });
+        if (response.status === 401) { location.href = '/restream'; return; }
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || '查詢失敗');
+        render(data.shows || []);
+        status.className = '';
+        status.textContent = '更新於 ' + new Date().toLocaleTimeString();
+    } catch (error) {
+        status.textContent = '更新失敗：' + error.message;
+        status.className = 'bad';
+    }
+}
+load();
+setInterval(load, 5000);
+</script>
+</body>
+</html>

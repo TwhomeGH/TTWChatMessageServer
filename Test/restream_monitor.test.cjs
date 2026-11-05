@@ -9,7 +9,8 @@ const end = source.indexOf('    if (window.top !== window.self', start);
 assert.ok(start >= 0 && end > start, '找不到純函式測試區段');
 const context = vm.createContext({ URL });
 vm.runInContext(source.slice(start, end), context);
-const { monitorUrl, observe, previewLabel, shouldAutoPause } = context;
+const { monitorUrl, observe, previewLabel, shouldAutoPause,
+    normalizeHealth, parseResolution, parseBitrateKbps, parseFps, parseKeyframeSec } = context;
 const url='https://livecenter.tiktok.com/live_monitor?apply_mode=11';
 test('只接受官方 HTTPS live_monitor 連結，不綁 Restream 雜湊 class',()=>{
     assert.equal(monitorUrl(url),url);
@@ -49,4 +50,19 @@ test('只有開啟、未互動、未嘗試且正在播放才自動暫停',()=>{
     assert.equal(shouldAutoPause({...ready,userInteracted:true}),false);
     assert.equal(shouldAutoPause({...ready,attempted:true}),false);
     assert.equal(shouldAutoPause({...ready,playing:false}),false);
+});
+test('Restream 指標依文字解析並保留小數，缺值不猜 0',()=>{
+    assert.equal(normalizeHealth(' Excellent '),'Excellent');
+    assert.equal(normalizeHealth(''),null);
+    assert.equal(parseResolution('1920x1080'),'1920x1080');
+    assert.equal(parseResolution('1080p'),null);
+    assert.equal(parseBitrateKbps('5744 Kbps'),5744);
+    assert.equal(parseBitrateKbps('5.744 Mbps'),5744);
+    assert.equal(parseBitrateKbps('1000 bps'),1);
+    assert.equal(parseBitrateKbps('—'),null);
+    assert.equal(parseFps('60 fps'),60);
+    assert.equal(parseFps('60'),null);
+    assert.equal(parseKeyframeSec('1.01 sec'),1.01);
+    assert.equal(parseKeyframeSec('1.01s'),1.01);
+    assert.equal(parseKeyframeSec('—'),null);
 });

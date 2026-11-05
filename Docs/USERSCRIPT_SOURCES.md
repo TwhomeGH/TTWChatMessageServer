@@ -53,7 +53,7 @@ WS relay 統一使用 `UserScript/ws-relay.user.js`，保留 URL、二進位與�
 | --- | --- | --- |
 | TikTokChat | 2.12 | Tampermonkey 選單「設定 TTW 主服務位址」 |
 | liveCenter | 1.19 | 面板「主服務位址」＋「測試主服務」；也可用選單 |
-| restream-monitor | 1.2.1 | 面板「主服務位址」＋「測試主服務」；也可用選單 |
+| restream-monitor | 1.3.0 | 面板「主服務位址」＋「測試主服務」；也可用選單 |
 | ws-relay | 1.4 | 選單 |
 | youtube-chat-userscript | 1.8 | 選單 |
 | TestCenter | 1.6 | 選單 |
@@ -77,6 +77,9 @@ WS relay 統一使用 `UserScript/ws-relay.user.js`，保留 URL、二進位與�
 - 只建議掛一個 Restream show 分頁；跨分頁／瀏覽器的去重尚未實作。重新整理後無法重新取得原分頁控制物件，手動開啟可能另建一頁。
 - **自動暫停預覽（1.2.0，預設開啟）**：在 show 頁找 `Play Preview`／`Pause Preview` 按鈕或預覽 `video`；偵測到播放且使用者尚未手動操作時，點擊暫停或呼叫 `video.pause()`，每場最多一次。使用者手動按播放後不再自動暫停；面板可取消。只影響預覽播放，不會停止 Restream 推流或直播。
 - 自動暫停依賴 Restream 目前的按鈕文字與相鄰 `video` 結構；若 Restream 改版導致找不到，功能會靜默停用，不影響監控連結與其他操作。
+- **Restream 指標（1.3.0）**：從 show 頁的 `Health`、`Resolution`、`Bitrate`、`Frame rate`、`Keyframe interval` 取文字值，送到 `POST /restream/metrics`；每 60 秒或數值變更時送一次，缺欄位送 null，不猜 0。面板顯示目前指標與最後傳送結果，也可按「指標頁」開啟 `/restream`。
+- 伺服器只在記憶體保存每個 showId 最新一筆與最近 120 筆（最多 20 場、24 小時），不寫交通場次、SQLite 或 `/chat`；`/restream` 需主服務登入，`POST /restream/metrics` 與 `/chat` 一樣供本機 userscript 送入。
+- 指標是第三方 DOM 擷取，可能過期或改版失效；只用於診斷，不作為開播、斷播或 AutoStop 判斷。
 
 監控頁需登入對應 TikTok 帳號並另裝 `UserScript/liveCenter.user.js`，後者匹配 `https://livecenter.tiktok.com/*`，但只在官方 `live_monitor` 頁面自動啟動監控，其餘頁面（例如回放）預設不觀察，改由右下角面板手動覆寫。既有腳本負責將可識別的聊天與統計送往本機 `/chat`；此次 Restream 樣本只含監控連結，尚未驗證實際監控頁 DOM、資料欄位與登入流程。不要把頭號觀眾名單當成總觀看數。
 
@@ -84,7 +87,7 @@ WS relay 統一使用 `UserScript/ws-relay.user.js`，保留 URL、二進位與�
 
 目前以本機腳本安裝為主，未設定遠端自動更新網址。後續專用瀏覽器整合與驗收規劃見根目錄 [todo.md](../todo.md)。
 
-### Restream 助手面板（1.2.1）
+### Restream 助手面板（1.3.0）
 
 面板可拖曳標題列移動，或聚焦標題後用方向鍵調整位置；收合後仍顯示狀態摘要，不會停止監控。位置與收合狀態保存在腳本管理器，重新整理後還原；視窗縮小時限制在可見範圍。展開後可使用「重設位置」回到右下角。1.2.0 新增「自動暫停預覽」勾選與預覽狀態；標題、狀態、操作區分開，後續功能可加入操作區。
 

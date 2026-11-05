@@ -11,11 +11,20 @@ const HTML = `<!doctype html><html><head><meta charset="utf-8"></head><body>
   <video id="preview"></video>
   <div><button id="toggle">Pause Preview</button></div>
 </div>
+<div id="monitor">
+  <div class="card"><div class="value-jxCDIq">RTMP</div><div class="title-yaUSLD">Stream</div></div>
+  <div class="card"><div class="value-jxCDIq"><div class="root-KdiGnE">Excellent</div></div><div class="title-yaUSLD">Health</div></div>
+  <div class="card"><div class="value-jxCDIq">1920x1080</div><div class="title-yaUSLD">Resolution</div></div>
+  <div class="card"><div class="value-jxCDIq">5744 Kbps</div><div class="title-yaUSLD">Bitrate</div></div>
+  <div class="card"><div class="value-jxCDIq">60 fps</div><div class="title-yaUSLD">Frame rate</div></div>
+  <div class="card"><div class="value-jxCDIq">1.01 sec</div><div class="title-yaUSLD">Keyframe interval</div></div>
+</div>
 <script>
 const store = {};
 const params = new URLSearchParams(location.search);
 window.__clicks = 0;
 window.__pauses = 0;
+window.__requests = [];
 const video = document.getElementById('preview');
 Object.defineProperty(video, 'paused', { value: false, configurable: true });
 video.pause = () => { window.__pauses += 1; };
@@ -29,7 +38,9 @@ window.GM_getValue = (key, fallback) => key === 'ttw-restream-monitor-pause-prev
 window.GM_setValue = (key, value) => { store[key] = value; };
 window.GM_openInTab = () => ({ closed: false });
 window.GM_registerMenuCommand = () => {};
-window.GM_xmlhttpRequest = () => {};
+window.GM_xmlhttpRequest = request => {
+    window.__requests.push({ method: request.method, url: request.url, data: request.data });
+};
 </script>
 <script src="/userscript.js"></script>
 </body></html>`;
@@ -70,6 +81,17 @@ async function main() {
         const status = await page.evaluate(() => document.querySelector('#ttw-restream-monitor')
             .shadowRoot.querySelector('.preview').textContent);
         assert.equal(status, '預覽已自動暫停');
+        await page.waitForFunction(() => window.__requests.some(request => request.url.endsWith('/restream/metrics')));
+        const health = await page.evaluate(() => {
+            const request = window.__requests.find(item => item.url.endsWith('/restream/metrics'));
+            return { url: request.url, payload: JSON.parse(request.data) };
+        });
+        assert.match(health.url, /\/restream\/metrics$/);
+        assert.equal(health.payload.showId, 'test');
+        assert.deepEqual(health.payload.values, {
+            health: 'Excellent', resolution: '1920x1080', bitrateKbps: 5744,
+            fps: 60, keyframeSec: 1.01
+        });
         await new Promise(resolve => setTimeout(resolve, 1200));
         assert.equal(await page.evaluate(() => document.querySelector('#ttw-restream-monitor')
             .shadowRoot.querySelector('.preview').textContent), '預覽已自動暫停');
@@ -83,7 +105,7 @@ async function main() {
         assert.equal(await page.evaluate(() => document.querySelector('#ttw-restream-monitor')
             .shadowRoot.querySelector('.preview').textContent), '');
         assert.deepEqual(errors, []);
-        console.log('Restream preview UI passed: auto pause once, and opt-out leaves it playing.');
+        console.log('Restream UI passed: auto pause once, opt-out leaves it playing, and health metrics payload is correct.');
     } finally {
         if (browser) await browser.close();
         await new Promise(resolve => server.close(resolve));

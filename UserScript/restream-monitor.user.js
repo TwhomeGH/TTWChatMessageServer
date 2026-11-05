@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Restream → TikTok Live Monitor 助手
 // @namespace    ttw-restream-monitor
-// @version      1.2.1
+// @version      1.3.0
 // @description  觀察 Restream 的 TikTok Live Monitor 連結，出現後開啟監控分頁；可自動暫停預覽避免多餘播放。
 // @match        https://app.restream.io/*
 // @run-at       document-idle
@@ -87,6 +87,32 @@
     function shouldAutoPause({ enabled, userInteracted, attempted, playing }) {
         return enabled === true && userInteracted !== true && attempted !== true && playing === true;
     }
+    function normalizeHealth(value) {
+        const text = String(value || '').trim().slice(0, 40);
+        return text || null;
+    }
+    function parseResolution(value) {
+        const text = String(value || '').trim();
+        return /^\d{2,5}x\d{2,5}$/i.test(text) ? text.toLowerCase() : null;
+    }
+    function parseBitrateKbps(value) {
+        const match = String(value || '').trim().match(/^([\d.]+)\s*(Kbps|Mbps|bps)$/i);
+        if (!match) return null;
+        const number = Number(match[1]);
+        if (!Number.isFinite(number) || number < 0) return null;
+        const unit = match[2].toLowerCase();
+        return unit === 'mbps' ? number * 1000 : unit === 'bps' ? number / 1000 : number;
+    }
+    function parseFps(value) {
+        const match = String(value || '').trim().match(/^([\d.]+)\s*fps$/i);
+        const number = Number(match?.[1]);
+        return Number.isFinite(number) && number >= 0 ? number : null;
+    }
+    function parseKeyframeSec(value) {
+        const match = String(value || '').trim().match(/^([\d.]+)\s*(?:sec|s)$/i);
+        const number = Number(match?.[1]);
+        return Number.isFinite(number) && number >= 0 ? number : null;
+    }
     if (window.top !== window.self || document.getElementById('ttw-restream-monitor')) return;
 
     const preference = 'ttw-restream-monitor-enabled';
@@ -94,8 +120,9 @@
     let enabled = GM_getValue(preference, true) === true;
     let autoPause = GM_getValue(pausePreference, true) === true;
     let show = '', state = {}, currentUrl = null, tab = null, lastSaved = '', timer = null;
-    let failure = '', lastStatus = '', previewStatusText = '';
+    let failure = '', lastStatus = '', previewStatusText = '', healthStatusText = '';
     let onShowPage = false, autoPauseAttempted = false, userInteracted = false;
+    let lastHealthAt = 0, lastHealthKey = '', healthNotice = '';
     const host = document.createElement('div');
     host.id = 'ttw-restream-monitor';
     host.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483646;max-width:calc(100vw - 32px)';
@@ -138,15 +165,17 @@
     endpointLabel.append(document.createTextNode('主服務位址 '), endpointInput);
     const endpointStatus = document.createElement('small');
     const previewStatus = document.createElement('small'); previewStatus.className = 'preview'; previewStatus.setAttribute('role', 'status');
+    const healthStatus = document.createElement('small'); healthStatus.className = 'health'; healthStatus.setAttribute('role', 'status');
     const button = document.createElement('button'); button.type = 'button'; button.textContent = '手動開啟監控頁';
     const testEndpointBtn = document.createElement('button'); testEndpointBtn.type = 'button'; testEndpointBtn.textContent = '測試主服務';
+    const healthPageBtn = document.createElement('button'); healthPageBtn.type = 'button'; healthPageBtn.textContent = '指標頁';
     const note = document.createElement('small');
     note.textContent = '需登入對應 TikTok 帳號並安裝 liveCenter.user.js 才能轉接資料。此助手不保證防止斷播；自動暫停只作用於 Restream 預覽，不會停止直播。主服務位址也可從腳本管理器選單修改。';
     header.append(title, collapse);
-    actions.append(testEndpointBtn, button, reset);
-    body.append(status, label, pauseLabel, endpointLabel, actions, endpointStatus, previewStatus, note);
+    actions.append(testEndpointBtn, healthPageBtn, button, reset);
+    body.append(status, label, pauseLabel, endpointLabel, actions, endpointStatus, previewStatus, healthStatus, note);
     panel.append(header, badge, body);
-    style.textContent += 'header{display:flex;align-items:center;gap:8px}header strong{flex:1;cursor:grab;touch-action:none;user-select:none;font-size:13px}header strong:active{cursor:grabbing}header button{background:#1b2940;padding:3px 8px}button:focus-visible,strong:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}.badge{display:block;color:#93c5fd;font-size:12px;margin-top:4px}.actions{display:flex;gap:8px;margin:8px 0}.actions button{font-size:12px}.actions button:last-child{background:#334155}.preview{display:block;margin-top:6px;color:#93c5fd}input[type=text]{width:100%;box-sizing:border-box;margin-top:4px;padding:4px 6px;border:1px solid #475569;border-radius:6px;background:#0f172a;color:#e5e7eb}[hidden]{display:none!important}section{box-sizing:border-box;width:280px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto}';
+    style.textContent += 'header{display:flex;align-items:center;gap:8px}header strong{flex:1;cursor:grab;touch-action:none;user-select:none;font-size:13px}header strong:active{cursor:grabbing}header button{background:#1b2940;padding:3px 8px}button:focus-visible,strong:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}.badge{display:block;color:#93c5fd;font-size:12px;margin-top:4px}.actions{display:flex;gap:8px;margin:8px 0}.actions button{font-size:12px}.actions button:last-child{background:#334155}.preview,.health{display:block;margin-top:6px;color:#93c5fd}input[type=text]{width:100%;box-sizing:border-box;margin-top:4px;padding:4px 6px;border:1px solid #475569;border-radius:6px;background:#0f172a;color:#e5e7eb}[hidden]{display:none!important}section{box-sizing:border-box;width:280px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto}';
     root.append(style, panel); document.body.append(host);
     const uiKey = 'ttw-restream-monitor-ui';
     const savedUI = GM_getValue(uiKey, {});
@@ -278,14 +307,81 @@
         pausePreview(control, video);
         setPreviewStatus('預覽已自動暫停');
     }
+    function setHealthStatus(text) {
+        if (text === healthStatusText) return;
+        healthStatusText = text;
+        healthStatus.textContent = text;
+    }
+    function metricText(label) {
+        const title = [...document.querySelectorAll('div')]
+            .find(node => node.childElementCount === 0 && node.textContent.trim() === label);
+        const holder = title?.parentElement;
+        const value = holder?.querySelector('[class*="value-"]') || title?.previousElementSibling;
+        return value?.textContent?.trim() || '';
+    }
+    function readHealthMetrics() {
+        return {
+            health: normalizeHealth(metricText('Health')),
+            resolution: parseResolution(metricText('Resolution')),
+            bitrateKbps: parseBitrateKbps(metricText('Bitrate')),
+            fps: parseFps(metricText('Frame rate')),
+            keyframeSec: parseKeyframeSec(metricText('Keyframe interval'))
+        };
+    }
+    function healthSummary(values) {
+        const parts = [];
+        if (values.health) parts.push('Health ' + values.health);
+        if (values.resolution) parts.push(values.resolution);
+        if (values.bitrateKbps != null) parts.push(values.bitrateKbps + ' Kbps');
+        if (values.fps != null) parts.push(values.fps + ' fps');
+        if (values.keyframeSec != null) parts.push('Keyframe ' + values.keyframeSec + 's');
+        return parts.length ? parts.join(' · ') : '找不到 Health / Bitrate 指標';
+    }
+    function sendHealth() {
+        if (!onShowPage || !show) { setHealthStatus(''); return; }
+        const values = readHealthMetrics();
+        const summary = healthSummary(values);
+        if (Object.values(values).every(value => value === null)) {
+            setHealthStatus('指標：' + summary);
+            return;
+        }
+        const now = Date.now();
+        const key = JSON.stringify([show, values]);
+        if (key === lastHealthKey && now - lastHealthAt < 60000) {
+            setHealthStatus('指標：' + summary + (healthNotice ? ' · ' + healthNotice : ''));
+            return;
+        }
+        lastHealthKey = key;
+        lastHealthAt = now;
+        healthNotice = '';
+        setHealthStatus('指標：' + summary + ' · 送出中…');
+        GM_xmlhttpRequest({
+            method: 'POST',
+            url: `${ttwEndpoint()}/restream/metrics`,
+            headers: { 'Content-Type': 'application/json' },
+            data: JSON.stringify({
+                type: 'restream-health', transport: 'userscript', showId: show,
+                capturedAt: now, values,
+                sourceUrl: location.origin + location.pathname
+            }),
+            timeout: 5000,
+            onload: res => {
+                healthNotice = (res.status === 200 ? '已送出' : 'HTTP ' + res.status) + ' ' + new Date().toLocaleTimeString();
+                setHealthStatus('指標：' + summary + ' · ' + healthNotice);
+            },
+            onerror: () => { healthNotice = '傳送失敗'; setHealthStatus('指標：' + summary + ' · ' + healthNotice); },
+            ontimeout: () => { healthNotice = '傳送逾時'; setHealthStatus('指標：' + summary + ' · ' + healthNotice); }
+        });
+    }
     function scan() {
         const path = location.pathname.match(/^\/shows\/([^/]+)\/?$/);
         onShowPage = Boolean(path);
         if (host.hidden !== !path) host.hidden = !path;
-        if (!path) { show = ''; setPreviewStatus(''); return; }
+        if (!path) { show = ''; setPreviewStatus(''); setHealthStatus(''); return; }
         if (show !== path[1]) {
             show = path[1]; lastSaved = ''; failure = '';
             autoPauseAttempted = false; userInteracted = false; setPreviewStatus('');
+            lastHealthAt = 0; lastHealthKey = ''; healthNotice = ''; setHealthStatus('');
             let saved;
             try { saved = JSON.parse(sessionStorage.getItem('ttw-monitor:' + show)); } catch { /* ignore */ }
             state = { opened: saved?.opened === true, url: null, since: null,
@@ -301,6 +397,7 @@
         if (!currentUrl) failure = '';
         save(); button.disabled = !currentUrl;
         maybePausePreview();
+        sendHealth();
         const message = failure || (!currentUrl ? '等待 Restream 顯示 TikTok Live Monitor 連結。'
             : !enabled ? '自動開啟已暫停；可使用手動按鈕。'
             : state.opened ? '本次已處理；關閉監控頁後可手動再開，不會自動反覆開頁。'
@@ -322,6 +419,11 @@
     }
     toggle.onchange = () => { enabled = toggle.checked; GM_setValue(preference, enabled); scan(); };
     testEndpointBtn.onclick = () => testEndpoint(endpointStatus);
+    healthPageBtn.onclick = () => {
+        const url = `${ttwEndpoint()}/restream`;
+        if (typeof GM_openInTab === 'function') GM_openInTab(url, { active: true, insert: true });
+        else window.open(url, '_blank', 'noopener');
+    };
     pauseToggle.onchange = () => {
         autoPause = pauseToggle.checked; GM_setValue(pausePreference, autoPause);
         autoPauseAttempted = false; userInteracted = false; setPreviewStatus('');

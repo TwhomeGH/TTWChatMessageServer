@@ -1,5 +1,36 @@
 # ChangeHistory
 
+## 2026.11.06 00:21 Restream 指標診斷通道
+
+**類型**: 功能 · **檔案**: `RestreamRoutes.cjs`、`ScriptLib/restream/metrics.cjs`、`OtherTool/restream/index.html`、`Server.js`、`UserScript/restream-monitor.user.js`、`Test/restream_metrics.test.cjs`、`Test/restream_monitor.test.cjs`、`Test/restream_monitor_ui.cjs`、`Docs/USERSCRIPT_SOURCES.md`
+
+### 問題 - Restream Health／Bitrate 沒有觀察入口
+
+`restream-monitor` 原本只開啟 TikTok 監控頁與暫停預覽；Sample2 的 Health、Resolution、Bitrate、Frame rate、Keyframe interval 只能看 Restream 頁面，無法確認擷取是否正確，也不該混進 `/chat` 或交通場次。
+
+### 修改
+
+- 新增 `POST /restream/metrics` 與 `GET /restream/metrics`；每個 showId 在記憶體保留最新一筆與最近 120 筆，最多 20 場、24 小時。
+- 新增 `OtherTool/restream/index.html`（`/restream`，需主服務登入）顯示最新 Health、解析度、Bitrate、FPS、Keyframe、擷取／收到時間與樣本數，5 秒更新。
+- `restream-monitor` 從文字標籤擷取指標，送到使用者設定的主服務；面板顯示目前值與送出結果，並可開啟「指標頁」。
+- 缺欄位送 null，不猜 0；只接受 `app.restream.io` 的來源；不寫 SQLite、交通或 `/chat`。
+- 指標每 60 秒或數值變更時送一次；頁面隱藏時仍可送出，但不會額外請求 TikTok。
+
+### 限制
+
+- 依賴 Restream DOM 的標籤文字與 `value-` 結構；改版可能失效，面板會顯示找不到指標。
+- 只用於診斷，不作為開播、斷播、AutoStop 或 AutoClip 判斷。
+- 尚未在真實 Restream 頁面長時間驗證；目前以 Sample2 結構與 fixture DOM 測試。
+
+### 驗證
+
+- `Test/restream_metrics.test.cjs`：正規化、缺值、來源限制、樣本上限與排序。
+- `Test/restream_monitor.test.cjs`：指標文字解析。
+- `Test/restream_monitor_ui.cjs`：fixture DOM 擷取並確認送到 `/restream/metrics` 的 payload。
+- `npm run test:core`、`npm run lint`、`npm run lint:restream`。
+
+---
+
 ## 2026.11.06 00:04 Userscript 主服務位址可設定
 
 **類型**: 功能 · **檔案**: `Server.js`、`UserScript/TikTokChat.user.js`、`UserScript/liveCenter.user.js`、`UserScript/restream-monitor.user.js`、`UserScript/ws-relay.user.js`、`UserScript/youtube-chat-userscript.user.js`、`UserScript/TestCenter.user.js`、`Test/userscript_source.test.mjs`、`eslint.config.mjs`、`Docs/USERSCRIPT_SOURCES.md`
