@@ -14,6 +14,7 @@
 | 檔案 | 涵蓋行為 |
 | --- | --- |
 | emoji_store.test.cjs | 預設＋本機覆寫、啟用狀態、版本衝突、損壞恢復、熱載入、字面替換、API 登入 |
+| emoji_ui.cjs | 真實 EmojiRoutes／Store／管理頁：停用、恢復預設、local 只寫與預設不變 |
 | message_stats.test.mjs | 舊快照合併、平台 ID 去重、最近明細上限、訊息時間 |
 | module_boundaries.test.cjs | UTF-8 分段、請求解析限制、AutoClip 相容入口 |
 

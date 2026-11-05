@@ -65,7 +65,7 @@ node Test/xxx.mjs
 | `Test/restream_monitor_ui.cjs` | Restream 助手自動暫停預覽、取消自動暫停與指標 payload |
 | `Test/restream_metrics.test.cjs` | Restream 指標正規化、缺值、來源限制與記憶體保留上限 |
 | `Test/emoji_store.test.cjs` | 表情預設／本機覆寫、enabled、版本衝突、熱載入與圖片快取 |
-| `Test/emoji_ui.cjs` | 表情管理頁停用預設、啟用切換與 POST revision |
+| `Test/emoji_ui.cjs` | 真實 EmojiRoutes／Store／管理頁：停用、恢復預設、local 只寫與預設不變 |
 | `Test/youtube_browser_ui.mjs` | 無 OAuth 時從頻道 `/live` discovery 後注入聊天 iframe |
 
 截圖寫入 `output/playwright/`，該目錄已在 `.gitignore`，只作本機展示與版本比較。
