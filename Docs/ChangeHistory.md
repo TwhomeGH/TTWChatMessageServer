@@ -1,5 +1,41 @@
 # ChangeHistory
 
+## 2026.11.06 03:53 監控頁本機測試訊息
+
+**類型**: 功能 · **檔案**: `monitor.html`、`assets/monitor.js`、`assets/monitor.css`、`EmojiRoutes.cjs`、`lang/zh-TW.json`、`lang/en.json`、`Test/monitor_audience_ui.cjs`、`Docs/RUNTIME.md`、`Docs/EMOJI_MAP.md`
+
+### 問題
+
+`/monitor` 只能看實際流入的訊息；要驗證頭貼、文字排版與 emoji 對應時，只能靠 live 或 `TestCenter` 走完整 `/chat` 管線，會依賴子程序，也可能混入其他處理。
+
+### 修改
+
+- monitor 新增可收合的「測試訊息（本機預覽）」：使用者、頭貼 URL、平台、分類、訊息。
+- 只在本機 `append()` 測試列，標記「測試」badge；不送 `/chat`、平台、filter、AutoClip、traffic 或統計，重新整理即消失。
+- 新增「送 socket 測試」：確認後檢查 `/api/runtime`，以 `isTest:true` POST `/chat`；需要 TikTok 子程序，經 filter／去重，可能被阻擋。
+- 實際送出不做樂觀新增，等 SSE 回顯才出現；失敗或子程序未運行會顯示狀態。
+- 新增公開唯讀 `GET /api/emoji/preview`，回傳目前啟用映射；測試訊息在瀏覽器用同一份 map 解析，支援將 emoji 代碼顯示為圖片。
+- 頭貼可手動輸入 HTTP(S) URL，或從目前 emoji map 選取（同一 URL 去重）；選取後表單旁即時顯示頭貼預覽，載入失敗會提示。
+- 使用者、頭貼、平台、分類保存在 `localStorage`（`ttw-monitor-test-prefs`），重新整理後還原；測試訊息本文不保存，另有「清除測試設定」。
+- 文字以 DOM 文字節點／安全圖片元素建立，不注入 HTML。
+- 「測試」badge 改成與平台／分類 chip 同高（1.25rem、inline-flex 置中），修正列內垂直對齊。
+- 補 `zh-TW`／`en` 文案與 monitor UI 測試（頭貼選單、prefs 還原／清除、文字、emoji、badge 對齊、無 POST）。
+
+### 限制
+
+- 「加入預覽」不測試 filter、翻譯、AutoClip 或平台實際送出；「送 socket 測試」才會走 `/chat` 與子程序。
+- 實際 socket 測試仍可能被 filter／去重阻擋；沒有回顯不代表送出失敗。
+- 圖片仍受瀏覽器與外部主機可用性影響；失敗時 emoji 會退回原始代碼文字。
+- `/api/emoji/preview` 是公開唯讀；只暴露目前啟用中的 emoji URL，不含本機管理狀態或寫入能力。
+- 偏好只存在目前瀏覽器／profile 的 `localStorage`；不跨裝置同步，也不使用 cookie。
+
+### 驗證
+
+- `node Test/monitor_audience_ui.cjs`
+- `npm run lint`
+
+---
+
 ## 2026.11.06 03:37 修正 Pages timeout 上限與殘留部署清理
 
 **類型**: CI · **檔案**: `.github/workflows/pages.yml`

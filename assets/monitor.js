@@ -41,6 +41,23 @@
     const clearEl = document.getElementById('monClear');
     const countEl = document.getElementById('monCount');
     const statusEl = document.getElementById('monStatus');
+    const testUser = document.getElementById('monTestUser');
+    const testAvatar = document.getElementById('monTestAvatar');
+    const testAvatarPick = document.getElementById('monTestAvatarPick');
+    const testAvatarPreview = document.getElementById('monTestAvatarPreview');
+    const testAvatarPreviewStatus = document.getElementById('monTestAvatarPreviewStatus');
+    const testPlatform = document.getElementById('monTestPlatform');
+    const testCategory = document.getElementById('monTestCategory');
+    const testMessage = document.getElementById('monTestMessage');
+    const testAdd = document.getElementById('monTestAdd');
+    const testSend = document.getElementById('monTestSend');
+    const testClear = document.getElementById('monTestClear');
+    const testStatus = document.getElementById('monTestStatus');
+    const TEST_PREFS_KEY = 'ttw-monitor-test-prefs';
+
+    let emojiMap = null;
+    let emojiPattern = null;
+    let savedTestPrefs = null;
 
     const state = {
         entries: [],
@@ -60,6 +77,217 @@
 
     const categoryLabel = name => t(`monitor.cat.${name}`, {}, name);
 
+    /** 建立與 EmojiMap 相同的字面匹配規則（長代碼優先）。 */
+    function buildEmojiPattern(map) {
+        const codes = Object.keys(map || {}).sort((a, b) => b.length - a.length);
+        if (!codes.length) return null;
+        const escaped = codes.map(code => code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+        return new RegExp(escaped.join('|'), 'g');
+    }
+
+    /** 把測試文字拆成文字片段與 emoji 對應；只做一次替換。 */
+    function emojiParts(text) {
+        const value = String(text ?? '');
+        if (!emojiPattern) return [value];
+        const parts = [];
+        let last = 0;
+        for (const match of value.matchAll(emojiPattern)) {
+            if (match.index > last) parts.push(value.slice(last, match.index));
+            parts.push({ code: match[0], url: emojiMap[match[0]] });
+            last = match.index + match[0].length;
+        }
+        if (last < value.length) parts.push(value.slice(last));
+        return parts;
+    }
+
+    function setTestStatus(text) {
+        testStatus.textContent = text;
+    }
+
+    function validAvatar(value) {
+        try {
+            const url = new URL(value);
+            return ['http:', 'https:'].includes(url.protocol);
+        } catch { return false; }
+    }
+
+    function updateAvatarPreview() {
+        const value = testAvatar.value.trim();
+        if (!value) {
+            testAvatarPreview.hidden = true;
+            testAvatarPreview.removeAttribute('src');
+            testAvatarPreviewStatus.textContent = '';
+            return;
+        }
+        if (!validAvatar(value)) {
+            testAvatarPreview.hidden = true;
+            testAvatarPreviewStatus.textContent = t('monitor.test.avatarPreviewInvalid', {}, '頭貼需為 HTTP(S) URL。');
+            return;
+        }
+        testAvatarPreview.hidden = false;
+        testAvatarPreviewStatus.textContent = '';
+        testAvatarPreview.onerror = () => {
+            testAvatarPreview.hidden = true;
+            testAvatarPreviewStatus.textContent = t('monitor.test.avatarPreviewError', {}, '圖片無法載入。');
+        };
+        testAvatarPreview.onload = () => {
+            testAvatarPreview.hidden = false;
+            testAvatarPreviewStatus.textContent = '';
+        };
+        testAvatarPreview.src = value;
+    }
+
+    function loadTestPrefs() {
+        try {
+            const data = JSON.parse(localStorage.getItem(TEST_PREFS_KEY) || 'null');
+            return data && typeof data === 'object' ? data : null;
+        } catch { return null; }
+    }
+
+    function saveTestPrefs() {
+        try {
+            localStorage.setItem(TEST_PREFS_KEY, JSON.stringify({
+                user: testUser.value,
+                avatar: testAvatar.value.trim(),
+                platform: testPlatform.value,
+                category: testCategory.value
+            }));
+        } catch { /* 無痕模式或儲存額度不足時不影響測試 */ }
+    }
+
+    function restoreTestPrefs() {
+        if (!savedTestPrefs) return;
+        if (typeof savedTestPrefs.user === 'string') testUser.value = savedTestPrefs.user;
+        if (validAvatar(savedTestPrefs.avatar)) testAvatar.value = savedTestPrefs.avatar;
+        if ([...testPlatform.options].some(option => option.value === savedTestPrefs.platform)) {
+            testPlatform.value = savedTestPrefs.platform;
+        }
+    }
+
+    function restoreTestCategory() {
+        if (!savedTestPrefs?.category) return;
+        if ([...testCategory.options].some(option => option.value === savedTestPrefs.category)) {
+            testCategory.value = savedTestPrefs.category;
+        }
+    }
+
+    function buildAvatarOptions() {
+        const byUrl = new Map();
+        for (const [code, url] of Object.entries(emojiMap || {}).sort(([a], [b]) => a.localeCompare(b))) {
+            if (typeof url === 'string' && !byUrl.has(url)) byUrl.set(url, code);
+        }
+        const empty = document.createElement('option');
+        empty.value = '';
+        empty.textContent = t('monitor.test.avatarPickEmpty', {}, '—');
+        const options = [empty];
+        for (const [url, code] of byUrl) {
+            const option = document.createElement('option');
+            option.value = url;
+            option.textContent = code;
+            options.push(option);
+        }
+        testAvatarPick.replaceChildren(...options);
+        testAvatarPick.disabled = byUrl.size === 0;
+        if (byUrl.has(testAvatar.value)) testAvatarPick.value = testAvatar.value;
+    }
+
+    function clearTestPrefs() {
+        try { localStorage.removeItem(TEST_PREFS_KEY); } catch { /* ignore */ }
+        savedTestPrefs = null;
+        testUser.value = '';
+        testAvatar.value = '';
+        testAvatarPick.value = '';
+        testMessage.value = '';
+        testPlatform.value = 'tiktok';
+        testCategory.value = [...testCategory.options].some(option => option.value === 'chat')
+            ? 'chat' : (testCategory.options[0]?.value || '');
+        updateAvatarPreview();
+        setTestStatus(t('monitor.test.cleared', {}, '已清除測試設定。'));
+    }
+
+    function applyTestI18n() {
+        testUser.placeholder = t('monitor.test.userPlaceholder', {}, '測試使用者');
+        testAvatar.placeholder = t('monitor.test.avatarPlaceholder', {}, 'https://…');
+        testMessage.placeholder = t('monitor.test.messagePlaceholder', {}, '哈囉 [laughcry] 測試');
+    }
+
+    function buildTestCategories() {
+        const previous = testCategory.value;
+        const names = state.categories.length ? state.categories : ['chat'];
+        testCategory.replaceChildren(...names.map(name => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = categoryLabel(name);
+            return option;
+        }));
+        testCategory.value = names.includes(previous) ? previous : (names.includes('chat') ? 'chat' : names[0]);
+    }
+
+    function addTestMessage() {
+        const message = testMessage.value;
+        if (!message.trim()) {
+            setTestStatus(t('monitor.test.empty', {}, '請先輸入訊息。'));
+            return;
+        }
+        const avatar = testAvatar.value.trim();
+        if (avatar && !validAvatar(avatar)) {
+            setTestStatus(t('monitor.test.invalidAvatar', {}, '頭貼需為 HTTP(S) URL。'));
+            return;
+        }
+        saveTestPrefs();
+        append({
+            t: Date.now(),
+            category: testCategory.value || 'chat',
+            platform: testPlatform.value || 'unknown',
+            user: testUser.value.trim() || t('monitor.test.userDefault', {}, '測試使用者'),
+            message,
+            img: avatar,
+            test: true
+        });
+        setTestStatus(t('monitor.test.added', {}, '已加入本機預覽；不會送出。'));
+    }
+
+    async function sendSocketTest() {
+        const message = testMessage.value;
+        if (!message.trim()) {
+            setTestStatus(t('monitor.test.empty', {}, '請先輸入訊息。'));
+            return;
+        }
+        const avatar = testAvatar.value.trim();
+        if (avatar && !validAvatar(avatar)) {
+            setTestStatus(t('monitor.test.invalidAvatar', {}, '頭貼需為 HTTP(S) URL。'));
+            return;
+        }
+        if (!window.confirm(t('monitor.test.confirmSend', {}, '會送進 /chat 並經 socket；需要 TikTok 子程序。確定？'))) return;
+        saveTestPrefs();
+        testSend.disabled = true;
+        setTestStatus(t('monitor.test.sending', {}, '送出中…'));
+        try {
+            let runtime = null;
+            try { runtime = await fetch('/api/runtime').then(response => response.ok ? response.json() : null); } catch { /* 檢查失敗仍嘗試送出 */ }
+            if (runtime && runtime.running === false) {
+                setTestStatus(t('monitor.test.runtimeOff', {}, 'TikTok 子程序未運行，請先啟動。'));
+                return;
+            }
+            const response = await fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'StreamMessage', platform: testPlatform.value || 'unknown',
+                    transport: 'userscript', isTest: true,
+                    user: testUser.value.trim() || t('monitor.test.userDefault', {}, '測試使用者'),
+                    message, img: avatar, observedAt: Date.now()
+                })
+            });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            setTestStatus(t('monitor.test.sent', {}, '已送出，等待 socket／監控回顯；若被過濾或去重可能不會出現。'));
+        } catch (error) {
+            setTestStatus(t('monitor.test.sendFailed', { error: error.message }, '送出失敗：' + error.message));
+        } finally {
+            testSend.disabled = false;
+        }
+    }
+
     function matches(entry) {
         if (state.active.size && !state.active.has(entry.category || 'system')) return false;
         if (!state.query) return true;
@@ -70,6 +298,7 @@
     function makeRow(entry) {
         const row = document.createElement('div');
         row.className = 'mon-row flex items-start gap-2 px-3 py-1 border-b border-gray-800/60 hover:bg-gray-900/50';
+        if (entry.test) row.classList.add('mon-test');
 
         const time = document.createElement('span');
         time.className = 'mon-time shrink-0 text-gray-500 select-none';
@@ -84,12 +313,17 @@
         chip.className = `mon-cat shrink-0 text-[11px] leading-5 px-1.5 rounded ${CATEGORY_STYLES[category] || CATEGORY_STYLES.system}`;
         chip.textContent = categoryLabel(category);
 
+        const testBadge = document.createElement('span');
+        testBadge.className = 'mon-test-badge shrink-0';
+        testBadge.textContent = t('monitor.test.badge', {}, '測試');
+
         const body = document.createElement('span');
         body.className = 'mon-body flex-1 min-w-0';
         if (entry.img) {
             const avatar = document.createElement('img');
             avatar.className = 'mon-avatar inline-block w-5 h-5 rounded-full align-middle mr-1.5';
             avatar.loading = 'lazy';
+            avatar.referrerPolicy = 'no-referrer';
             avatar.src = entry.img;
             avatar.onerror = () => avatar.remove();
             body.append(avatar);
@@ -113,12 +347,29 @@
         }
         const message = document.createElement('span');
         message.className = 'mon-msg text-gray-300 whitespace-pre-wrap break-words';
-        message.textContent = String(entry.message ?? '');
+        if (entry.test) {
+            for (const part of emojiParts(entry.message)) {
+                if (typeof part === 'string') {
+                    message.append(document.createTextNode(part));
+                    continue;
+                }
+                const emoji = document.createElement('img');
+                emoji.className = 'mon-emoji';
+                emoji.alt = part.code;
+                emoji.title = `${part.code} → ${part.url}`;
+                emoji.referrerPolicy = 'no-referrer';
+                emoji.onerror = () => emoji.replaceWith(document.createTextNode(part.code));
+                emoji.src = part.url;
+                message.append(emoji);
+            }
+        } else {
+            message.textContent = String(entry.message ?? '');
+        }
         body.append(user);
         if (tags.childElementCount) body.append(tags);
         body.append(message);
 
-        row.append(time, platform, chip, body);
+        row.append(time, platform, ...(entry.test ? [testBadge] : []), chip, body);
         return row;
     }
 
@@ -211,26 +462,63 @@
     scrollEl.addEventListener('scroll', () => {
         if (state.autoscroll && !atBottom()) { state.autoscroll = false; autoscrollEl.checked = false; }
     });
+    testAdd.addEventListener('click', addTestMessage);
+    testSend.addEventListener('click', sendSocketTest);
+    testClear.addEventListener('click', clearTestPrefs);
+    testUser.addEventListener('input', saveTestPrefs);
+    testAvatar.addEventListener('input', () => { saveTestPrefs(); updateAvatarPreview(); });
+    testPlatform.addEventListener('change', saveTestPrefs);
+    testCategory.addEventListener('change', saveTestPrefs);
+    testAvatarPick.addEventListener('change', () => {
+        if (!testAvatarPick.value) return;
+        testAvatar.value = testAvatarPick.value;
+        saveTestPrefs();
+        updateAvatarPreview();
+        setTestStatus(t('monitor.test.avatarApplied', {}, '已套用 emoji 頭貼。'));
+    });
     document.addEventListener('languagechange', () => {
         searchEl.placeholder = t('monitor.search', {}, '搜尋訊息…');
+        applyTestI18n();
         buildFilters();
+        buildTestCategories();
+        buildAvatarOptions();
+        updateAvatarPreview();
         updateCount();
         setStatus(state.statusKey);
     });
 
     searchEl.placeholder = t('monitor.search', {}, '搜尋訊息…');
     autoscrollEl.checked = state.autoscroll;
+    savedTestPrefs = loadTestPrefs();
+    applyTestI18n();
+    buildTestCategories();
+    restoreTestPrefs();
+    restoreTestCategory();
+    updateAvatarPreview();
     updateCount();
     setStatus('monitor.reconnecting');
+
+    fetch('/api/emoji/preview')
+        .then(response => response.ok ? response.json() : null)
+        .then(data => {
+            if (!data?.success || !data.map || typeof data.map !== 'object') return;
+            emojiMap = data.map;
+            emojiPattern = buildEmojiPattern(emojiMap);
+            buildAvatarOptions();
+            renderAll();
+        })
+        .catch(() => buildAvatarOptions());
 
     fetch('/api/message-categories')
         .then(response => response.json())
         .then(data => {
             state.categories = Array.isArray(data.categories) ? data.categories : [];
             buildFilters();
+            buildTestCategories();
+            restoreTestCategory();
             renderAll();
         })
-        .catch(() => buildFilters());
+        .catch(() => { buildFilters(); buildTestCategories(); restoreTestCategory(); });
 
     const source = new EventSource('/status/stream/messages');
     source.onopen = () => setStatus('monitor.connected');

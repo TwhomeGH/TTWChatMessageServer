@@ -21,12 +21,12 @@ async function createFixture(t) {
 }
 
 /** 模擬路由請求與 JSON 回應，無須啟動 HTTP 服務或使用真實登入資訊。 */
-function requestMapping(method, authorized, body) {
+function requestMapping(method, authorized, body, url = '/api/emoji') {
     const { serveEmoji } = require('../EmojiRoutes.cjs');
     return new Promise((resolve, reject) => {
         const chunks = body ? [Buffer.from(JSON.stringify(body))] : [];
         const req = Readable.from(chunks);
-        req.url = '/api/emoji';
+        req.url = url;
         req.method = method;
         req.headers = { 'content-type': 'application/json' };
 
@@ -138,6 +138,10 @@ test('管理 API 檢查登入、持久化修改，並回報版本衝突', async 
     t.after(() => Object.assign(store, original));
 
     assert.equal((await requestMapping('GET', false)).status, 401);
+    const preview = await requestMapping('GET', false, undefined, '/api/emoji/preview');
+    assert.equal(preview.status, 200);
+    assert.equal(preview.data.success, true);
+    assert.ok(preview.data.map['[laughcry]']);
     const current = await requestMapping('GET', true);
     assert.equal(current.status, 200);
 

@@ -39,6 +39,26 @@
       <span id="monCount" class="text-gray-400 text-xs"></span>
     </div>
 
+    <details id="monTestPanel" class="mon-test-panel">
+      <summary data-i18n="monitor.test.title">測試訊息（本機預覽）</summary>
+      <div class="mon-test-grid">
+        <label><span data-i18n="monitor.test.user">使用者</span><input id="monTestUser" type="text" maxlength="80" autocomplete="off"></label>
+        <label><span data-i18n="monitor.test.avatar">頭貼 URL</span><input id="monTestAvatar" type="url" maxlength="2048" autocomplete="off"></label>
+        <label><span data-i18n="monitor.test.avatarPick">從 emoji 選頭貼</span><select id="monTestAvatarPick"><option value="" data-i18n="monitor.test.avatarPickEmpty">—</option></select></label>
+        <label class="mon-test-avatar-preview-wrap"><span data-i18n="monitor.test.avatarPreview">頭貼預覽</span><span class="mon-test-avatar-preview-line"><img id="monTestAvatarPreview" class="mon-test-avatar-preview" alt="" referrerpolicy="no-referrer" hidden><small id="monTestAvatarPreviewStatus"></small></span></label>
+        <label><span data-i18n="monitor.test.platform">平台</span>
+          <select id="monTestPlatform">
+            <option value="tiktok">TikTok</option><option value="twitch">Twitch</option><option value="kick">Kick</option>
+            <option value="youtube">YouTube</option><option value="odysee">Odysee</option><option value="unknown">Unknown</option>
+          </select>
+        </label>
+        <label><span data-i18n="monitor.test.category">分類</span><select id="monTestCategory"></select></label>
+        <label class="mon-test-message"><span data-i18n="monitor.test.message">訊息</span><textarea id="monTestMessage" rows="2" maxlength="2000"></textarea></label>
+        <div class="mon-test-actions"><button id="monTestAdd" type="button" data-i18n="monitor.test.add">加入預覽</button><button id="monTestSend" type="button" class="mon-test-send" data-i18n="monitor.test.send">送 socket 測試</button><button id="monTestClear" type="button" class="mon-test-clear" data-i18n="monitor.test.clear">清除測試設定</button><span id="monTestStatus" role="status"></span></div>
+      </div>
+      <small data-i18n="monitor.test.note">加入預覽只影響本機；送 socket 測試會經 /chat，需 TikTok 子程序，且可能被過濾或去重。</small>
+    </details>
+
     <!-- 訊息列：時間 / 平台 / 分類 / 使用者 / 內容 -->
     <div id="monScroll" class="bg-black rounded-lg flex-1 min-h-0 overflow-auto w-full">
       <div id="monRows" class="text-sm min-h-full" role="log" aria-live="polite"></div>

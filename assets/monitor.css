@@ -30,7 +30,7 @@ body.app-ui {
     /* 依工具列實際換行高度分配空間，避免訊息將面板撐出視窗。 */
     flex: 1;
     display: grid;
-    grid-template-rows: auto auto minmax(8rem, 1fr);
+    grid-template-rows: auto auto auto minmax(8rem, 1fr);
     min-height: min-content;
     padding: 1rem;
 }
@@ -42,4 +42,120 @@ body.app-ui {
 
 .mon-msg {
     word-break: break-word;
+}
+
+/* 本機測試訊息：只影響畫面，不送 /chat；測試列加左側琥珀色標記。 */
+.mon-test-panel {
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #334155;
+    border-radius: 0.5rem;
+    background: #111827;
+}
+.mon-test-panel summary {
+    cursor: pointer;
+    color: #93c5fd;
+    font-size: 0.8rem;
+    user-select: none;
+}
+.mon-test-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+.mon-test-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    color: #cbd5e1;
+    font-size: 0.75rem;
+}
+.mon-test-grid input,
+.mon-test-grid select,
+.mon-test-grid textarea {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid #475569;
+    border-radius: 0.375rem;
+    background: #0f172a;
+    color: #e5e7eb;
+    font: inherit;
+}
+.mon-test-avatar-preview-wrap {
+    justify-content: flex-start;
+}
+.mon-test-avatar-preview-line {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2rem;
+}
+.mon-test-avatar-preview {
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid #475569;
+    border-radius: 999px;
+    object-fit: cover;
+    background: #0f172a;
+}
+.mon-test-avatar-preview-line small {
+    color: #94a3b8;
+    font-size: 0.7rem;
+}
+.mon-test-message,
+.mon-test-actions {
+    grid-column: 1 / -1;
+}
+.mon-test-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.mon-test-actions button {
+    padding: 0.35rem 0.7rem;
+    border: 0;
+    border-radius: 0.375rem;
+    background: #2563eb;
+    color: #fff;
+    cursor: pointer;
+}
+.mon-test-actions .mon-test-send {
+    background: #b45309;
+}
+.mon-test-actions .mon-test-clear {
+    background: #334155;
+}
+#monTestStatus {
+    color: #fbbf24;
+    font-size: 0.75rem;
+}
+.mon-test-panel > small {
+    display: block;
+    margin-top: 0.4rem;
+    color: #94a3b8;
+}
+.mon-test {
+    border-left: 3px solid #f59e0b;
+    background: rgba(245, 158, 11, 0.06);
+}
+.mon-test-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 1.25rem;
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    background: #78350f;
+    color: #fcd34d;
+    font-size: 11px;
+    line-height: 1;
+    white-space: nowrap;
+}
+.mon-emoji {
+    display: inline-block;
+    width: 1.25rem;
+    height: 1.25rem;
+    object-fit: contain;
+    vertical-align: -0.25rem;
+    margin: 0 1px;
 }

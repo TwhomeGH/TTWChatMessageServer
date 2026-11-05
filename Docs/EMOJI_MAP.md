@@ -59,6 +59,8 @@
 
 ## 管理 API
 
+`GET /api/emoji/preview` 是給監控頁本機測試訊息使用的公開唯讀端點，只回傳目前啟用的 `{code:url}` map，不接受修改。
+
 `GET /api/emoji` 回傳：
 
 - `map`：實際啟用且可替換的 `{code:url}`。

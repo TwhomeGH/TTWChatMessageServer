@@ -8,6 +8,12 @@ const { serveEmojiImage } = require('./ScriptLib/emoji/image_cache.cjs');
  * 未登入的頁面顯示登入表單，API 則回傳 401。
  */
 async function dispatch(req, res, pathname, authorized) {
+    // 監控頁的本機測試訊息需要同一個啟用映射；只讀、不含管理寫入。
+    if (pathname === '/api/emoji/preview' && req.method === 'GET') {
+        await store.load().catch(() => {});
+        sendJson(res, 200, { success: true, map: store.snapshot().map });
+        return;
+    }
     if (!authorized) {
         if (pathname === '/api/emoji' || pathname === '/emoji/image') {
             sendJson(res, 401, { success: false, error: '請先登入' });
@@ -32,7 +38,7 @@ async function dispatch(req, res, pathname, authorized) {
  */
 function serveEmoji(req, res, authorized) {
     const pathname = req.url.split('?')[0];
-    if (!['/emoji', '/api/emoji', '/emoji/image'].includes(pathname)) return false;
+    if (!['/emoji', '/api/emoji', '/api/emoji/preview', '/emoji/image'].includes(pathname)) return false;
     dispatch(req, res, pathname, authorized).catch(error => {
         sendJson(res, error.status || 400, { success: false, error: error.message });
     });

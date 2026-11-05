@@ -29,6 +29,12 @@ Socket 使用既有 SOCKET_API 設定（可再用 SOCKET_APIS 加開多個端點
 
 `/monitor`（別名 `/messages`）以 SSE 訂閱 `/status/stream/messages`，顯示子程序鏡像回主服務的每則 socket 訊息（時間／平台／分類／使用者／內容），可依分類（清單來自 `/api/message-categories`）與關鍵字篩選。此頁**不需要連線任何 socket 端點**：子程序每送出一則訊息都會鏡像回主服務（`ScriptLib/socket/monitor-relay.mjs`，具背壓上限）。
 
+「測試訊息（本機預覽）」可輸入使用者、頭貼 URL、平台、分類與訊息；只加入目前頁面，不會送到 `/chat`、平台、filter、AutoClip 或統計。emoji 代碼由公開唯讀的 `/api/emoji/preview` 取得目前映射後在瀏覽器解析，停用或不存在的代碼保留原文。測試列有「測試」badge，重新整理或清除畫面即消失。
+
+頭貼可手動輸入 HTTP(S) URL，或從目前 emoji map 的 active 項目中選取（同一 URL 只列一次）；選取後表單旁會即時顯示頭貼預覽，載入失敗會提示。使用者名稱、頭貼、平台與分類會保存在瀏覽器 `localStorage`（`ttw-monitor-test-prefs`），重新整理後還原；測試訊息本文不保存。「清除測試設定」會移除這組偏好。
+
+另有「送 socket 測試」：確認後檢查 `/api/runtime`，再以 `isTest:true` POST `/chat`；需要 TikTok 子程序，會經過 filter／去重並可能被阻擋。頁面不會樂觀新增本機列，必須等 SSE 回顯；測試訊息仍由子程序處理，不直接偽造監控資料。
+
 ## 啟停日誌中的統計摘要
 
 子程序在停止時仍回傳完整關鍵字快照供主服務快取與保存；主控台只顯示一行，例如 `[OUT] 關鍵字統計已同步 (完整快照，123 種留言)`。平時 `top10` 亦使用筆數摘要，不再重複列印原始 JSON 與解析後物件，也不將 `recent` 使用者／聊天明細複製進日誌。完整資料仍由關鍵字頁面使用，並未刪除統計。
