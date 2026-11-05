@@ -1,5 +1,25 @@
 # ChangeHistory
 
+## 2026.11.06 03:23 GitHub Pages deploy timeout 延長至 20 分鐘
+
+**類型**: CI · **檔案**: `.github/workflows/pages.yml`
+
+### 問題
+
+`actions/deploy-pages@v5` 使用預設 10 分鐘 timeout；Pages 後端偶爾停留在 `updating_pages` 超過 10 分鐘，導致 deploy job 失敗，網站仍停留在上一個版本。
+
+### 修改
+
+- deploy 步驟 timeout 改為 20 分鐘（`1200000ms`）。
+- `error_count` 20、`reporting_interval` 10 秒，降低輪詢錯誤與 log 噪音。
+- 保留既有 workflow-level `concurrency: pages`／`cancel-in-progress: true`；新 push 仍會取消舊的 pages run。
+
+### 限制
+
+- 這只容忍較慢的 Pages 佇列，不會修復 Pages 後端真正卡死；若持續超過 20 分鐘仍需重跑或檢查 Pages 狀態。
+
+---
+
 ## 2026.11.06 03:02 表情停用卡片按鈕不再變暗
 
 **類型**: 修正 · **檔案**: `assets/emoji.js`、`Test/emoji_ui.cjs`
