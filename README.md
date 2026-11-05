@@ -825,8 +825,9 @@ http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickU
 
 ## 其他功能
 
-表情對應可於登入後開啟 `/emoji` 管理，支援圖片預覽、增加、修改與刪除；
-映射更新約 1 秒後套用至新訊息，不需重啟聊天。詳見 [表情映射與熱載入](Docs/EMOJI_MAP.md)。
+表情對應可於登入後開啟 `/emoji` 管理，支援圖片預覽、增加、修改、啟用／停用與恢復預設；
+預設清單在 `emoji_map.json`，本機變更寫入不提交的 `emoji_map_local.json`，約 1 秒後套用至新訊息。
+詳見 [表情映射與熱載入](Docs/EMOJI_MAP.md)。
 
 ### 分支文件功能說明
 

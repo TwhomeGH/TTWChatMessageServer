@@ -9,14 +9,16 @@ let stopWatching;
 
 /**
  * 切換使用中的映射檔、載入內容並啟動每秒監看；先停止前一次監看。
+ * 不給路徑時使用正式的預設＋本機覆寫 store；指定路徑則維持舊單檔模式。
  * 同一 store 載入失敗時保留最後有效內容；切換到新檔案則使用新實例。
  * 載入錯誤會記錄到主控台，仍啟動監看以便檔案修正後恢復。
- * @param {string} filePath 映射 JSON 路徑，預設相對於工作目錄。
+ * @param {string|null} filePath 映射 JSON 路徑；null 使用正式雙檔 store。
  * @returns {Promise<void>}
  */
-export async function loadEmojiMap(filePath = EMOJI_MAP_FILE) {
+export async function loadEmojiMap(filePath = null) {
     stopWatching?.();
-    activeStore = path.resolve(filePath) === emojiStoreModule.store.file ? emojiStoreModule.store : new emojiStoreModule.EmojiStore(path.resolve(filePath));
+    activeStore = filePath == null ? emojiStoreModule.store
+        : (path.resolve(filePath) === emojiStoreModule.store.file ? emojiStoreModule.store : new emojiStoreModule.EmojiStore(path.resolve(filePath)));
     try { await activeStore.load(); } catch (error) { console.error('表情映射載入失敗，保留上一版：',error.message); }
     stopWatching=activeStore.watch();
     emojiMap=activeStore.snapshot().map;

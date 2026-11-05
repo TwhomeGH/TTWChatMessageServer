@@ -130,9 +130,11 @@ test('管理 API 檢查登入、持久化修改，並回報版本衝突', async 
     const { store } = require('../EmojiStore.cjs');
     // 路由使用共用 store，暫時指向隔離檔案，結束時還原原本狀態。
     const original = {
-        file: store.file, map: store.map, loaded: store.loaded, error: store.error
+        file: store.file, localFile: store.localFile, defaults: store.defaults, local: store.local,
+        map: store.map, entries: store.entries, loaded: store.loaded, error: store.error
     };
     store.file = file;
+    store.localFile = null;
     t.after(() => Object.assign(store, original));
 
     assert.equal((await requestMapping('GET', false)).status, 401);
@@ -215,4 +217,99 @@ test('表情圖片路由需要登入', async () => {
         serveEmoji(req, res, false);
     });
     assert.equal(result.status, 401);
+});
+
+/** 建立預設＋本機覆寫的雙檔測試環境。 */
+async function createLayeredFixture(t, local = null) {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'ttw-emoji-layered-'));
+    t.after(() => fs.rm(directory, { recursive: true, force: true }));
+    const defaultsFile = path.join(directory, 'emoji_map.json');
+    const localFile = path.join(directory, 'emoji_map_local.json');
+    await fs.writeFile(defaultsFile, JSON.stringify({
+        '[laughcry]': 'https://example.com/default.png',
+        beta: 'https://example.com/beta.png'
+    }));
+    if (local !== null) await fs.writeFile(localFile, typeof local === 'string' ? local : JSON.stringify(local));
+    const store = new EmojiStore(defaultsFile, localFile);
+    await store.load();
+    return { store, defaultsFile, localFile, directory };
+}
+
+test('雙檔合併支援本機覆寫、停用預設、自訂與停用自訂', async t => {
+    const { store } = await createLayeredFixture(t, {
+        version: 1,
+        emojis: {
+            '[laughcry]': { url: 'https://example.com/override.png' },
+            beta: { enabled: false },
+            custom: { url: 'https://example.com/custom.png' },
+            disabledCustom: { url: 'https://example.com/off.png', enabled: false }
+        }
+    });
+    const snapshot = store.snapshot();
+    assert.equal(snapshot.map['[laughcry]'], 'https://example.com/override.png');
+    assert.equal(snapshot.map.beta, undefined);
+    assert.equal(snapshot.map.custom, 'https://example.com/custom.png');
+    assert.equal(snapshot.map.disabledCustom, undefined);
+    const entries = Object.fromEntries(snapshot.entries.map(entry => [entry.code, entry]));
+    assert.equal(entries['[laughcry]'].source, 'override');
+    assert.equal(entries.beta.enabled, false);
+    assert.equal(entries.beta.isDefault, true);
+    assert.equal(entries.beta.overridden, true);
+    assert.equal(entries.custom.source, 'local');
+    assert.equal(entries.disabledCustom.enabled, false);
+});
+
+test('雙檔修改只寫 local，不覆寫預設；停用與恢復預設可逆', async t => {
+    const { store, defaultsFile, localFile } = await createLayeredFixture(t);
+    const defaultsBefore = await fs.readFile(defaultsFile, 'utf8');
+    await store.change({
+        operation: 'save', code: 'custom', url: 'https://example.com/custom.png',
+        revision: store.snapshot().revision
+    });
+    assert.equal(await fs.readFile(defaultsFile, 'utf8'), defaultsBefore);
+    let local = JSON.parse(await fs.readFile(localFile, 'utf8'));
+    assert.deepEqual(local, { version: 1, emojis: { custom: { url: 'https://example.com/custom.png' } } });
+
+    await store.change({ operation: 'set-enabled', code: 'beta', enabled: false, revision: store.snapshot().revision });
+    assert.equal(store.snapshot().map.beta, undefined);
+    local = JSON.parse(await fs.readFile(localFile, 'utf8'));
+    assert.deepEqual(local.emojis.beta, { enabled: false });
+    await store.change({ operation: 'reset', code: 'beta', revision: store.snapshot().revision });
+    assert.equal(store.snapshot().map.beta, 'https://example.com/beta.png');
+    assert.equal(JSON.parse(await fs.readFile(localFile, 'utf8')).emojis.beta, undefined);
+
+    await assert.rejects(store.change({
+        operation: 'delete', code: 'beta', revision: store.snapshot().revision
+    }), /停用/);
+    await store.change({ operation: 'delete', code: 'custom', revision: store.snapshot().revision });
+    assert.equal(store.snapshot().map.custom, undefined);
+    assert.equal(JSON.parse(await fs.readFile(localFile, 'utf8')).emojis.custom, undefined);
+});
+
+test('本機覆寫損壞時保留上一版，修正後恢復', async t => {
+    const { store, localFile } = await createLayeredFixture(t, {
+        version: 1, emojis: { hot: { url: 'https://example.com/hot.png' } }
+    });
+    assert.equal(store.snapshot().map.hot, 'https://example.com/hot.png');
+    await fs.writeFile(localFile, '{');
+    await assert.rejects(store.load());
+    assert.equal(store.snapshot().map.hot, 'https://example.com/hot.png');
+    assert.ok(store.snapshot().error);
+    await fs.writeFile(localFile, JSON.stringify({ version: 1, emojis: { fixed: { url: 'https://example.com/fixed.png' } } }));
+    await store.load();
+    assert.equal(store.snapshot().error, null);
+    assert.equal(store.snapshot().map.fixed, 'https://example.com/fixed.png');
+    assert.equal(store.snapshot().map.hot, undefined);
+});
+
+test('本機覆寫格式錯誤不會被當成預設', async t => {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'ttw-emoji-invalid-'));
+    t.after(() => fs.rm(directory, { recursive: true, force: true }));
+    const defaultsFile = path.join(directory, 'emoji_map.json');
+    const localFile = path.join(directory, 'emoji_map_local.json');
+    await fs.writeFile(defaultsFile, JSON.stringify({ a: 'https://example.com/a.png' }));
+    await fs.writeFile(localFile, JSON.stringify({ version: 1, emojis: { a: { enabled: 'no' } } }));
+    const store = new EmojiStore(defaultsFile, localFile);
+    await assert.rejects(store.load(), /enabled/);
+    assert.equal(store.snapshot().map.a, undefined);
 });

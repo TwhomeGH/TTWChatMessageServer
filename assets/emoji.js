@@ -2,7 +2,7 @@
 // 從 /api/emoji 載入映射表，提供搜尋、預覽、新增、編輯、刪除；
 // 儲存後由伺服器端約 1 秒套用至新訊息，此頁只負責送出變更並重新渲染清單。
 
-let mapping = {};
+let entries = [];
 let revision = '';
 let originalCode = null;
 let busy = false;
@@ -43,14 +43,16 @@ function resetForm() {
     el('previewStatus').textContent = '';
 }
 
-// 建立單一映射卡片：縮圖、代碼、網址、編輯與刪除。
-function createCard(code, url) {
+// 建立單一映射卡片：縮圖、代碼、網址、來源／啟用狀態與操作。
+function createCard(entry) {
+    const { code, url, enabled, source, isDefault, overridden } = entry;
     const card = document.createElement('article');
     card.className = 'bg-gray-900 rounded-lg p-3 flex gap-3';
+    if (!enabled) card.style.opacity = '.6';
 
     const image = document.createElement('img');
     // 走伺服器端快取路由（依代碼取圖）；v 讓網址變更時繞過瀏覽器快取。
-    image.src = '/emoji/image?code=' + encodeURIComponent(code) + '&v=' + shortHash(url);
+    image.src = '/emoji/image?code=' + encodeURIComponent(code) + '&v=' + shortHash(url || '');
     image.alt = code;
     image.width = 48;
     image.height = 48;
@@ -65,48 +67,79 @@ function createCard(code, url) {
     name.textContent = code;
     name.className = 'font-semibold break-all';
 
+    const sourceLabel = source === 'local' ? '自訂' : source === 'override' ? '本機覆寫' : '預設';
+    const state = document.createElement('span');
+    state.textContent = enabled ? '啟用' : '已停用';
+    state.className = 'text-xs ml-2 ' + (enabled ? 'text-green-300' : 'text-amber-300');
+    const sourceBadge = document.createElement('span');
+    sourceBadge.textContent = sourceLabel;
+    sourceBadge.className = 'text-xs text-gray-400 ml-2';
+    name.append(state, sourceBadge);
+
     const address = document.createElement('p');
-    address.textContent = url;
+    address.textContent = url || '（沒有圖片網址）';
     address.className = 'text-xs text-gray-400 break-all';
 
     image.onerror = () => {
         image.hidden = true;
-        address.textContent = '圖片無法載入 · ' + url;
+        address.textContent = '圖片無法載入 · ' + (url || '');
     };
 
     const actions = document.createElement('div');
-    actions.className = 'flex gap-3 mt-2';
+    actions.className = 'flex flex-wrap gap-3 mt-2';
 
     const edit = document.createElement('button');
     edit.textContent = '編輯';
-    edit.disabled = busy;
-    edit.onclick = () => startEdit(code, url);
+    edit.disabled = busy || !url;
+    edit.onclick = () => startEdit(code, url || '');
 
-    const remove = document.createElement('button');
-    remove.textContent = '刪除';
-    remove.className = 'text-red-300';
-    remove.disabled = busy;
-    remove.onclick = () => {
-        if (confirm('刪除 ' + code + ' 的映射？')) mutate({ operation: 'delete', code });
-    };
+    const toggle = document.createElement('button');
+    toggle.textContent = enabled ? '停用' : '啟用';
+    toggle.className = enabled ? 'text-amber-300' : 'text-green-300';
+    toggle.disabled = busy;
+    toggle.onclick = () => mutate({ operation: 'set-enabled', code, enabled: !enabled });
 
-    actions.append(edit, remove);
+    actions.append(edit, toggle);
+
+    if (isDefault && overridden) {
+        const reset = document.createElement('button');
+        reset.textContent = '恢復預設';
+        reset.className = 'text-blue-300';
+        reset.disabled = busy;
+        reset.onclick = () => {
+            if (confirm('恢復 ' + code + ' 的預設值？')) mutate({ operation: 'reset', code });
+        };
+        actions.append(reset);
+    }
+
+    if (source === 'local') {
+        const remove = document.createElement('button');
+        remove.textContent = '刪除';
+        remove.className = 'text-red-300';
+        remove.disabled = busy;
+        remove.onclick = () => {
+            if (confirm('刪除自訂映射 ' + code + '？')) mutate({ operation: 'delete', code });
+        };
+        actions.append(remove);
+    }
+
     body.append(name, address, actions);
     card.append(image, body);
     return card;
 }
 
-// 依搜尋字串過濾並重新渲染映射清單。
+// 依搜尋字串過濾並重新渲染映射清單；停用項目仍然列出以便恢復。
 function render() {
     el('list').replaceChildren();
     const query = el('search').value.toLowerCase();
-    const entries = Object.entries(mapping).filter(([code, url]) => (code + ' ' + url).toLowerCase().includes(query));
-    el('count').textContent = entries.length + ' / ' + Object.keys(mapping).length + ' 筆';
-    for (const [code, url] of entries) el('list').append(createCard(code, url));
-    if (!entries.length) el('list').textContent = '沒有符合的映射';
+    const filtered = entries.filter(entry => (entry.code + ' ' + (entry.url || '')).toLowerCase().includes(query));
+    const active = entries.filter(entry => entry.enabled).length;
+    el('count').textContent = filtered.length + ' / ' + entries.length + ' 筆 · 啟用 ' + active;
+    for (const entry of filtered) el('list').append(createCard(entry));
+    if (!filtered.length) el('list').textContent = '沒有符合的映射';
 }
 
-// 將某筆映射載入表單進行編輯。
+// 將某筆映射載入表單進行編輯；儲存會重新啟用。
 function startEdit(code, url) {
     clearTimeout(previewTimer);
     originalCode = code;
@@ -130,7 +163,8 @@ async function request(options) {
 async function load() {
     try {
         const data = await request();
-        mapping = data.map;
+        entries = Array.isArray(data.entries) ? data.entries
+            : Object.entries(data.map).map(([code, url]) => ({ code, url, enabled: true, source: 'default', isDefault: true, overridden: false }));
         revision = data.revision;
         render();
         setStatus(data.error ? '檔案格式錯誤，保留上一版：' + data.error : '已載入；外部檔案變更可按重新載入查看。');
@@ -152,7 +186,8 @@ async function mutate(action) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...action, revision })
         });
-        mapping = data.map;
+        entries = Array.isArray(data.entries) ? data.entries
+            : Object.entries(data.map).map(([code, url]) => ({ code, url, enabled: true, source: 'default', isDefault: true, overridden: false }));
         revision = data.revision;
         resetForm();
         setStatus('已儲存，約 1 秒後套用至新訊息。');

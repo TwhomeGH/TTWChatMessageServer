@@ -1,5 +1,37 @@
 # ChangeHistory
 
+## 2026.11.06 02:37 表情映射拆分預設與本機覆寫
+
+**類型**: 功能 · **檔案**: `EmojiStore.cjs`、`EmojiMap.js`、`ScriptLib/emoji/image_cache.cjs`、`assets/emoji.js`、`emoji.html`、`.gitignore`、`Test/emoji_store.test.cjs`、`Test/emoji_ui.cjs`、`Docs/EMOJI_MAP.md`、`README.md`
+
+### 問題 - 管理頁直接改寫預設表情清單
+
+原本 `/emoji` 的儲存直接覆寫 `emoji_map.json`；版本更新或個人修改會互相覆蓋，也無法安全停用預設。
+
+### 修改
+
+- `emoji_map.json` 改為只讀的預設參考清單；管理頁只寫不提交的 `emoji_map_local.json`。
+- 本機覆寫格式 `{version:1, emojis:{code:{url?, enabled?}}}`；`url` 覆寫網址、`enabled` 控制啟用，自訂需 `url`。
+- 合併後只把啟用且有網址的項目放進聊天替換表；停用預設保留網址，可「恢復預設」。
+- 管理頁列出所有項目（含停用），顯示預設／本機覆寫／自訂與啟用狀態，提供停用／啟用、恢復預設、刪除自訂。
+- 圖片預覽路徑改用 `imageUrl()`，停用項目仍可預覽。
+- 版本指紋涵蓋預設＋本機狀態；兩份檔案每秒熱載入，任一檔案損壞保留上一版。
+- `EmojiStore` 保留舊單檔模式供測試與舊 API；正式 store 使用雙檔。
+
+### 限制
+
+- 目前仍只接受 HTTP(S) 圖片；`data:` base64 尚未支援，之後才做接收端能力判斷。
+- 本機狀態是每個環境一份，不會跨機器同步；這是刻意不提交。
+- 預設項目不能刪除，只能停用；避免失去恢復來源。
+
+### 驗證
+
+- `Test/emoji_store.test.cjs`：預設＋本機合併、覆寫、停用、恢復、自訂、預設檔不被改寫、損壞本機保留上一版、雙檔監看、版本衝突與既有單檔行為。
+- `Test/emoji_ui.cjs`：停用預設可見、可啟用，POST 帶正確 revision。
+- `npm run lint`。
+
+---
+
 ## 2026.11.06 00:21 Restream 指標診斷通道
 
 **類型**: 功能 · **檔案**: `RestreamRoutes.cjs`、`ScriptLib/restream/metrics.cjs`、`OtherTool/restream/index.html`、`Server.js`、`UserScript/restream-monitor.user.js`、`Test/restream_metrics.test.cjs`、`Test/restream_monitor.test.cjs`、`Test/restream_monitor_ui.cjs`、`Docs/USERSCRIPT_SOURCES.md`

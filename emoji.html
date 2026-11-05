@@ -2,12 +2,12 @@
 <html lang="zh-TW"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>表情映射管理</title><link rel="stylesheet" href="/assets/app.css"></head>
 <body class="app-ui bg-gray-900 text-gray-100 p-3 sm:p-6">
 <main class="max-w-5xl mx-auto space-y-4">
-<header class="page-header"><div><h1 class="text-2xl font-bold">表情映射管理</h1><p class="text-sm text-gray-400 mt-2">儲存後約 1 秒套用至新訊息；支援 [laughcry] 等完整代碼。</p></div><nav class="flex gap-3"><a href="/">主控台</a><a href="/keyword">關鍵字</a><a href="/config">設定</a></nav></header>
+<header class="page-header"><div><h1 class="text-2xl font-bold">表情映射管理</h1><p class="text-sm text-gray-400 mt-2">儲存後約 1 秒套用至新訊息；支援 [laughcry] 等完整代碼。變更只寫入本機覆寫檔，不會修改預設清單。</p></div><nav class="flex gap-3"><a href="/">主控台</a><a href="/keyword">關鍵字</a><a href="/config">設定</a></nav></header>
 <p id="status" role="status" class="text-sm text-gray-300"></p>
 <form id="editor" class="bg-gray-800 p-4 rounded-xl space-y-3">
 <h2 id="editorTitle" class="font-semibold">新增映射</h2>
 <div class="grid sm:grid-cols-2 gap-3"><label>表情代碼<input id="code" required maxlength="200" placeholder="[laughcry]" class="block w-full bg-gray-900 rounded p-2 mt-1"></label><label>圖片網址<input id="url" required type="url" maxlength="4096" placeholder="https://…/emoji.png" class="block w-full bg-gray-900 rounded p-2 mt-1"></label></div>
-<div class="flex flex-wrap items-center gap-3"><img id="preview" alt="圖片預覽" width="64" height="64" class="object-contain" hidden referrerpolicy="no-referrer"><span id="previewStatus" class="text-sm text-gray-400"></span><button id="save" class="bg-blue-600 rounded px-3 py-2">儲存</button><button type="button" id="cancel" class="bg-gray-700 rounded px-3 py-2">取消編輯</button></div>
+<div class="flex flex-wrap items-center gap-3"><img id="preview" alt="圖片預覽" width="64" height="64" class="object-contain" hidden referrerpolicy="no-referrer"><span id="previewStatus" class="text-sm text-gray-400"></span><button id="save" class="bg-blue-600 rounded px-3 py-2">儲存</button><span class="text-xs text-gray-500">儲存會寫入 emoji_map_local.json；預設項目可停用或用「恢復預設」還原。</span><button type="button" id="cancel" class="bg-gray-700 rounded px-3 py-2">取消編輯</button></div>
 </form>
 <section class="bg-gray-800 rounded-xl p-4 space-y-3"><div class="flex flex-wrap gap-3"><input id="search" aria-label="搜尋代碼或網址" placeholder="搜尋代碼或網址" class="bg-gray-900 rounded p-2 flex-1"><button id="reload" class="bg-gray-700 rounded px-3 py-2">重新載入</button><span id="count" class="text-sm text-gray-400"></span></div><div id="list" class="grid sm:grid-cols-2 gap-3"></div></section>
 </main>

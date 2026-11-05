@@ -55,7 +55,7 @@ function createImageCache(cacheDir = DEFAULT_CACHE_DIR) {
     /** 依代碼供應映射圖片；命中快取直接回傳，否則抓取一次後寫入快取。 */
     async function serve(req, res, code, store) {
         if (!['GET', 'HEAD'].includes(req.method)) throw httpError(405, '不支援的請求');
-        const url = store.snapshot().map[code];
+        const url = store.imageUrl ? store.imageUrl(code) : store.snapshot().map[code];
         if (typeof url !== 'string' || !url) throw httpError(404, '找不到此表情');
 
         let image = await readCache(url);
