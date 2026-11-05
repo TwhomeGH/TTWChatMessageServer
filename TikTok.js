@@ -551,29 +551,49 @@ process.stdin.on('data', async (chunk) => {
                 json.message = replaceEmojis(json.message);
 
                 const fr = processFilter({ user: json.user, message: json.message });
+                const skippedNotify = { status: 'skipped', channels: [] };
                 if (fr.blocked) {
                     console.log('🚫 過濾器阻擋(來自Server):', json.user, json.message, `(規則: ${fr.reason})`);
-                    reportTestResult(json.testId, 'filtered');
+                    reportTestResult(json.testId, 'filtered', 0, skippedNotify);
                     return;
                 }
                 if (fr.modified && fr.user) json.user = fr.user;
                 if (fr.modified && fr.message) json.message = fr.message;
 
                 if (!recordChatHeat(json.message, { ...normalizeSource(json, 'userscript'), id: json.msgId || json.id, sentAt: json.sentAt || json.createTime, userId: json.userId, user: origUser, receivedAt: json.receivedAt || Date.now() })) {
-                    reportTestResult(json.testId, 'ignored');
+                    reportTestResult(json.testId, 'ignored', 0, skippedNotify);
                     return;
                 }
 
                 applyRelayAudience(json);
 
-                const sent = sendSocketMessage(json.user, json.message, { img: json.img || '', giftImg: json.giftImg || '', category: 'chat', platform: 'tiktok', dedupUser: origUser, dedupMessage: origMsg, dedupVariant });
-
-                if (sent || json.isTest !== true) dedup.add(origUser, origMsg, dedupVariant);
                 if (json.isTest === true) {
-                    reportTestResult(json.testId, sent ? 'sent' : 'duplicate', dedup.remaining(origUser, origMsg, dedupVariant));
+                    const dispatch = normalizeTestDispatch(json.testDispatch);
+                    let socketStatus = 'skipped';
+                    let remainingMs = 0;
+                    if (dispatch.socket) {
+                        const sent = sendSocketMessage(json.user, json.message, {
+                            img: json.img || '', giftImg: json.giftImg || '', category: 'chat', platform: 'tiktok',
+                            dedupUser: origUser, dedupMessage: origMsg, dedupVariant
+                        });
+                        if (sent) dedup.add(origUser, origMsg, dedupVariant);
+                        socketStatus = sent ? 'sent' : 'duplicate';
+                        remainingMs = dedup.remaining(origUser, origMsg, dedupVariant);
+                    }
+                    let notifyResult = skippedNotify;
+                    if (dispatch.notify) {
+                        const results = await notify(json.user, json.message, json.img || json.giftImg || '');
+                        notifyResult = summarizeNotify(results);
+                    }
+                    reportTestResult(json.testId, socketStatus, remainingMs, notifyResult);
+                    console.log('📥 收到 JSON 訊息:', json);
+                    return;
                 }
 
-                let Gift = json.giftImg || ''
+                sendSocketMessage(json.user, json.message, { img: json.img || '', giftImg: json.giftImg || '', category: 'chat', platform: 'tiktok', dedupUser: origUser, dedupMessage: origMsg, dedupVariant });
+                dedup.add(origUser, origMsg, dedupVariant);
+
+                let Gift = json.giftImg || '';
 
                 notify(json.user, json.message, json.img || Gift);
 
@@ -894,9 +914,34 @@ function sendSocketMessage(user, message, { img = '', giftImg = '', isMain = tru
 }
 
 /** 把測試訊息結果回報給主服務；沒有 testId 或 IPC 時安靜略過。 */
-function reportTestResult(testId, status, remainingMs = 0) {
+function reportTestResult(testId, status, remainingMs = 0, notify = null) {
     if (!testId || typeof process.send !== 'function') return;
-    try { process.send({ type: 'TEST_RESULT', data: { testId, status, remainingMs } }); } catch { /* IPC 關閉 */ }
+    try {
+        process.send({
+            type: 'TEST_RESULT',
+            data: {
+                testId, status, remainingMs,
+                notify: notify || { status: 'skipped', channels: [] }
+            }
+        });
+    } catch { /* IPC 關閉 */ }
+}
+
+/** 測試派發目標；未帶時沿用原本 socket＋通知。 */
+function normalizeTestDispatch(value) {
+    if (!value || typeof value !== 'object') return { socket: true, notify: true };
+    return { socket: value.socket !== false, notify: value.notify !== false };
+}
+
+/** 把 Notifier 的逐通道結果整理成測試結果。 */
+function summarizeNotify(results) {
+    if (!Array.isArray(results) || !results.length) return { status: 'nochannels', channels: [] };
+    const channels = results.map(item => ({ name: String(item.channel || ''), ok: item.ok === true }));
+    const okCount = channels.filter(item => item.ok).length;
+    return {
+        status: okCount === 0 ? 'failed' : okCount === channels.length ? 'sent' : 'partial',
+        channels
+    };
 }
 
 

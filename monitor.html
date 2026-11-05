@@ -54,9 +54,18 @@
         </label>
         <label><span data-i18n="monitor.test.category">分類</span><select id="monTestCategory"></select></label>
         <label class="mon-test-message"><span data-i18n="monitor.test.message">訊息</span><textarea id="monTestMessage" rows="2" maxlength="2000"></textarea></label>
-        <div class="mon-test-actions"><button id="monTestAdd" type="button" data-i18n="monitor.test.add">加入預覽</button><button id="monTestSend" type="button" class="mon-test-send" data-i18n="monitor.test.send">送 socket 測試</button><button id="monTestClear" type="button" class="mon-test-clear" data-i18n="monitor.test.clear">清除測試設定</button><span id="monTestStatus" role="status"></span></div>
+        <div class="mon-test-targets"><span data-i18n="monitor.test.targets">派發目標</span>
+          <label><input id="monTestSocket" type="checkbox" checked> <span data-i18n="monitor.test.targetSocket">Socket／overlay</span></label>
+          <label><input id="monTestNotify" type="checkbox"> <span data-i18n="monitor.test.targetNotify">Bark／ntfy</span></label>
+        </div>
+        <div class="mon-test-actions">
+          <button id="monTestAdd" type="button" data-i18n="monitor.test.add">加入預覽</button>
+          <button id="monTestSend" type="button" class="mon-test-send" data-i18n="monitor.test.send">送出測試</button>
+          <button id="monTestClear" type="button" class="mon-test-clear" data-i18n="monitor.test.clear">清除測試設定</button>
+          <span id="monTestStatus" role="status"></span>
+        </div>
       </div>
-      <small data-i18n="monitor.test.note">加入預覽只影響本機；送 socket 測試會經 /chat，需 TikTok 子程序，且可能被過濾或去重。</small>
+      <small data-i18n="monitor.test.note">加入預覽只影響本機；送出測試會依勾選目標經 /chat，需 TikTok 子程序。Socket／overlay 與 Bark／ntfy 是獨立輸出；同時勾選不會重複送 Socket。</small>
     </details>
 
     <!-- 訊息列：時間 / 平台 / 分類 / 使用者 / 內容 -->

@@ -1,5 +1,5 @@
 /** 監控頁常客標記冒煙檢查：node Test/monitor_audience_ui.cjs；使用假 SSE。 */
-/* global document -- 僅在瀏覽器 waitForFunction 回呼中使用。 */
+/* global document, getComputedStyle -- 僅在瀏覽器回呼中使用。 */
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const fs = require('node:fs');
@@ -49,7 +49,10 @@ async function main() {
                 emitTestResult({
                     testId: data.testId,
                     status: chatCount === 1 ? 'sent' : 'duplicate',
-                    remainingMs: chatCount === 1 ? 60000 : 59000
+                    remainingMs: chatCount === 1 ? 60000 : 59000,
+                    notify: data.testDispatch?.notify
+                        ? { status: 'sent', channels: [{ name: 'bark', ok: true }] }
+                        : { status: 'skipped', channels: [] }
                 });
                 res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
                 res.end('OK');
@@ -112,6 +115,21 @@ async function main() {
         assert.equal(await page.$eval('.mon-tags', node => node.title.includes('12')), true);
 
         await page.evaluate(() => { document.querySelector('#monTestPanel').open = true; });
+        const targetLayout = await page.evaluate(() => {
+            const label = document.querySelector('.mon-test-targets label');
+            const box = label.querySelector('input').getBoundingClientRect();
+            const text = label.querySelector('span').getBoundingClientRect();
+            return {
+                direction: getComputedStyle(label).flexDirection,
+                boxCenter: box.top + box.height / 2,
+                textCenter: text.top + text.height / 2
+            };
+        });
+        assert.equal(targetLayout.direction, 'row');
+        assert.ok(Math.abs(targetLayout.boxCenter - targetLayout.textCenter) <= 2);
+        const targetLabels = await page.$$eval('.mon-test-targets label', nodes => nodes.map(node => node.textContent.trim()));
+        assert.match(targetLabels[0], /Socket／overlay/);
+        assert.match(targetLabels[1], /Bark／ntfy/);
         await page.waitForFunction(() => document.querySelectorAll('#monTestAvatarPick option').length === 2);
         await page.select('#monTestAvatarPick', base + '/emoji.png');
         assert.equal(await page.$eval('#monTestAvatar', node => node.value), base + '/emoji.png');
@@ -129,6 +147,7 @@ async function main() {
             image.dispatchEvent(new Event('input', { bubbles: true }));
             document.querySelector('#monTestMessage').value = 'hi [laughcry]';
         }, base + '/avatar.png');
+        await page.click('#monTestNotify');
         await page.click('#monTestAdd');
         await page.waitForFunction(() => document.querySelectorAll('.mon-test').length === 1);
         await page.waitForFunction(() => Boolean(document.querySelector('.mon-test .mon-emoji')));
@@ -164,10 +183,12 @@ async function main() {
         assert.equal(posts[0].data.type, 'StreamMessage');
         assert.equal(posts[0].data.isTest, true);
         assert.match(posts[0].data.testId, /\S+/);
+        assert.deepEqual(posts[0].data.testDispatch, { socket: true, notify: true });
         assert.equal(posts[0].data.user, 'Preview User');
         assert.equal(posts[0].data.message, 'hi [laughcry]');
         assert.match(posts[0].data.img, /avatar\.png$/);
         assert.match(await page.$eval('#monTestStatus', node => node.textContent), /去重保護/);
+        assert.match(await page.$eval('#monTestStatus', node => node.textContent), /通知.*Bark/);
 
         // 第二次送同文同頭貼：fake 回報 duplicate，頁面應顯示剩餘冷卻。
         await page.click('#monTestSend');
@@ -188,12 +209,16 @@ async function main() {
             avatar: document.querySelector('#monTestAvatar').value,
             platform: document.querySelector('#monTestPlatform').value,
             category: document.querySelector('#monTestCategory').value,
+            socket: document.querySelector('#monTestSocket').checked,
+            notify: document.querySelector('#monTestNotify').checked,
             message: document.querySelector('#monTestMessage').value
         }));
         assert.equal(restored.user, 'Preview User');
         assert.equal(restored.avatar, base + '/avatar.png');
         assert.equal(restored.platform, 'tiktok');
         assert.equal(restored.category, 'chat');
+        assert.equal(restored.socket, true);
+        assert.equal(restored.notify, true);
         assert.equal(restored.message, '');
 
         await page.click('#monTestClear');
@@ -202,11 +227,14 @@ async function main() {
             avatar: document.querySelector('#monTestAvatar').value,
             platform: document.querySelector('#monTestPlatform').value,
             category: document.querySelector('#monTestCategory').value,
+            socket: document.querySelector('#monTestSocket').checked,
+            notify: document.querySelector('#monTestNotify').checked,
             previewHidden: document.querySelector('#monTestAvatarPreview').hidden,
             prefs: localStorage.getItem('ttw-monitor-test-prefs')
         }));
         assert.deepEqual(cleared, {
-            user: '', avatar: '', platform: 'tiktok', category: 'chat', previewHidden: true, prefs: null
+            user: '', avatar: '', platform: 'tiktok', category: 'chat',
+            socket: true, notify: false, previewHidden: true, prefs: null
         });
         assert.equal(posts.length, 2);
         assert.deepEqual(errors, []);

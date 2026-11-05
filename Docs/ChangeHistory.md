@@ -1,5 +1,38 @@
 # ChangeHistory
 
+## 2026.11.06 06:27 測試派發目標與通知通道結果
+
+**類型**: 改善 · **檔案**: `monitor.html`、`assets/monitor.js`、`assets/monitor.css`、`TikTok.js`、`ScriptLib/notify/index.mjs`、`Server.js`、`lang/zh-TW.json`、`lang/en.json`、`Test/notify.test.mjs`、`Test/monitor_audience_ui.cjs`、`Docs/RUNTIME.md`、`Docs/CHAT_API.md`、`Docs/SOCKET_TRANSPORT.md`
+
+### 問題
+
+測試訊息過去無條件走 socket 並呼叫通知派發器；monitor 只看得到 socket，沒有派發目標控制，也看不到 Bark／ntfy 哪個成功。`Notifier.notify` 也丟掉各通道結果。
+
+### 修改
+
+- 測試表單新增 `Socket`／`通知` 勾選；通知預設關閉，避免測試誤發。
+- 測試 payload 帶 `testDispatch`；子程序只執行勾選的目標。
+- `Notifier.notify` 回傳 `[{ channel, ok }]`；子程序彙整為 `sent`／`partial`／`failed`／`nochannels`。
+- `TEST_RESULT`／`/status/stream/test-results` 加入 `notify` 與逐通道結果；monitor 同時顯示 socket 冷卻與通知通道。
+- 有勾選通知時等待結果延長到 15 秒；預設 5 秒。
+- 通知勾選狀態一併存入 localStorage。
+- 派發目標獨立成一個 grid 列，覆寫 `.mon-test-grid label` 的 column 排列；checkbox 與文字改為同一列，不再和操作按鈕擠在一起。
+- 標籤改為 `Socket／overlay` 與 `Bark／ntfy`，說明兩者獨立、同時勾選不會重複送 Socket。
+
+### 限制
+
+- 通知測試會實際送到已啟用的 Bark／ntfy；需要明確勾選與確認。
+- 通知通道失敗只回報 ok=false；詳細例外交由子程序日誌。
+- 仍只支援測試訊息；一般 `/chat` 不產生 TEST_RESULT。
+
+### 驗證
+
+- `node --test Test/notify.test.mjs`
+- `node Test/monitor_audience_ui.cjs`
+- `npm run test:core`、`npm run lint`、`npm run check:css`
+
+---
+
 ## 2026.11.06 06:15 測試訊息精確結果與去重倒數
 
 **類型**: 功能 · **檔案**: `Server.js`、`TikTok.js`、`ScriptLib/socket/dedup.mjs`、`ScriptLib/socket/hub.mjs`、`assets/monitor.js`、`lang/zh-TW.json`、`lang/en.json`、`Test/socket_hub.test.mjs`、`Test/monitor_audience_ui.cjs`、`Docs/RUNTIME.md`、`Docs/CHAT_API.md`、`Docs/SOCKET_TRANSPORT.md`

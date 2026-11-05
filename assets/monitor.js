@@ -49,6 +49,8 @@
     const testPlatform = document.getElementById('monTestPlatform');
     const testCategory = document.getElementById('monTestCategory');
     const testMessage = document.getElementById('monTestMessage');
+    const testSocket = document.getElementById('monTestSocket');
+    const testNotify = document.getElementById('monTestNotify');
     const testAdd = document.getElementById('monTestAdd');
     const testSend = document.getElementById('monTestSend');
     const testClear = document.getElementById('monTestClear');
@@ -153,7 +155,9 @@
                 user: testUser.value,
                 avatar: testAvatar.value.trim(),
                 platform: testPlatform.value,
-                category: testCategory.value
+                category: testCategory.value,
+                socket: testSocket.checked,
+                notify: testNotify.checked
             }));
         } catch { /* 無痕模式或儲存額度不足時不影響測試 */ }
     }
@@ -165,6 +169,8 @@
         if ([...testPlatform.options].some(option => option.value === savedTestPrefs.platform)) {
             testPlatform.value = savedTestPrefs.platform;
         }
+        if (typeof savedTestPrefs.socket === 'boolean') testSocket.checked = savedTestPrefs.socket;
+        if (typeof savedTestPrefs.notify === 'boolean') testNotify.checked = savedTestPrefs.notify;
     }
 
     function restoreTestCategory() {
@@ -206,6 +212,8 @@
         testPlatform.value = 'tiktok';
         testCategory.value = [...testCategory.options].some(option => option.value === 'chat')
             ? 'chat' : (testCategory.options[0]?.value || '');
+        testSocket.checked = true;
+        testNotify.checked = false;
         updateAvatarPreview();
         setTestStatus(t('monitor.test.cleared', {}, '已清除測試設定。'));
     }
@@ -264,18 +272,36 @@
         testCooldownTimer = null;
     }
 
-    function startTestCooldown(remainingMs, duplicate) {
+    function channelLabel(name) {
+        return name === 'bark' ? 'Bark' : name === 'ntfy' ? 'ntfy' : name;
+    }
+
+    function describeNotify(notify) {
+        if (!notify || notify.status === 'skipped') return '';
+        const channels = Array.isArray(notify.channels)
+            ? notify.channels.map(item => ({ name: channelLabel(item.name), ok: item.ok === true }))
+            : [];
+        const ok = channels.filter(item => item.ok).map(item => item.name);
+        const failed = channels.filter(item => !item.ok).map(item => item.name);
+        if (notify.status === 'nochannels') return t('monitor.test.notifyNoChannels', {}, '未啟用通知通道');
+        if (notify.status === 'sent') return t('monitor.test.notifySent', { channels: ok.join(', ') || '—' }, `已送出（${ok.join(', ') || '—'}）`);
+        if (notify.status === 'partial') return t('monitor.test.notifyPartial', { ok: ok.join(', ') || '—', failed: failed.join(', ') || '—' }, `部分成功（${ok.join(', ') || '—'}；失敗：${failed.join(', ') || '—'}）`);
+        return t('monitor.test.notifyFailed', { channels: failed.join(', ') || channels.map(item => item.name).join(', ') || '—' }, `失敗（${failed.join(', ') || '—'}）`);
+    }
+
+    function startTestCooldown(remainingMs, duplicate, notifyText = '') {
         clearTestCooldown();
         const until = Date.now() + Math.max(0, Number(remainingMs) || 0);
         const key = duplicate ? 'monitor.test.resultDuplicate' : 'monitor.test.resultSent';
+        const suffix = notifyText ? ` · ${t('monitor.test.notifyLabel', {}, '通知')}：${notifyText}` : '';
         const render = () => {
             const seconds = Math.max(0, Math.ceil((until - Date.now()) / 1000));
             if (seconds <= 0) {
                 clearTestCooldown();
-                setTestStatus(t('monitor.test.cooldownDone', {}, '去重冷卻結束，可再次送出。'));
+                setTestStatus(t('monitor.test.cooldownDone', {}, '去重冷卻結束，可再次送出。') + suffix);
                 return;
             }
-            setTestStatus(t(key, { seconds }, duplicate ? `重複；去重保護剩 ${seconds} 秒` : `已送出；去重保護剩 ${seconds} 秒`));
+            setTestStatus(t(key, { seconds }, duplicate ? `重複；去重保護剩 ${seconds} 秒` : `已送出；去重保護剩 ${seconds} 秒`) + suffix);
         };
         render();
         if (Date.now() < until) testCooldownTimer = setInterval(render, 1000);
@@ -284,24 +310,27 @@
     function handleTestResult(result) {
         if (!result || result.testId !== pendingTestId) return;
         clearTestPending();
+        const notifyText = describeNotify(result.notify);
+        const suffix = notifyText ? ` · ${t('monitor.test.notifyLabel', {}, '通知')}：${notifyText}` : '';
         switch (result.status) {
             case 'sent':
-                startTestCooldown(result.remainingMs, false);
-                break;
             case 'duplicate':
-                startTestCooldown(result.remainingMs, true);
+                startTestCooldown(result.remainingMs, result.status === 'duplicate', notifyText);
                 break;
             case 'filtered':
-                setTestStatus(t('monitor.test.resultFiltered', {}, '被過濾，未送 socket。'));
+                setTestStatus(t('monitor.test.resultFiltered', {}, '被過濾，未送 socket。') + suffix);
                 break;
             case 'ignored':
-                setTestStatus(t('monitor.test.resultIgnored', {}, '未進入聊天統計（可能重複或未達條件）。'));
+                setTestStatus(t('monitor.test.resultIgnored', {}, '未進入聊天統計（可能重複或未達條件）。') + suffix);
                 break;
             case 'offline':
-                setTestStatus(t('monitor.test.resultOffline', {}, 'TikTok 子程序未運行，未送 socket。'));
+                setTestStatus(t('monitor.test.resultOffline', {}, 'TikTok 子程序未運行，未送 socket。') + suffix);
+                break;
+            case 'skipped':
+                setTestStatus(t('monitor.test.socketSkipped', {}, 'Socket：未選') + suffix);
                 break;
             default:
-                setTestStatus(t('monitor.test.resultUnknown', { status: result.status }, '未知結果：' + result.status));
+                setTestStatus(t('monitor.test.resultUnknown', { status: result.status }, '未知結果：' + result.status) + suffix);
         }
     }
 
@@ -316,7 +345,12 @@
             setTestStatus(t('monitor.test.invalidAvatar', {}, '頭貼需為 HTTP(S) URL。'));
             return;
         }
-        if (!window.confirm(t('monitor.test.confirmSend', {}, '會送進 /chat 並經 socket；需要 TikTok 子程序。確定？'))) return;
+        const dispatch = { socket: testSocket.checked, notify: testNotify.checked };
+        if (!dispatch.socket && !dispatch.notify) {
+            setTestStatus(t('monitor.test.targetRequired', {}, '請至少選擇 Socket 或通知。'));
+            return;
+        }
+        if (!window.confirm(t('monitor.test.confirmSend', {}, '會依勾選目標派發；通知會送到已啟用的 Bark／ntfy。確定？'))) return;
         saveTestPrefs();
         clearTestCooldown();
         const testId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -327,7 +361,7 @@
             if (!pendingTestId) return;
             clearTestPending();
             setTestStatus(t('monitor.test.resultTimeout', {}, '未收到處理結果；子程序或結果 SSE 可能中斷。'));
-        }, 5000);
+        }, dispatch.notify ? 15000 : 5000);
         try {
             let runtime = null;
             try { runtime = await fetch('/api/runtime').then(response => response.ok ? response.json() : null); } catch { /* 檢查失敗仍嘗試送出 */ }
@@ -343,7 +377,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     type: 'StreamMessage', platform: testPlatform.value || 'unknown',
-                    transport: 'userscript', isTest: true, testId,
+                    transport: 'userscript', isTest: true, testId, testDispatch: dispatch,
                     user: testUser.value.trim() || t('monitor.test.userDefault', {}, '測試使用者'),
                     message, img: avatar, observedAt: Date.now()
                 })
@@ -538,6 +572,8 @@
     testAvatar.addEventListener('input', () => { saveTestPrefs(); updateAvatarPreview(); });
     testPlatform.addEventListener('change', saveTestPrefs);
     testCategory.addEventListener('change', saveTestPrefs);
+    testSocket.addEventListener('change', saveTestPrefs);
+    testNotify.addEventListener('change', saveTestPrefs);
     testAvatarPick.addEventListener('change', () => {
         if (!testAvatarPick.value) return;
         testAvatar.value = testAvatarPick.value;

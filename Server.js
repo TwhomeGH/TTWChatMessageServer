@@ -108,10 +108,20 @@ const testResultClients = new Set();
 /** 推送測試結果給診斷 SSE；只保留最近 100 筆。 */
 function pushTestResult(payload) {
     if (!payload || typeof payload !== 'object' || typeof payload.testId !== 'string' || !payload.testId) return;
+    const notify = payload.notify && typeof payload.notify === 'object' ? payload.notify : {};
     const entry = {
         t: Date.now(), testId: payload.testId,
         status: typeof payload.status === 'string' ? payload.status : 'unknown',
-        remainingMs: Number.isFinite(payload.remainingMs) ? Math.max(0, payload.remainingMs) : 0
+        remainingMs: Number.isFinite(payload.remainingMs) ? Math.max(0, payload.remainingMs) : 0,
+        notify: {
+            status: typeof notify.status === 'string' ? notify.status : 'skipped',
+            channels: Array.isArray(notify.channels)
+                ? notify.channels.slice(0, 10).map(channel => ({
+                    name: typeof channel?.name === 'string' ? channel.name : '',
+                    ok: channel?.ok === true
+                }))
+                : []
+        }
     };
     testResults.push(entry);
     if (testResults.length > MAX_TEST_RESULTS) testResults.shift();
@@ -640,7 +650,7 @@ const server = http.createServer((req, res) => {
                     // 另記一筆 filter 事件：只進攔截率／廣告比例，不算聊天數（chat 已在上面記過）。
                     require('./TrafficRoutes.cjs').traffic.record({ ...data, type: 'filter', rule: fr.reason, ad: fr.ad === true });
                     pushLog('🚫 過濾器阻擋(/chat):', user, message, `(規則: ${fr.reason})`);
-                    if (testId) pushTestResult({ testId, status: 'filtered', remainingMs: 0 });
+                    if (testId) pushTestResult({ testId, status: 'filtered', remainingMs: 0, notify: { status: 'skipped', channels: [] } });
                     res.writeHead(200);
                     res.end("Filtered");
                     return;
@@ -655,7 +665,7 @@ const server = http.createServer((req, res) => {
                 if (!tiktokProcess) recordMessageStat(fr.modified ? fr.message : message, {
                     ...data, id: data.msgId || data.id, sentAt: data.sentAt || data.createTime, user
                 });
-                if (testId && !hadProcess) pushTestResult({ testId, status: 'offline', remainingMs: 0 });
+                if (testId && !hadProcess) pushTestResult({ testId, status: 'offline', remainingMs: 0, notify: { status: 'skipped', channels: [] } });
 
                 pushLog('📩 發送訊息:', fr.modified ? fr.user : user, fr.modified ? fr.message : message);
 

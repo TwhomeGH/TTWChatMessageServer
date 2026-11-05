@@ -21,9 +21,14 @@ export class Notifier {
      * @param {string} comment
      * @param {string} [icon]
      * @param {string} [url] 點擊後開啟的網址
+     * @returns {Promise<Array<{channel: string, ok: boolean}>>} 各通道結果；未啟用通道不列入。
      */
     async notify(title = 'Twitch', comment, icon, url) {
-        await Promise.allSettled(this.channels.map(channel => channel.send({ title, comment, icon, link: url })));
+        const settled = await Promise.allSettled(this.channels.map(channel => channel.send({ title, comment, icon, link: url })));
+        return this.channels.map((channel, index) => ({
+            channel: channel.name,
+            ok: settled[index].status === 'fulfilled' && settled[index].value === true
+        }));
     }
 }
 

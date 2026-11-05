@@ -5,6 +5,8 @@
 `MessageDedup` 除了使用者與第一行內容，可帶 opt-in `variant`。目前只有 `isTest` 測試訊息使用 `test:<頭貼 URL>`，讓同文同人但換頭貼的測試可以通過；一般訊息不帶 variant，維持原本跨路徑去重。
 
 `remaining(username, message, variant)` 回傳目前保護剩餘毫秒；測試訊息會把結果經 IPC 回主服務，並用 `testId` 對應到 `/status/stream/test-results`，因此能顯示精確的冷卻時間。重複的測試訊息不會再刷新 TTL。
+
+測試派發可分別關閉 socket／通知；`Notifier.notify` 回傳 `[{ channel, ok }]`，子程序再彙整成 `sent`／`partial`／`failed`／`nochannels`。一般聊天仍同時走 socket 與通知，不受測試選項影響。
 通訊格式維持 UTF-8 JSON，每筆以換行結尾，不需修改既有接收端協定。
 
 ## 預設限制

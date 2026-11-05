@@ -112,6 +112,28 @@ body.app-ui {
     gap: 0.5rem;
     flex-wrap: wrap;
 }
+.mon-test-targets {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    color: #cbd5e1;
+    font-size: 0.75rem;
+}
+/* 覆寫 .mon-test-grid label 的 column 排列，避免 checkbox 與文字上下分離。 */
+.mon-test-targets label {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.25rem;
+    cursor: pointer;
+}
+.mon-test-targets input {
+    width: 1rem;
+    height: 1rem;
+    accent-color: #2563eb;
+}
 .mon-test-actions button {
     padding: 0.35rem 0.7rem;
     border: 0;

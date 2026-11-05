@@ -104,7 +104,7 @@ Userscript → Server.js → TikTok.js → Socket 顯示與自動剪輯統計
 - API 與 Userscript 跨管道重複到達時，至少一邊缺少 ID，會以同平台、同使用者名稱（缺少時使用 ID）、同內容在 3 秒內出現作為備援去重。不同的已知訊息 ID 不合併。
 - 此備援規則不會單憑同內容排除同管道的無 ID 留言；其他既有內容過濾與各平台去重仍可能生效。沒有原始 ID 時，無法保證辨識所有重連重播或延遲重複。
 - `isTest` 測試訊息另外以頭貼 URL 作為 socket 去重 variant：同文同人但換頭貼會視為不同測試，同一頭貼仍會去重；一般訊息維持原本使用者／內容規則。
-- 測試訊息可帶 `testId`；`/chat` 與子程序會把 `sent`／`duplicate`／`filtered`／`ignored`／`offline` 及剩餘去重時間經 `/status/stream/test-results` 回報。這只供診斷，不寫入正式訊息歷史，也不代表平台已顯示。
+- 測試訊息可帶 `testId` 與 `testDispatch: { socket, notify }`；`/chat` 與子程序會把 `sent`／`duplicate`／`filtered`／`ignored`／`offline`、剩餘去重時間及每個通知通道結果經 `/status/stream/test-results` 回報。`notify` 預設關閉，需明確勾選；這只供診斷，不寫入正式訊息歷史，也不代表平台已顯示。
 - 不要把重連時重新讀到的舊訊息填成新的平台發送時間。`observedAt` 可以更新，但不能拿來冒充 `sentAt`。
 - 自動剪輯還會檢查時間窗口、洗頻限制、最低留言量、發言人數、暖機及冷卻。未知來源也適用；所有平台提供熱度，實際剪輯畫面仍取自 Twitch。
 

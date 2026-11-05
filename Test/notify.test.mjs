@@ -82,7 +82,8 @@ test('Notifier 扇出到所有已啟用通道；單一通道失敗不影響其�
         new NtfyChannel({ url: 'https://ntfy.sh/topic', axios: boom, logger })
     ]);
     assert.deepEqual(notifier.enabled, ['bark', 'ntfy']);
-    await notifier.notify('T', 'hello');
+    const results = await notifier.notify('T', 'hello');
+    assert.deepEqual(results, [{ channel: 'bark', ok: true }, { channel: 'ntfy', ok: false }]);
     assert.equal(barkAxios.calls.length, 1);
 });
 
