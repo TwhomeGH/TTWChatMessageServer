@@ -70,7 +70,13 @@ function isTikTokLivePage(value) {
 function createController(config = browserConfig(), deps = {}) {
     const request = deps.fetch || fetch;
     const spawnBrowser = deps.spawn || spawn;
+    const connectBrowser = deps.connect || (async options => {
+        const { default: puppeteer } = await import('puppeteer-core');
+        return puppeteer.connect(options);
+    });
     let launching = null;
+    let watcher = null;
+    let watchTimer = null;
     async function cdp(route, method = 'GET') {
         const response = await request(config.browserURL + route, {
             method, signal: AbortSignal.timeout(3000), redirect: 'error'
@@ -80,6 +86,74 @@ function createController(config = browserConfig(), deps = {}) {
     }
     async function tabs() {
         return (await (await cdp('/json/list')).json()).filter(tab => tab.type === 'page');
+    }
+    /** 清除過期的 TikTok WAF token；只動 cookie，不導航、不影響登入。 */
+    async function clearWafToken() {
+        try {
+            const { clearTikTokWafToken } = await import('./waf.mjs');
+            await clearTikTokWafToken(config.browserURL, connectBrowser);
+        } catch (error) {
+            console.warn('[Browser] 清除 TikTok WAF token 失敗:', error?.message || error);
+        }
+    }
+
+    /**
+     * 監看專用瀏覽器：任何 TikTok 文件層 403（包含使用者手動點擊）都清一次
+     * WAF token 並重新載入該分頁。每個分頁 10 分鐘最多修一次，避免重試風暴。
+     */
+    function startWatching() {
+        if (watcher) return;
+        watcher = (async () => {
+            const client = await connectBrowser({ browserURL: config.browserURL, defaultViewport: null, protocolTimeout: 5000 });
+            const seen = new WeakSet();
+            const lastByPage = new WeakMap();
+
+            const recover = async (page, response) => {
+                try {
+                    if (response.request().resourceType() !== 'document') return;
+                    if (response.status() !== 403) return;
+                    const url = response.url();
+                    if (!/^https:\/\/([^/]+\.)?tiktok\.com\//.test(url)) return;
+                    const frame = response.frame?.();
+                    if (frame && frame !== page.mainFrame()) return;
+                    const now = Date.now();
+                    if (now - (lastByPage.get(page) || 0) < 10 * 60000) return;
+                    lastByPage.set(page, now);
+                    console.warn('[Browser] TikTok 403，清除 WAF token 後重新載入:', new URL(url).pathname);
+                    const { deleteTikTokWafCookie } = await import('./waf.mjs');
+                    await deleteTikTokWafCookie(page);
+                    if (!page.isClosed?.()) {
+                        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+                    }
+                } catch (error) {
+                    console.warn('[Browser] TikTok 403 自動修復失敗:', error?.message || error);
+                }
+            };
+
+            const attach = page => {
+                if (!page || seen.has(page)) return;
+                seen.add(page);
+                page.on('response', response => { void recover(page, response); });
+            };
+
+            for (const page of await client.pages()) attach(page);
+            client.on('targetcreated', async target => {
+                if (target.type() !== 'page') return;
+                try { attach(await target.page()); } catch { /* 分頁可能已關閉 */ }
+            });
+            client.on('disconnected', () => {
+                if (watchTimer) clearInterval(watchTimer);
+                watchTimer = null;
+                watcher = null;
+            });
+            if (config.wafCleanMin > 0) {
+                watchTimer = setInterval(() => { void clearWafToken(); }, config.wafCleanMin * 60000);
+                watchTimer.unref?.();
+            }
+        })().catch(error => {
+            watcher = null;
+            console.warn('[Browser] TikTok 403 監看啟動失敗:', error?.message || error);
+        });
     }
     async function status() {
         try {
@@ -94,7 +168,11 @@ function createController(config = browserConfig(), deps = {}) {
         }
     }
     async function start() {
-        if ((await status()).connected) return;
+        if ((await status()).connected) {
+            await clearWafToken();
+            startWatching();
+            return;
+        }
         if (launching) return launching;
         launching = (async () => {
             const executable = (deps.findBrowser || findBrowser)(config);
@@ -108,7 +186,12 @@ function createController(config = browserConfig(), deps = {}) {
             const deadline = Date.now() + 15000;
             while (Date.now() < deadline) {
                 if (failure) throw failure;
-                if ((await status()).connected) return;
+                if ((await status()).connected) {
+                    // 啟動時先清掉上次殘留的 WAF token，讓第一次開 live 不會被 403。
+                    await clearWafToken();
+                    startWatching();
+                    return;
+                }
                 await new Promise(resolve => setTimeout(resolve, 250));
             }
             throw Object.assign(new Error('瀏覽器未就緒，請確認 profile 未被其他程序鎖定及偵錯埠設定'), { code: 'BROWSER_START_TIMEOUT' });
@@ -122,11 +205,7 @@ function createController(config = browserConfig(), deps = {}) {
         if (tab) {
             // 先啟用分頁，再還原最小化視窗；顯示操作由使用者按鈕明確觸發。
             await cdp('/json/activate/' + encodeURIComponent(tab.id));
-            const connect = deps.connect || (async options => {
-                const { default: puppeteer } = await import('puppeteer-core');
-                return puppeteer.connect(options);
-            });
-            const client = await connect({ browserURL: config.browserURL, defaultViewport: null, protocolTimeout: 5000 });
+            const client = await connectBrowser({ browserURL: config.browserURL, defaultViewport: null, protocolTimeout: 5000 });
             try {
                 const session = await client.target().createCDPSession();
                 const { windowId } = await session.send('Browser.getWindowForTarget', { targetId: tab.id });
@@ -141,6 +220,8 @@ function createController(config = browserConfig(), deps = {}) {
     async function openTikTokLive(handle) {
         const targetUrl = tiktokLiveUrl(handle);
         await start();
+        // 每次開 live 前先清掉舊 token；這是本機 cookie 操作，不會多發 TikTok 請求。
+        await clearWafToken();
         const pages = await tabs();
         const target = pages.find(page => page.url === targetUrl);
         if (target) {
@@ -157,6 +238,6 @@ function createController(config = browserConfig(), deps = {}) {
         return { id: created?.id || '', url: targetUrl, reused: false };
     }
 
-    return { status, start, show, openTikTokLive };
+    return { status, start, show, watch: startWatching, openTikTokLive };
 }
 module.exports = { createController, launchArgs, findBrowser, tiktokLiveUrl };

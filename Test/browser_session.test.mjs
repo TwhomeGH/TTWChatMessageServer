@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import { BrowserSession } from '../ScriptLib/browser/session.mjs';
+import { clearTikTokWafToken } from '../ScriptLib/browser/waf.mjs';
 import configModule from '../ScriptLib/browser/config.cjs';
 import controllerModule from '../ScriptLib/browser/controller.cjs';
 import routes from '../ScriptLib/browser/routes.cjs';
@@ -59,6 +60,84 @@ test('只允許本機偵錯端點，專用 profile 與啟動參數不關閉 sand
     const args = controllerModule.launchArgs(config);
     assert.ok(args.includes('--user-data-dir=' + config.profile));
     assert.equal(args.some(arg => arg.includes('headless') || arg.includes('no-sandbox')), false);
+});
+
+test('清除 TikTok WAF token 只刪 _waftokenid，不動登入 cookie', async () => {
+    const deleted = [];
+    let disconnected = false;
+    let closed = false;
+    let created = 0;
+    const page = {
+        url: () => 'https://www.tiktok.com/',
+        createCDPSession: async () => ({
+            send: async (method, params) => {
+                if (method === 'Network.deleteCookies') deleted.push(params);
+            },
+            detach: async () => {}
+        }),
+        close: async () => { closed = true; }
+    };
+    const client = {
+        pages: async () => [page],
+        newPage: async () => { created += 1; return page; },
+        disconnect: async () => { disconnected = true; }
+    };
+    assert.equal(await clearTikTokWafToken('http://127.0.0.1:9222', async () => client), true);
+    assert.deepEqual(deleted.map(item => item.domain), ['.tiktok.com', 'www.tiktok.com']);
+    assert.equal(deleted.every(item => item.name === '_waftokenid' && item.path === '/'), true);
+    assert.equal(created, 0);
+    assert.equal(closed, false);
+    assert.equal(disconnected, true);
+});
+
+test('TikTok 403 監看會清 WAF token、重新載入，且同一分頁不重複重試', async () => {
+    const deleted = [];
+    const navigations = [];
+    const frame = {};
+    const page = new EventEmitter();
+    Object.assign(page, {
+        url: () => 'https://www.tiktok.com/@user/live',
+        mainFrame: () => frame,
+        isClosed: () => false,
+        createCDPSession: async () => ({
+            send: async (method, params) => {
+                if (method === 'Network.deleteCookies') deleted.push(params);
+            },
+            detach: async () => {}
+        }),
+        goto: async url => { navigations.push(url); }
+    });
+    const client = new EventEmitter();
+    Object.assign(client, {
+        pages: async () => [page],
+        disconnect: async () => {}
+    });
+    const controller = controllerModule.createController({ browserURL: 'http://127.0.0.1:9222', wafCleanMin: 0 }, {
+        connect: async () => client,
+        fetch: async () => ({ ok: true, json: async () => [] })
+    });
+    controller.watch();
+    await new Promise(resolve => setImmediate(resolve));
+    page.emit('response', {
+        request: () => ({ resourceType: () => 'document' }),
+        status: () => 403,
+        url: () => 'https://www.tiktok.com/@user/live',
+        frame: () => frame
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(deleted.map(item => item.name), ['_waftokenid', '_waftokenid']);
+    assert.deepEqual(navigations, ['https://www.tiktok.com/@user/live']);
+
+    page.emit('response', {
+        request: () => ({ resourceType: () => 'document' }),
+        status: () => 403,
+        url: () => 'https://www.tiktok.com/@user/live',
+        frame: () => frame
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(navigations.length, 1);
+    client.emit('disconnected');
 });
 
 test('TikTok 直播頁只接受 tiktok.com，並支援 @handle 或頻道 URL', () => {

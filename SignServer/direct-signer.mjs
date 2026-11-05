@@ -3,6 +3,7 @@
  * Uses byted_acrawler.frontierSign() — TikTok SDK's new signing API.
  */
 import { BrowserSession } from '../ScriptLib/browser/session.mjs';
+import { deleteTikTokWafCookie } from '../ScriptLib/browser/waf.mjs';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -33,6 +34,28 @@ let wsPage = null;
 let livePage = null;
 let liveWsReady = false;
 let ready = false;
+/** 導航前先清掉 WAF token；只動 cookie，不影響登入，也不額外發 TikTok 請求。 */
+async function gotoTikTok(target, url, options) {
+    try {
+        await deleteTikTokWafCookie(target);
+    } catch (error) {
+        console.warn('[DirectSigner] 清除 WAF token 失敗:', error?.message || error);
+    }
+    let status = null;
+    const listener = response => {
+        if (response.request().resourceType() === 'document'
+            && response.url().startsWith('https://www.tiktok.com/')) status = response.status();
+    };
+    target.on('response', listener);
+    try {
+        await target.goto(url, options);
+    } catch (error) {
+        if (status !== 403) throw error;
+    } finally {
+        target.off('response', listener);
+    }
+    return status;
+}
 
 /** 連線失敗冷卻 10 秒，避免收訊重試大量建立控制連線。 */
 export async function initDirectSigner() {
@@ -65,7 +88,7 @@ async function initialize() {
 
     console.log('[DirectSigner] Navigating to TikTok...');
     try {
-        await page.goto('https://www.tiktok.com/', {
+        await gotoTikTok(page, 'https://www.tiktok.com/', {
             waitUntil: 'domcontentloaded',
             timeout: 60000,
         });
@@ -225,7 +248,7 @@ export async function signWebSocketForUser(username, timeoutMs = 20000) {
     const liveUrl = `https://www.tiktok.com/@${username}/live`;
     console.log(`[DirectSigner] Navigating to ${liveUrl}...`);
     try {
-        await wsPage.goto(liveUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await gotoTikTok(wsPage, liveUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
     } catch (e) {
         console.log(`[DirectSigner] Navigation warning: ${e.message}`);
     }
@@ -452,7 +475,7 @@ export async function browserFetchSigned(params) {
         }
         fetchPage = await session.newPage();
         await setTikTokCookies(fetchPage);
-        await fetchPage.goto('https://www.tiktok.com/', { waitUntil: 'networkidle0', timeout: 30000 }).catch(() => {});
+        await gotoTikTok(fetchPage, 'https://www.tiktok.com/', { waitUntil: 'networkidle0', timeout: 30000 }).catch(() => {});
         fetchPageCreated = now;
         console.log('[DirectSigner] Fetch page ready');
     }

@@ -26,6 +26,20 @@ Windows profile 固定保存在 LOCALAPPDATA/TTWChatMessageServer/browser-profil
 控制台沿用主服務的監聽位址與登入驗證，寫入操作另驗證相同 Origin。瀏覽器 CDP 仍只限本機。CDP 可控制已登入瀏覽器，不要轉發偵錯埠到網際網路或區網。
 若自行提供 CDP 瀏覽器，控制台顯示的 profile 路徑是啟動器設定，不能證明外部程序實際使用的資料夾。
 
+## TikTok 403 與 WAF token
+
+TikTok 的 `_waftokenid` 是 WAF token，不是登入 cookie。長時間閒置或切換網路後，live 頁可能在文件層直接回 403；因為頁面沒有成功載入，TikTok 的 JS 沒有機會自行刷新 token，瀏覽器就卡在錯誤頁。
+
+處理方式（不影響 `sessionid`／`sid_tt`，也不需要重新登入）：
+
+- 專用瀏覽器啟動時清除一次 `_waftokenid`。
+- 每次開啟 TikTok 直播分頁前再清除一次；這是本機 cookie 操作，不會額外發送 TikTok 請求。
+- 簽名器的每次 TikTok 導航（首頁、live、fetch 頁）都先清除再導航，不等待 403。
+- 使用者手動點擊無法在 Chrome 送出請求前攔截；背景監看會在文件層 403 時清除並重新載入該分頁，每個分頁 10 分鐘最多一次。另有每 6 小時一次的主動清理（`BROWSER_WAF_CLEAN_MIN`，0 可停用）。
+- 清除後由下一次成功的 TikTok 頁面重新產生 token。
+
+模組：`ScriptLib/browser/waf.mjs`；由 `controller.cjs` 與 `SignServer/direct-signer.mjs` 共用。`BROWSER_WAF_CLEAN_MIN` 預設 360 分鐘。
+
 ## TikTok 聊天來源（無 EulerStream 時）
 
 `TIKTOK_CHAT_SOURCE` 控制聊天從哪裡來：
@@ -46,7 +60,7 @@ Windows profile 固定保存在 LOCALAPPDATA/TTWChatMessageServer/browser-profil
 ## 生命週期與模組
 
 - ScriptLib/browser/config.cjs：本機端點及專用 profile。
-- controller.cjs：尋找瀏覽器、啟動可見視窗、分頁摘要及視窗還原。
+- controller.cjs：尋找瀏覽器、啟動可見視窗、分頁摘要、視窗還原及 WAF token 清理。
 - routes.cjs：本機管理 HTTP 入口。
 - session.mjs：合併連線請求、追蹤自有分頁、關閉時斷線。
 - BrowserRoutes.cjs、OtherTool/browser/index.html：主服務 /browser 控制台。

@@ -9,11 +9,14 @@ function browserConfig(env = process.env) {
         throw new Error('BROWSER_DEBUG_URL 必須是本機 HTTP 位址，例如 http://127.0.0.1:9222');
     }
     const dataRoot = env.LOCALAPPDATA || path.join(os.homedir(), '.local', 'share');
+    const wafCleanMin = Number(env.BROWSER_WAF_CLEAN_MIN);
     return {
         browserURL: url.origin,
         port: Number(url.port || 80),
         profile: path.join(dataRoot, 'TTWChatMessageServer', 'browser-profile'),
-        executable: env.BROWSER_EXECUTABLE || ''
+        executable: env.BROWSER_EXECUTABLE || '',
+        // 背景清理 WAF token 的間隔；0 表示只在啟動／開 live／403 時清。
+        wafCleanMin: Number.isFinite(wafCleanMin) && wafCleanMin >= 0 ? wafCleanMin : 360
     };
 }
 module.exports = { browserConfig };

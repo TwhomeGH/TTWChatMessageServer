@@ -1,5 +1,36 @@
 # ChangeHistory
 
+## 2026.11.05 23:34 專用瀏覽器 TikTok live 403 修復
+
+**類型**: 修復 · **檔案**: `ScriptLib/browser/waf.mjs`、`ScriptLib/browser/controller.cjs`、`SignServer/direct-signer.mjs`、`Test/browser_session.test.mjs`、`Docs/BROWSER.md`
+
+### 問題 - 專用瀏覽器開 TikTok live 得到 403
+
+專用 profile 開 `https://www.tiktok.com/` 正常，但開 `https://www.tiktok.com/@handle/live` 在文件層回 403；同一個 live 頁在無痕 context 是 200。把 profile cookies 複製到無痕可重現 403；逐一排除後，只刪除 `_waftokenid` 就恢復 200，其他單一 cookie（msToken、ttwid、s_v_web_id、odin_tt 等）仍 403。登入 session cookies 不帶路由 cookie 時也是 200。
+
+原因是長時間閒置後 `_waftokenid`（WAF token）失效。403 發生在頁面載入前，TikTok 的 JS 沒有機會自行刷新，瀏覽器就卡在錯誤頁。
+
+### 修改
+
+- 新增 `ScriptLib/browser/waf.mjs`：只刪除 `.tiktok.com`／`www.tiktok.com` 的 `_waftokenid`，不動 `sessionid`、`sid_tt` 等登入 cookie。
+- 專用瀏覽器啟動時清除一次；每次開 live 前再清除一次。這是本機 cookie 操作，不會多發 TikTok 請求。
+- `SignServer/direct-signer.mjs` 的每次 TikTok 導航都先清除再導航，不等待 403。
+- 背景監看手動開啟的分頁：文件層 403 時清除並重新載入，每個分頁 10 分鐘最多一次；另有每 6 小時一次主動清理（`BROWSER_WAF_CLEAN_MIN`）。
+- 清除後由下一次成功的 TikTok 頁面重新產生 token。
+
+### 限制
+
+- 只處理 WAF token；若 403 來自帳號、IP 或平台限制，清除 cookie 不會修復。
+- 手動點擊建立的分頁仍可能在請求送出後才被偵測到 403；背景監看會清除後重載該分頁，但無法保證完全不出現一瞬間的錯誤頁。
+
+### 驗證
+
+- 以 cookie 分組比對定位 `_waftokenid`；無痕 context 與只帶登入 cookie 皆為 200。
+- 新增 `clearTikTokWafToken()` 單元測試：只刪 `_waftokenid`、不動登入 cookie、正確斷線。
+- 未再大量導航 TikTok；後續以單元測試與實機開啟 live 驗證。
+
+---
+
 ## 2026.11.05 05:37 AutoClip 歷史 UI 冒煙測試
 
 **類型**: 測試 · **檔案**: `Test/autoclip_history_ui.cjs`、`assets/autoclip.js`、`Docs/TEST_FILES_REFERENCE.md`
