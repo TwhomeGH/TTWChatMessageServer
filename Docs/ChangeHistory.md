@@ -1,6 +1,36 @@
 # ChangeHistory
 
-## 2026.11.06 03:31 GitHub Pages 取消殘留的進行中部署
+## 2026.11.06 03:37 修正 Pages timeout 上限與殘留部署清理
+
+**類型**: CI · **檔案**: `.github/workflows/pages.yml`
+
+### 問題
+
+- `deploy-pages@v5` 的 `timeout` 上限是 **600000ms（10 分鐘）**；先前設定 20 分鐘會被 clamp，並在 log 產生 warning。
+- 先前的 preflight 用 Pages deployment status 查詢；在 `7e8f988` 的案例中步驟雖成功，但沒有取消，deploy 仍收到 400。Pages 狀態 API 不一定反映後端仍持有的 lock。
+
+### 修改
+
+- 移除超過上限的 `timeout`，保留 `error_count: 20` 與 `reporting_interval: 10000`。
+- preflight 改為列出 `github-pages` environment 的 Actions deployments，讀取每個 deployment 的最新狀態。
+- 只挑戰/取消狀態不是 `success` 或 `inactive` 的舊 deployment（包含 failure／in_progress）：
+  `POST /repos/{owner}/{repo}/pages/deployments/{sha}/cancel`。
+- 每一步都記錄 SHA 與狀態；任何錯誤只記錄，不阻擋 deploy。
+
+### 限制
+
+- 只檢查最近 20 個 `github-pages` deployments；更舊的殘留仍需手動取消。
+- 若 GitHub Pages 後端把 lock 掛在沒有對應 deployment 的狀態，仍可能需要 GitHub Support。
+- 目前這筆修正尚未在 Pages 上完成實機驗證；下一個 push 會直接測試 preflight。
+
+### 驗證
+
+- YAML 解析確認 preflight 在 `deploy-pages` 前，且沒有超過上限的 timeout。
+- 下一個 pages run 會先嘗試取消 `7e8f988` 等非 success 的殘留 deployment。
+
+---
+
+## 2026.11.06 03:31 GitHub Pages 取消殘留的進行中部署（初版）
 
 **類型**: CI · **檔案**: `.github/workflows/pages.yml`
 
@@ -29,7 +59,7 @@
 
 ---
 
-## 2026.11.06 03:23 GitHub Pages deploy timeout 延長至 20 分鐘
+## 2026.11.06 03:23 GitHub Pages deploy timeout 調整（上限 10 分鐘）
 
 **類型**: CI · **檔案**: `.github/workflows/pages.yml`
 
@@ -39,7 +69,7 @@
 
 ### 修改
 
-- deploy 步驟 timeout 改為 20 分鐘（`1200000ms`）。
+- 嘗試將 deploy timeout 設為 20 分鐘；`deploy-pages@v5` 上限為 600000ms，實際會被 clamp（後續修正見 03:37）。
 - `error_count` 20、`reporting_interval` 10 秒，降低輪詢錯誤與 log 噪音。
 - 保留既有 workflow-level `concurrency: pages`／`cancel-in-progress: true`；新 push 仍會取消舊的 pages run。
 
