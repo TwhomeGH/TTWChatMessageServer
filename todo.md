@@ -14,6 +14,15 @@
 - [ ] WAF 修正後重啟主服務的實機驗證。
 - [ ] 集中式 endpoint 設定頁（可選；目前每個腳本各自設定）。
 
+## 表情映射後續（2026-11-06）
+
+- [x] Phase 1：`emoji_map.json` 只讀預設；`emoji_map_local.json` 支援 `url`／`enabled`、停用預設、恢復預設、自訂刪除與管理頁開關。
+- [ ] Phase 2：data URI 可選來源。允許 `data:image/(png|jpeg|gif|webp);base64,...`、大小上限、拒絕 SVG；管理頁預覽與 `/emoji/image` 解碼。
+- [ ] Phase 3：接收端 capability。`replaceEmojis` 依 target 決定是否輸出 data URI；不支援的聊天／通知保留原始代碼，不送 base64。
+- [ ] 實機驗證：停用／恢復預設、重啟後 local 保留、預設更新穿透、管理頁在真實資料下的操作。
+- [ ] 決定預設檔是否統一成 v2（目前 hybrid；非必要）。
+- [ ] data URI 的訊息長度限制與各平台／通知實際支援矩陣。
+
 ## 第一階段：使用者自行掛載
 
 - [x] 新增 Restream UserScript，觀察官方監控連結、自動開新分頁，提供暫停與手動重開。
