@@ -1,11 +1,15 @@
 // ==UserScript==
 // @name         TikTok Socket Test Button
 // @namespace    pip-chat-test
-// @version      1.5
+// @version      1.6
 // @description  Manual test button for local socket bridge (SPA safe)
 // @match        https://livecenter.tiktok.com/*
 // @match        https://*.bing.com/*
 // @grant        GM_xmlhttpRequest
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_registerMenuCommand
+// @connect      *
 
 
 // @updateURL    https://raw.githubusercontent.com/TwhomeGH/TTWChatMessageServer/main/UserScript/TestCenter.user.js
@@ -16,8 +20,43 @@
 (function () {
     'use strict';
 
-    const HTTP_HOST = "192.168.0.102";
-    const HTTP_PORT = 3332;
+    const ENDPOINT_KEY = 'ttw-main-endpoint';
+    const DEFAULT_ENDPOINT = 'http://127.0.0.1:3332';
+
+    function normalizeEndpoint(value) {
+        let raw = String(value || '').trim();
+        if (!raw || raw.length > 500) return null;
+        if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) raw = 'http://' + raw;
+        let url;
+        try { url = new URL(raw); } catch { return null; }
+        if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) return null;
+        if (url.username || url.password || url.search || url.hash) return null;
+        const path = url.pathname.replace(/\/+$/, '');
+        return url.origin + (path && path !== '/' ? path : '');
+    }
+
+    function ttwEndpoint() {
+        try {
+            return normalizeEndpoint(GM_getValue(ENDPOINT_KEY, DEFAULT_ENDPOINT)) || DEFAULT_ENDPOINT;
+        } catch { return DEFAULT_ENDPOINT; }
+    }
+
+    function saveEndpoint(value) {
+        const normalized = normalizeEndpoint(value);
+        if (!normalized) return null;
+        try { GM_setValue(ENDPOINT_KEY, normalized); } catch { /* ignore */ }
+        return normalized;
+    }
+
+    function changeEndpoint() {
+        const value = window.prompt('TTW 主服務位址', ttwEndpoint());
+        if (value === null) return;
+        const saved = saveEndpoint(value);
+        if (!saved) { window.alert('格式無效：請輸入 http://host:port 或 host:port'); return; }
+        window.alert('已儲存：' + saved);
+    }
+    if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('設定 TTW 主服務位址', changeEndpoint);
+
     const BUTTON_ID = "socketTestBtn";
 
     function sendTestMessage() {
@@ -32,7 +71,7 @@
             userList: ['肉鬆', '松鼠', '瓜瓜'] // 模擬頭號觀眾名字列表
         };
 
-        const sendURL = `http://${HTTP_HOST}:${HTTP_PORT}/chat`;
+        const sendURL = `${ttwEndpoint()}/chat`;
 
         console.log("📤 發送測試訊息:", payload);
 

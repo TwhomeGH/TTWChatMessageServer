@@ -28,6 +28,8 @@ window.GM_getValue = (key, fallback) => key === 'ttw-restream-monitor-pause-prev
     : (key in store ? store[key] : fallback);
 window.GM_setValue = (key, value) => { store[key] = value; };
 window.GM_openInTab = () => ({ closed: false });
+window.GM_registerMenuCommand = () => {};
+window.GM_xmlhttpRequest = () => {};
 </script>
 <script src="/userscript.js"></script>
 </body></html>`;

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat → Socket Bridge
 // @namespace    pip-chat-bridge
-// @version      1.18
+// @version      1.19
 // @description  Listen TikTok live chat and forward to socket server
 // @author       Nuclear0709
 // @match        https://livecenter.tiktok.com/*
@@ -10,6 +10,8 @@
 // @grant GM_xmlhttpRequest
 // @grant GM_getValue
 // @grant GM_setValue
+// @grant GM_registerMenuCommand
+// @connect *
 
 
 // @updateURL    https://raw.githubusercontent.com/TwhomeGH/TTWChatMessageServer/main/UserScript/liveCenter.user.js
@@ -22,10 +24,46 @@
 
     
     /**********************
-     * 🔌 Socket 設定
+     * 🔌 主服務位址
      **********************/
-    const HTTP_HOST = "127.0.0.1";
-    const HTTP_PORT = 3332;
+    const ENDPOINT_KEY = 'ttw-main-endpoint';
+    const DEFAULT_ENDPOINT = 'http://127.0.0.1:3332';
+
+    /** 正規化主服務位址；保留可選路徑前綴，拒絕帳密、query 與 hash。 */
+    function normalizeEndpoint(value) {
+        let raw = String(value || '').trim();
+        if (!raw || raw.length > 500) return null;
+        if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) raw = 'http://' + raw;
+        let url;
+        try { url = new URL(raw); } catch { return null; }
+        if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) return null;
+        if (url.username || url.password || url.search || url.hash) return null;
+        const path = url.pathname.replace(/\/+$/, '');
+        return url.origin + (path && path !== '/' ? path : '');
+    }
+
+    /** 每次呼叫都重新讀取，修改設定不必重新載入頁面。 */
+    function ttwEndpoint() {
+        try {
+            return normalizeEndpoint(GM_getValue(ENDPOINT_KEY, DEFAULT_ENDPOINT)) || DEFAULT_ENDPOINT;
+        } catch { return DEFAULT_ENDPOINT; }
+    }
+
+    function saveEndpoint(value) {
+        const normalized = normalizeEndpoint(value);
+        if (!normalized) return null;
+        try { GM_setValue(ENDPOINT_KEY, normalized); } catch { /* ignore */ }
+        return normalized;
+    }
+
+    function changeEndpoint() {
+        const value = window.prompt('TTW 主服務位址', ttwEndpoint());
+        if (value === null) return;
+        const saved = saveEndpoint(value);
+        if (!saved) { window.alert('格式無效：請輸入 http://host:port 或 host:port'); return; }
+        window.alert('已儲存：' + saved);
+    }
+    if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('設定 TTW 主服務位址', changeEndpoint);
 
     // 主播識別：live_monitor 頁面沒有可靠的帳號來源，讓使用者明確填寫；
     // 空值時不猜測，人流會留在「未分類」而不是被錯歸到別人身上。
@@ -66,7 +104,7 @@ let hydrateUntil = 0;
 
 function sendAudienceUpdate(userNum, userList) {
     const payload = { type: 'audience', platform: 'TikTok', transport: 'userscript', broadcasterId: broadcasterId(), audienceKind: 'top-fans', userNum, userList };
-    const sendURL = `http://${HTTP_HOST}:${HTTP_PORT}/chat`;
+    const sendURL = `${ttwEndpoint()}/chat`;
     GM_xmlhttpRequest({
         method: "POST", url: sendURL, data: JSON.stringify(payload),
         headers: { "Content-Type": "application/json" },
@@ -104,7 +142,7 @@ function sendMetrics() {
     if (Object.values(metrics).every(value => value === null)) return;
     GM_xmlhttpRequest({
         method: "POST",
-        url: `http://${HTTP_HOST}:${HTTP_PORT}/chat`,
+        url: `${ttwEndpoint()}/chat`,
         data: JSON.stringify({ type: 'metrics', platform: 'TikTok', transport: 'userscript', broadcasterId: broadcasterId(), observedAt: Date.now(), ...metrics }),
         headers: { "Content-Type": "application/json" },
         onerror: () => { /* ignore */ }
@@ -130,8 +168,7 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 
         return;
     }
 
-    const sendURL = `http://${HTTP_HOST}:${HTTP_PORT}/chat`
-
+    const sendURL = `${ttwEndpoint()}/chat`
     console.log("sendTo",sendURL)
 
     GM_xmlhttpRequest({
@@ -308,14 +345,33 @@ function getTopFanUsers() {
         GM_setValue(BROADCASTER_KEY, broadcasterName);
     };
     accountLabel.append(document.createTextNode('主播帳號（選填） '), accountInput);
+    const endpointLabel = document.createElement('label');
+    const endpointInput = document.createElement('input');
+    endpointInput.type = 'text';
+    endpointInput.value = ttwEndpoint();
+    endpointInput.placeholder = DEFAULT_ENDPOINT;
+    endpointInput.setAttribute('aria-label', 'TTW 主服務位址');
+    endpointInput.onchange = () => {
+        const saved = saveEndpoint(endpointInput.value);
+        if (!saved) {
+            endpointInput.value = ttwEndpoint();
+            endpointStatus.textContent = '主服務位址格式無效';
+            return;
+        }
+        endpointInput.value = saved;
+        endpointStatus.textContent = '已儲存主服務位址';
+    };
+    endpointLabel.append(document.createTextNode('主服務位址 '), endpointInput);
+    const endpointStatus = document.createElement('small');
     const actions = document.createElement('div'); actions.className = 'actions';
+    const testEndpointBtn = document.createElement('button'); testEndpointBtn.type = 'button'; testEndpointBtn.textContent = '測試主服務';
     const autoBtn = document.createElement('button'); autoBtn.type = 'button'; autoBtn.textContent = '恢復自動';
     const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = '重設位置';
     const note = document.createElement('small');
-    note.textContent = '僅官方 live_monitor 頁面會自動啟動；其他頁面（如回放）預設不觀察，可用上方開關強制啟用。';
+    note.textContent = '僅官方 live_monitor 頁面會自動啟動；其他頁面（如回放）預設不觀察，可用上方開關強制啟用。主服務位址也可從腳本管理器選單修改。';
     header.append(title, collapse);
-    actions.append(autoBtn, reset);
-    body.append(status, label, accountLabel, actions, note);
+    actions.append(testEndpointBtn, autoBtn, reset);
+    body.append(status, label, accountLabel, endpointLabel, actions, endpointStatus, note);
     panel.append(header, badge, body);
     style.textContent += 'header{display:flex;align-items:center;gap:8px}header strong{flex:1;cursor:grab;touch-action:none;user-select:none;font-size:13px}header strong:active{cursor:grabbing}header button{background:#1b2940;padding:3px 8px}button:focus-visible,strong:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}.badge{display:block;color:#93c5fd;font-size:12px;margin-top:4px}.actions{display:flex;gap:8px;margin:8px 0}.actions button{font-size:12px}.actions button:last-child{background:#334155}[hidden]{display:none!important}section{box-sizing:border-box;width:280px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto}';
     root.append(style, panel);
@@ -425,7 +481,19 @@ function getTopFanUsers() {
         renderPanel();
     }
 
+    function testEndpoint(target) {
+        target.textContent = '測試中…';
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url: `${ttwEndpoint()}/ping`,
+            timeout: 5000,
+            onload: res => { target.textContent = res.status === 200 ? '主服務連線正常' : '主服務回應 HTTP ' + res.status; },
+            onerror: () => { target.textContent = '主服務連線失敗'; },
+            ontimeout: () => { target.textContent = '主服務連線逾時'; }
+        });
+    }
     toggle.onchange = () => { preference = toggle.checked; GM_setValue(PREF_KEY, preference); apply(); };
+    testEndpointBtn.onclick = () => testEndpoint(endpointStatus);
     autoBtn.onclick = () => { preference = null; GM_setValue(PREF_KEY, 'auto'); apply(); };
 
     // SPA 換頁時重新判定；僅在自動模式下需要檢查網址。

@@ -36,7 +36,8 @@ export default defineConfig([
     languageOptions: {
       sourceType: "script",
       globals: { ...globals.browser, GM_getValue: "readonly", GM_setValue: "readonly",
-        GM_openInTab: "readonly", GM_xmlhttpRequest: "readonly", GM_addStyle: "readonly" },
+        GM_openInTab: "readonly", GM_xmlhttpRequest: "readonly", GM_addStyle: "readonly",
+        GM_registerMenuCommand: "readonly" },
     },
   },
 ]);

@@ -15,6 +15,7 @@ function contextFor(file, start, end, source = fs.readFileSync(new URL('../UserS
         // 主播歸屬：TikTokChat 由頁面 handle 取得，liveCenter／YouTube 由使用者設定取得。
         currentHandle: () => 'target_handle', broadcasterId: () => 'anchor_id',
         state: { enabled: true, broadcaster: 'yt_channel' }, SERVER_URL: 'http://localhost',
+        ttwEndpoint: () => 'http://localhost',
         GM_xmlhttpRequest: request => sent.push(JSON.parse(request.data)) });
     const a = source.indexOf(start), b = source.indexOf(end, a);
     assert.ok(a >= 0, file + ': 找不到起始標記 ' + start);
@@ -35,6 +36,31 @@ test('TikTok and Live Center bridges preserve real metadata and identify their p
         }
     }
 });
+test('所有轉接腳本都提供主服務位址設定入口', () => {
+    for (const file of ['TikTokChat.user.js', 'liveCenter.user.js', 'restream-monitor.user.js',
+        'ws-relay.user.js', 'youtube-chat-userscript.user.js', 'TestCenter.user.js']) {
+        const source = fs.readFileSync(new URL('../UserScript/' + file, import.meta.url), 'utf8');
+        assert.match(source, /ttw-main-endpoint/, file);
+        assert.match(source, /GM_registerMenuCommand/, file);
+        assert.match(source, /@connect\s+\*/, file);
+    }
+});
+
+test('userscript 主服務位址正規化與拒絕不安全格式', () => {
+    const source = fs.readFileSync(new URL('../UserScript/liveCenter.user.js', import.meta.url), 'utf8');
+    const start = source.indexOf('function normalizeEndpoint');
+    const end = source.indexOf('\n    }', start) + '\n    }'.length;
+    assert.ok(start >= 0 && end > start);
+    const ctx = vm.createContext({ URL });
+    vm.runInContext(source.slice(start, end), ctx);
+    assert.equal(ctx.normalizeEndpoint('127.0.0.1:3332'), 'http://127.0.0.1:3332');
+    assert.equal(ctx.normalizeEndpoint(' http://192.168.0.102:3332/ '), 'http://192.168.0.102:3332');
+    assert.equal(ctx.normalizeEndpoint('https://example.test/ttw/'), 'https://example.test/ttw');
+    for (const value of ['', 'ftp://127.0.0.1', 'http://user:pass@127.0.0.1:3332', 'http://127.0.0.1:3332/?x=1', 'http://127.0.0.1:3332/#x', 'not a url']) {
+        assert.equal(ctx.normalizeEndpoint(value), null, value);
+    }
+});
+
 test('liveCenter 主播帳號有無 @ 或前後空白都能正規化', () => {
     const source = fs.readFileSync(new URL('../UserScript/liveCenter.user.js', import.meta.url), 'utf8');
     const start = source.indexOf('function normalizeBroadcaster');

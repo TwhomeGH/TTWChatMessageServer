@@ -26,5 +26,5 @@ test('merged relay forwards URL, binary and text exactly once per socket event',
 });
 test('update metadata points to the canonical relay script',()=>{
     for(const key of ['updateURL','downloadURL'])assert.match(source,new RegExp('@'+key+'\\s+https://raw\\.githubusercontent\\.com/TwhomeGH/TTWChatMessageServer/main/UserScript/ws-relay\\.user\\.js'));
-    assert.match(source,/@version\s+1\.3/);
+    assert.match(source,/@version\s+1\.4/);
 });

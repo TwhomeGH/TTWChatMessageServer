@@ -45,6 +45,25 @@ WS relay 統一使用 `UserScript/ws-relay.user.js`，保留 URL、二進位與�
 本機修改尚未發布到 GitHub，遠端自動更新需等新版發布後才可取得。
 自動剪輯預設為影子模式；正式執行條件見 [自動剪輯說明](KEYWORD_AUTOCLIP_V2.md)。
 
+## 主服務位址（所有轉接腳本）
+
+所有會送到本機主服務的 userscript 現在共用同一個設定鍵 `ttw-main-endpoint`，預設 `http://127.0.0.1:3332`：
+
+| 腳本 | 版本 | 設定位置 |
+| --- | --- | --- |
+| TikTokChat | 2.12 | Tampermonkey 選單「設定 TTW 主服務位址」 |
+| liveCenter | 1.19 | 面板「主服務位址」＋「測試主服務」；也可用選單 |
+| restream-monitor | 1.2.1 | 面板「主服務位址」＋「測試主服務」；也可用選單 |
+| ws-relay | 1.4 | 選單 |
+| youtube-chat-userscript | 1.8 | 選單 |
+| TestCenter | 1.6 | 選單 |
+
+- 可輸入 `127.0.0.1:3332`、`http://192.168.0.102:3332` 或含路徑前綴的 `https://example.test/ttw`；會移除結尾 `/`。
+- 拒絕帳密、query、hash 與非 http(s) 位址；格式錯誤會提示並保留原值。
+- 設定存在各腳本自己的 GM storage；不同腳本／網域不會共用，換主機時請逐一設定。
+- 面板的「測試主服務」打 `GET /ping`；`/ping` 不需要登入。舊版伺服器沒有 `/ping` 時會顯示 HTTP 404，但實際 `/chat` 仍可能可用。
+- 腳本使用 `@connect *` 以支援自訂主機；腳本只會把資料送到你設定的位址，不會送到其他網域。
+
 ## Restream 自動開啟 TikTok Live Monitor
 
 安裝 `UserScript/restream-monitor.user.js` 到支援 `GM_openInTab` 的 UserScript 管理器（例如 Tampermonkey），再開啟 `https://app.restream.io/shows/<show-id>`。不需要修改 show ID。首次安裝預設開啟自動偵測，右下角面板可暫停或手動開啟；1.2.0 起預設也會自動暫停預覽，可在面板取消。
@@ -65,7 +84,7 @@ WS relay 統一使用 `UserScript/ws-relay.user.js`，保留 URL、二進位與�
 
 目前以本機腳本安裝為主，未設定遠端自動更新網址。後續專用瀏覽器整合與驗收規劃見根目錄 [todo.md](../todo.md)。
 
-### Restream 助手面板（1.2.0）
+### Restream 助手面板（1.2.1）
 
 面板可拖曳標題列移動，或聚焦標題後用方向鍵調整位置；收合後仍顯示狀態摘要，不會停止監控。位置與收合狀態保存在腳本管理器，重新整理後還原；視窗縮小時限制在可見範圍。展開後可使用「重設位置」回到右下角。1.2.0 新增「自動暫停預覽」勾選與預覽狀態；標題、狀態、操作區分開，後續功能可加入操作區。
 

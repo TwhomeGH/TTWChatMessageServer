@@ -1,5 +1,36 @@
 # ChangeHistory
 
+## 2026.11.06 00:04 Userscript 主服務位址可設定
+
+**類型**: 功能 · **檔案**: `Server.js`、`UserScript/TikTokChat.user.js`、`UserScript/liveCenter.user.js`、`UserScript/restream-monitor.user.js`、`UserScript/ws-relay.user.js`、`UserScript/youtube-chat-userscript.user.js`、`UserScript/TestCenter.user.js`、`Test/userscript_source.test.mjs`、`eslint.config.mjs`、`Docs/USERSCRIPT_SOURCES.md`
+
+### 問題 - 主服務位址只能改腳本原始碼
+
+各腳本原本寫死不同位址：`TikTokChat`／`TestCenter` 是 `192.168.0.102`，`liveCenter`／`ws-relay` 是 `127.0.0.1`，YouTube 是 `localhost`。換 port、換機器或反向代理就得改原始碼。
+
+### 修改
+
+- 所有轉接腳本改用 `ttw-main-endpoint`（預設 `http://127.0.0.1:3332`）與 `ttwEndpoint()` 動態讀取。
+- 統一 `normalizeEndpoint()`：允許 `host:port`、http(s)、可選路徑前綴；拒絕帳密、query、hash。
+- `TikTokChat`、`ws-relay`、`youtube-chat`、`TestCenter` 加 Tampermonkey 選單；`liveCenter`、`restream-monitor` 面板加位址欄位與「測試主服務」。
+- 新增 `GET /ping` 供設定畫面測試，不需要登入。
+- 腳本加 `GM_registerMenuCommand` 與 `@connect *`，只送到使用者設定的位址。
+- 版本：TikTokChat 2.12、liveCenter 1.19、restream-monitor 1.2.1、ws-relay 1.4、YouTube 1.8、TestCenter 1.6。
+
+### 限制
+
+- GM storage 是每個腳本各自獨立，沒有跨腳本／跨網域的單一設定；換主機仍需逐一設定。
+- `/ping` 只證明主服務可達，不證明目前登入或聊天轉接正常。
+- `@connect *` 是為了支援自訂主機；若只使用本機，建議設回 `127.0.0.1:3332`。
+
+### 驗證
+
+- `Test/userscript_source.test.mjs`：位址正規化與不安全格式拒絕；既有 payload 測試改注入 `ttwEndpoint()`。
+- `Test/restream_monitor_ui.cjs`：面板與預覽功能仍正常。
+- `npm run lint`、`npm run lint:restream`。
+
+---
+
 ## 2026.11.05 23:47 Restream 助手自動暫停預覽
 
 **類型**: 功能 · **檔案**: `UserScript/restream-monitor.user.js`、`Test/restream_monitor.test.cjs`、`Test/restream_monitor_ui.cjs`、`Docs/USERSCRIPT_SOURCES.md`

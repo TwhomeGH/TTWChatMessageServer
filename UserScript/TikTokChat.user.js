@@ -1,11 +1,15 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      2.11
+// @version      2.12
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像；新增目標直播間鎖定，避免亂逛誤送）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
 // @grant        GM_xmlhttpRequest
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_registerMenuCommand
+// @connect      *
 // @run-at       document-end
 
 
@@ -17,8 +21,43 @@
 (function() {
     'use strict';
 
-    const HTTP_HOST = "192.168.0.102";
-    const HTTP_PORT = 3332;
+    const ENDPOINT_KEY = 'ttw-main-endpoint';
+    const DEFAULT_ENDPOINT = 'http://127.0.0.1:3332';
+
+    /** 正規化主服務位址；保留可選路徑前綴，拒絕帳密、query 與 hash。 */
+    function normalizeEndpoint(value) {
+        let raw = String(value || '').trim();
+        if (!raw || raw.length > 500) return null;
+        if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) raw = 'http://' + raw;
+        let url;
+        try { url = new URL(raw); } catch { return null; }
+        if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) return null;
+        if (url.username || url.password || url.search || url.hash) return null;
+        const path = url.pathname.replace(/\/+$/, '');
+        return url.origin + (path && path !== '/' ? path : '');
+    }
+
+    function ttwEndpoint() {
+        try {
+            return normalizeEndpoint(GM_getValue(ENDPOINT_KEY, DEFAULT_ENDPOINT)) || DEFAULT_ENDPOINT;
+        } catch { return DEFAULT_ENDPOINT; }
+    }
+
+    function saveEndpoint(value) {
+        const normalized = normalizeEndpoint(value);
+        if (!normalized) return null;
+        try { GM_setValue(ENDPOINT_KEY, normalized); } catch { /* ignore */ }
+        return normalized;
+    }
+
+    function changeEndpoint() {
+        const value = window.prompt('TTW 主服務位址', ttwEndpoint());
+        if (value === null) return;
+        const saved = saveEndpoint(value);
+        if (!saved) { window.alert('格式無效：請輸入 http://host:port 或 host:port'); return; }
+        window.alert('已儲存：' + saved);
+    }
+    if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('設定 TTW 主服務位址', changeEndpoint);
 
     // ─────────────────────────────────────────────────────────────
     // 目標直播間鎖定：只有「目前頁面 /@帳號/live」等於設定值時才發送，
@@ -90,7 +129,7 @@
     function sendAudienceUpdate() {
         if (!canSend()) { logBlocked(); return; }
         const payload = { type: 'audience', platform: 'TikTok', transport: 'userscript', broadcasterId: currentHandle(), audienceKind: 'total', userNum: View, userList: ViewUserList };
-        const sendURL = `http://${HTTP_HOST}:${HTTP_PORT}/chat`;
+        const sendURL = `${ttwEndpoint()}/chat`;
         GM_xmlhttpRequest({
             method: "POST", url: sendURL, data: JSON.stringify(payload),
             headers: { "Content-Type": "application/json" },
@@ -103,8 +142,7 @@
         flashSent(sentKind(isMain, giftImg), user, message);
         const payload = { ...metadata, platform: 'TikTok', transport: 'userscript', broadcasterId: currentHandle(), observedAt: Date.now(), type: 'StreamMessage', user, message, img, giftImg, isMain ,userNum,userList};
 
-        const sendURL = `http://${HTTP_HOST}:${HTTP_PORT}/chat`;
-
+        const sendURL = `${ttwEndpoint()}/chat`;
         console.log("sendTo", sendURL, payload);
 
         if (FailCount > MaxFail) {

@@ -550,6 +550,12 @@ const server = http.createServer((req, res) => {
     if (require('./WebAssets.cjs').serveWebAsset(req, res)) return;
     if (require('./EmojiRoutes.cjs').serveEmoji(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (require('./BrowserRoutes.cjs').serveBrowser(req, res, isValidToken(parseCookies(req).authToken))) return;
+    // 供使用者腳本測試主服務位址；與 /chat 一樣不要求登入。
+    if (req.method === 'GET' && req.url.split('?')[0] === '/ping') {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: true, service: 'ttw-chat-message-server' }));
+        return;
+    }
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
 
     // =======================

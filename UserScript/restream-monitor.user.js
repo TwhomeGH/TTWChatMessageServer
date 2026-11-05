@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Restream → TikTok Live Monitor 助手
 // @namespace    ttw-restream-monitor
-// @version      1.2.0
+// @version      1.2.1
 // @description  觀察 Restream 的 TikTok Live Monitor 連結，出現後開啟監控分頁；可自動暫停預覽避免多餘播放。
 // @match        https://app.restream.io/*
 // @run-at       document-idle
@@ -9,10 +9,50 @@
 // @grant        GM_openInTab
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_xmlhttpRequest
+// @grant        GM_registerMenuCommand
+// @connect      *
 // ==/UserScript==
 
 (function () {
     'use strict';
+    const ENDPOINT_KEY = 'ttw-main-endpoint';
+    const DEFAULT_ENDPOINT = 'http://127.0.0.1:3332';
+
+    function normalizeEndpoint(value) {
+        let raw = String(value || '').trim();
+        if (!raw || raw.length > 500) return null;
+        if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) raw = 'http://' + raw;
+        let url;
+        try { url = new URL(raw); } catch { return null; }
+        if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) return null;
+        if (url.username || url.password || url.search || url.hash) return null;
+        const path = url.pathname.replace(/\/+$/, '');
+        return url.origin + (path && path !== '/' ? path : '');
+    }
+
+    function ttwEndpoint() {
+        try {
+            return normalizeEndpoint(GM_getValue(ENDPOINT_KEY, DEFAULT_ENDPOINT)) || DEFAULT_ENDPOINT;
+        } catch { return DEFAULT_ENDPOINT; }
+    }
+
+    function saveEndpoint(value) {
+        const normalized = normalizeEndpoint(value);
+        if (!normalized) return null;
+        try { GM_setValue(ENDPOINT_KEY, normalized); } catch { /* ignore */ }
+        return normalized;
+    }
+
+    function changeEndpoint() {
+        const value = window.prompt('TTW 主服務位址', ttwEndpoint());
+        if (value === null) return;
+        const saved = saveEndpoint(value);
+        if (!saved) { window.alert('格式無效：請輸入 http://host:port 或 host:port'); return; }
+        window.alert('已儲存：' + saved);
+    }
+    if (typeof GM_registerMenuCommand === 'function') GM_registerMenuCommand('設定 TTW 主服務位址', changeEndpoint);
+
     const STABLE_MS = 3000;
     const ABSENT_MS = 60000;
     function monitorUrl(raw) {
@@ -79,15 +119,34 @@
     const pauseLabel = document.createElement('label');
     const pauseToggle = document.createElement('input'); pauseToggle.type = 'checkbox'; pauseToggle.checked = autoPause;
     pauseLabel.append(pauseToggle, document.createTextNode(' 自動暫停預覽（避免多餘播放）'));
+    const endpointLabel = document.createElement('label');
+    const endpointInput = document.createElement('input');
+    endpointInput.type = 'text';
+    endpointInput.value = ttwEndpoint();
+    endpointInput.placeholder = DEFAULT_ENDPOINT;
+    endpointInput.setAttribute('aria-label', 'TTW 主服務位址');
+    endpointInput.onchange = () => {
+        const saved = saveEndpoint(endpointInput.value);
+        if (!saved) {
+            endpointInput.value = ttwEndpoint();
+            endpointStatus.textContent = '主服務位址格式無效';
+            return;
+        }
+        endpointInput.value = saved;
+        endpointStatus.textContent = '已儲存主服務位址';
+    };
+    endpointLabel.append(document.createTextNode('主服務位址 '), endpointInput);
+    const endpointStatus = document.createElement('small');
     const previewStatus = document.createElement('small'); previewStatus.className = 'preview'; previewStatus.setAttribute('role', 'status');
     const button = document.createElement('button'); button.type = 'button'; button.textContent = '手動開啟監控頁';
+    const testEndpointBtn = document.createElement('button'); testEndpointBtn.type = 'button'; testEndpointBtn.textContent = '測試主服務';
     const note = document.createElement('small');
-    note.textContent = '需登入對應 TikTok 帳號並安裝 liveCenter.user.js 才能轉接資料。此助手不保證防止斷播；自動暫停只作用於 Restream 預覽，不會停止直播。';
+    note.textContent = '需登入對應 TikTok 帳號並安裝 liveCenter.user.js 才能轉接資料。此助手不保證防止斷播；自動暫停只作用於 Restream 預覽，不會停止直播。主服務位址也可從腳本管理器選單修改。';
     header.append(title, collapse);
-    actions.append(button, reset);
-    body.append(status, label, pauseLabel, actions, previewStatus, note);
+    actions.append(testEndpointBtn, button, reset);
+    body.append(status, label, pauseLabel, endpointLabel, actions, endpointStatus, previewStatus, note);
     panel.append(header, badge, body);
-    style.textContent += 'header{display:flex;align-items:center;gap:8px}header strong{flex:1;cursor:grab;touch-action:none;user-select:none;font-size:13px}header strong:active{cursor:grabbing}header button{background:#1b2940;padding:3px 8px}button:focus-visible,strong:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}.badge{display:block;color:#93c5fd;font-size:12px;margin-top:4px}.actions{display:flex;gap:8px;margin:8px 0}.actions button{font-size:12px}.actions button:last-child{background:#334155}.preview{display:block;margin-top:6px;color:#93c5fd}[hidden]{display:none!important}section{box-sizing:border-box;width:280px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto}';
+    style.textContent += 'header{display:flex;align-items:center;gap:8px}header strong{flex:1;cursor:grab;touch-action:none;user-select:none;font-size:13px}header strong:active{cursor:grabbing}header button{background:#1b2940;padding:3px 8px}button:focus-visible,strong:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}.badge{display:block;color:#93c5fd;font-size:12px;margin-top:4px}.actions{display:flex;gap:8px;margin:8px 0}.actions button{font-size:12px}.actions button:last-child{background:#334155}.preview{display:block;margin-top:6px;color:#93c5fd}input[type=text]{width:100%;box-sizing:border-box;margin-top:4px;padding:4px 6px;border:1px solid #475569;border-radius:6px;background:#0f172a;color:#e5e7eb}[hidden]{display:none!important}section{box-sizing:border-box;width:280px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto}';
     root.append(style, panel); document.body.append(host);
     const uiKey = 'ttw-restream-monitor-ui';
     const savedUI = GM_getValue(uiKey, {});
@@ -250,7 +309,19 @@
         if (badge.textContent !== summary) badge.textContent = summary;
         if (message !== lastStatus) { status.textContent = message; lastStatus = message; }
     }
+    function testEndpoint(target) {
+        target.textContent = '測試中…';
+        GM_xmlhttpRequest({
+            method: 'GET',
+            url: `${ttwEndpoint()}/ping`,
+            timeout: 5000,
+            onload: res => { target.textContent = res.status === 200 ? '主服務連線正常' : '主服務回應 HTTP ' + res.status; },
+            onerror: () => { target.textContent = '主服務連線失敗'; },
+            ontimeout: () => { target.textContent = '主服務連線逾時'; }
+        });
+    }
     toggle.onchange = () => { enabled = toggle.checked; GM_setValue(preference, enabled); scan(); };
+    testEndpointBtn.onclick = () => testEndpoint(endpointStatus);
     pauseToggle.onchange = () => {
         autoPause = pauseToggle.checked; GM_setValue(pausePreference, autoPause);
         autoPauseAttempted = false; userInteracted = false; setPreviewStatus('');
