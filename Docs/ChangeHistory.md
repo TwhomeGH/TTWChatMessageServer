@@ -1,5 +1,35 @@
 # ChangeHistory
 
+## 2026.11.05 23:47 Restream 助手自動暫停預覽
+
+**類型**: 功能 · **檔案**: `UserScript/restream-monitor.user.js`、`Test/restream_monitor.test.cjs`、`Test/restream_monitor_ui.cjs`、`Docs/USERSCRIPT_SOURCES.md`
+
+### 問題 - Restream show 頁預覽會自動播放
+
+`restream-monitor.user.js` 原本只負責偵測並開啟 TikTok Live Monitor 連結，沒有處理 Restream show 頁的預覽播放；預覽自動播放會造成多餘播放與聲音。
+
+### 修改
+
+- 版本 1.2.0；新增「自動暫停預覽」選項，預設開啟，面板可取消，設定保存在腳本管理器。
+- 在 show 頁尋找 `Play Preview`／`Pause Preview` 按鈕與相鄰預覽 `video`；播放中且使用者尚未手動操作時，點擊暫停或呼叫 `video.pause()`。
+- 每場最多自動暫停一次；使用者手動按播放後不再自動暫停。
+- 新增預覽狀態列；失敗或找不到控制項時靜默停用，不影響監控連結。
+- 只影響預覽，不會停止 Restream 推流或直播。
+
+### 限制
+
+- 依賴 Restream 當前的按鈕文字與 `video` 結構；改版可能使自動暫停失效。
+- 只處理 show 頁；不處理其他影片或瀏覽器原生子母畫面。
+- 尚未在真實 Restream 頁面重播自動播放流程，僅以樣本 DOM 與純函式測試覆蓋。
+
+### 驗證
+
+- `Test/restream_monitor.test.cjs`：按鈕標籤辨識與自動暫停條件。
+- `Test/restream_monitor_ui.cjs`：以 fixture DOM 驗證自動暫停一次，以及 `?pause=0` 時不暫停。
+- `npm run lint:restream`。
+
+---
+
 ## 2026.11.05 23:34 專用瀏覽器 TikTok live 403 修復
 
 **類型**: 修復 · **檔案**: `ScriptLib/browser/waf.mjs`、`ScriptLib/browser/controller.cjs`、`SignServer/direct-signer.mjs`、`Test/browser_session.test.mjs`、`Docs/BROWSER.md`

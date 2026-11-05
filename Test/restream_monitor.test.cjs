@@ -9,7 +9,7 @@ const end = source.indexOf('    if (window.top !== window.self', start);
 assert.ok(start >= 0 && end > start, '找不到純函式測試區段');
 const context = vm.createContext({ URL });
 vm.runInContext(source.slice(start, end), context);
-const { monitorUrl, observe } = context;
+const { monitorUrl, observe, previewLabel, shouldAutoPause } = context;
 const url='https://livecenter.tiktok.com/live_monitor?apply_mode=11';
 test('只接受官方 HTTPS live_monitor 連結，不綁 Restream 雜湊 class',()=>{
     assert.equal(monitorUrl(url),url);
@@ -35,4 +35,18 @@ test('連續消失60秒才解除本輪去重；初次開頁不誤判開播',()=>
     assert.equal(observe(state,url,64000),true);
     const restored={opened:true};
     observe(restored,url,0);assert.equal(observe(restored,url,4000),false);
+});
+test('只辨識 Restream 的 Play/Pause Preview 按鈕',()=>{
+    assert.equal(previewLabel('Play Preview'),'play');
+    assert.equal(previewLabel(' Pause Preview '),'pause');
+    assert.equal(previewLabel('Preview'),null);
+    assert.equal(previewLabel('Pause'),null);
+});
+test('只有開啟、未互動、未嘗試且正在播放才自動暫停',()=>{
+    const ready={enabled:true,userInteracted:false,attempted:false,playing:true};
+    assert.equal(shouldAutoPause(ready),true);
+    assert.equal(shouldAutoPause({...ready,enabled:false}),false);
+    assert.equal(shouldAutoPause({...ready,userInteracted:true}),false);
+    assert.equal(shouldAutoPause({...ready,attempted:true}),false);
+    assert.equal(shouldAutoPause({...ready,playing:false}),false);
 });

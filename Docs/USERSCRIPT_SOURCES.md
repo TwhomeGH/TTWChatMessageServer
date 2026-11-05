@@ -47,7 +47,7 @@ WS relay 統一使用 `UserScript/ws-relay.user.js`，保留 URL、二進位與�
 
 ## Restream 自動開啟 TikTok Live Monitor
 
-安裝 `UserScript/restream-monitor.user.js` 到支援 `GM_openInTab` 的 UserScript 管理器（例如 Tampermonkey），再開啟 `https://app.restream.io/shows/<show-id>`。不需要修改 show ID。首次安裝預設開啟自動偵測，右下角面板可暫停或手動開啟。
+安裝 `UserScript/restream-monitor.user.js` 到支援 `GM_openInTab` 的 UserScript 管理器（例如 Tampermonkey），再開啟 `https://app.restream.io/shows/<show-id>`。不需要修改 show ID。首次安裝預設開啟自動偵測，右下角面板可暫停或手動開啟；1.2.0 起預設也會自動暫停預覽，可在面板取消。
 
 腳本只觀察頁面中可見的官方 `https://livecenter.tiktok.com/live_monitor` 連結，保留其查詢參數；連結連續存在 3 秒後開啟背景新分頁。它不操作 Restream 的開播、停播或平台開關，也不從 Restream 樣本猜測聊天／統計資料。
 
@@ -56,6 +56,8 @@ WS relay 統一使用 `UserScript/ws-relay.user.js`，保留 URL、二進位與�
 - 本助手仍持有且尚未關閉的監控分頁會沿用，不主動關閉、重新整理或搶焦點。
 - 手動關閉監控分頁後，不會自動反覆重開；可按「手動開啟監控頁」。開啟失敗也須手動重試。
 - 只建議掛一個 Restream show 分頁；跨分頁／瀏覽器的去重尚未實作。重新整理後無法重新取得原分頁控制物件，手動開啟可能另建一頁。
+- **自動暫停預覽（1.2.0，預設開啟）**：在 show 頁找 `Play Preview`／`Pause Preview` 按鈕或預覽 `video`；偵測到播放且使用者尚未手動操作時，點擊暫停或呼叫 `video.pause()`，每場最多一次。使用者手動按播放後不再自動暫停；面板可取消。只影響預覽播放，不會停止 Restream 推流或直播。
+- 自動暫停依賴 Restream 目前的按鈕文字與相鄰 `video` 結構；若 Restream 改版導致找不到，功能會靜默停用，不影響監控連結與其他操作。
 
 監控頁需登入對應 TikTok 帳號並另裝 `UserScript/liveCenter.user.js`，後者匹配 `https://livecenter.tiktok.com/*`，但只在官方 `live_monitor` 頁面自動啟動監控，其餘頁面（例如回放）預設不觀察，改由右下角面板手動覆寫。既有腳本負責將可識別的聊天與統計送往本機 `/chat`；此次 Restream 樣本只含監控連結，尚未驗證實際監控頁 DOM、資料欄位與登入流程。不要把頭號觀眾名單當成總觀看數。
 
@@ -63,9 +65,9 @@ WS relay 統一使用 `UserScript/ws-relay.user.js`，保留 URL、二進位與�
 
 目前以本機腳本安裝為主，未設定遠端自動更新網址。後續專用瀏覽器整合與驗收規劃見根目錄 [todo.md](../todo.md)。
 
-### Restream 助手面板（1.1.0）
+### Restream 助手面板（1.2.0）
 
-面板可拖曳標題列移動，或聚焦標題後用方向鍵調整位置；收合後仍顯示狀態摘要，不會停止監控。位置與收合狀態保存在腳本管理器，重新整理後還原；視窗縮小時限制在可見範圍。展開後可使用「重設位置」回到右下角。標題、狀態、操作區分開，後續功能可加入操作區。
+面板可拖曳標題列移動，或聚焦標題後用方向鍵調整位置；收合後仍顯示狀態摘要，不會停止監控。位置與收合狀態保存在腳本管理器，重新整理後還原；視窗縮小時限制在可見範圍。展開後可使用「重設位置」回到右下角。1.2.0 新增「自動暫停預覽」勾選與預覽狀態；標題、狀態、操作區分開，後續功能可加入操作區。
 
 ### Live Center 控制面板（1.15）
 
