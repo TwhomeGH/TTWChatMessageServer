@@ -1,5 +1,34 @@
 # ChangeHistory
 
+## 2026.11.06 03:31 GitHub Pages 取消殘留的進行中部署
+
+**類型**: CI · **檔案**: `.github/workflows/pages.yml`
+
+### 問題
+
+`concurrency` 只會取消舊的 workflow run，不會取消已建立的 Pages deployment。`7e8f988` 的 deployment 在 Actions 顯示 failure，但 Pages 後端仍視為進行中，導致 `5177e79` 建立新 deployment 時收到 400：
+
+> due to in progress deployment. Please cancel `7e8f988` first.
+
+### 修改
+
+- deploy 前新增 `actions/github-script` preflight：檢查最近 10 個 commit 的 Pages deployment。
+- 只有狀態仍是 `deployment_in_progress`、`syncing_files`、`finished_file_sync`、`updating_pages`、`purging_cdn` 時才呼叫 cancel；成功或已失敗的不動。
+- 404 或其他取消錯誤只記錄，不阻擋後續 deploy（`continue-on-error`）。
+- 既有 20 分鐘 timeout 與 workflow-level concurrency 保留。
+
+### 限制
+
+- 只掃最近 10 個 commit；更舊的殘留 deployment 仍需手動取消。
+- 這是清理殘留狀態的防呆，不會修復 Pages 後端本身卡住。
+
+### 驗證
+
+- YAML 解析確認 preflight 在 `deploy-pages` 前、參數正確。
+- 下一次 push 的 pages run 會先清理殘留 deployment，再建立新部署。
+
+---
+
 ## 2026.11.06 03:23 GitHub Pages deploy timeout 延長至 20 分鐘
 
 **類型**: CI · **檔案**: `.github/workflows/pages.yml`
