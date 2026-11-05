@@ -89,3 +89,6 @@ node Test/emoji_ui.cjs
 
 `data:image/...;base64` 尚未支援。之後會作為可選來源，依接收端能力決定是否替換；
 不支援的聊天平台會保留原始代碼，不會送出 data URI。
+
+SVG 具主動內容與腳本注入風險，不直接放行；若需要向量圖，應在伺服器端 rasterize 成 PNG／WebP 後再供應。
+目前 `image_cache` 仍只檢查 `image/*`，後續需另外拒絕遠端 SVG 或 rasterize，避免直接開啟 `/emoji/image` 時執行腳本。

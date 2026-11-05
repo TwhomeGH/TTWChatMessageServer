@@ -17,11 +17,12 @@
 ## 表情映射後續（2026-11-06）
 
 - [x] Phase 1：`emoji_map.json` 只讀預設；`emoji_map_local.json` 支援 `url`／`enabled`、停用預設、恢復預設、自訂刪除與管理頁開關。
-- [ ] Phase 2：data URI 可選來源。允許 `data:image/(png|jpeg|gif|webp);base64,...`、大小上限、拒絕 SVG；管理頁預覽與 `/emoji/image` 解碼。
+- [ ] Phase 2：data URI 可選來源。允許 `data:image/(png|jpeg|gif|webp);base64,...`、大小上限；SVG 因主動內容／腳本注入風險不直接放行（必要時伺服器端 rasterize）。管理頁預覽與 `/emoji/image` 解碼。
 - [ ] Phase 3：接收端 capability。`replaceEmojis` 依 target 決定是否輸出 data URI；不支援的聊天／通知保留原始代碼，不送 base64。
 - [ ] 實機驗證：停用／恢復預設、重啟後 local 保留、預設更新穿透、管理頁在真實資料下的操作。
 - [ ] 決定預設檔是否統一成 v2（目前 hybrid；非必要）。
 - [ ] data URI 的訊息長度限制與各平台／通知實際支援矩陣。
+- [ ] 安全性：`image_cache` 目前只檢查 `image/*`，遠端 HTTP SVG 也需拒絕或伺服器端 rasterize，避免直接開啟 `/emoji/image` 時執行 SVG 腳本。
 
 ## 第一階段：使用者自行掛載
 
