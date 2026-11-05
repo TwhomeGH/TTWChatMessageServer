@@ -1,5 +1,5 @@
 /** 表情管理頁與真實 EmojiRoutes／EmojiStore 的整合冒煙檢查。 */
-/* global document -- 僅在瀏覽器回呼中使用。 */
+/* global document, getComputedStyle -- 僅在瀏覽器回呼中使用。 */
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const fs = require('node:fs');
@@ -93,6 +93,13 @@ async function main() {
         assert.equal(await fsp.readFile(defaultsFile, 'utf8'), defaultsText);
         await page.waitForFunction(() => [...document.querySelectorAll('#list article')]
             .some(item => item.textContent.includes('other') && item.textContent.includes('已停用')));
+        const opacity = await page.evaluate(() => {
+            const card = [...document.querySelectorAll('#list article')].find(item => item.textContent.includes('other'));
+            const buttons = [...card.querySelectorAll('button')];
+            return { card: getComputedStyle(card).opacity, buttons: buttons.map(button => getComputedStyle(button).opacity) };
+        });
+        assert.equal(opacity.card, '1');
+        assert.ok(opacity.buttons.every(value => value === '1'));
 
         const reloaded = new (require('../EmojiStore.cjs').EmojiStore)(defaultsFile, localFile);
         await reloaded.load();

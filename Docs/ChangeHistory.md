@@ -1,5 +1,26 @@
 # ChangeHistory
 
+## 2026.11.06 03:02 表情停用卡片按鈕不再變暗
+
+**類型**: 修正 · **檔案**: `assets/emoji.js`、`Test/emoji_ui.cjs`
+
+### 問題 - 停用項目整張卡片變暗，操作按鈕看起來失效
+
+停用預設時卡片套用 `opacity:.6`，連「編輯／啟用／恢復預設」一起變暗，容易被誤認為不能按。
+
+### 修改
+
+- 移除卡片整體透明度；只把縮圖調淡並加 `title="已停用"`。
+- 代碼、來源／狀態與所有操作按鈕維持正常亮度。
+- UI 測試新增斷言：停用卡片的 computed opacity 與按鈕 opacity 都必須是 1。
+
+### 驗證
+
+- `node Test/emoji_ui.cjs`
+- `npm run lint`
+
+---
+
 ## 2026.11.06 02:37 表情映射拆分預設與本機覆寫
 
 **類型**: 功能 · **檔案**: `EmojiStore.cjs`、`EmojiMap.js`、`ScriptLib/emoji/image_cache.cjs`、`assets/emoji.js`、`emoji.html`、`.gitignore`、`Test/emoji_store.test.cjs`、`Test/emoji_ui.cjs`、`Docs/EMOJI_MAP.md`、`README.md`

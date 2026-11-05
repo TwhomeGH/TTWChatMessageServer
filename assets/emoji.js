@@ -48,7 +48,6 @@ function createCard(entry) {
     const { code, url, enabled, source, isDefault, overridden } = entry;
     const card = document.createElement('article');
     card.className = 'bg-gray-900 rounded-lg p-3 flex gap-3';
-    if (!enabled) card.style.opacity = '.6';
 
     const image = document.createElement('img');
     // 走伺服器端快取路由（依代碼取圖）；v 讓網址變更時繞過瀏覽器快取。
@@ -59,6 +58,11 @@ function createCard(entry) {
     image.loading = 'lazy';
     image.referrerPolicy = 'no-referrer';
     image.className = 'object-contain w-12 h-12';
+    // 只讓縮圖變淡表示停用；操作按鈕維持正常亮度，避免看起來像不能按。
+    if (!enabled) {
+        image.style.opacity = '.45';
+        image.title = '已停用';
+    }
 
     const body = document.createElement('div');
     body.className = 'flex-1 min-w-0';
