@@ -218,6 +218,7 @@
   "nav.pushdiag": "🔧 推流診斷",
   "nav.console": "🖥️ 系統日誌",
   "nav.monitor": "💬 直播訊息",
+  "nav.restream": "🎥 Restream 指標",
   "nav.audience": "常客分析",
   "console.title": "系統日誌 Console",
   "console.search": "搜尋日誌…",

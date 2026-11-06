@@ -65,6 +65,7 @@ node Test/xxx.mjs
 | `Test/autoclip_history_ui.cjs` | AutoClip 歷史場次切換、本場最高、單人門檻、觸發證據與範圍摘要 |
 | `Test/restream_monitor_ui.cjs` | Restream 助手自動暫停預覽、取消自動暫停與指標 payload |
 | `Test/restream_metrics.test.cjs` | Restream 指標正規化、缺值、來源限制與記憶體保留上限 |
+| `Test/restream_page_ui.cjs` | Restream 指標頁入口、固定表格寬度、Health badge 與 Mbps 顯示 |
 | `Test/emoji_store.test.cjs` | 表情預設／本機覆寫、enabled、版本衝突、熱載入與圖片快取 |
 | `Test/emoji_ui.cjs` | 真實 EmojiRoutes／Store／管理頁：停用、恢復預設、local 只寫與預設不變 |
 | `Test/youtube_browser_ui.mjs` | 無 OAuth 時從頻道 `/live` discovery 後注入聊天 iframe |

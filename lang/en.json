@@ -218,6 +218,7 @@
   "nav.pushdiag": "🔧 Stream diagnostics",
   "nav.console": "🖥️ System console",
   "nav.monitor": "💬 Live messages",
+  "nav.restream": "🎥 Restream metrics",
   "nav.audience": "Regulars",
   "console.title": "System console",
   "console.search": "Search logs…",

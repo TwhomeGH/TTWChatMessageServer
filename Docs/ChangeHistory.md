@@ -1,5 +1,33 @@
 # ChangeHistory
 
+## 2026.11.06 19:55 Restream 指標頁排版與入口
+
+**類型**: 改善 · **檔案**: `OtherTool/restream/index.html`、`log.html`、`runtime.html`、`monitor.html`、`lang/zh-TW.json`、`lang/en.json`、`Test/restream_page_ui.cjs`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 問題
+
+Restream 頁面只有「回首頁」，沒有主控台／運行狀態／人流／監控入口；表格使用過大的最小寬度，長 showId 讓「樣本」欄被水平捲動裁掉，Health 與 bitrate 也不夠易讀。
+
+### 修改
+
+- 固定表格欄寬與 `table-layout: fixed`；showId 可換行，樣本欄保持可見，窄螢幕才水平捲動。
+- Health 改為顏色 badge；Bitrate 在 ≥1000 Kbps 時顯示 Mbps；擷取／收到時間保留 title 相對時間。
+- 頁首補 `/`、`/runtime`、`/traffic`、`/monitor`、`/restream` 導覽與「重新整理」按鈕。
+- 主控台、運行狀態、直播訊息頁加入 `Restream 指標` 入口。
+- 新增 `Test/restream_page_ui.cjs`：入口、表格不溢出、Health badge、Mbps 與樣本欄。
+
+### 限制
+
+- 頁面仍是單一表格；大量 show 時以垂直列表呈現，沒有趨勢圖。
+- 指標仍只存在記憶體，重啟後消失。
+
+### 驗證
+
+- `node Test/restream_page_ui.cjs`
+- `npm run lint`、`npm run check:css`
+
+---
+
 ## 2026.11.06 06:27 測試派發目標與通知通道結果
 
 **類型**: 改善 · **檔案**: `monitor.html`、`assets/monitor.js`、`assets/monitor.css`、`TikTok.js`、`ScriptLib/notify/index.mjs`、`Server.js`、`lang/zh-TW.json`、`lang/en.json`、`Test/notify.test.mjs`、`Test/monitor_audience_ui.cjs`、`Docs/RUNTIME.md`、`Docs/CHAT_API.md`、`Docs/SOCKET_TRANSPORT.md`
