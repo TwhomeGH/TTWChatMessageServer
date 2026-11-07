@@ -172,6 +172,19 @@ test('TikTokChat 只在目標直播頁且可見時掛 observer，離開就拆除
     assert.doesNotMatch(source, /const viewers = getViewerCount\(\);\s*console\.log\('觀眾人數:'/);
 });
 
+test('videoTK 使用事件驅動尺寸更新與可拖動劇院按鈕', () => {
+    const source = fs.readFileSync(new URL('../UserScript/videoTK.user.js', import.meta.url), 'utf8');
+    assert.match(source, /@version\s+2\.5/);
+    assert.match(source, /ResizeObserver/);
+    assert.match(source, /function applyTheater\(/);
+    assert.match(source, /function restoreTheater\(/);
+    assert.match(source, /pointerdown/);
+    assert.match(source, /ttw-videotk-button-pos/);
+    assert.doesNotMatch(source, /video\.muted\s*=\s*false/);
+    assert.doesNotMatch(source, /function loop\(\)/);
+    assert.doesNotMatch(source, /requestAnimationFrame\(loop\)/);
+});
+
 test('轉送種類判斷：有禮物圖＝送禮、isMain=false＝加入、其餘聊天', () => {
     const source = fs.readFileSync(new URL('../UserScript/TikTokChat.user.js', import.meta.url), 'utf8');
     const a = source.indexOf('function sentKind(');

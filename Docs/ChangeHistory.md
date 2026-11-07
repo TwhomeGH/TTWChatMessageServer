@@ -23,6 +23,35 @@
 
 ---
 
+## 2026.11.08 00:01 videoTK 事件驅動與可拖動劇院按鈕
+
+**類型**: 改善 · **檔案**: `UserScript/videoTK.user.js`、`Test/video_tk_ui.cjs`、`Test/userscript_source.test.mjs`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 問題
+
+- `requestAnimationFrame(loop)` 永久執行，每幀查詢 video／container、讀取 rect 並寫樣式。
+- `removeMeta` 的 MutationObserver 每次 DOM 變動都查詢整份文件。
+- 每幀設定 `video.muted = false`，會覆蓋使用者靜音。
+- 禮物在啟動時無條件隱藏；OFF 使用硬編碼 `flex`／`calc(100% - 327px)` 還原，容易壞。
+- 右下 OFF/ON 圓形按鈕不可拖動。
+
+### 修改
+
+- 移除永久 rAF loop；改用 ResizeObserver、loadedmetadata、resize、scroll 與低頻 maintenance 更新。
+- 快取文字與位置，只有變更才寫 DOM。
+- Theater 模式保存每個元素原始 inline style，關閉時精確還原；禮物只在 ON 時隱藏。
+- 移除自動 unmute 與死程式碼 `updateInfo`。
+- 右下改成緊湊的 `⛶` 按鈕：pointer 拖曳、位置存 localStorage、resize clamp、拖曳不會觸發切換。
+- 新增 `Test/video_tk_ui.cjs` 驗證 Theater 還原與拖曳不誤觸。
+
+### 驗證
+
+- `node Test/video_tk_ui.cjs`
+- `node --test Test/userscript_source.test.mjs`
+- `npm run lint`
+
+---
+
 ## 2026.11.07 23:54 TikTokChat observer 生命週期
 
 **類型**: 改善 · **檔案**: `UserScript/TikTokChat.user.js`、`Test/userscript_source.test.mjs`、`Docs/USERSCRIPT_SOURCES.md`
