@@ -91,6 +91,11 @@ test('SocketHub.sendMessage 去重、套用 replaceEmojis 並帶上 category', (
     assert.equal(hub.sendMessage('顯示名', '原文', { dedupUser: 'orig', dedupMessage: '原文' }), true);
     assert.equal('category' in endpoint.sent[1], false);
 
+    // 本場累計隨 payload 帶出。
+    const session = { joins: 1, likes: 9, chats: 3 };
+    assert.equal(hub.sendMessage('session-user', 'session-msg', { session }), true);
+    assert.deepEqual(endpoint.sent[endpoint.sent.length - 1].session, session);
+
     // 測試訊息用頭貼作為 variant：換圖可送，同圖仍被擋。
     dedup.add('測試使用者', '哈拉', 'test:avatar-a');
     assert.equal(hub.sendMessage('測試使用者', '哈拉', { dedupVariant: 'test:avatar-b' }), true);

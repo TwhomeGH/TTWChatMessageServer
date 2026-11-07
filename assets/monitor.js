@@ -41,6 +41,19 @@
     const clearEl = document.getElementById('monClear');
     const countEl = document.getElementById('monCount');
     const statusEl = document.getElementById('monStatus');
+    const jumpLatestEl = document.getElementById('monJumpLatest');
+    const sessionEl = document.getElementById('monSession');
+    const sessionJoinsEl = document.getElementById('monSessionJoins');
+    const sessionLikesEl = document.getElementById('monSessionLikes');
+    const sessionChatsEl = document.getElementById('monSessionChats');
+    const modeLiveEl = document.getElementById('monModeLive');
+    const modeHistoryEl = document.getElementById('monModeHistory');
+    const historyBarEl = document.getElementById('monHistoryBar');
+    const historySessionEl = document.getElementById('monHistorySession');
+    const historyPrevEl = document.getElementById('monHistoryPrev');
+    const historyNextEl = document.getElementById('monHistoryNext');
+    const historyPageEl = document.getElementById('monHistoryPage');
+    const historyTotalEl = document.getElementById('monHistoryTotal');
     const testUser = document.getElementById('monTestUser');
     const testAvatar = document.getElementById('monTestAvatar');
     const testAvatarPick = document.getElementById('monTestAvatarPick');
@@ -71,8 +84,13 @@
         query: '',
         autoscroll: true,
         shown: 0,
+        unseen: 0,
+        session: null,
+        mode: 'live',
+        history: { sessions: [], sessionId: '', page: 1, pages: 1, total: 0, messages: [], loading: false },
         statusKey: 'monitor.reconnecting'
     };
+    let lastUserScrollIntent = 0;
 
     function fmtTime(ms) {
         const d = new Date(ms);
@@ -81,6 +99,158 @@
     }
 
     const categoryLabel = name => t(`monitor.cat.${name}`, {}, name);
+
+    /** 顯示子程序維護的本場累計；缺少欄位視為 0。 */
+    function updateSession() {
+        const session = state.session;
+        if (!session) { sessionEl.hidden = true; return; }
+        const count = value => Math.max(0, Number(value) || 0);
+        sessionEl.hidden = false;
+        sessionJoinsEl.textContent = String(count(session.joins));
+        sessionLikesEl.textContent = String(count(session.likes));
+        sessionChatsEl.textContent = String(count(session.chats));
+    }
+
+    function setHistoryStatus(text, error = false) {
+        statusEl.textContent = text;
+        statusEl.className = 'text-xs ' + (error ? 'text-red-400' : 'text-yellow-400');
+    }
+
+    function historySessionLabel(session) {
+        const date = new Date(session.startedAt).toLocaleString(window.TTWI18n.language,
+            { dateStyle: 'medium', timeStyle: 'short' });
+        const platforms = (session.platforms || []).join(' / ') || '—';
+        return t('monitor.history.sessionLabel', {
+            date, platforms, count: session.messageCount
+        }, `${date} · ${platforms} · ${session.messageCount}`);
+    }
+
+    function renderHistory() {
+        const history = state.history;
+        const fragment = document.createDocumentFragment();
+        if (history.messages.length) {
+            for (const entry of history.messages) fragment.append(makeRow(entry));
+        } else {
+            const empty = document.createElement('div');
+            empty.className = 'mon-history-empty';
+            empty.textContent = t('monitor.history.empty', {}, '這個場次沒有符合的訊息。');
+            fragment.append(empty);
+        }
+        rowsEl.replaceChildren(fragment);
+        historySessionEl.value = history.sessionId;
+        historyPageEl.textContent = t('monitor.history.page', { page: history.page, pages: history.pages },
+            `第 ${history.page} / ${history.pages} 頁`);
+        historyTotalEl.textContent = t('monitor.history.total', { total: history.total }, `共 ${history.total} 則`);
+        historyPrevEl.disabled = history.page <= 1;
+        historyNextEl.disabled = history.page >= history.pages;
+        countEl.textContent = t('monitor.count', {
+            shown: history.messages.length, total: history.total
+        }, `${history.messages.length} / ${history.total}`);
+        jumpLatestEl.hidden = true;
+        setHistoryStatus(t('monitor.history.status', {}, '歷史模式'));
+    }
+
+    function clearHistoryRows() {
+        rowsEl.replaceChildren();
+        countEl.textContent = '';
+        historyPageEl.textContent = '';
+        historyTotalEl.textContent = '';
+        historyPrevEl.disabled = true;
+        historyNextEl.disabled = true;
+    }
+
+    async function loadHistoryMessages(page = 1) {
+        const history = state.history;
+        if (!history.sessionId || history.loading) return;
+        history.loading = true;
+        try {
+            const categories = [...state.active].join(',');
+            const params = new URLSearchParams({
+                session: history.sessionId, page: String(page), pageSize: '200',
+                q: state.query, categories
+            });
+            const response = await fetch('/api/monitor/messages?' + params, { cache: 'no-store' });
+            if (response.status === 401) {
+                clearHistoryRows();
+                setHistoryStatus(t('monitor.history.login', {}, '歷史需要主服務登入。'), true);
+                return;
+            }
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || 'HTTP ' + response.status);
+            state.history = {
+                ...history,
+                sessionId: data.session.id, page: data.page, pages: data.pages,
+                total: data.total, messages: data.messages || [], loading: false
+            };
+            renderHistory();
+        } catch (error) {
+            setHistoryStatus(t('monitor.history.loadError', { error: error.message },
+                '歷史載入失敗：' + error.message), true);
+        } finally {
+            state.history.loading = false;
+        }
+    }
+
+    async function loadHistorySessions() {
+        setHistoryStatus(t('monitor.history.status', {}, '歷史模式'));
+        try {
+            const response = await fetch('/api/monitor/sessions', { cache: 'no-store' });
+            if (response.status === 401) {
+                clearHistoryRows();
+                setHistoryStatus(t('monitor.history.login', {}, '歷史需要主服務登入。'), true);
+                return;
+            }
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || 'HTTP ' + response.status);
+            const sessions = data.sessions || [];
+            state.history.sessions = sessions;
+            historySessionEl.replaceChildren(...sessions.map(session => {
+                const option = document.createElement('option');
+                option.value = session.id;
+                option.textContent = historySessionLabel(session);
+                return option;
+            }));
+            historySessionEl.disabled = sessions.length === 0;
+            if (!sessions.length) {
+                state.history = { ...state.history, sessionId: '', page: 1, pages: 1, total: 0, messages: [] };
+                clearHistoryRows();
+                setHistoryStatus(t('monitor.history.noSessions', {}, '尚無歷史場次。'));
+                return;
+            }
+            const selected = sessions.some(session => session.id === state.history.sessionId)
+                ? state.history.sessionId : sessions[0].id;
+            state.history.sessionId = selected;
+            historySessionEl.value = selected;
+            await loadHistoryMessages(1);
+        } catch (error) {
+            setHistoryStatus(t('monitor.history.loadError', { error: error.message },
+                '歷史載入失敗：' + error.message), true);
+        }
+    }
+
+    function setMode(mode) {
+        if (state.mode === mode) return;
+        state.mode = mode;
+        const live = mode === 'live';
+        modeLiveEl.classList.toggle('is-active', live);
+        modeHistoryEl.classList.toggle('is-active', !live);
+        historyBarEl.hidden = live;
+        autoscrollEl.disabled = !live;
+        clearEl.disabled = !live;
+        if (live) {
+            renderAll();
+            updateJump();
+            setStatus(state.statusKey);
+        } else {
+            jumpLatestEl.hidden = true;
+            loadHistorySessions();
+        }
+    }
+
+    function refreshView() {
+        if (state.mode === 'history') loadHistoryMessages(1);
+        else renderAll();
+    }
 
     /** 建立與 EmojiMap 相同的字面匹配規則（長代碼優先）。 */
     function buildEmojiPattern(map) {
@@ -483,6 +653,12 @@
     const atBottom = () => scrollEl.scrollHeight - scrollEl.scrollTop - scrollEl.clientHeight < 8;
     const scrollToBottom = () => { scrollEl.scrollTop = scrollEl.scrollHeight; };
 
+    function updateJump() {
+        const hidden = state.autoscroll || state.unseen <= 0;
+        jumpLatestEl.hidden = hidden;
+        if (!hidden) jumpLatestEl.textContent = t('monitor.newMessages', { count: state.unseen }, `${state.unseen} 則新訊息 ↓`);
+    }
+
     function renderAll() {
         const fragment = document.createDocumentFragment();
         state.shown = 0;
@@ -494,19 +670,33 @@
         rowsEl.replaceChildren(fragment);
         updateCount();
         if (state.autoscroll) scrollToBottom();
+        updateJump();
     }
 
     function append(entry) {
         state.entries.push(entry);
+        if (entry.session && typeof entry.session === 'object') {
+            state.session = entry.session;
+            updateSession();
+        }
         if (state.entries.length > MAX_ENTRIES) {
             const removed = state.entries.shift();
-            if (matches(removed) && rowsEl.firstElementChild) { rowsEl.firstElementChild.remove(); state.shown--; }
+            if (state.mode === 'live' && matches(removed) && rowsEl.firstElementChild) {
+                rowsEl.firstElementChild.remove();
+                state.shown--;
+            }
         }
+        if (state.mode !== 'live') return;
         if (!matches(entry)) { updateCount(); return; }
         rowsEl.append(makeRow(entry));
         state.shown++;
         updateCount();
-        if (state.autoscroll) scrollToBottom();
+        if (state.autoscroll) {
+            scrollToBottom();
+        } else {
+            state.unseen++;
+            updateJump();
+        }
     }
 
     function buildFilters() {
@@ -519,7 +709,7 @@
         all.className = allActive
             ? 'mon-filter px-2 py-1 rounded border border-transparent bg-blue-600 text-white'
             : 'mon-filter px-2 py-1 rounded border border-gray-700 bg-gray-900 text-gray-400';
-        all.addEventListener('click', () => { state.active.clear(); buildFilters(); renderAll(); });
+        all.addEventListener('click', () => { state.active.clear(); buildFilters(); refreshView(); });
         fragment.append(all);
 
         for (const name of state.categories) {
@@ -535,7 +725,7 @@
                 if (state.active.has(name)) state.active.delete(name);
                 else state.active.add(name);
                 buildFilters();
-                renderAll();
+                refreshView();
             });
             fragment.append(button);
         }
@@ -550,20 +740,74 @@
 
     searchEl.addEventListener('input', () => {
         state.query = searchEl.value.trim().toLowerCase();
-        renderAll();
+        if (state.mode === 'history') {
+            clearTimeout(state.history.timer);
+            state.history.timer = setTimeout(() => loadHistoryMessages(1), 250);
+        } else {
+            renderAll();
+        }
     });
     clearEl.addEventListener('click', () => {
         state.entries = [];
         rowsEl.replaceChildren();
         state.shown = 0;
+        state.unseen = 0;
         updateCount();
+        updateJump();
     });
     autoscrollEl.addEventListener('change', () => {
         state.autoscroll = autoscrollEl.checked;
-        if (state.autoscroll) scrollToBottom();
+        if (state.autoscroll) {
+            state.unseen = 0;
+            scrollToBottom();
+        }
+        updateJump();
     });
+    for (const type of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
+        scrollEl.addEventListener(type, () => { lastUserScrollIntent = Date.now(); }, { passive: true });
+    }
     scrollEl.addEventListener('scroll', () => {
-        if (state.autoscroll && !atBottom()) { state.autoscroll = false; autoscrollEl.checked = false; }
+        if (state.mode !== 'live') return;
+        if (state.autoscroll) {
+            if (atBottom()) return;
+            if (Date.now() - lastUserScrollIntent < 600) {
+                state.autoscroll = false;
+                autoscrollEl.checked = false;
+                updateJump();
+                return;
+            }
+            // 圖片載入或列高變化造成的位移，持續貼底。
+            scrollToBottom();
+            return;
+        }
+        if (state.unseen > 0 && atBottom()) {
+            state.unseen = 0;
+            updateJump();
+        }
+    });
+    jumpLatestEl.addEventListener('click', () => {
+        state.autoscroll = true;
+        autoscrollEl.checked = true;
+        state.unseen = 0;
+        updateJump();
+        scrollToBottom();
+    });
+    if (typeof ResizeObserver === 'function') {
+        new ResizeObserver(() => {
+            if (state.mode === 'live' && state.autoscroll) scrollToBottom();
+        }).observe(rowsEl);
+    }
+    modeLiveEl.addEventListener('click', () => setMode('live'));
+    modeHistoryEl.addEventListener('click', () => setMode('history'));
+    historySessionEl.addEventListener('change', () => {
+        state.history.sessionId = historySessionEl.value;
+        loadHistoryMessages(1);
+    });
+    historyPrevEl.addEventListener('click', () => {
+        if (state.history.page > 1) loadHistoryMessages(state.history.page - 1);
+    });
+    historyNextEl.addEventListener('click', () => {
+        if (state.history.page < state.history.pages) loadHistoryMessages(state.history.page + 1);
     });
     testAdd.addEventListener('click', addTestMessage);
     testSend.addEventListener('click', sendSocketTest);
@@ -588,8 +832,13 @@
         buildTestCategories();
         buildAvatarOptions();
         updateAvatarPreview();
-        updateCount();
-        setStatus(state.statusKey);
+        if (state.mode === 'history') {
+            loadHistorySessions();
+        } else {
+            updateCount();
+            updateJump();
+            setStatus(state.statusKey);
+        }
     });
 
     searchEl.placeholder = t('monitor.search', {}, '搜尋訊息…');
@@ -601,6 +850,8 @@
     restoreTestCategory();
     updateAvatarPreview();
     updateCount();
+    updateJump();
+    historyBarEl.hidden = true;
     setStatus('monitor.reconnecting');
 
     fetch('/api/emoji/preview')
@@ -644,7 +895,8 @@
             user: typeof entry.user === 'string' ? entry.user : '',
             message: entry.message,
             img: typeof entry.img === 'string' ? entry.img : '',
-            audience: entry.audience && typeof entry.audience === 'object' ? entry.audience : undefined
+            audience: entry.audience && typeof entry.audience === 'object' ? entry.audience : undefined,
+            session: entry.session && typeof entry.session === 'object' ? entry.session : undefined
         });
     };
 })();

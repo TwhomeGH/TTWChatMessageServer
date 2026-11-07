@@ -28,11 +28,53 @@ body.app-ui {
 
 .monitor-panel {
     /* 依工具列實際換行高度分配空間，避免訊息將面板撐出視窗。 */
+    position: relative;
     flex: 1;
     display: grid;
     grid-template-rows: auto auto auto minmax(8rem, 1fr);
     min-height: min-content;
     padding: 1rem;
+}
+.mon-session {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    color: #cbd5e1;
+    font-size: 0.75rem;
+}
+.mon-session-title {
+    color: #94a3b8;
+}
+.mon-session span:not(.mon-session-title) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.15rem 0.5rem;
+    border: 1px solid #334155;
+    border-radius: 999px;
+    background: #111827;
+}
+.mon-session b {
+    color: #e5e7eb;
+    font-weight: 600;
+}
+.mon-jump {
+    position: absolute;
+    right: 1.5rem;
+    bottom: 1.5rem;
+    z-index: 2;
+    padding: 0.4rem 0.7rem;
+    border: 1px solid #1d4ed8;
+    border-radius: 999px;
+    background: #1e3a8a;
+    color: #dbeafe;
+    font-size: 0.8rem;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+}
+.mon-jump:hover {
+    background: #1d4ed8;
 }
 
 .mon-avatar {
@@ -180,4 +222,64 @@ body.app-ui {
     object-fit: contain;
     vertical-align: -0.25rem;
     margin: 0 1px;
+}
+
+/* 即時／歷史模式；歷史控制放在工具列內，避免多一列 grid track。 */
+.mon-mode {
+    display: inline-flex;
+    border: 1px solid #475569;
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+.mon-mode button {
+    padding: 0.3rem 0.6rem;
+    border: 0;
+    background: #1e293b;
+    color: #cbd5e1;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+.mon-mode button + button {
+    border-left: 1px solid #475569;
+}
+.mon-mode button.is-active {
+    background: #1d4ed8;
+    color: #fff;
+}
+.mon-history {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    color: #cbd5e1;
+    font-size: 0.75rem;
+}
+.mon-history select {
+    max-width: 22rem;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid #475569;
+    border-radius: 0.375rem;
+    background: #0f172a;
+    color: #e5e7eb;
+    font: inherit;
+}
+.mon-history button {
+    padding: 0.3rem 0.6rem;
+    border: 1px solid #475569;
+    border-radius: 0.375rem;
+    background: #1e293b;
+    color: #e5e7eb;
+    cursor: pointer;
+}
+.mon-history button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+.mon-history-total {
+    color: #94a3b8;
+}
+.mon-history-empty {
+    padding: 1rem;
+    color: #94a3b8;
+    font-size: 0.8rem;
 }

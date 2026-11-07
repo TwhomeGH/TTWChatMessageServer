@@ -25,6 +25,30 @@ async function main() {
     };
     let base = '';
     const server = http.createServer((req, res) => {
+        const url = new URL(req.url, 'http://127.0.0.1');
+        if (url.pathname === '/api/monitor/sessions') {
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({
+                ok: true,
+                sessions: [{
+                    id: 'history-1', startedAt: Date.now() - 3600000, endedAt: Date.now() - 1800000,
+                    messageCount: 2, joins: 2, likes: 7, chats: 3, platforms: ['TikTok']
+                }]
+            }));
+            return;
+        }
+        if (url.pathname === '/api/monitor/messages') {
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({
+                ok: true, total: 2, page: 1, pages: 1, pageSize: 200,
+                session: { id: 'history-1', startedAt: Date.now() - 3600000, endedAt: Date.now() - 1800000 },
+                messages: [
+                    { id: 2, t: Date.now() - 1800000, category: 'chat', platform: 'TikTok', user: 'History Two', message: 'older' },
+                    { id: 1, t: Date.now() - 1900000, category: 'like', platform: 'TikTok', user: 'History One', message: 'newer' }
+                ]
+            }));
+            return;
+        }
         if (req.url === '/api/runtime') {
             res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
             res.end(JSON.stringify({ running: true }));
@@ -80,7 +104,8 @@ async function main() {
                 audience: {
                     level: 3, score: 70, labels: ['alwaysHere', 'giftRegular'],
                     sessions: 12, streak: 6, messages: 40, gifts: 4, tenureDays: 60
-                }
+                },
+                session: { joins: 2, likes: 7, chats: 3 }
             }) + '\n\n');
             return;
         }
@@ -113,6 +138,13 @@ async function main() {
         const tags = await page.$$eval('.mon-tag', nodes => nodes.map(node => node.textContent));
         assert.deepEqual(tags, ['每次都來', '送禮常客']);
         assert.equal(await page.$eval('.mon-tags', node => node.title.includes('12')), true);
+        const session = await page.evaluate(() => ({
+            hidden: document.querySelector('#monSession').hidden,
+            joins: document.querySelector('#monSessionJoins').textContent,
+            likes: document.querySelector('#monSessionLikes').textContent,
+            chats: document.querySelector('#monSessionChats').textContent
+        }));
+        assert.deepEqual(session, { hidden: false, joins: '2', likes: '7', chats: '3' });
 
         await page.evaluate(() => { document.querySelector('#monTestPanel').open = true; });
         const targetLayout = await page.evaluate(() => {
@@ -236,9 +268,27 @@ async function main() {
             user: '', avatar: '', platform: 'tiktok', category: 'chat',
             socket: true, notify: false, previewHidden: true, prefs: null
         });
+
+        await page.click('#monModeHistory');
+        await page.waitForFunction(() => !document.querySelector('#monHistoryBar').hidden
+            && document.querySelectorAll('#monRows .mon-row').length === 2);
+        const history = await page.evaluate(() => ({
+            options: document.querySelectorAll('#monHistorySession option').length,
+            page: document.querySelector('#monHistoryPage').textContent,
+            total: document.querySelector('#monHistoryTotal').textContent,
+            status: document.querySelector('#monStatus').textContent,
+            clearDisabled: document.querySelector('#monClear').disabled
+        }));
+        assert.equal(history.options, 1);
+        assert.match(history.page, /1 \/ 1/);
+        assert.match(history.total, /2/);
+        assert.match(history.status, /歷史模式/);
+        assert.equal(history.clearDisabled, true);
+        await page.click('#monModeLive');
+        await page.waitForFunction(() => document.querySelector('#monHistoryBar').hidden);
         assert.equal(posts.length, 2);
         assert.deepEqual(errors, []);
-        console.log('Monitor UI passed: audience badges, emoji preview, prefs, and exact sent/duplicate result feedback.');
+        console.log('Monitor UI passed: audience badges, emoji preview, exact results, and history mode.');
     } finally {
         await browser?.close();
         await new Promise(resolve => server.close(resolve));

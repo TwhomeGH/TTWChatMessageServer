@@ -53,3 +53,4 @@ output/playwright/*
 
 # changelogkit 匯出的唯讀靜態站（CI 部署 GitHub Pages 產物）。
 _site/
+/data/monitor.sqlite*

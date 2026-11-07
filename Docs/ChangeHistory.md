@@ -1,5 +1,107 @@
 # ChangeHistory
 
+## 2026.11.07 22:00 常客關係視覺與總頁數
+
+**類型**: 改善 · **檔案**: `audience.html`、`assets/audience.js`、`assets/audience.css`、`lang/zh-TW.json`、`lang/en.json`、`Test/audience_ui.cjs`、`Docs/AUDIENCE.md`
+
+### 問題
+
+常客列表的關係欄只有同色文字，朋友與新朋友不易辨識；頁碼只顯示目前頁，缺少總頁數。
+
+### 修改
+
+- 觀眾欄加入 tenure 色碼 avatar 與名稱；關係欄改成「新朋友／朋友／老朋友／元老」色塊＋天數。
+- 等級欄改成有色 badge＋分數；列首加上 tenure 色條。
+- 新增關係圖例；新朋友關係已顯示時，標記欄不重複同一個 `newcomer` 標籤。
+- 頁碼改成「第 X / Y 頁」，測試補關係 badge、avatar 與總頁數。
+
+### 驗證
+
+- `node Test/audience_ui.cjs`
+- `npm run lint`、`npm run check:css`
+
+---
+
+## 2026.11.07 22:09 監控訊息歷史持久化
+
+**類型**: 功能 · **檔案**: `ScriptLib/monitor/store.cjs`、`MonitorRoutes.cjs`、`Server.js`、`TikTok.js`、`ScriptLib/socket/hub.mjs`、`monitor.html`、`assets/monitor.js`、`assets/monitor.css`、`lang/zh-TW.json`、`lang/en.json`、`.env.example`、`.gitignore`、`Test/monitor_history.test.cjs`、`Test/monitor_routes.test.cjs`、`Test/monitor_audience_ui.cjs`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`、`todo.md`
+
+### 問題
+
+monitor 只保留記憶體內 500 則；主服務重啟或超過緩衝後就無法回顧先前的直播訊息。
+
+### 修改
+
+- 新增 `data/monitor.sqlite`：`sessions`／`messages`，每場由子程序啟動／結束界定，WAL 交易式寫入。
+- 預設保留最近 10 場、14 天、每場 20,000 則；可用環境變數調整。`isTest` 測試訊息不寫入。
+- 新增需登入的 `GET /api/monitor/sessions` 與 `GET /api/monitor/messages`，支援場次、分頁、全文搜尋與分類篩選。
+- monitor 工具列新增「即時／歷史」；歷史模式有場次選單、分頁、搜尋／分類，切回即時不中斷背景 SSE。
+- 補 SQLite、route 與 monitor UI 測試；資料庫加入 `.gitignore`。
+
+### 限制
+
+- 歷史以主服務啟動的子程序為場次邊界；同一個子程序內重連仍算同一場。
+- 歷史 API 需要登入，未登入時 monitor 只顯示提示。
+- SQLite 寫入目前逐則交易；極高訊息量時可能需要批次寫入。
+
+### 驗證
+
+- `node --test Test/monitor_history.test.cjs Test/monitor_routes.test.cjs`
+- `node Test/monitor_audience_ui.cjs`
+- `npm run test:core`、`npm run lint`、`npm run check:css`
+
+---
+
+## 2026.11.07 21:58 本場統計與點讚聚合
+
+**類型**: 功能 · **檔案**: `ScriptLib/tiktok/events.mjs`、`ScriptLib/socket/hub.mjs`、`TikTok.js`、`monitor.html`、`assets/monitor.js`、`assets/monitor.css`、`lang/zh-TW.json`、`lang/en.json`、`Test/monitor_audience_ui.cjs`、`Test/socket_hub.test.mjs`、`Docs/RUNTIME.md`、`Docs/SOCKET_TRANSPORT.md`
+
+### 問題
+
+monitor 只能看到逐筆加入／點讚，沒有本場累計；每個點讚事件都直接推播，容易洗通知。
+
+### 修改
+
+- 子程序維護 `session: { joins, likes, chats }`，隨 `sendCat` payload 帶出；monitor 工具列顯示本場累計。
+- 本場點讚以原始 `data.count` 累加；每位使用者的 60 秒累計顯示維持不變。
+- 點讚 Bark／ntfy 改為 3 秒合併，類似加入事件；monitor 逐筆列保留。
+- socket test 補 `session` payload 斷言；monitor UI 測試補本場統計列。
+
+### 限制
+
+- 本場統計綁定 TikTok 子程序生命週期；重新啟動後從 0 開始。
+- 加入／點讚被 filter 或 socket 去重時，monitor 可能到下一個事件才看到最新累計。
+- 點讚通知合併若在程序結束前尚未 flush，可能不發送。
+
+### 驗證
+
+- `node Test/monitor_audience_ui.cjs`
+- `node --test Test/socket_hub.test.mjs`
+- `npm run test:core`、`npm run lint`、`npm run check:css`
+
+---
+
+## 2026.11.07 21:51 修正 monitor 自動捲動
+
+**類型**: 修正 · **檔案**: `monitor.html`、`assets/monitor.js`、`assets/monitor.css`、`lang/zh-TW.json`、`lang/en.json`、`Docs/RUNTIME.md`
+
+### 問題
+
+監控頁原本在每次 `scroll` 發現不在底部就關閉自動捲動；圖片／列高延遲載入或程式捲動造成誤判，使用者常需手動往下追新訊息。
+
+### 修改
+
+- 以 wheel／touch／pointer／key 的使用者意圖區分；使用者主動往上才停用自動捲動。
+- 內容高度變化（頭貼載入等）用 `ResizeObserver` 持續貼底。
+- 非自動捲動時累計 unseen，右下角顯示「N 則新訊息 ↓」；點擊恢復自動捲動。
+- 使用者手動捲回底部時清除 unseen。
+
+### 驗證
+
+- monitor UI 測試、core 304 項、lint、`check:css`。
+
+---
+
 ## 2026.11.06 19:55 Restream 指標頁排版與入口
 
 **類型**: 改善 · **檔案**: `OtherTool/restream/index.html`、`log.html`、`runtime.html`、`monitor.html`、`lang/zh-TW.json`、`lang/en.json`、`Test/restream_page_ui.cjs`、`Docs/TEST_FILES_REFERENCE.md`

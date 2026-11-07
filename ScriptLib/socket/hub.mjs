@@ -57,10 +57,12 @@ export class SocketHub {
      * @param {string} [options.dedupUser] 覆寫去重比對的使用者。
      * @param {string} [options.dedupMessage] 覆寫去重比對的訊息。
      * @param {string} [options.dedupVariant] 額外去重辨識（測試訊息可用頭貼區分）。
+     * @param {Object} [options.session] 本場累計（加入／點讚／聊天）。
+     * @param {boolean} [options.isTest] 測試訊息；歷史不保存。
      * @returns {boolean} 是否實際送出（false = 被去重擋下）。
      */
     sendMessage(user, message, { img = '', giftImg = '', isMain = true, userNum = 0, userList = [], category, platform,
-        dedupUser, dedupMessage, dedupVariant = '' } = {}) {
+        dedupUser, dedupMessage, dedupVariant = '', session = null, isTest = false } = {}) {
         const checkUser = String(dedupUser ?? user).trim();
         const checkMsg = String(dedupMessage ?? message).trim();
         if (this.dedup.isDuplicate(checkUser, checkMsg, dedupVariant)) {
@@ -77,7 +79,9 @@ export class SocketHub {
             giftImg,
             isMain: Boolean(isMain),
             userNum: Number(userNum),
-            userList
+            userList,
+            ...(session && typeof session === 'object' ? { session } : {}),
+            ...(isTest ? { isTest: true } : {})
         };
         this.send(payload);
         return true;

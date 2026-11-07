@@ -7,6 +7,8 @@
 `remaining(username, message, variant)` 回傳目前保護剩餘毫秒；測試訊息會把結果經 IPC 回主服務，並用 `testId` 對應到 `/status/stream/test-results`，因此能顯示精確的冷卻時間。重複的測試訊息不會再刷新 TTL。
 
 測試派發可分別關閉 socket／通知；`Notifier.notify` 回傳 `[{ channel, ok }]`，子程序再彙整成 `sent`／`partial`／`failed`／`nochannels`。一般聊天仍同時走 socket 與通知，不受測試選項影響。
+
+TikTok 的 `sendCat` 會在 payload 附上 `session: { joins, likes, chats }`，供 monitor 顯示本場累計；一般 socket 端點可忽略此欄位。點讚通知以 3 秒窗口合併，monitor 的逐筆點讚列不受影響。
 通訊格式維持 UTF-8 JSON，每筆以換行結尾，不需修改既有接收端協定。
 
 ## 預設限制

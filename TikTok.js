@@ -574,7 +574,7 @@ process.stdin.on('data', async (chunk) => {
                     if (dispatch.socket) {
                         const sent = sendSocketMessage(json.user, json.message, {
                             img: json.img || '', giftImg: json.giftImg || '', category: 'chat', platform: 'tiktok',
-                            dedupUser: origUser, dedupMessage: origMsg, dedupVariant
+                            dedupUser: origUser, dedupMessage: origMsg, dedupVariant, isTest: true
                         });
                         if (sent) dedup.add(origUser, origMsg, dedupVariant);
                         socketStatus = sent ? 'sent' : 'duplicate';
@@ -907,10 +907,12 @@ function updateCombinedViewerCount(force = false) {
  * @param {string} [options.dedupUser] 覆寫去重比對的使用者。
  * @param {string} [options.dedupMessage] 覆寫去重比對的訊息。
  * @param {string} [options.dedupVariant] 額外去重辨識（測試訊息用頭貼區分）。
+ * @param {Object} [options.session] 本場累計（加入／點讚／聊天）。
+ * @param {boolean} [options.isTest] 測試訊息；歷史不保存。
  * @returns {boolean} 是否實際送出（false = 被去重擋下）。
  */
-function sendSocketMessage(user, message, { img = '', giftImg = '', isMain = true, category, platform, dedupUser, dedupMessage, dedupVariant = '' } = {}) {
-    return socketHub.sendMessage(user, message, { img, giftImg, isMain, userNum: CacheUserNum, userList: CacheUserList, category, platform, dedupUser, dedupMessage, dedupVariant });
+function sendSocketMessage(user, message, { img = '', giftImg = '', isMain = true, category, platform, dedupUser, dedupMessage, dedupVariant = '', session = null, isTest = false } = {}) {
+    return socketHub.sendMessage(user, message, { img, giftImg, isMain, userNum: CacheUserNum, userList: CacheUserList, category, platform, dedupUser, dedupMessage, dedupVariant, session, isTest });
 }
 
 /** 把測試訊息結果回報給主服務；沒有 testId 或 IPC 時安靜略過。 */

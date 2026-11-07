@@ -63,6 +63,16 @@ const audiencePrune = setInterval(() => {
 }, 24 * 3600000);
 audiencePrune.unref();
 
+// 直播訊息歷史：子程序一場寫入同一 session，重啟後仍可回顧。
+const { createMonitorHistoryStore } = require('./ScriptLib/monitor/store.cjs');
+const monitorHistory = createMonitorHistoryStore({
+    retentionDays: Number(process.env.MONITOR_HISTORY_DAYS) || 14,
+    maxSessions: Number(process.env.MONITOR_HISTORY_SESSIONS) || 10,
+    maxMessagesPerSession: Number(process.env.MONITOR_HISTORY_MAX_MESSAGES) || 20000
+});
+const serveMonitorHistory = require('./MonitorRoutes.cjs').createMonitorRoutes(monitorHistory);
+let monitorSessionId = null;
+
 let tiktokProcess = null;
 const { RuntimeState } = require('./ScriptLib/runtime/state.cjs');
 const runtimeState = new RuntimeState(Date.now, { stopTimeoutMs: 15000, logger: (...parts) => pushLog('[RUNTIME]', ...parts) });
@@ -94,6 +104,10 @@ function pushStreamMessage(payload) {
     }
     streamMessages.push(entry);
     if (streamMessages.length > MAX_STREAM_MESSAGES) streamMessages.shift();
+    if (monitorSessionId) {
+        try { monitorHistory.append(monitorSessionId, entry); }
+        catch (error) { console.error('[MonitorHistory] 寫入失敗:', error.message); }
+    }
     for (const client of messageClients) {
         try { client.write(`data: ${JSON.stringify(entry)}\n\n`); }
         catch { messageClients.delete(client); }
@@ -437,6 +451,17 @@ function startRuntime(url) {
 
         // Persist the parent baseline so a new child continues the same counts.
         SaveCacheKeywordDataAll();
+        if (monitorSessionId) {
+            try { monitorHistory.endSession(monitorSessionId); } catch { /* ignore */ }
+        }
+        let launchMonitorSession = null;
+        try {
+            launchMonitorSession = monitorHistory.startSession({ startedAt: Date.now() });
+            monitorSessionId = launchMonitorSession;
+        } catch (error) {
+            pushLog('[MonitorHistory] 建立場次失敗:', error.message);
+            monitorSessionId = null;
+        }
         tiktokProcess = spawn(process.execPath, args, { stdio: ['pipe', 'pipe', 'pipe', 'ipc'] });
 
         if (isTK && tiktokChatSource() === 'browser') {
@@ -468,6 +493,10 @@ function startRuntime(url) {
         launchedProcess.once('error', error => {
             pushLog('[SYSTEM] 程序啟動失敗:', error.code || 'PROCESS_ERROR');
             if (tiktokProcess === launchedProcess) tiktokProcess = null;
+            if (monitorSessionId && monitorSessionId === launchMonitorSession) {
+                try { monitorHistory.endSession(monitorSessionId); } catch { /* ignore */ }
+                monitorSessionId = null;
+            }
         });
         launchedProcess.stdin.on('error', error => pushLog('[SYSTEM] 程序輸入錯誤:', error.code || 'STDIN_ERROR'));
 
@@ -549,6 +578,10 @@ function startRuntime(url) {
         tiktokProcess.on('exit', (code, signal) => {
             pushLog(`[SYSTEM] Exit code=${code} signal=${signal}`);
             if (tiktokProcess === launchedProcess) tiktokProcess = null;
+            if (monitorSessionId && monitorSessionId === launchMonitorSession) {
+                try { monitorHistory.endSession(monitorSessionId); } catch { /* ignore */ }
+                monitorSessionId = null;
+            }
 
             // 離線（TikTok.js 結束）時才把自動剪輯即時快照寫入磁碟；跨場次歷史已在 SQLite。
             try {
@@ -578,6 +611,7 @@ const server = http.createServer((req, res) => {
     if (serveAudience(req,res,isValidToken(parseCookies(req).authToken))) return;
     if (servePlanner(req,res)) return;
     if (require('./TrafficRoutes.cjs').serveTraffic(req,res,isValidToken(parseCookies(req).authToken))) return;
+    if (serveMonitorHistory(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (require('./RestreamRoutes.cjs').serveRestream(req,res,isValidToken(parseCookies(req).authToken))) return;
     if (serveRuntime(req, res, runtimeState, startRuntime)) return;
     if (require('./WebAssets.cjs').serveWebAsset(req, res)) return;

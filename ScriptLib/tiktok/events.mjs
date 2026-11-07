@@ -40,9 +40,13 @@ export function registerTikTokEvents(connection, deps) {
         logger = console,
     } = deps;
 
+    // 本場累計；隨每則 socket payload 帶給 monitor。
+    const sessionStats = { joins: 0, likes: 0, chats: 0 };
+    const sessionSnapshot = () => ({ ...sessionStats });
+
     // 以固定 category／platform 送 socket 訊息的便利包裝。
     const sendCat = (category, user, message, img, giftImg, isMain = true, dedupUser, dedupMessage) =>
-        sendSocketMessage(user, message, { img, giftImg, isMain, dedupUser, dedupMessage, category, platform: 'tiktok' });
+        sendSocketMessage(user, message, { img, giftImg, isMain, dedupUser, dedupMessage, category, platform: 'tiktok', session: sessionSnapshot() });
 
     // 重播聊天過濾統計（僅本模組使用）。
     let lastTikTokReplayLog = 0;
@@ -51,6 +55,29 @@ export function registerTikTokEvents(connection, deps) {
     // 加入事件：socket 逐筆送、bark/ntfy 累計 3 秒後合併。
     let memberBarkAccum = [];
     let memberBarkTimer = null;
+
+    // 點讚通知也做短時間合併，避免每個讚都推一次。
+    let likeBarkAccum = [];
+    let likeBarkTimer = null;
+
+    /** 將 3 秒內的點讚合併成一則通知；monitor 仍保留逐筆列。 */
+    function flushLikeBark() {
+        if (likeBarkAccum.length === 0) return;
+        const byUser = new Map();
+        let avatar = '';
+        for (const item of likeBarkAccum) {
+            byUser.set(item.nickname, (byUser.get(item.nickname) || 0) + item.count);
+            if (!avatar) avatar = item.avatar;
+        }
+        const entries = [...byUser.entries()];
+        const total = entries.reduce((sum, [, count]) => sum + count, 0);
+        const body = entries.length > 5
+            ? `${entries.slice(0, 5).map(([name, count]) => `${name} ${count} 次`).join('、')}⋯等 ${total} 次`
+            : `${entries.map(([name, count]) => `${name} ${count} 次`).join('、')}（合計 ${total} 次）`;
+        notify('❤️ 點讚', body, avatar);
+        likeBarkAccum = [];
+        likeBarkTimer = null;
+    }
 
     /**
      * 將累計的加入事件合併成一則推播（超過 5 人以「⋯等 N 人」摘要）。
@@ -242,7 +269,8 @@ export function registerTikTokEvents(connection, deps) {
             return;
         }
 
-        // socket：維持逐筆發送
+        // socket：維持逐筆發送；本場加入數同步給 monitor。
+        sessionStats.joins += 1;
         sendCat('member', nickname, "來了", iconn, "", false, data.user.nickname, "加入了");
 
         // bark：累計後合併發送
@@ -335,6 +363,7 @@ export function registerTikTokEvents(connection, deps) {
                 notify(nickname + "[翻譯]", RES, iconn);
             }
 
+            sessionStats.chats += 1;
             sendCat('chat', nickname, RESCHAT, iconn, "", true, data.user.nickname, data.content);
 
             // 翻譯屬於同一則留言，不重複統計。
@@ -396,13 +425,19 @@ export function registerTikTokEvents(connection, deps) {
     connection.on(WebcastEvent.LIKE, data => {
         logRawEvent('LIKE', data);
 
+        const delta = Math.max(0, Number(data.count) || 0);
+        sessionStats.likes += delta;
         let iconn = getTikTokProfilePic(data.user);
-        let likeCount = likeUserCount(data.user.nickname, data.count || 0);
+        let likeCount = likeUserCount(data.user.nickname, delta);
         let mess = `喜歡你 ${likeCount} 次`;
 
         logger.log(`${data.user.nickname} ${mess}`);
 
-        notify(data.user.nickname, mess, iconn);
+        if (delta > 0) {
+            likeBarkAccum.push({ nickname: data.user.nickname, avatar: iconn, count: delta });
+            if (likeBarkTimer) clearTimeout(likeBarkTimer);
+            likeBarkTimer = setTimeout(flushLikeBark, 3000);
+        }
         sendCat('like', data.user.nickname, mess, iconn, "", false);
         dedup.add(data.user.nickname.trim(), mess);
 

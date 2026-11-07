@@ -29,6 +29,14 @@ Socket 使用既有 SOCKET_API 設定（可再用 SOCKET_APIS 加開多個端點
 
 `/monitor`（別名 `/messages`）以 SSE 訂閱 `/status/stream/messages`，顯示子程序鏡像回主服務的每則 socket 訊息（時間／平台／分類／使用者／內容），可依分類（清單來自 `/api/message-categories`）與關鍵字篩選。此頁**不需要連線任何 socket 端點**：子程序每送出一則訊息都會鏡像回主服務（`ScriptLib/socket/monitor-relay.mjs`，具背壓上限）。
 
+自動捲動以使用者意圖區分：圖片載入或列高變化會持續貼底，只有在 wheel／touch／拖曳／鍵盤主動往上時才暫停；離開底部後累計新訊息並顯示右下角「N 則新訊息 ↓」，點擊即回到最新。
+
+工具列會顯示子程序維護的本場加入／點讚／聊天累計。數字隨 socket payload 的 `session` metadata 更新；點讚以原始 `data.count` 累加，因此與每位使用者的 60 秒顯示計數不同。點讚的 Bark／ntfy 通知會像加入事件一樣合併 3 秒，monitor 仍保留逐筆點讚列。
+
+歷史訊息保存在 `data/monitor.sqlite`（`sessions`／`messages`）。每次 TikTok 子程序啟動是一場；預設保留最近 10 場、14 天、每場最多 20,000 則，可用 `MONITOR_HISTORY_DAYS`／`MONITOR_HISTORY_SESSIONS`／`MONITOR_HISTORY_MAX_MESSAGES` 調整。測試訊息與 `isTest` 不寫入；歷史 API 需要主服務登入，即時 SSE 仍維持原本公開行為。
+
+monitor 工具列的「即時／歷史」切換會在歷史模式列出最近場次、支援搜尋／分類篩選與分頁；切回即時會恢復背景持續累積的 SSE 訊息。歷史查詢 API 為 `GET /api/monitor/sessions` 與 `GET /api/monitor/messages?session=…&page=…&q=…&categories=…`。
+
 「測試訊息（本機預覽）」可輸入使用者、頭貼 URL、平台、分類與訊息；只加入目前頁面，不會送到 `/chat`、平台、filter、AutoClip 或統計。emoji 代碼由公開唯讀的 `/api/emoji/preview` 取得目前映射後在瀏覽器解析，停用或不存在的代碼保留原文。測試列有「測試」badge，重新整理或清除畫面即消失。
 
 頭貼可手動輸入 HTTP(S) URL，或從目前 emoji map 的 active 項目中選取（同一 URL 只列一次）；選取後表單旁會即時顯示頭貼預覽，載入失敗會提示。使用者名稱、頭貼、平台與分類會保存在瀏覽器 `localStorage`（`ttw-monitor-test-prefs`），重新整理後還原；測試訊息本文不保存。「清除測試設定」會移除這組偏好。
