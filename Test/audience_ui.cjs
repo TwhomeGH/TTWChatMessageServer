@@ -62,6 +62,12 @@ async function main() {
         assert.match(relationshipUi.page, /1 \/ 1/);
         assert.ok(relationshipUi.tenures >= 2);
         assert.ok(relationshipUi.avatars >= 2);
+        await page.click('#audience-tenure-newcomer');
+        await page.waitForFunction(() => document.querySelectorAll('#audience-rows tr').length === 1);
+        assert.equal(await page.$eval('#audience-rows tr .audience-name', el => el.textContent), 'Bob');
+        assert.equal(await page.$eval('#audience-count', el => el.textContent.includes('1')), true);
+        await page.click('#audience-tenure-all');
+        await page.waitForFunction(() => document.querySelectorAll('#audience-rows tr').length >= 2);
         await page.click('#audience-rows tr');
         await page.waitForFunction(() => !document.querySelector('#audience-detail').hidden);
         assert.equal(await page.$eval('#audience-detail-name', el => el.textContent), 'Alice');

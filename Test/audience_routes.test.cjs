@@ -36,10 +36,12 @@ test('常客 API 需要登入，平台名稱會正規化並轉小寫查詢', asy
     assert.equal((await request(f.serve, '/api/audience')).status, 401);
     assert.equal((await request(f.serve, '/api/audience', { method: 'POST', authorized: true })).status, 405);
 
-    const list = await request(f.serve, '/api/audience?platform=tiktok&q=alice&sort=score&page=2', { authorized: true });
+    const list = await request(f.serve, '/api/audience?platform=tiktok&q=alice&sort=score&page=2&tenures=newcomer,friend', { authorized: true });
     assert.equal(list.status, 200);
     assert.equal(list.body.total, 1);
-    assert.deepEqual(f.calls[0], ['list', { platform: 'TikTok', q: 'alice', sort: 'score', page: 2 }]);
+    assert.deepEqual(f.calls[0], ['list', {
+        platform: 'TikTok', q: 'alice', sort: 'score', page: 2, tenures: ['newcomer', 'friend']
+    }]);
 
     const detail = await request(f.serve, '/api/audience/user?platform=twitch&user=Alice', { authorized: true });
     assert.equal(detail.status, 200);

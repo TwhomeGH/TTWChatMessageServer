@@ -43,10 +43,11 @@
 
     <div class="audience-legend" aria-label="關係圖例">
       <span class="audience-legend-label" data-i18n="audience.legend">關係</span>
-      <span class="audience-tenure is-tenure-newcomer" data-i18n="audience.tenure.newcomer">新朋友</span>
-      <span class="audience-tenure is-tenure-friend" data-i18n="audience.tenure.friend">朋友</span>
-      <span class="audience-tenure is-tenure-oldFriend" data-i18n="audience.tenure.oldFriend">老朋友</span>
-      <span class="audience-tenure is-tenure-veteran" data-i18n="audience.tenure.veteran">元老</span>
+      <button id="audience-tenure-all" type="button" class="audience-tenure is-all" aria-pressed="true" data-i18n="audience.tenure.all">全部</button>
+      <button id="audience-tenure-newcomer" type="button" class="audience-tenure is-tenure-newcomer" data-tenure="newcomer" aria-pressed="false" data-i18n="audience.tenure.newcomer">新朋友</button>
+      <button id="audience-tenure-friend" type="button" class="audience-tenure is-tenure-friend" data-tenure="friend" aria-pressed="false" data-i18n="audience.tenure.friend">朋友</button>
+      <button id="audience-tenure-oldFriend" type="button" class="audience-tenure is-tenure-oldFriend" data-tenure="oldFriend" aria-pressed="false" data-i18n="audience.tenure.oldFriend">老朋友</button>
+      <button id="audience-tenure-veteran" type="button" class="audience-tenure is-tenure-veteran" data-tenure="veteran" aria-pressed="false" data-i18n="audience.tenure.veteran">元老</button>
     </div>
 
     <div class="table-wrap audience-table-wrap">

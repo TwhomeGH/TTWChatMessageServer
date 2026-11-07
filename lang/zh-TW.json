@@ -340,6 +340,7 @@
   "audience.count": "共 {count} 位",
   "audience.page": "第 {page} / {pages} 頁",
   "audience.legend": "關係",
+  "audience.tenure.all": "全部",
   "audience.empty": "目前沒有符合的觀眾。",
   "audience.prev": "上一頁",
   "audience.nextPage": "下一頁",

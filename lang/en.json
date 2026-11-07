@@ -340,6 +340,7 @@
   "audience.count": "{count} viewers",
   "audience.page": "Page {page} of {pages}",
   "audience.legend": "Relationship",
+  "audience.tenure.all": "All",
   "audience.empty": "No matching viewers.",
   "audience.prev": "Previous",
   "audience.nextPage": "Next",

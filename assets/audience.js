@@ -7,7 +7,7 @@
     await window.TTWI18n.ready;
     const t = (key, params = {}, fallback) => window.TTWI18n.t('audience.' + key, params, fallback);
     const el = id => document.getElementById(id);
-    const state = { page: 1, pageSize: 50, total: 0, platform: '', q: '', sort: 'score', list: null, detail: null, timer: null };
+    const state = { page: 1, pageSize: 50, total: 0, platform: '', q: '', sort: 'score', tenures: new Set(), list: null, detail: null, timer: null };
 
     const fmtDate = value => Number.isFinite(Number(value))
         ? new Date(Number(value)).toLocaleString(window.TTWI18n.language, { dateStyle: 'medium', timeStyle: 'short' })
@@ -126,7 +126,8 @@
 
     async function loadList() {
         const params = new URLSearchParams({
-            platform: state.platform, q: state.q, sort: state.sort, page: String(state.page)
+            platform: state.platform, q: state.q, sort: state.sort, page: String(state.page),
+            tenures: [...state.tenures].join(',')
         });
         const response = await fetch('/api/audience?' + params, { cache: 'no-store' });
         if (response.status === 401) { location.href = '/'; return; }
@@ -236,6 +237,30 @@
         state.page = 1;
         loadList();
     });
+    const tenureButtons = [...document.querySelectorAll('.audience-tenure[data-tenure]')];
+    const tenureAll = el('audience-tenure-all');
+    function updateTenureLegend() {
+        for (const button of tenureButtons) {
+            button.setAttribute('aria-pressed', String(state.tenures.has(button.dataset.tenure)));
+        }
+        tenureAll.setAttribute('aria-pressed', String(state.tenures.size === 0));
+    }
+    for (const button of tenureButtons) {
+        button.addEventListener('click', () => {
+            const value = button.dataset.tenure;
+            if (state.tenures.has(value)) state.tenures.delete(value);
+            else state.tenures.add(value);
+            updateTenureLegend();
+            state.page = 1;
+            loadList();
+        });
+    }
+    tenureAll.addEventListener('click', () => {
+        state.tenures.clear();
+        updateTenureLegend();
+        state.page = 1;
+        loadList();
+    });
     el('audience-prev').addEventListener('click', () => { if (state.page > 1) { state.page--; loadList(); } });
     el('audience-next').addEventListener('click', () => {
         if (state.page * state.pageSize < state.total) { state.page++; loadList(); }
@@ -251,9 +276,12 @@
     state.platform = params.get('platform') || '';
     state.q = params.get('q') || '';
     state.sort = params.get('sort') || 'score';
+    state.tenures = new Set((params.get('tenures') || '').split(',')
+        .map(value => value.trim()).filter(value => ['newcomer', 'friend', 'oldFriend', 'veteran'].includes(value)));
     el('audience-platform').value = state.platform;
     el('audience-sort').value = state.sort;
     el('audience-search').value = state.q;
+    updateTenureLegend();
     await loadList();
     const initialUser = params.get('user');
     if (initialUser && state.platform) await loadDetails(state.platform, initialUser);

@@ -115,4 +115,10 @@ test('userId 優先於顯示名稱，列表可搜尋與分頁', t => {
     assert.equal(filtered.users[0].displayName, 'Bob');
     assert.equal(f.tracker.details('TikTok', 'u1').messages, 2);
     assert.equal(f.tracker.details('TikTok', 'u2'), null);
+
+    // 新朋友與朋友的 tenure 篩選。
+    f.tracker.observe(f.entry(5, 'chat', 'Cara', { message: 'new' }));
+    assert.equal(f.tracker.list({ tenures: ['newcomer'] }).total, 1);
+    assert.equal(f.tracker.list({ tenures: ['friend'] }).total, 2);
+    assert.equal(f.tracker.list({ tenures: ['newcomer', 'friend'] }).total, 3);
 });

@@ -65,6 +65,11 @@ function levelFor({ score = 0, activeStreams = 0, streak = 0 } = {}) {
     return 0;
 }
 
+/** 關係分類與前端保持同一組 key。 */
+function tenureKey(days) {
+    return days < 7 ? 'newcomer' : days < 90 ? 'friend' : days < 365 ? 'oldFriend' : 'veteran';
+}
+
 /** 產生監控頁用的簡短標記；標記不寫入資料庫，門檻調整後立即生效。 */
 function labelsFor({ activeStreams = 0, streak = 0, messages = 0, gifts = 0, giftStreams = 0, tenureDays = 0 } = {}) {
     const labels = [];
@@ -216,13 +221,16 @@ function createAudienceTracker({
         return value;
     };
 
-    const list = ({ platform = '', q = '', sort = 'score', page = 1, pageSize = PAGE_SIZE } = {}) => {
+    const list = ({ platform = '', q = '', sort = 'score', page = 1, pageSize = PAGE_SIZE, tenures = [] } = {}) => {
         if (!Number.isInteger(page) || page < 1 || page > 100000) throw new RangeError('page');
         const size = Math.min(Math.max(Number(pageSize) || PAGE_SIZE, 1), 100);
         const users = db.prepare(`SELECT platform,user_key FROM audience_users
             WHERE (?='' OR platform=?) AND (?='' OR instr(lower(display_name),lower(?))>0)
             ORDER BY last_seen DESC LIMIT ?`).all(platform, platform, q, q, MAX_LIST_USERS);
-        const rows = users.map(row => summary(row.platform, row.user_key)).filter(Boolean);
+        const selectedTenures = (Array.isArray(tenures) ? tenures : [tenures])
+            .map(value => String(value || '').trim()).filter(value => ['newcomer', 'friend', 'oldFriend', 'veteran'].includes(value));
+        const rows = users.map(row => summary(row.platform, row.user_key)).filter(Boolean)
+            .filter(user => !selectedTenures.length || selectedTenures.includes(tenureKey(user.tenureDays)));
         const order = {
             score: (a, b) => b.score - a.score || b.lastSeen - a.lastSeen,
             sessions: (a, b) => b.activeStreams - a.activeStreams || b.score - a.score,

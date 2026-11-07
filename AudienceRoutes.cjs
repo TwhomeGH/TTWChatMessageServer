@@ -54,7 +54,8 @@ function createAudienceRoutes(tracker) {
                     platform: platformName(url.searchParams.get('platform') || ''),
                     q: url.searchParams.get('q') || '',
                     sort: url.searchParams.get('sort') || 'score',
-                    page: Number(url.searchParams.get('page') || 1)
+                    page: Number(url.searchParams.get('page') || 1),
+                    tenures: (url.searchParams.get('tenures') || '').split(',').map(value => value.trim()).filter(Boolean)
                 });
                 res.writeHead(200);
                 res.end(JSON.stringify(result));

@@ -289,3 +289,20 @@
 .audience-table td {
     vertical-align: middle;
 }
+
+/* 關係篩選：legend 是可點擊的 tenure chip。 */
+.audience-tenure {
+    cursor: pointer;
+    font: inherit;
+}
+.audience-tenure.is-all {
+    color: #cbd5e1;
+    border-color: #475569;
+    background: #1e293b;
+}
+.audience-tenure[aria-pressed="true"] {
+    box-shadow: 0 0 0 2px #60a5fa;
+}
+.audience-legend .audience-tenure[aria-pressed="false"] {
+    opacity: .62;
+}
