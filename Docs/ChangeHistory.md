@@ -23,6 +23,30 @@
 
 ---
 
+## 2026.11.07 23:49 Signer 導航節流與 WAF 冷卻
+
+**類型**: 修正 · **檔案**: `ScriptLib/tiktok/navigation-guard.mjs`、`SignServer/direct-signer.mjs`、`SignServer/index.js`、`Test/navigation_guard.test.mjs`、`.env.example`、`Docs/BROWSER.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 問題
+
+WAF 403 時，fetch page 可能在兩次錯誤後立即重建並導航 TikTok；最壞情況每 5 秒一次，容易放大 IP 頻率保護。fetch page 原本也每 5 分鐘無條件更新。
+
+### 修改
+
+- 新增 `TikTokNavigationGuard`：所有 signer TikTok 文件導航最小間隔 10 秒，403／429／451 後冷卻 10 分鐘。
+- 冷卻期間不重建也不導航；避免 WAF 時反覆開頁。
+- fetch page 改為 15 分鐘更新；`im/fetch` 連續錯誤改指數退避，且 fetch page 最多每 10 分鐘重置一次。
+- 導航 log 加入次數；狀態可由 `signerNavigationState()` 讀取。
+- 補導航節流單元測試與環境變數文件。
+
+### 驗證
+
+- `node --test Test/navigation_guard.test.mjs`
+- `node --check SignServer/direct-signer.mjs`、`node --check SignServer/index.js`
+- `npm run lint`
+
+---
+
 ## 2026.11.07 22:09 監控訊息歷史持久化
 
 **類型**: 功能 · **檔案**: `ScriptLib/monitor/store.cjs`、`MonitorRoutes.cjs`、`Server.js`、`TikTok.js`、`ScriptLib/socket/hub.mjs`、`monitor.html`、`assets/monitor.js`、`assets/monitor.css`、`lang/zh-TW.json`、`lang/en.json`、`.env.example`、`.gitignore`、`Test/monitor_history.test.cjs`、`Test/monitor_routes.test.cjs`、`Test/monitor_audience_ui.cjs`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`、`todo.md`

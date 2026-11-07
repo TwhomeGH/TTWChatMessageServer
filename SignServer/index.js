@@ -173,6 +173,7 @@ function imFetchPollLoop(roomId, connection, mock) {
     let errCount = 0;
     let silentCount = 0;
     let consecErrors = 0;
+    let lastFetchResetAt = 0;
 
     const poll = async () => {
         while (connection._wsClientInstance === mock) {
@@ -211,10 +212,16 @@ function imFetchPollLoop(roomId, connection, mock) {
                 consecErrors++;
                 if (errCount % 10 === 1) console.warn('[imFetch] err:', e.message);
                 if (consecErrors >= 2) {
-                    console.warn('[imFetch] 2 consecutive errors, resetting fetch page');
-                    resetFetchPage();
+                    const now = Date.now();
+                    if (now - lastFetchResetAt >= 600000) {
+                        console.warn('[imFetch] consecutive errors, resetting fetch page once');
+                        resetFetchPage();
+                        lastFetchResetAt = now;
+                    }
+                    const backoff = Math.min(30000 * 2 ** Math.min(consecErrors - 2, 4), 300000);
+                    console.warn(`[imFetch] ${consecErrors} consecutive errors; backoff ${Math.round(backoff / 1000)}s`);
+                    await new Promise(r => setTimeout(r, backoff));
                     consecErrors = 0;
-                    await new Promise(r => setTimeout(r, 5000));
                     continue;
                 }
                 if (errCount > 5) {

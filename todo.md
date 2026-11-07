@@ -21,6 +21,7 @@
 - [x] monitor 本場加入／點讚／聊天統計與點讚通知 3 秒聚合。
 - [ ] 獨立 `/dedup`（或 `/diagnostics/dedup`）診斷頁：最近 test results、其他送入訊息的去重狀態查詢與剩餘冷卻；由 monitor／runtime 提供入口。
 - [x] monitor 歷史 SQLite 持久化、最近場次 API 與即時／歷史切換。
+- [x] Signer TikTok 導航節流與 WAF 403 冷卻，避免 fetch page 重建風暴。
 - [ ] 正式環境以實際 child 程序驗證 IPC 結果與倒數（目前 monitor UI 使用假 SSE／fake `/chat`）。
 
 ## 表情映射後續（2026-11-06）

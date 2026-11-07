@@ -4,12 +4,18 @@
  */
 import { BrowserSession } from '../ScriptLib/browser/session.mjs';
 import { deleteTikTokWafCookie } from '../ScriptLib/browser/waf.mjs';
+import { TikTokNavigationGuard } from '../ScriptLib/tiktok/navigation-guard.mjs';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SDK_DIR = path.resolve(__dirname, './sdk');
+const FETCH_PAGE_TTL_MS = Math.max(60000, Number(process.env.DIRECT_SIGNER_FETCH_PAGE_TTL_MS) || 15 * 60000);
+const navigationGuard = new TikTokNavigationGuard({
+    minIntervalMs: Math.max(1000, Number(process.env.DIRECT_SIGNER_NAV_MIN_MS) || 10000),
+    wafCooldownMs: Math.max(60000, Number(process.env.DIRECT_SIGNER_WAF_COOLDOWN_MS) || 10 * 60000)
+});
 
 const session = new BrowserSession(async options => {
     const { default: puppeteer } = await import('puppeteer-core');
@@ -36,6 +42,7 @@ let liveWsReady = false;
 let ready = false;
 /** 導航前先清掉 WAF token；只動 cookie，不影響登入，也不額外發 TikTok 請求。 */
 async function gotoTikTok(target, url, options) {
+    await navigationGuard.acquire(url);
     try {
         await deleteTikTokWafCookie(target);
     } catch (error) {
@@ -53,8 +60,14 @@ async function gotoTikTok(target, url, options) {
         if (status !== 403) throw error;
     } finally {
         target.off('response', listener);
+        navigationGuard.record(status, url);
     }
     return status;
+}
+
+/** 供 runtime／診斷讀取導航節流狀態。 */
+export function signerNavigationState() {
+    return navigationGuard.state();
 }
 
 /** 連線失敗冷卻 10 秒，避免收訊重試大量建立控制連線。 */
@@ -87,13 +100,18 @@ async function initialize() {
     await page.evaluateOnNewDocument((code) => { try { eval(code); } catch(e) { console.error('[SDK] v5.1.3 error:', e.message); } }, sdk513);
 
     console.log('[DirectSigner] Navigating to TikTok...');
+    let navigationStatus;
     try {
-        await gotoTikTok(page, 'https://www.tiktok.com/', {
+        navigationStatus = await gotoTikTok(page, 'https://www.tiktok.com/', {
             waitUntil: 'domcontentloaded',
             timeout: 60000,
         });
     } catch (e) {
         console.log('[DirectSigner] Navigation warning:', e.message);
+        throw e;
+    }
+    if ([403, 429, 451].includes(Number(navigationStatus))) {
+        throw new Error(`TikTok navigation blocked with HTTP ${navigationStatus}`);
     }
 
     await new Promise(r => setTimeout(r, 3000));
@@ -409,10 +427,18 @@ export async function initLivePage(username, timeoutMs = 20000) {
     await setTikTokCookies(page);
     const liveUrl = `https://www.tiktok.com/@${username}/live`;
     console.log(`[DirectSigner] Navigating to ${liveUrl}...`);
+    let liveStatus;
     try {
-        await page.goto(liveUrl, { waitUntil: 'networkidle0', timeout: 45000 });
+        liveStatus = await gotoTikTok(page, liveUrl, { waitUntil: 'networkidle0', timeout: 45000 });
     } catch (e) {
         console.warn(`[DirectSigner] Nav warning: ${e.message}`);
+        try { await page.close(); } catch { /* ignore */ }
+        return false;
+    }
+    if ([403, 429, 451].includes(Number(liveStatus))) {
+        console.warn(`[DirectSigner] Live page blocked with HTTP ${liveStatus}; waiting for cooldown`);
+        try { await page.close(); } catch { /* ignore */ }
+        return false;
     }
 
     const start = Date.now();
@@ -467,17 +493,29 @@ let fetchPageCreated = 0;
 export async function browserFetchSigned(params) {
     if (!browser) throw new Error('Signer not initialized');
 
-    // Refresh fetch page every 5 minutes to prevent staleness
+    // 頁面只定期更新；真正 403 時由 navigation guard 冷卻，不立刻重建。
     const now = Date.now();
-    if (!fetchPage || fetchPage.isClosed() || (now - fetchPageCreated > 300000)) {
+    if (!fetchPage || fetchPage.isClosed() || (now - fetchPageCreated > FETCH_PAGE_TTL_MS)) {
         if (fetchPage && !fetchPage.isClosed()) {
             try { await fetchPage.close(); } catch (err) { console.warn('[DirectSigner] 關閉 fetchPage 失敗:', err?.message || err); }
         }
-        fetchPage = await session.newPage();
-        await setTikTokCookies(fetchPage);
-        await gotoTikTok(fetchPage, 'https://www.tiktok.com/', { waitUntil: 'networkidle0', timeout: 30000 }).catch(() => {});
-        fetchPageCreated = now;
-        console.log('[DirectSigner] Fetch page ready');
+        fetchPage = null;
+        const nextPage = await session.newPage();
+        try {
+            await setTikTokCookies(nextPage);
+            const status = await gotoTikTok(nextPage, 'https://www.tiktok.com/', {
+                waitUntil: 'networkidle0', timeout: 30000
+            });
+            if ([403, 429, 451].includes(Number(status))) {
+                throw new Error(`TikTok fetch page blocked with HTTP ${status}`);
+            }
+            fetchPage = nextPage;
+            fetchPageCreated = now;
+            console.log('[DirectSigner] Fetch page ready');
+        } catch (error) {
+            try { await nextPage.close(); } catch { /* ignore */ }
+            throw error;
+        }
     }
 
     const rawBytes = await fetchPage.evaluate(async ({ roomId, cursor }) => {
@@ -524,6 +562,11 @@ export async function browserFetchSigned(params) {
 
     if (!rawBytes || rawBytes.status !== 200) {
         console.warn('[DirectSigner] im/fetch/ status:', rawBytes?.status);
+        if ([403, 429, 451].includes(Number(rawBytes?.status))) {
+            navigationGuard.record(rawBytes.status, 'im/fetch');
+            resetFetchPage();
+            throw new Error(`TikTok im/fetch blocked with HTTP ${rawBytes.status}`);
+        }
         if (rawBytes?.url) {
             try {
                 const ru = new URL(rawBytes.url);

@@ -60,6 +60,7 @@ node Test/xxx.mjs
 | `Test/monitor_audience_ui.cjs` | 監控聊天列、本場統計、測試訊息、Socket／通知派發、精確結果與即時／歷史切換 |
 | `Test/monitor_history.test.cjs` | 監控歷史 SQLite 的場次、分頁、搜尋、保留與測試訊息排除 |
 | `Test/monitor_routes.test.cjs` | 監控歷史 API 的登入、場次、訊息與缺少場次 |
+| `Test/navigation_guard.test.mjs` | Signer TikTok 導航最小間隔與 WAF 冷卻 |
 | `Test/notify.test.mjs` | 通知格式化與 Bark／ntfy 逐通道結果 |
 | `Test/traffic_planner_ui.cjs` | 人流分類、批次補分類、預覽／套用／復原與手機寬度 |
 | `Test/traffic_planner_collecting_ui.cjs` | 資料累積建議、時段分組提醒與一週計畫 UI |

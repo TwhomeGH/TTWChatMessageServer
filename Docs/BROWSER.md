@@ -19,6 +19,9 @@
 | DIRECT_SIGNER_PRIORITY=1 | 同時有 EulerStream key 時優先本機簽名 |
 | BROWSER_EXECUTABLE | 自訂 Chrome／Edge 執行檔完整路徑 |
 | BROWSER_DEBUG_URL | 預設 http://127.0.0.1:9222，僅接受本機 HTTP 位址 |
+| DIRECT_SIGNER_NAV_MIN_MS | 簽名器 TikTok 導航最小間隔，預設 10000 |
+| DIRECT_SIGNER_WAF_COOLDOWN_MS | 403／429／451 後的導航冷卻，預設 600000 |
+| DIRECT_SIGNER_FETCH_PAGE_TTL_MS | 簽名器 fetch page 更新週期，預設 900000 |
 | DIRECT_SIGNER_IMPORT_COOKIES=1 | 明確使用舊 TIKTOK_COOKIES／SESSION_ID 匯入；預設不覆蓋瀏覽器 Cookie |
 
 Windows profile 固定保存在 LOCALAPPDATA/TTWChatMessageServer/browser-profile，其他系統使用 ~/.local/share/TTWChatMessageServer/browser-profile。
@@ -39,6 +42,15 @@ TikTok 的 `_waftokenid` 是 WAF token，不是登入 cookie。長時間閒置�
 - 清除後由下一次成功的 TikTok 頁面重新產生 token。
 
 模組：`ScriptLib/browser/waf.mjs`；由 `controller.cjs` 與 `SignServer/direct-signer.mjs` 共用。`BROWSER_WAF_CLEAN_MIN` 預設 360 分鐘。
+
+### 簽名器導航節流
+
+`ScriptLib/tiktok/navigation-guard.mjs` 限制簽名器所有 TikTok 文件導航：
+
+- 預設最小間隔 10 秒（`DIRECT_SIGNER_NAV_MIN_MS`）。
+- 導航回 403／429／451 後冷卻 10 分鐘（`DIRECT_SIGNER_WAF_COOLDOWN_MS`），冷卻期間不重建頁面、不重新導航。
+- fetch page 預設 15 分鐘更新一次（`DIRECT_SIGNER_FETCH_PAGE_TTL_MS`）。
+- `im/fetch` 連續錯誤改為指數退避；fetch page 最多每 10 分鐘重置一次，避免 WAF 時每 5 秒重建導航。
 
 ## TikTok 聊天來源（無 EulerStream 時）
 
