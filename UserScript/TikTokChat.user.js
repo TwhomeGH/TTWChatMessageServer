@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      2.12
+// @version      2.13
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像；新增目標直播間鎖定，避免亂逛誤送）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
@@ -170,6 +170,57 @@
         
     }
 
+    let monitorActive = false;
+    let monitorObservers = [];
+    let enterObserverTimer = null;
+    let audienceTimer = null;
+
+    /** 只在目標直播頁且分頁可見時掛 observer；離開／隱藏就全部拆除。 */
+    function startMonitoring() {
+        if (monitorActive || !canSend() || document.visibilityState === 'hidden') return;
+        monitorActive = true;
+        View = 0;
+        ViewUserList = [];
+        hydrateUntil = Date.now() + HYDRATION_MS;
+        document.querySelectorAll('div[data-e2e="chat-message"]')
+            .forEach(node => sentMessages.add(node));
+        monitorObservers.push(
+            onElementAdded('div[data-e2e="chat-message"]', getNewChatMessages),
+            watchGiftMessages(getNewGiftMessages)
+        );
+        enterObserverTimer = setTimeout(() => {
+            if (!monitorActive) return;
+            monitorObservers.push(watchEnterMessages(getNewEnterMessages));
+        }, 15000);
+        audienceTimer = setInterval(() => {
+            if (!canSend() || document.hidden) return;
+            View = getViewerCount();
+            sendAudienceUpdate();
+        }, 15000);
+        console.log('[TikTok轉接] 開始監控 @' + currentHandle());
+    }
+
+    function stopMonitoring(reason) {
+        if (!monitorActive) return;
+        monitorActive = false;
+        for (const observer of monitorObservers) {
+            try { observer.disconnect(); } catch { /* ignore */ }
+        }
+        monitorObservers = [];
+        if (enterObserverTimer) clearTimeout(enterObserverTimer);
+        if (audienceTimer) clearInterval(audienceTimer);
+        enterObserverTimer = null;
+        audienceTimer = null;
+        hydrateUntil = 0;
+        console.log('[TikTok轉接] 停止監控：' + reason);
+    }
+
+    function syncMonitoring() {
+        const should = canSend() && document.visibilityState !== 'hidden';
+        if (should && !monitorActive) startMonitoring();
+        else if (!should && monitorActive) stopMonitoring(canSend() ? '分頁隱藏' : '離開目標直播間');
+    }
+
     // 監控 DOM 新增元素的工具函式
     function onElementAdded(selector, callback) {
         const observer = new MutationObserver(mutations => {
@@ -255,17 +306,6 @@ function hasContent(el) {
 
     return false;
 }
-
-    function getViewers() {
-        const viewers = [];
-        document.querySelectorAll('[data-e2e="live-chat-container"] .flex.items-center.cursor-pointer').forEach(el => {
-            const rank = el.querySelector('div.w-22')?.innerText?.trim();
-            const name = el.querySelector('.flex-auto')?.innerText?.trim();
-            const giftCount = el.querySelector('.flex-shrink-0.align-middle')?.innerText?.trim();
-            if (name) viewers.push({ rank, name, giftCount });
-        });
-        return viewers;
-    }
 
     // 觀眾人數通常在一個包含 "觀眾人數" 字樣的元素中，裡面有多個 span 組成的數字
     function getViewerCount() {
@@ -490,8 +530,18 @@ function hasContent(el) {
             const body = box.querySelector('#ttw-body');
             body.hidden = !body.hidden;
         };
-        input.oninput = () => { target.handle = input.value.replace(/^@/, '').trim(); saveTarget(); renderPanelState(); };
-        enabled.onchange = () => { target.enabled = enabled.checked; saveTarget(); renderPanelState(); };
+        input.oninput = () => {
+            target.handle = input.value.replace(/^@/, '').trim();
+            saveTarget();
+            syncMonitoring();
+            renderPanelState();
+        };
+        enabled.onchange = () => {
+            target.enabled = enabled.checked;
+            saveTarget();
+            syncMonitoring();
+            renderPanelState();
+        };
         renderPanelState();
     }
 
@@ -513,38 +563,21 @@ function hasContent(el) {
         if (pill) pill.textContent = cls === 'on' ? '轉接中 @' + here : (cls === 'warn' ? '轉接未設定' : '轉接已暫停');
     }
 
-    if (document.body) buildPanel();
-    else document.addEventListener('DOMContentLoaded', buildPanel);
-    // TikTok 是 SPA，換頁不會重載；定期重畫狀態，發送判斷則每次都讀當前網址。
-    setInterval(renderPanelState, 5000);
+    function boot() {
+        buildPanel();
+        syncMonitoring();
+    }
+    if (document.body) boot();
+    else document.addEventListener('DOMContentLoaded', boot, { once: true });
 
+    // TikTok 是 SPA；換頁、目標設定改變或分頁隱藏時重新評估 observer 生命週期。
     setInterval(() => {
-        const viewers = getViewerCount();
-        console.log('觀眾人數:', viewers);
-        View = viewers
-        sendAudienceUpdate();
-
-    }, 15000); // 每 15 秒更新一次觀眾列表
-
-    setTimeout(() => {
-        // 初次抓取觀眾列表
-        console.log("Current viewers after 5s:", getViewers());
-
-        // 先標記已存在的訊息，再忽略觀察器啟動後的短暫補齊期，避免刷新重播。
-        document.querySelectorAll('div[data-e2e="chat-message"]')
-            .forEach(node => sentMessages.add(node));
-        hydrateUntil = Date.now() + HYDRATION_MS;
-
-        // 監控聊天室新訊息
-        onElementAdded('div[data-e2e="chat-message"]', getNewChatMessages);
-        // 監控送禮訊息
-        watchGiftMessages(getNewGiftMessages);
-
-    }, 5000);
-
-    setTimeout(() => {
-        // 監控觀眾進入訊息
-        watchEnterMessages(getNewEnterMessages);
-    }, 15000);
+        syncMonitoring();
+        renderPanelState();
+    }, 2000);
+    document.addEventListener('visibilitychange', () => {
+        syncMonitoring();
+        renderPanelState();
+    });
 
 })();

@@ -161,6 +161,17 @@ test('TikTok 轉接只在目標直播間發送（安全預設：沒填目標就�
     assert.equal(canSend({ enabled: true, handle: '@A0936931' }, '/@a0936931/live'), true);
 });
 
+test('TikTokChat 只在目標直播頁且可見時掛 observer，離開就拆除', () => {
+    const source = fs.readFileSync(new URL('../UserScript/TikTokChat.user.js', import.meta.url), 'utf8');
+    assert.match(source, /@version\s+2\.13/);
+    assert.match(source, /function startMonitoring\(/);
+    assert.match(source, /function stopMonitoring\(/);
+    assert.match(source, /function syncMonitoring\(/);
+    assert.match(source, /monitorObservers/);
+    assert.match(source, /addEventListener\('visibilitychange'/);
+    assert.doesNotMatch(source, /const viewers = getViewerCount\(\);\s*console\.log\('觀眾人數:'/);
+});
+
 test('轉送種類判斷：有禮物圖＝送禮、isMain=false＝加入、其餘聊天', () => {
     const source = fs.readFileSync(new URL('../UserScript/TikTokChat.user.js', import.meta.url), 'utf8');
     const a = source.indexOf('function sentKind(');

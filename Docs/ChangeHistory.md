@@ -23,6 +23,29 @@
 
 ---
 
+## 2026.11.07 23:54 TikTokChat observer 生命週期
+
+**類型**: 改善 · **檔案**: `UserScript/TikTokChat.user.js`、`Test/userscript_source.test.mjs`、`Docs/USERSCRIPT_SOURCES.md`
+
+### 問題
+
+TikTokChat 在所有 TikTok 頁面都掛三個全頁 MutationObserver 與 15 秒觀眾回報；離開目標直播間、停用或分頁隱藏時仍持續處理 DOM，增加不必要的 CPU 與事件量。
+
+### 修改
+
+- 新增 `startMonitoring`／`stopMonitoring`／`syncMonitoring`。
+- 只在目標 `/@帳號/live` 且分頁可見時掛 chat／gift／enter observer 與 audience timer。
+- SPA 換頁、目標設定變更、停用、visibilitychange 都會重新評估並拆除 observer。
+- 進入頁面時只標記既有聊天節點；重新開始時重置 hydration 與觀眾狀態。
+- 版本提升到 2.13；補來源測試確認生命週期函式存在且舊的全域觀眾 timer 已移除。
+
+### 驗證
+
+- `node --test Test/userscript_source.test.mjs`
+- `npm run lint`
+
+---
+
 ## 2026.11.07 23:49 Signer 導航節流與 WAF 冷卻
 
 **類型**: 修正 · **檔案**: `ScriptLib/tiktok/navigation-guard.mjs`、`SignServer/direct-signer.mjs`、`SignServer/index.js`、`Test/navigation_guard.test.mjs`、`.env.example`、`Docs/BROWSER.md`、`Docs/TEST_FILES_REFERENCE.md`
