@@ -54,6 +54,14 @@ async function main() {
         await page.goto(`http://127.0.0.1:${server.address().port}/audience`);
         await page.waitForFunction(() => document.querySelectorAll('#audience-rows tr').length >= 2);
         assert.equal(await page.$eval('#audience-count', el => el.textContent.includes('2')), true);
+        const relationshipUi = await page.evaluate(() => ({
+            page: document.querySelector('#audience-page').textContent,
+            tenures: document.querySelectorAll('.audience-tenure').length,
+            avatars: document.querySelectorAll('.audience-avatar').length
+        }));
+        assert.match(relationshipUi.page, /1 \/ 1/);
+        assert.ok(relationshipUi.tenures >= 2);
+        assert.ok(relationshipUi.avatars >= 2);
         await page.click('#audience-rows tr');
         await page.waitForFunction(() => !document.querySelector('#audience-detail').hidden);
         assert.equal(await page.$eval('#audience-detail-name', el => el.textContent), 'Alice');

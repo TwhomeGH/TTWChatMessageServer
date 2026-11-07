@@ -39,12 +39,55 @@
         return wrap;
     }
 
+    function userCell(user, tenure) {
+        const wrap = document.createElement('span');
+        wrap.className = 'audience-user';
+        const initial = Array.from(String(user.displayName || '?').trim())[0] || '?';
+        const avatar = document.createElement('span');
+        avatar.className = `audience-avatar is-tenure-${tenure}`;
+        avatar.textContent = initial.toUpperCase();
+        avatar.setAttribute('aria-hidden', 'true');
+        const name = document.createElement('span');
+        name.className = 'audience-name';
+        name.textContent = user.displayName;
+        wrap.append(avatar, name);
+        return wrap;
+    }
+
+    function levelCell(user) {
+        const wrap = document.createElement('span');
+        wrap.className = 'audience-level-cell';
+        const badge = document.createElement('span');
+        badge.className = `audience-level is-level-${user.level}`;
+        badge.textContent = levelLabel(user.level);
+        const score = document.createElement('span');
+        score.className = 'audience-score';
+        score.textContent = `· ${user.score}`;
+        wrap.append(badge, score);
+        return wrap;
+    }
+
+    function tenureCell(user, tenure) {
+        const wrap = document.createElement('span');
+        wrap.className = 'audience-tenure-cell';
+        const badge = document.createElement('span');
+        badge.className = `audience-tenure is-tenure-${tenure}`;
+        badge.textContent = t('tenure.' + tenure, {}, tenure);
+        const days = document.createElement('span');
+        days.className = 'audience-days';
+        days.textContent = `${user.tenureDays} ${t('unit.days', {}, 'd')}`;
+        wrap.append(badge, days);
+        return wrap;
+    }
+
     function renderRows() {
         const data = state.list;
         const rows = el('audience-rows');
         if (!data) return;
         rows.replaceChildren(...data.users.map(user => {
+            const tenure = tenureKey(user.tenureDays);
             const tr = document.createElement('tr');
+            tr.className = `is-tenure-${tenure} is-level-${user.level}`;
             tr.tabIndex = 0;
             tr.addEventListener('click', () => loadDetails(user.platform, user.userKey));
             tr.addEventListener('keydown', event => {
@@ -53,24 +96,30 @@
                     loadDetails(user.platform, user.userKey);
                 }
             });
+            // 關係欄已顯示「新朋友」，標記欄不重複同一個 tenure 標籤。
+            const labels = (user.labels || []).filter(label => !(label === 'newcomer' && tenure === 'newcomer'));
+            const chips = labelChips(labels);
+            if (!chips.childElementCount) {
+                chips.textContent = '—';
+                chips.classList.add('is-empty');
+            }
             tr.append(
-                cell(user.displayName),
+                cell(userCell(user, tenure)),
                 cell(user.platform),
-                cell(`${levelLabel(user.level)} · ${user.score}`),
-                cell(`${t('tenure.' + tenureKey(user.tenureDays), {}, '—')} · ${user.tenureDays} ${t('unit.days', {}, 'd')}`),
+                cell(levelCell(user)),
+                cell(tenureCell(user, tenure)),
                 cell(`${user.activeStreams} / ${user.streak}`),
                 cell(String(user.activeDays)),
                 cell(`${user.messages} / ${user.gifts}`),
                 cell(fmtDate(user.lastSeen)),
-                cell(labelChips(user.labels))
+                cell(chips)
             );
             return tr;
         }));
         el('audience-empty').hidden = data.users.length > 0;
         el('audience-count').textContent = t('count', { count: data.total }, `${data.total}`);
-        el('audience-page').textContent = t('page', {
-            page: data.page, total: Math.max(1, Math.ceil(data.total / data.pageSize))
-        }, `${data.page}`);
+        const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
+        el('audience-page').textContent = t('page', { page: data.page, pages }, `${data.page} / ${pages}`);
         el('audience-prev').disabled = data.page <= 1;
         el('audience-next').disabled = data.page * data.pageSize >= data.total;
     }

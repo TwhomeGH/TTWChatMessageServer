@@ -200,3 +200,92 @@
 .audience-stat strong {
     color: #e2e8f0;
 }
+
+/* 關係視覺：列表用色碼 avatar、關係 badge 與列首色條區分朋友程度。 */
+.audience-legend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 10px;
+    font-size: .75rem;
+}
+.audience-legend-label {
+    color: #94a3b8;
+}
+.audience-user {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.audience-avatar {
+    width: 26px;
+    height: 26px;
+    border: 1px solid;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    font-size: .75rem;
+    font-weight: 700;
+}
+.audience-name {
+    color: #f1f5f9;
+    font-weight: 600;
+}
+.audience-tenure {
+    display: inline-block;
+    padding: 1px 8px;
+    border: 1px solid;
+    border-radius: 999px;
+    font-size: .75rem;
+    font-weight: 600;
+    line-height: 1.6;
+}
+.audience-tenure-cell,
+.audience-level-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.audience-days,
+.audience-score {
+    color: #94a3b8;
+    font-size: .75rem;
+}
+.audience-labels.is-empty {
+    color: #64748b;
+}
+.audience-avatar.is-tenure-newcomer,
+.audience-tenure.is-tenure-newcomer {
+    color: #f9a8d4;
+    border-color: #9d174d;
+    background: #500724;
+}
+.audience-avatar.is-tenure-friend,
+.audience-tenure.is-tenure-friend {
+    color: #93c5fd;
+    border-color: #1d4ed8;
+    background: #172554;
+}
+.audience-avatar.is-tenure-oldFriend,
+.audience-tenure.is-tenure-oldFriend {
+    color: #fcd34d;
+    border-color: #b45309;
+    background: #451a03;
+}
+.audience-avatar.is-tenure-veteran,
+.audience-tenure.is-tenure-veteran {
+    color: #e9d5ff;
+    border-color: #7e22ce;
+    background: #2e1065;
+}
+.audience-table tbody tr.is-tenure-newcomer td:first-child { box-shadow: inset 3px 0 #ec4899; }
+.audience-table tbody tr.is-tenure-friend td:first-child { box-shadow: inset 3px 0 #60a5fa; }
+.audience-table tbody tr.is-tenure-oldFriend td:first-child { box-shadow: inset 3px 0 #fbbf24; }
+.audience-table tbody tr.is-tenure-veteran td:first-child { box-shadow: inset 3px 0 #c084fc; }
+.audience-table th,
+.audience-table td {
+    vertical-align: middle;
+}

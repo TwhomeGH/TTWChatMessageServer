@@ -66,6 +66,7 @@ L0 是尚未達到常客門檻。關係（新朋友／朋友／老朋友／元�
 ## 頁面與 API
 
 - `/audience`：常客列表、搜尋、平台／排序、分頁；點選觀眾可看分數組成、等級門檻與最近場次。
+- 列表以 tenure 色碼 avatar／關係 badge（新朋友／朋友／老朋友／元老）與等級 badge 區分關係；頁碼顯示「第 X / Y 頁」。
 - `GET /api/audience?platform=&q=&sort=&page=`：列表。
 - `GET /api/audience/user?platform=&user=`：單一觀眾的完整明細。
 - 頁面與 API 都要求主服務登入；API 只回聚合，不回原始訊息。
