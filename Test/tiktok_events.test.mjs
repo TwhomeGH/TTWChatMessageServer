@@ -80,6 +80,27 @@ test('LIKE：累加點讚並送出', () => {
     assert.ok(calls.some(c => c[0] === 'socket' && String(c[2]).includes('喜歡你 3 次')));
 });
 
+test('malformed decoded events 不會讓 handler 丟出例外', () => {
+    const { conn } = makeHarness();
+    assert.doesNotThrow(() => conn.handlers[WebcastEvent.CAPTION_MESSAGE]({}));
+    assert.doesNotThrow(() => conn.handlers[WebcastEvent.ROOM_USER]({ ranks: [{}] }));
+    assert.doesNotThrow(() => conn.handlers[WebcastEvent.MEMBER]({}));
+    assert.doesNotThrow(() => conn.handlers[WebcastEvent.LIKE]({}));
+    assert.doesNotThrow(() => conn.handlers[WebcastEvent.SHARE]({}));
+});
+
+test('decoded data 錯誤只記錄，不當成連線失敗', () => {
+    const errors = [];
+    const { conn, calls } = makeHarness({
+        logger: { log() {}, error: (...args) => errors.push(args) }
+    });
+    conn.handlers.error({ info: 'Failed to process decoded data', exception: new Error('boom') });
+    assert.equal(calls.some(c => c[0] === 'socket'), false);
+    assert.equal(calls.some(c => c[0] === 'notify'), false);
+    assert.ok(errors.some(args => String(args[0]).includes('訊息處理錯誤')));
+    assert.ok(errors.some(args => String(args[0]).includes('boom')));
+});
+
 test('GIFT：連擊進行中只送連擊進度', () => {
     const { conn, calls } = makeHarness();
     conn.handlers.gift({ user: user('Dave'), gift: { name: 'Rose', type: 1 }, repeatEnd: false, repeatCount: 2 });

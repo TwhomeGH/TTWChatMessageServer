@@ -44,6 +44,44 @@ export function registerTikTokEvents(connection, deps) {
     const sessionStats = { joins: 0, likes: 0, chats: 0 };
     const sessionSnapshot = () => ({ ...sessionStats });
 
+    const handlerErrorLog = new Map();
+    function describeException(value) {
+        if (value instanceof Error) return value.stack || `${value.name}: ${value.message}`;
+        if (value && typeof value === 'object') {
+            try { return JSON.stringify(value); } catch { return String(value); }
+        }
+        return String(value);
+    }
+
+    /** 單一事件處理失敗只記錄，不讓 connector 把它當成連線錯誤。 */
+    function logHandlerError(event, data, error) {
+        const detail = describeException(error);
+        const type = data?.common?.method || data?.method || data?.type || '';
+        const key = `${event}|${type}|${detail.split('\n')[0]}`;
+        const now = Date.now();
+        if (now - (handlerErrorLog.get(key) || 0) < 10000) return;
+        handlerErrorLog.set(key, now);
+        if (handlerErrorLog.size > 100) handlerErrorLog.clear();
+        logger.error(`[TikTok] ${event}${type ? ` (${type})` : ''} 處理失敗: ${detail}`);
+        try { writeLog("Default", `${event}${type ? ` (${type})` : ''} 處理失敗\n${detail}`, "HandlerError"); } catch { /* ignore */ }
+    }
+
+    /** 包住 WebcastEvent handler；同步錯誤與 async rejection 都不會傳回 connector。 */
+    const safeEvent = (event, handler) => {
+        connection.on(event, (...args) => {
+            try {
+                const result = handler(...args);
+                if (result && typeof result.catch === 'function') {
+                    result.catch(error => logHandlerError(event, args[0], error));
+                }
+                return result;
+            } catch (error) {
+                logHandlerError(event, args[0], error);
+                return undefined;
+            }
+        });
+    };
+
     // 以固定 category／platform 送 socket 訊息的便利包裝。
     const sendCat = (category, user, message, img, giftImg, isMain = true, dedupUser, dedupMessage) =>
         sendSocketMessage(user, message, { img, giftImg, isMain, dedupUser, dedupMessage, category, platform: 'tiktok', session: sessionSnapshot() });
@@ -189,33 +227,42 @@ export function registerTikTokEvents(connection, deps) {
     });
 
     connection.on(ControlEvent.ERROR, (err) => {
-        const msg = typeof err === 'object' ? (err.message || JSON.stringify(err)) : err;
-        logger.error('TikTok 連線錯誤:', msg);
-        if (err && err.message === 'Unexpected server response: 200') {
+        const info = err?.info || '';
+        const exception = err?.exception || err;
+        const detail = describeException(exception);
+        if (info === 'Failed to process decoded data') {
+            const key = 'decoded|' + detail.split('\n')[0];
+            const now = Date.now();
+            if (now - (handlerErrorLog.get(key) || 0) >= 10000) {
+                handlerErrorLog.set(key, now);
+                logger.error(`[TikTok] 訊息處理錯誤: ${detail}`);
+                try { writeLog("Default", `訊息處理錯誤\n${detail}`, "DecodedDataError"); } catch { /* ignore */ }
+            }
+            return;
+        }
+        const msg = exception?.message || detail || String(info);
+        logger.error('TikTok 連線錯誤:', info, msg);
+        if (exception?.message === 'Unexpected server response: 200') {
             logger.error('[TikTok] WebSocket 200 錯誤 — 簽名可能無效或連線協定不符');
         }
-        sendCat('system', "系統", `TikTok 連線錯誤: ${msg.substring(0, 100)}`, "", "", false);
+        sendCat('system', "系統", `TikTok 連線錯誤: ${String(msg).substring(0, 100)}`, "", "", false);
     });
 
-    connection.on(WebcastEvent.CAPTION_MESSAGE, (data) => {
+    safeEvent(WebcastEvent.CAPTION_MESSAGE, (data) => {
         logRawEvent('CAPTION_MESSAGE', data);
-        var MES_CAPTION = [""];
-
-        if (data.content.length) {
-            const lines = data.content.map(c => `[${c.lang}] ${c.content}`).join(' ');
-
-            MES_CAPTION.push`Caption (${data.timestampMs}): ${lines}`;
-
-            writeLog("Default", MES_CAPTION.join("\n"), "Caption");
+        const content = Array.isArray(data?.content) ? data.content : [];
+        if (content.length) {
+            const lines = content.map(c => `[${c?.lang || ''}] ${c?.content || ''}`).join(' ');
+            writeLog("Default", `Caption (${data?.timestampMs || ''}): ${lines}`, "Caption");
         }
     });
 
-    connection.on(WebcastEvent.ROOM_USER, data => {
+    safeEvent(WebcastEvent.ROOM_USER, data => {
         logRawEvent('ROOM_USER', data);
         const viewerCount = data.total ?? data.totalUser ?? connection.state?.roomInfo?.data?.user_count;
         const viewerNum = Number(viewerCount);
         logger.log(`Viewer Count: ${Number.isFinite(viewerNum) ? viewerNum : '未知'}`);
-        const ranksList = data.ranks || [];
+        const ranksList = Array.isArray(data?.ranks) ? data.ranks : [];
         const topGifter = ranksList[0];
         if (topGifter?.user) {
             const uniqueId = topGifter.user.displayId;
@@ -224,7 +271,7 @@ export function registerTikTokEvents(connection, deps) {
             if (nickname) logger.log(`Top gifter nickname: ${nickname} (${topGifter.score})`);
         }
 
-        setCacheUserList(ranksList.map(item => item.user.nickname));
+        setCacheUserList(ranksList.map(item => item?.user?.nickname).filter(Boolean));
         if (Number.isFinite(viewerNum) && viewerNum >= 0) {
             const effective = setTikTokViewerCount(viewerNum);
             getAutoClip()?.updatePlatformViewers('TikTok', effective);
@@ -233,14 +280,15 @@ export function registerTikTokEvents(connection, deps) {
         updateCombinedViewerCount(true);
     });
 
-    connection.on(WebcastEvent.MEMBER, data => {
+    safeEvent(WebcastEvent.MEMBER, data => {
         reportTraffic({ platform: 'TikTok', eventType: 'join', id: data.msgId || data.common?.msgId, sentAt: data.createTime || data.common?.createTime, userId: data.user?.userId || data.user?.id, user: data.user?.nickname });
         logRawEvent('MEMBER', data);
+        if (!data?.user?.nickname) return;
 
         let iconn = getTikTokProfilePic(data.user);
 
         logger.log(data.user.nickname, "加入了");
-        logger.log("STATE View", connection.state.roomInfo.data.user_count, getCacheUserNum());
+        logger.log("STATE View", connection.state?.roomInfo?.data?.user_count, getCacheUserNum());
 
         // 跨路徑去重：檢查是否已被 userscript 路徑送出（檢查 syncBuffer）
         const isCrossPathDuplicate = dedup.isDuplicate(data.user.nickname.trim(), "加入了");
@@ -281,8 +329,9 @@ export function registerTikTokEvents(connection, deps) {
         dedup.add(data.user.nickname.trim(), "加入了");
     });
 
-    connection.on(WebcastEvent.FOLLOW, data => {
+    safeEvent(WebcastEvent.FOLLOW, data => {
         logRawEvent('FOLLOW', data);
+        if (!data?.user?.nickname) return;
         let iconn = getTikTokProfilePic(data.user);
         logger.log(data.user.nickname, "關注了主播");
 
@@ -291,7 +340,8 @@ export function registerTikTokEvents(connection, deps) {
         dedup.add(data.user.nickname.trim(), "關注了主播");
     });
 
-    connection.on(WebcastEvent.CHAT, data => {
+    safeEvent(WebcastEvent.CHAT, data => {
+        if (!data?.user?.nickname) return;
         reportTraffic({ platform: 'TikTok', eventType: 'chat', id: data.msgId || data.common?.msgId, sentAt: data.createTime || data.common?.createTime, userId: data.user?.userId || data.user?.id, user: data.user?.nickname, message: data.comment });
         if (isTK) {
             const result = tikTokChatGuard.check(data);
@@ -372,7 +422,7 @@ export function registerTikTokEvents(connection, deps) {
         });
     });
 
-    connection.on(WebcastEvent.SOCIAL, data => {
+    safeEvent(WebcastEvent.SOCIAL, data => {
         logRawEvent('SOCIAL', data);
 
         var LOG_SOCIAL = [];
@@ -387,7 +437,7 @@ export function registerTikTokEvents(connection, deps) {
         writeLog("Default", LOG_SOCIAL.join("\n"), "Social分享");
     });
 
-    connection.on(WebcastEvent.EMOTE, (data) => {
+    safeEvent(WebcastEvent.EMOTE, (data) => {
         logRawEvent('EMOTE', data);
         const uniqueId = data.user?.displayId;
         const nickname = data.user?.nickname;
@@ -409,7 +459,7 @@ export function registerTikTokEvents(connection, deps) {
         }
     });
 
-    connection.on(WebcastEvent.ROOM_MESSAGE, data => {
+    safeEvent(WebcastEvent.ROOM_MESSAGE, data => {
         logRawEvent('ROOM_MESSAGE', data);
 
         var LOG_ROOM = [];
@@ -422,8 +472,9 @@ export function registerTikTokEvents(connection, deps) {
         writeLog("Default", LOG_ROOM.join('\n'), "Room message");
     });
 
-    connection.on(WebcastEvent.LIKE, data => {
+    safeEvent(WebcastEvent.LIKE, data => {
         logRawEvent('LIKE', data);
+        if (!data?.user?.nickname) return;
 
         const delta = Math.max(0, Number(data.count) || 0);
         sessionStats.likes += delta;
@@ -444,8 +495,9 @@ export function registerTikTokEvents(connection, deps) {
         writeLog("Default", `${data.user.nickname} ${mess}`, "Like");
     });
 
-    connection.on(WebcastEvent.GIFT, async data => {
+    safeEvent(WebcastEvent.GIFT, async data => {
         logRawEvent('GIFT', data);
+        if (!data?.user?.nickname) return;
         await getGiftMapReady();
         const giftInfo = data.gift;
         const originalGiftName = giftInfo?.name || "";
@@ -487,8 +539,9 @@ export function registerTikTokEvents(connection, deps) {
         }
     });
 
-    connection.on(WebcastEvent.SHARE, data => {
+    safeEvent(WebcastEvent.SHARE, data => {
         logRawEvent('SHARE', data);
+        if (!data?.user?.nickname) return;
         let mess = "分享直播間";
         let iconn = getTikTokProfilePic(data.user);
         logger.log(`${data.user.nickname} ${mess}`);
@@ -500,7 +553,7 @@ export function registerTikTokEvents(connection, deps) {
         writeLog("Default", `${data.user.nickname} 分享了直播間！`, "Share");
     });
 
-    connection.on(WebcastEvent.ENVELOPE, data => {
+    safeEvent(WebcastEvent.ENVELOPE, data => {
         logRawEvent('ENVELOPE', data);
         const envelope = data.envelopeInfo;
         if (!envelope) return;
@@ -524,7 +577,7 @@ export function registerTikTokEvents(connection, deps) {
         writeLog("Default", `${senderName} 送出了寶箱，包含 ${envelope.diamondCount} 鑽石`, "Envelope");
     });
 
-    connection.on(WebcastEvent.SUPER_FAN, (data) => {
+    safeEvent(WebcastEvent.SUPER_FAN, (data) => {
         logRawEvent('SUPER_FAN', data);
         logger.log('A user became a superfan!');
         let mess = "鐵粉出現啦！";
@@ -538,7 +591,7 @@ export function registerTikTokEvents(connection, deps) {
         writeLog("Default", `${nickname} 成為了鐵粉！`, "SuperFan");
     });
 
-    connection.on(WebcastEvent.STREAM_END, ({ action }) => {
+    safeEvent(WebcastEvent.STREAM_END, ({ action }) => {
         let IMG = "https://img.icons8.com/?size=100&id=xruQNezCArqC&format=png&color=000000";
         let mess = "直播結束啦";
 

@@ -23,6 +23,28 @@
 
 ---
 
+## 2026.11.10 05:03 TikTok 訊息處理錯誤隔離
+
+**類型**: 修正 · **檔案**: `ScriptLib/tiktok/events.mjs`、`Test/tiktok_events.test.mjs`
+
+### 問題
+
+`tiktok-live-connector` 的 `processProtoMessageFetchResult` 會接住事件 listener 的例外，再以 `ControlEvent.ERROR` 回報 `Failed to process decoded data`；原本只用 `JSON.stringify` 記錄，Error 的 message／stack 不可列舉，畫面只剩 `exception: {}`，且被誤標成連線錯誤。
+
+### 修改
+
+- 新增 `safeEvent`：同步 `try/catch` 與 async rejection 都記錄 event／message type／stack，單一 malformed 訊息不影響後續訊息。
+- `ControlEvent.ERROR` 區分 `Failed to process decoded data` 與真正連線錯誤；前者只 log，不送 system 訊息、不觸發重連。
+- 加入缺少 user／content／ranks 的 guard，避免常見 undefined 欄位直接丟錯。
+- 同一種 handler 錯誤 10 秒內只記錄一次。
+
+### 驗證
+
+- `node --test Test/tiktok_events.test.mjs`
+- `npm run lint`
+
+---
+
 ## 2026.11.08 00:01 videoTK 事件驅動與可拖動劇院按鈕
 
 **類型**: 改善 · **檔案**: `UserScript/videoTK.user.js`、`Test/video_tk_ui.cjs`、`Test/userscript_source.test.mjs`、`Docs/TEST_FILES_REFERENCE.md`
