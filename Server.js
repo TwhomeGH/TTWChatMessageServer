@@ -61,6 +61,11 @@ const serveAudience = createAudienceRoutes(audience);
 const mediaRoutes = require('./MediaRoutes.cjs');
 const serveMedia = mediaRoutes.createMediaRoutes();
 const serveMediaAdmin = mediaRoutes.createMediaAdminRoutes();
+const { DiagnosticsStore } = require('./ScriptLib/diagnostics/store.cjs');
+const { createDiagnosticsRoutes } = require('./DiagnosticsRoutes.cjs');
+const diagnosticsRoutes = createDiagnosticsRoutes(new DiagnosticsStore(), {
+    token: process.env.DIAGNOSTICS_TOKEN || ''
+});
 const audiencePrune = setInterval(() => {
     try { audience.prune(180); } catch (error) { console.error('[Audience] 清理失敗:', error.message); }
 }, 24 * 3600000);
@@ -625,6 +630,9 @@ const server = http.createServer((req, res) => {
     if (serveMonitorHistory(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (require('./RestreamRoutes.cjs').serveRestream(req,res,isValidToken(parseCookies(req).authToken))) return;
     if (serveRuntime(req, res, runtimeState, startRuntime)) return;
+    if (diagnosticsRoutes.serveIntake(req, res)) return;
+    if (diagnosticsRoutes.servePage(req, res)) return;
+    if (diagnosticsRoutes.serveApi(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (serveMediaAdmin(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (serveSocketTest(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (serveMedia(req, res)) return;

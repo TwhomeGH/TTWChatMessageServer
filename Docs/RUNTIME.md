@@ -33,6 +33,8 @@ Socket 使用既有 SOCKET_API 設定（可再用 SOCKET_APIS 加開多個端點
 
 工具列會顯示子程序維護的本場加入／點讚／聊天累計。數字隨 socket payload 的 `session` metadata 更新；點讚以原始 `data.count` 累加，因此與每位使用者的 60 秒顯示計數不同。點讚的 Bark／ntfy 通知會像加入事件一樣合併 3 秒，monitor 仍保留逐筆點讚列。
 
+應用診斷（ReplyKit／外部 HTTP log bridge 與帶外 logio）顯示在 `/diagnostics`；只存在記憶體，不寫 log／SQLite／聊天歷史。
+
 圖片（TikTok／Twitch 頭像、禮物圖與贊助 overlay 圖片）由 MediaCache 持久化到 `cache/media/` 與 `data/media.sqlite`，訊息改傳 `MEDIA_BASE_URL/media/<hash>`；詳見 `Docs/MEDIA_CACHE.md`。
 
 歷史訊息保存在 `data/monitor.sqlite`（`sessions`／`messages`）。每次 TikTok 子程序啟動是一場；預設保留最近 10 場、14 天、每場最多 20,000 則，可用 `MONITOR_HISTORY_DAYS`／`MONITOR_HISTORY_SESSIONS`／`MONITOR_HISTORY_MAX_MESSAGES` 調整。測試訊息與 `isTest` 不寫入；歷史 API 需要主服務登入，即時 SSE 仍維持原本公開行為。

@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>應用診斷</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <style>
+    .diag-wrap { max-width: 1100px; margin: 0 auto; }
+    .diag-card { background:#111827; border:1px solid #334155; border-radius:10px; padding:12px; }
+    .diag-card h2 { margin:0 0 8px; font-size:14px; color:#93c5fd; }
+    .diag-metric { display:flex; justify-content:space-between; gap:12px; font-size:12px; padding:4px 0; border-top:1px solid #1f2937; }
+    .diag-metric:first-of-type { border-top:0; }
+    .diag-logs { max-height: 50vh; overflow:auto; border:1px solid #334155; border-radius:8px; background:#0b1220; }
+    .diag-log { padding:7px 10px; border-bottom:1px solid #1f2937; font-size:12px; }
+    .diag-log time { color:#94a3b8; }
+    .diag-log strong { color:#fbbf24; margin-left:6px; }
+    .diag-log p { margin:4px 0 0; white-space:pre-wrap; overflow-wrap:anywhere; color:#e5e7eb; }
+    .diag-empty { padding:14px; color:#94a3b8; font-size:12px; }
+    .diag-status { font-size:12px; color:#94a3b8; }
+  </style>
+</head>
+<body class="app-ui bg-gray-900 text-gray-200 font-mono min-h-screen p-4">
+  <div class="diag-wrap">
+    <header class="flex items-center justify-between flex-wrap gap-2 mb-4">
+      <h1 class="text-xl font-bold text-green-400">應用診斷</h1>
+      <nav class="flex gap-2 flex-wrap text-sm">
+        <a href="/monitor" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg">直播訊息</a>
+        <a href="/runtime" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg">運行狀態</a>
+        <a href="/log" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg">系統日誌</a>
+        <a href="/diagnostics" class="bg-blue-700 px-3 py-1.5 rounded-lg">診斷</a>
+      </nav>
+    </header>
+
+    <p id="diagCallout" class="diag-card mb-4" hidden></p>
+
+    <div class="grid gap-3 md:grid-cols-2 mb-4">
+      <section class="diag-card">
+        <h2>Log I/O</h2>
+        <div id="diagCards"><div class="diag-empty">尚無 logio 診斷。</div></div>
+      </section>
+      <section class="diag-card">
+        <h2>最近帶外診斷</h2>
+        <div id="diagRecent"><div class="diag-empty">尚無資料。</div></div>
+      </section>
+    </div>
+
+    <section class="diag-card">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+        <h2 class="!mb-0">應用日誌</h2>
+        <div class="flex items-center gap-2 text-xs">
+          <input id="diagSearch" type="search" placeholder="搜尋標題或內容…"
+                 class="bg-gray-900 border border-gray-700 rounded-lg px-2 py-1 min-w-48">
+          <label class="inline-flex items-center gap-1"><input id="diagAuto" type="checkbox" checked> 自動更新</label>
+          <label class="inline-flex items-center gap-1"><input id="diagAutoScroll" type="checkbox" checked> 自動滾到最新</label>
+          <button id="diagRefresh" class="bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded">重新整理</button>
+        </div>
+      </div>
+      <div id="diagStatus" class="diag-status mb-2"></div>
+      <div id="diagLogs" class="diag-logs"><div class="diag-empty">載入中…</div></div>
+    </section>
+  </div>
+  <script src="/assets/i18n.js"></script>
+  <script src="/assets/diagnostics.js"></script>
+</body>
+</html>

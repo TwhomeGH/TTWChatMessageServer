@@ -1,5 +1,38 @@
 # ChangeHistory
 
+## 2026.11.10 20:42 應用診斷入口與 HTTP log bridge
+
+**類型**: 功能 · **檔案**: `diagnostics.html`、`assets/diagnostics.js`、`DiagnosticsRoutes.cjs`、`ScriptLib/diagnostics/store.cjs`、`Server.js`、`WebAssets.cjs`、`monitor.html`、`runtime.html`、`log.html`、`lang/*.json`、`.env.example`、`Test/diagnostics.test.cjs`、`Test/diagnostics_ui.cjs`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 修改
+
+- 新增 `/diagnostics` 診斷頁與導覽入口。
+- 新增 LogServer 相容 `POST /post`（也接受 `/api/diagnostics/report`）：
+  - `{logs:[{time,title,body}]}`、單一 log 或陣列。
+  - 也接受 `type:"diagnostic"` 的 logio 摘要。
+  - 可選 `DIAGNOSTICS_TOKEN`，支援 query／`x-diagnostics-token`／Bearer。
+- 診斷只存在記憶體（logs 2000、diagnostic 100），不寫 log 檔、SQLite、聊天、traffic 或通知。
+- `/diagnostics` 顯示 logio 卡片、最近帶外診斷與應用日誌；2 秒自動更新，需主服務登入才能讀 API。
+- 應用日誌改為舊到新、最新在底部；新增「自動滾到最新」開關，關閉時保留目前 scrollTop。
+- 補 memory store／route／UI 測試。
+
+### 使用
+
+ReplyKit 的 `logURL` 改指向 `http://<TTWChat主機>:3332/post`；若有設定 `DIAGNOSTICS_TOKEN`，可加 `?token=...`。socket diagnostic 可由既有橋接轉送到同一個 `/api/diagnostics/report`。
+
+### 限制
+
+- 資料不持久化，重啟即清空；這是刻意的診斷暫存。
+- 目前不實作 TTWChat 自己連 ReplyKit socket server；採 HTTP bridge。
+
+### 驗證
+
+- `node --test Test/diagnostics.test.cjs`
+- `node Test/diagnostics_ui.cjs`
+- `npm run lint`、`npm run check:css`
+
+---
+
 ## 2026.11.10 20:30 monitor 工具面板不再撐滿版面
 
 **類型**: 修正 · **檔案**: `assets/monitor.css`、`Test/monitor_audience_ui.cjs`
