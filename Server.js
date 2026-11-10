@@ -62,10 +62,23 @@ const mediaRoutes = require('./MediaRoutes.cjs');
 const serveMedia = mediaRoutes.createMediaRoutes();
 const serveMediaAdmin = mediaRoutes.createMediaAdminRoutes();
 const { DiagnosticsStore } = require('./ScriptLib/diagnostics/store.cjs');
+const { DiagnosticsSocketClient } = require('./ScriptLib/diagnostics/socket-client.cjs');
 const { createDiagnosticsRoutes } = require('./DiagnosticsRoutes.cjs');
-const diagnosticsRoutes = createDiagnosticsRoutes(new DiagnosticsStore(), {
-    token: process.env.DIAGNOSTICS_TOKEN || ''
+const diagnosticsStore = new DiagnosticsStore();
+const diagnosticsSocket = new DiagnosticsSocketClient({ store: diagnosticsStore });
+const diagnosticsRoutes = createDiagnosticsRoutes(diagnosticsStore, {
+    token: process.env.DIAGNOSTICS_TOKEN || '',
+    socketClient: diagnosticsSocket,
+    socketDefaults: {
+        host: process.env.DIAGNOSTICS_SOCKET_HOST || '',
+        port: Number(process.env.DIAGNOSTICS_SOCKET_PORT) || 9322
+    }
 });
+if (/^(1|true|yes|on)$/i.test(process.env.DIAGNOSTICS_SOCKET_ENABLED || '')
+    && process.env.DIAGNOSTICS_SOCKET_HOST) {
+    diagnosticsSocket.start(process.env.DIAGNOSTICS_SOCKET_HOST,
+        Number(process.env.DIAGNOSTICS_SOCKET_PORT) || 9322);
+}
 const audiencePrune = setInterval(() => {
     try { audience.prune(180); } catch (error) { console.error('[Audience] 清理失敗:', error.message); }
 }, 24 * 3600000);
@@ -633,6 +646,7 @@ const server = http.createServer((req, res) => {
     if (diagnosticsRoutes.serveIntake(req, res)) return;
     if (diagnosticsRoutes.servePage(req, res)) return;
     if (diagnosticsRoutes.serveApi(req, res, isValidToken(parseCookies(req).authToken))) return;
+    if (diagnosticsRoutes.serveSocket(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (serveMediaAdmin(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (serveSocketTest(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (serveMedia(req, res)) return;

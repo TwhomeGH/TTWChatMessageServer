@@ -26,6 +26,8 @@
 - [x] Python overlay 支援 img／giftImg／AdOverlay icon 與訊息內嵌 data URI。
 - [x] monitor MediaCache 檢視／本地連結複製與 Raw Socket 測試入口。
 - [x] 應用診斷 `/diagnostics`、LogServer 相容 `/post` 與可選 token。
+- [x] 診斷頁 Socket 外部事件訂閱開關（subscribeExternalLogs、自動重連）。
+- [x] 未啟用 YouTube 時不輸出假斷線；handleExit 冪等。
 - [ ] 正式環境以實際 child 程序驗證 IPC 結果與倒數（目前 monitor UI 使用假 SSE／fake `/chat`）。
 
 ## 表情映射後續（2026-11-06）

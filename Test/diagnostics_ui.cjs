@@ -9,11 +9,34 @@ const { browserPath } = require('./browser_path.cjs');
 
 async function main() {
     const pageHtml = fs.readFileSync(path.join(__dirname, '../diagnostics.html'));
+    const socketPosts = [];
     const server = http.createServer((req, res) => {
         const url = new URL(req.url, 'http://127.0.0.1');
         if (url.pathname === '/diagnostics') {
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
             res.end(pageHtml);
+            return;
+        }
+        if (url.pathname === '/api/diagnostics/socket') {
+            if (req.method === 'POST') {
+                let body = '';
+                req.on('data', chunk => { body += chunk; });
+                req.on('end', () => {
+                    const data = JSON.parse(body);
+                    socketPosts.push(data);
+                    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({
+                        ok: true, enabled: data.enabled, host: data.host, port: data.port,
+                        state: data.enabled ? 'connecting' : 'off', subscribed: false, defaults: {}
+                    }));
+                });
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+            res.end(JSON.stringify({
+                ok: true, enabled: false, host: '', port: 9322, state: 'off', subscribed: false,
+                defaults: { host: '192.168.0.242', port: 9322 }
+            }));
             return;
         }
         if (url.pathname === '/api/diagnostics') {
@@ -60,6 +83,14 @@ async function main() {
         assert.equal(result.atBottom, true);
         assert.match(result.diagnostic, /logio/);
         assert.equal(result.loginHidden, true);
+        await page.waitForFunction(() => document.querySelector('#diagSocketStatus').textContent.length > 0);
+        assert.match(await page.$eval('#diagSocketStatus', node => node.textContent), /未啟用/);
+        await page.click('#diagSocketEnabled');
+        await new Promise(resolve => setTimeout(resolve, 2300));
+        assert.equal(await page.$eval('#diagSocketEnabled', node => node.checked), true);
+        await page.click('#diagSocketApply');
+        await page.waitForFunction(() => document.querySelector('#diagSocketStatus').textContent.includes('連線中'));
+        assert.deepEqual(socketPosts[0], { enabled: true });
         assert.deepEqual(errors, []);
         console.log('Diagnostics UI passed: log stream, logio card, and no page errors.');
     } finally {

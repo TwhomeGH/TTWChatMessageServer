@@ -1,5 +1,50 @@
 # ChangeHistory
 
+## 2026.11.10 22:58 YouTube 未啟用時不再輸出斷線收尾
+
+**類型**: 修正 · **檔案**: `ScriptLib/youtube/chat.mjs`、`TikTok.js`、`Test/youtube_stop.test.mjs`
+
+### 問題
+
+`handleExit` 無條件呼叫 `stopYoutubeChat()`，而後者每次都會輸出「❌ Youtube 聊天室已斷線」，即使這次執行根本沒有啟用 YouTube。`handleExit` 也可能被多個退出來源重複呼叫，造成同一段收尾與 YouTube 訊息出現兩次。
+
+### 修改
+
+- YouTube 模組新增 `youtubeActive`，只在原生聊天室、觀眾輪詢或瀏覽器 fallback 真正啟動後設為 true。
+- `stopYoutubeChat` 先記錄是否曾啟用；未啟用時不輸出斷線訊息。
+- 有啟用時改成中性「⏹️ Youtube 聊天室已停止」。
+- `handleExit` 加 idempotent guard，重複退出訊號只收尾一次。
+
+### 驗證
+
+- `node --test Test/youtube_stop.test.mjs`
+- `npm run lint`
+
+---
+
+## 2026.11.10 22:48 診斷 Socket 外部事件訂閱
+
+**類型**: 功能 · **檔案**: `ScriptLib/diagnostics/socket-client.cjs`、`DiagnosticsRoutes.cjs`、`Server.js`、`diagnostics.html`、`assets/diagnostics.js`、`Test/diagnostics.test.cjs`、`Test/diagnostics_ui.cjs`、`.env.example`、`Docs/DIAGNOSTICS.md`
+
+### 修改
+
+- 新增 ReplyKit SocketServer 客戶端：送出 `subscribeExternalLogs`，接收 `externalLogSubscription`／`externalLogBatch`／`diagnostic`。
+- 斷線自動重連並重新訂閱；取消訂閱會送 `enabled:false` 並關閉連線。
+- TTWChat 只送訂閱訊息，不送 extension 專用 type，維持外部工具角色。
+- 連線目標只由 `DIAGNOSTICS_SOCKET_HOST`／`PORT` 設定；`/diagnostics` 只保留訂閱開關與狀態。
+- 訂閱切換只送 `subscribeExternalLogs`，同一條已建立連線不重連；取消只送 `enabled:false` 並保留連線。
+- Socket 訂閱欄位有 dirty 狀態：使用者勾選後，2 秒狀態輪詢不會把 checkbox 重設回伺服器舊值。
+- Log I/O 卡片只顯示 `subsystem:"logio"`；socket 外部日誌進下方應用日誌列表。
+- 補 socket client、API 與 UI 測試。
+
+### 驗證
+
+- `node --test Test/diagnostics.test.cjs`
+- `node Test/diagnostics_ui.cjs`
+- `npm run lint`、`npm run check:css`
+
+---
+
 ## 2026.11.10 20:42 應用診斷入口與 HTTP log bridge
 
 **類型**: 功能 · **檔案**: `diagnostics.html`、`assets/diagnostics.js`、`DiagnosticsRoutes.cjs`、`ScriptLib/diagnostics/store.cjs`、`Server.js`、`WebAssets.cjs`、`monitor.html`、`runtime.html`、`log.html`、`lang/*.json`、`.env.example`、`Test/diagnostics.test.cjs`、`Test/diagnostics_ui.cjs`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`

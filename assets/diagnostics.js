@@ -11,10 +11,14 @@
     const auto = $('diagAuto');
     const autoScroll = $('diagAutoScroll');
     const refresh = $('diagRefresh');
+    const socketEnabled = $('diagSocketEnabled');
+    const socketApply = $('diagSocketApply');
+    const socketStatus = $('diagSocketStatus');
     let state = { logs: [], diagnostics: [], recentDiagnostics: [], stats: {}, lastReceived: null };
     let timer = null;
     let searchTimer = null;
     let loading = false;
+    let socketDirty = false;
 
     function text(node, value) {
         node.textContent = value == null ? '' : String(value);
@@ -49,7 +53,7 @@
 
     function renderCards() {
         cards.replaceChildren();
-        const diagnostics = state.diagnostics || [];
+        const diagnostics = (state.diagnostics || []).filter(item => item.subsystem === 'logio');
         if (!diagnostics.length) {
             const empty = document.createElement('div');
             empty.className = 'diag-empty';
@@ -154,6 +158,65 @@
         statusEl.textContent = `最後收到：${relative(state.lastReceived)} · 緩衝 ${stats.bufferedLogs || 0} 則 · 診斷 ${stats.bufferedDiagnostics || 0} 筆`;
     }
 
+    function socketLabel(data) {
+        const stateLabels = {
+            off: '未啟用', connecting: '連線中', connected: '已連線', subscribed: '已訂閱',
+            reconnecting: '重連中', error: '錯誤'
+        };
+        const label = stateLabels[data.state] || data.state || '未知';
+        const where = data.host ? `${data.host}:${data.port}` : '未設定';
+        const extra = data.lastError ? ` · ${data.lastError}` : '';
+        return `${where} · ${label}${data.subscribed ? '（外部事件）' : ''}${extra}`;
+    }
+
+    async function loadSocketStatus() {
+        try {
+            const response = await fetch('/api/diagnostics/socket', { cache: 'no-store' });
+            if (response.status === 401) {
+                socketStatus.textContent = '需要登入';
+                return;
+            }
+            const data = await response.json();
+            if (!response.ok || !data.ok) {
+                socketStatus.textContent = data.error || ('HTTP ' + response.status);
+                return;
+            }
+            // 使用者正在編輯時不要用輪詢結果蓋掉勾選狀態。
+            if (!socketDirty) socketEnabled.checked = data.enabled === true;
+            socketStatus.textContent = socketLabel(data);
+        } catch (error) {
+            socketStatus.textContent = '狀態讀取失敗：' + error.message;
+        }
+    }
+
+    async function applySocketSubscription() {
+        socketApply.disabled = true;
+        try {
+            const body = { enabled: socketEnabled.checked };
+            const response = await fetch('/api/diagnostics/socket', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await response.json().catch(() => ({}));
+            if (response.status === 401) {
+                showCallout('Socket 訂閱需要主服務登入。', '/login');
+                return;
+            }
+            if (!response.ok || !data.ok) {
+                socketStatus.textContent = data.error || ('HTTP ' + response.status);
+                return;
+            }
+            socketDirty = false;
+            socketEnabled.checked = data.enabled === true;
+            socketStatus.textContent = socketLabel(data);
+        } catch (error) {
+            socketStatus.textContent = '套用失敗：' + error.message;
+        } finally {
+            socketApply.disabled = false;
+        }
+    }
+
     async function load() {
         if (loading) return;
         loading = true;
@@ -186,7 +249,10 @@
         timer = null;
         if (!auto.checked) return;
         timer = setInterval(() => {
-            if (document.visibilityState === 'visible') load();
+            if (document.visibilityState === 'visible') {
+                load();
+                loadSocketStatus();
+            }
         }, 2000);
     }
 
@@ -194,14 +260,23 @@
         clearTimeout(searchTimer);
         searchTimer = setTimeout(load, 250);
     });
-    refresh.addEventListener('click', load);
+    refresh.addEventListener('click', () => {
+        load();
+        loadSocketStatus();
+    });
     auto.addEventListener('change', schedule);
     autoScroll.addEventListener('change', () => {
         if (autoScroll.checked) scrollLogsToLatest();
     });
+    socketApply.addEventListener('click', applySocketSubscription);
+    socketEnabled.addEventListener('change', () => { socketDirty = true; });
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && auto.checked) load();
+        if (document.visibilityState === 'visible' && auto.checked) {
+            load();
+            loadSocketStatus();
+        }
     });
     schedule();
     load();
+    loadSocketStatus();
 })();

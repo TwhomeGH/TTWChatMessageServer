@@ -65,8 +65,9 @@ node Test/xxx.mjs
 | `Test/media_cache.test.cjs` | 圖片快取本地 URL、下載、SVG／私有位址拒絕、路由與 SocketHub 改寫 |
 | `Test/inline_image.test.cjs` | data URI 圖片格式、大小／數量限制與通知剝離 |
 | `Test/socket_test_routes.test.cjs` | Raw Socket 測試入口的登入、子程序檢查與 payload 轉送 |
-| `Test/diagnostics.test.cjs` | 診斷記憶體 store、LogServer 相容 `/post`、diagnostic 與 token |
+| `Test/diagnostics.test.cjs` | 診斷 store、`/post`、diagnostic、token、Socket 外部事件訂閱與 API |
 | `Test/diagnostics_ui.cjs` | `/diagnostics` 日誌順序、自動滾到最新、logio 卡片與無 page error |
+| `Test/youtube_stop.test.mjs` | 未啟用 YouTube 時收尾不輸出聊天室斷線 |
 | `Test/notify.test.mjs` | 通知格式化與 Bark／ntfy 逐通道結果 |
 | `Test/traffic_planner_ui.cjs` | 人流分類、批次補分類、預覽／套用／復原與手機寬度 |
 | `Test/traffic_planner_collecting_ui.cjs` | 資料累積建議、時段分組提醒與一週計畫 UI |

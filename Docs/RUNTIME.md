@@ -33,7 +33,7 @@ Socket 使用既有 SOCKET_API 設定（可再用 SOCKET_APIS 加開多個端點
 
 工具列會顯示子程序維護的本場加入／點讚／聊天累計。數字隨 socket payload 的 `session` metadata 更新；點讚以原始 `data.count` 累加，因此與每位使用者的 60 秒顯示計數不同。點讚的 Bark／ntfy 通知會像加入事件一樣合併 3 秒，monitor 仍保留逐筆點讚列。
 
-應用診斷（ReplyKit／外部 HTTP log bridge 與帶外 logio）顯示在 `/diagnostics`；只存在記憶體，不寫 log／SQLite／聊天歷史。
+應用診斷（ReplyKit／外部 HTTP log bridge 與帶外 logio）顯示在 `/diagnostics`；可另外訂閱 ReplyKit SocketServer 的 external logs，只存在記憶體，不寫 log／SQLite／聊天歷史。詳見 `Docs/DIAGNOSTICS.md`。
 
 圖片（TikTok／Twitch 頭像、禮物圖與贊助 overlay 圖片）由 MediaCache 持久化到 `cache/media/` 與 `data/media.sqlite`，訊息改傳 `MEDIA_BASE_URL/media/<hash>`；詳見 `Docs/MEDIA_CACHE.md`。
 

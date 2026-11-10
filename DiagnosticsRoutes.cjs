@@ -12,9 +12,9 @@ function json(res, status, value) {
  * 診斷入口：HTTP LogServer 相容 /post、帶外 diagnostic、以及唯讀診斷頁。
  * 資料只存在記憶體，不寫 log 檔或聊天歷史。
  * @param {import('./ScriptLib/diagnostics/store.cjs').DiagnosticsStore} store
- * @param {{token?: string}} [options]
+ * @param {{token?: string, socketClient?: Object, socketDefaults?: {host?: string, port?: number}}} [options]
  */
-function createDiagnosticsRoutes(store, { token = '' } = {}) {
+function createDiagnosticsRoutes(store, { token = '', socketClient = null, socketDefaults = {} } = {}) {
     function authorizedIntake(req) {
         if (!token) return true;
         const header = req.headers['x-diagnostics-token'];
@@ -103,7 +103,61 @@ function createDiagnosticsRoutes(store, { token = '' } = {}) {
         return true;
     }
 
-    return { servePage, serveApi, serveIntake };
+    function serveSocket(req, res, authorized = false) {
+        const url = new URL(req.url, 'http://localhost');
+        if (url.pathname !== '/api/diagnostics/socket') return false;
+        if (!authorized) {
+            json(res, 401, { ok: false, code: 'AUTH_REQUIRED', error: '請先登入' });
+            return true;
+        }
+        if (!socketClient) {
+            json(res, 501, { ok: false, error: 'Socket 訂閱未啟用' });
+            return true;
+        }
+        if (req.method === 'GET') {
+            json(res, 200, {
+                ok: true,
+                ...socketClient.snapshot(),
+                defaults: { host: socketDefaults.host || '', port: socketDefaults.port || 0 }
+            });
+            return true;
+        }
+        if (req.method !== 'POST') {
+            json(res, 405, { ok: false, error: '只支援 GET 或 POST' });
+            return true;
+        }
+        let body = '';
+        let tooLarge = false;
+        req.on('data', chunk => {
+            body += chunk;
+            if (Buffer.byteLength(body) > 64 * 1024) tooLarge = true;
+        });
+        req.on('end', () => {
+            if (tooLarge) {
+                json(res, 413, { ok: false, error: 'body too large' });
+                return;
+            }
+            try {
+                const data = JSON.parse(body);
+                if (data.enabled === true) {
+                    const host = String(socketDefaults.host || '').trim();
+                    const port = Number(socketDefaults.port || 0);
+                    if (!socketClient.start(host, port)) {
+                        json(res, 400, { ok: false, error: '需要有效的 host 與 port' });
+                        return;
+                    }
+                } else {
+                    socketClient.unsubscribe();
+                }
+                json(res, 200, { ok: true, ...socketClient.snapshot() });
+            } catch (error) {
+                json(res, 400, { ok: false, error: 'JSON 解析失敗：' + error.message });
+            }
+        });
+        return true;
+    }
+
+    return { servePage, serveApi, serveIntake, serveSocket };
 }
 
 module.exports = { createDiagnosticsRoutes };
