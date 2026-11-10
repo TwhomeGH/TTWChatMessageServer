@@ -1,28 +1,5 @@
 # ChangeHistory
 
-## 2026.11.07 22:00 常客關係視覺與總頁數
-
-**類型**: 改善 · **檔案**: `audience.html`、`assets/audience.js`、`assets/audience.css`、`lang/zh-TW.json`、`lang/en.json`、`Test/audience_ui.cjs`、`Docs/AUDIENCE.md`
-
-### 問題
-
-常客列表的關係欄只有同色文字，朋友與新朋友不易辨識；頁碼只顯示目前頁，缺少總頁數。
-
-### 修改
-
-- 觀眾欄加入 tenure 色碼 avatar 與名稱；關係欄改成「新朋友／朋友／老朋友／元老」色塊＋天數。
-- 等級欄改成有色 badge＋分數；列首加上 tenure 色條。
-- 新增關係圖例；新朋友關係已顯示時，標記欄不重複同一個 `newcomer` 標籤。
-- 關係圖例可點擊多選篩選（新朋友／朋友／老朋友／元老），全部可清除；API 支援 `tenures`，總頁數依篩選結果計算。
-- 頁碼改成「第 X / Y 頁」，測試補關係 badge、avatar、總頁數與新朋友篩選。
-
-### 驗證
-
-- `node Test/audience_ui.cjs`
-- `npm run lint`、`npm run check:css`
-
----
-
 ## 2026.11.10 20:00 Inline data URI 驗證與通知剝離
 
 **類型**: 功能 · **檔案**: `ScriptLib/media/inline.cjs`、`ScriptLib/notify/format.mjs`、`Test/inline_image.test.cjs`、`Test/notify.test.mjs`、`Test/media_cache.test.cjs`、`Docs/CHAT_API.md`、`Docs/MEDIA_CACHE.md`、`Docs/TEST_FILES_REFERENCE.md`
@@ -197,6 +174,29 @@ monitor 只保留記憶體內 500 則；主服務重啟或超過緩衝後就無�
 - `node --test Test/monitor_history.test.cjs Test/monitor_routes.test.cjs`
 - `node Test/monitor_audience_ui.cjs`
 - `npm run test:core`、`npm run lint`、`npm run check:css`
+
+---
+
+## 2026.11.07 22:00 常客關係視覺與總頁數
+
+**類型**: 改善 · **檔案**: `audience.html`、`assets/audience.js`、`assets/audience.css`、`lang/zh-TW.json`、`lang/en.json`、`Test/audience_ui.cjs`、`Docs/AUDIENCE.md`
+
+### 問題
+
+常客列表的關係欄只有同色文字，朋友與新朋友不易辨識；頁碼只顯示目前頁，缺少總頁數。
+
+### 修改
+
+- 觀眾欄加入 tenure 色碼 avatar 與名稱；關係欄改成「新朋友／朋友／老朋友／元老」色塊＋天數。
+- 等級欄改成有色 badge＋分數；列首加上 tenure 色條。
+- 新增關係圖例；新朋友關係已顯示時，標記欄不重複同一個 `newcomer` 標籤。
+- 關係圖例可點擊多選篩選（新朋友／朋友／老朋友／元老），全部可清除；API 支援 `tenures`，總頁數依篩選結果計算。
+- 頁碼改成「第 X / Y 頁」，測試補關係 badge、avatar、總頁數與新朋友篩選。
+
+### 驗證
+
+- `node Test/audience_ui.cjs`
+- `npm run lint`、`npm run check:css`
 
 ---
 
