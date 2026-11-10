@@ -6,12 +6,20 @@ import { MessageDedup } from './dedup.mjs';
  * 需要傳輸層、去重、emoji 取代與心跳，此處統一組裝，事件點不必知道有幾個端點。
  */
 export class SocketHub {
-    constructor({ endpoints = [], dedup = new MessageDedup(), replaceEmojis = (value) => value, onSend, logger = console } = {}) {
+    constructor({ endpoints = [], dedup = new MessageDedup(), replaceEmojis = (value) => value, onSend,
+        mediaCache = null, logger = console } = {}) {
         this.endpoints = endpoints.filter(endpoint => endpoint && endpoint.enabled);
         this.dedup = dedup;
         this.replaceEmojis = replaceEmojis;
         this.onSend = onSend;
+        this.mediaCache = mediaCache;
         this.logger = logger;
+    }
+
+    /** 圖片欄位改成本機 media URL；快取不可用時保留原始 URL。 */
+    mediaUrl(value) {
+        if (!this.mediaCache || !value) return value;
+        try { return this.mediaCache.localUrl(value) || value; } catch { return value; }
     }
 
     /** 主要（第一個）端點，供既有診斷讀取連線狀態。 */
@@ -75,8 +83,8 @@ export class SocketHub {
             ...(platform ? { platform } : {}),
             user: String(user),
             message: this.replaceEmojis(String(message)),
-            img,
-            giftImg,
+            img: this.mediaUrl(img),
+            giftImg: this.mediaUrl(giftImg),
             isMain: Boolean(isMain),
             userNum: Number(userNum),
             userList,
@@ -133,10 +141,12 @@ export function splitApis(input) {
  * @param {(payload: object) => void} [options.onSend] 每送出一則 payload 時的回呼（監控鏡像用）。
  * @param {(value: string) => string} [options.replaceEmojis]
  * @param {import('./dedup.mjs').MessageDedup} [options.dedup]
+ * @param {Object|null} [options.mediaCache] 圖片快取（需有 localUrl）。
  * @param {Console} [options.logger=console]
  * @returns {SocketHub}
  */
-export function createHub({ socketApi, apis = [], enabled = true, onConnect, onSend, replaceEmojis, dedup, logger = console } = {}) {
+export function createHub({ socketApi, apis = [], enabled = true, onConnect, onSend, replaceEmojis, dedup,
+    mediaCache = null, logger = console } = {}) {
     const specs = [];
     if (socketApi) specs.push(socketApi);
     for (const api of splitApis(apis)) specs.push(api);
@@ -165,5 +175,5 @@ export function createHub({ socketApi, apis = [], enabled = true, onConnect, onS
             endpoints.push(new SocketEndpoint({ url, enabled, filter, onConnect, logger }));
         }
     }
-    return new SocketHub({ endpoints, dedup, replaceEmojis, onSend, logger });
+    return new SocketHub({ endpoints, dedup, replaceEmojis, onSend, mediaCache, logger });
 }

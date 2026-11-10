@@ -58,6 +58,7 @@ const audience = createAudienceTracker({
     timezone: () => planner.settings().timezone
 });
 const serveAudience = createAudienceRoutes(audience);
+const serveMedia = require('./MediaRoutes.cjs').createMediaRoutes();
 const audiencePrune = setInterval(() => {
     try { audience.prune(180); } catch (error) { console.error('[Audience] 清理失敗:', error.message); }
 }, 24 * 3600000);
@@ -614,6 +615,7 @@ const server = http.createServer((req, res) => {
     if (serveMonitorHistory(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (require('./RestreamRoutes.cjs').serveRestream(req,res,isValidToken(parseCookies(req).authToken))) return;
     if (serveRuntime(req, res, runtimeState, startRuntime)) return;
+    if (serveMedia(req, res)) return;
     if (require('./WebAssets.cjs').serveWebAsset(req, res)) return;
     if (require('./EmojiRoutes.cjs').serveEmoji(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (require('./BrowserRoutes.cjs').serveBrowser(req, res, isValidToken(parseCookies(req).authToken))) return;

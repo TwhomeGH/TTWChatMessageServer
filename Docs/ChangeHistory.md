@@ -23,6 +23,55 @@
 
 ---
 
+## 2026.11.10 20:00 Inline data URI 驗證與通知剝離
+
+**類型**: 功能 · **檔案**: `ScriptLib/media/inline.cjs`、`ScriptLib/notify/format.mjs`、`Test/inline_image.test.cjs`、`Test/notify.test.mjs`、`Test/media_cache.test.cjs`、`Docs/CHAT_API.md`、`Docs/MEDIA_CACHE.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 修改
+
+- 新增 InlineImage 驗證：png／jpeg／webp／gif、base64、單張 256 KiB、總計 768 KiB、最多 20 張；拒絕 SVG／PDF。
+- MediaCache 明確 bypass data URI，不快取、不抓取。
+- 通知格式化會移除 data URI 內文；Bark／ntfy 不帶 data URI icon；保留 `allowInlineIcon` 給未來支援 inline 的通道。
+- 新增 inline 與通知測試；文件補 data URI 契約。
+
+### 尚未處理
+
+- Python overlay 的 `iconURL`／訊息內嵌 data URI 解碼。
+- monitor 歷史的 base64 materialize／清理。
+
+### 驗證
+
+- `node --test Test/inline_image.test.cjs Test/notify.test.mjs Test/media_cache.test.cjs`
+- `npm run lint`
+
+---
+
+## 2026.11.10 19:47 圖片媒體快取 Phase 1
+
+**類型**: 功能 · **檔案**: `ScriptLib/media/cache.cjs`、`MediaRoutes.cjs`、`Server.js`、`ScriptLib/socket/hub.mjs`、`TikTok.js`、`Test/media_cache.test.cjs`、`.env.example`、`.gitignore`、`Docs/MEDIA_CACHE.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 修改
+
+- 新增持久化 MediaCache：`data/media.sqlite`＋`cache/media/<sha256>.bin`。
+- 訊息中的 `img`／`giftImg` 改成 `/media/<hash>`；涵蓋 TikTok 頭像／禮物圖與 Twitch（及其他平台）頭像。
+- 贊助 AdOverlay 的 `iconURL` 與文字內圖片 URL 也改成快取 URL；Bark／ntfy 保留原始 URL。
+- 公開 `GET /media/<hash>`，首次請求才下載；支援 ETag、HEAD、immutable cache。
+- 下載限制：HTTP(S)、公開 IP、最多 3 次 redirect、8 MB、8 秒、raster 圖片；拒絕 SVG 與私有位址。
+- 新增 `MEDIA_BASE_URL`；資料庫與圖片目錄排除 Git。
+
+### 限制
+
+- Phase 1 尚未實作 LRU／容量上限與清理介面。
+- DNS rebinding 仍是殘餘風險；可再加 host allowlist。
+- 跨機 overlay 必須把 `MEDIA_BASE_URL` 改成主服務區網位址。
+
+### 驗證
+
+- `node --test Test/media_cache.test.cjs`
+- `npm run lint`
+
+---
+
 ## 2026.11.10 05:03 TikTok 訊息處理錯誤隔離
 
 **類型**: 修正 · **檔案**: `ScriptLib/tiktok/events.mjs`、`Test/tiktok_events.test.mjs`

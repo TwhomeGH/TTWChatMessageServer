@@ -45,6 +45,7 @@ import Translate from "./TranslateTest.js"
 import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFilter, clearStats, takeThrottleSummaries } from "./MessageFilter.js"
 import { replaceEmojis, loadEmojiMap, getEmojiMap } from "./EmojiMap.js"
 import { startKickChat } from './ScriptLib/kick/chat.mjs';
+import mediaCacheModule from './ScriptLib/media/cache.cjs';
 import console from 'console';
 import { AutoClipManager } from './AutoClip.js'
 
@@ -243,6 +244,7 @@ const socketHub = createHub({
     enabled: isSocket,
     replaceEmojis,
     dedup,
+    mediaCache: mediaCacheModule.defaultMediaCache,
     onSend: (payload) => monitorRelay.forward(payload),
     onConnect: () => {
         if (isFirstSocketConnect) {
@@ -866,10 +868,22 @@ var CacheUserList = [] // 用於去重的用戶列表
 var CacheUserNum = 0 // 合併觀眾數（由 viewerCounts 計算）
 
 
-function sendAdOverylayMessage(user,text,iconURL,useTTS){
+const AD_IMAGE_URL_RE = /https?:\/\/[^\s<>"']+\.(?:png|jpe?g|gif|webp|avif|bmp)(?:\?[^\s<>"']*)?/gi;
 
-    const payload = { type: 'AdOverlay', category: 'ad', user, text, iconURL, useTTS };
-    
+function cachedMediaUrl(value) {
+    if (!value) return value;
+    try {
+        return mediaCacheModule.defaultMediaCache.localUrl(value) || value;
+    } catch {
+        return value;
+    }
+}
+
+function sendAdOverylayMessage(user, text, iconURL, useTTS) {
+    // 只改 overlay 使用的圖片；通知仍保留原始 URL，手機才連得到外部站。
+    const localText = String(text || '').replace(AD_IMAGE_URL_RE, url => cachedMediaUrl(url));
+    const payload = { type: 'AdOverlay', category: 'ad', user, text: localText, iconURL: cachedMediaUrl(iconURL), useTTS };
+
     console.log('📤 發送 AdOverlay 訊息:', payload);
     socketHub.send(payload);
 }
