@@ -38,6 +38,7 @@ let youtubeNextPageToken = null;
 let youtubeViewerInterval = null;
 let youtubeBrowserFallbackStarted = false;
 let youtubeSourceMode = 'auto';
+let youtubeActive = false;
 
 function loadYoutubeCache() {
     try {
@@ -199,6 +200,7 @@ function handleYoutubeText(payload, deps, transport = 'native') {
 /** 每 60 秒用 API Key 更新觀眾數；瀏覽器 fallback 與原生 API 共用。 */
 function startYoutubeViewerPolling(videoId, deps) {
     clearInterval(youtubeViewerInterval);
+    youtubeActive = true;
     youtubeVideoId = videoId;
     youtubeViewerInterval = setInterval(async () => {
         if (!youtubeVideoId) return;
@@ -218,6 +220,7 @@ function startYoutubeViewerPolling(videoId, deps) {
 
 function connect(liveChatId, videoId, channelName, deps) {
     const { axios, apiKey, pollIntervalS, writeLog, notify, sendSystem, sendChat } = deps;
+    youtubeActive = true;
     youtubeLiveChatId = liveChatId;
     youtubeNextPageToken = null;
     youtubeBrowserFallbackStarted = false;
@@ -423,6 +426,7 @@ export async function startYoutubeChat(channelName, deps) {
                     onText: payload => handleYoutubeText(payload, deps, 'browser')
                 }
             });
+            youtubeActive = true;
             sendSystem(`Youtube 已透過專用瀏覽器 discovery 連線 ${channelName}`);
             notify("Youtube 連線", `已透過專用瀏覽器 discovery 連線 ${channelName}`, "");
         } catch (error) {
@@ -508,6 +512,8 @@ export async function startYoutubeChat(channelName, deps) {
  * @returns {Promise<void>}
  */
 export async function stopYoutubeChat() {
+    const wasActive = youtubeActive
+        || Boolean(youtubePollInterval || youtubeViewerInterval || youtubeLiveChatId || youtubeVideoId);
     clearTimeout(youtubePollInterval);
     clearInterval(youtubeViewerInterval);
     youtubePollInterval = null;
@@ -516,10 +522,11 @@ export async function stopYoutubeChat() {
     youtubeVideoId = null;
     youtubeNextPageToken = null;
     youtubeBrowserFallbackStarted = false;
+    youtubeActive = false;
     try {
         await stopYoutubeBrowser();
     } catch (error) {
         console.error('❌ 關閉 Youtube 專用瀏覽器失敗:', error.message);
     }
-    console.log('❌ Youtube 聊天室已斷線');
+    if (wasActive) console.log('⏹️ Youtube 聊天室已停止');
 }

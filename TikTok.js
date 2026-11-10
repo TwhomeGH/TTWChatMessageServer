@@ -353,10 +353,13 @@ const tiktokConn = createTikTokConnectionManager({
 
 
 var isEnd=false
+let exitStarted=false
 
 const EXIT_TIMEOUT_MS = 8000;
 
 async function handleExit() {
+    if (exitStarted) return;
+    exitStarted = true;
     console.log("⏹️ 程式結束，開始收尾...");
 
     // 收尾若卡住（網路 / Puppeteer），必須有硬性上限，否則行程永遠不退出，
