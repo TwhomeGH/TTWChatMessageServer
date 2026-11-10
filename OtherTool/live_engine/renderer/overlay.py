@@ -45,6 +45,7 @@ from PyQt6 import QtCore, QtWidgets
 from PyQt6.QtCore import QPoint
 
 from core.debug_log import log, log_error, log_warn
+from core.emoji_parser import display_image_url
 from core.hotkey import GlobalHotkey
 
 from gui.overlay_settings import load_overlay_config, save_overlay_config
@@ -573,7 +574,7 @@ class Overlay(QOpenGLWidget):
                         current_x += emoji_size + 1
                     else:
                         if not hasattr(n, '_emoji_logged'):
-                            log(f"emoji not cached: {seg['url'][-40:]}")
+                            log(f"emoji not cached: {display_image_url(seg['url'])}")
                             n._emoji_logged = True
 
             gift_size = 28

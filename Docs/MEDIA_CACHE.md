@@ -43,6 +43,7 @@ MediaCache 將圖片持久化到本機，訊息只傳本地 URL：
 - `ScriptLib/media/inline.cjs` 驗證格式、encoded 大小、數量與總量；不切片、不 fallback HTTP。
 - 通知會移除 body 中的 data URI，且外部 Bark／ntfy 不帶 data URI icon。
 - Live 顯示保留 inline；歷史持久化不應直接寫 base64，必要時 materialize 成 `/media/<content-hash>`。
+- Python overlay 已在 texture worker 本機解碼 png／jpeg／webp／gif data URI；日誌只記錄類型與長度。
 
 ## 安全限制
 

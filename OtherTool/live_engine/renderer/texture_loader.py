@@ -1,5 +1,8 @@
+import base64
+import binascii
 import os
 import hashlib
+import re
 import threading
 from collections import OrderedDict
 
@@ -9,6 +12,7 @@ from PyQt6.QtCore import QRectF, Qt
 from OpenGL.GL import *
 
 from core.debug_log import log_warn
+from core.emoji_parser import display_image_url
 
 
 EMOJI_DISK_CACHE = os.path.join(
@@ -24,6 +28,35 @@ MAX_FETCH_WORKERS = 4
 MAX_UPLOADS_PER_FRAME = 4
 REQUEST_TIMEOUT = 5
 USER_AGENT = "Mozilla/5.0"
+MAX_INLINE_ENCODED = 256 * 1024
+INLINE_DATA_RE = re.compile(
+    r'^data:(image/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$',
+    re.IGNORECASE
+)
+
+
+def inline_data_bytes(url: str) -> bytes:
+    """解碼受支援的 inline data URI；不發 HTTP、不寫入日誌內容。"""
+    match = INLINE_DATA_RE.match(url or '')
+    if not match:
+        raise ValueError('不支援的 inline image')
+    if len(url.encode('utf-8')) > MAX_INLINE_ENCODED:
+        raise ValueError('inline image 過大')
+    payload = match.group(2)
+    payload += '=' * (-len(payload) % 4)
+    try:
+        data = base64.b64decode(payload, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise ValueError('inline base64 無效') from error
+    if not data:
+        raise ValueError('inline image 為空')
+    return data
+
+
+def _url_key(url: str) -> str:
+    if isinstance(url, str) and url.lower().startswith('data:image/'):
+        return 'inline:' + hashlib.sha256(url.encode('utf-8')).hexdigest()
+    return url
 
 
 def _emoji_disk_path(url):
@@ -41,7 +74,9 @@ def qimage_to_bytes(img: QImage):
 
 
 def _fetch_bytes(url):
-    """Blocking network fetch; only ever called on a worker thread."""
+    """Blocking fetch；data URI 只在本機解碼，不發出 HTTP。"""
+    if isinstance(url, str) and url.lower().startswith('data:image/'):
+        return inline_data_bytes(url)
     res = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=REQUEST_TIMEOUT)
     if res.status_code != 200:
         raise ValueError(f"HTTP {res.status_code}")
@@ -152,7 +187,7 @@ class TextureLoader:
                 if image is not None and kind == "circular":
                     image = _circular(image, size)
         except Exception as error:
-            log_warn(f"texture fetch failed ({kind}): {url[-60:]} -> {error}")
+            log_warn(f"texture fetch failed ({kind}): {display_image_url(url, 60)} -> {error}")
             image = None
         finally:
             with self._lock:
@@ -167,6 +202,11 @@ class TextureLoader:
             self._fetch_slots.release()
 
     def _load_emoji_image(self, url, size):
+        if isinstance(url, str) and url.lower().startswith('data:image/'):
+            img = _decode(inline_data_bytes(url))
+            if img is None:
+                raise ValueError("QImage decode failed")
+            return _scale(img, size)
         disk_path = _emoji_disk_path(url)
         if os.path.exists(disk_path):
             img = QImage(disk_path)
@@ -195,22 +235,22 @@ class TextureLoader:
     def load_emoji(self, url, size=24):
         if not url:
             return None
-        return self._request(f"emoji:{url}:{size}", url, "emoji", size)
+        return self._request(f"emoji:{_url_key(url)}:{size}", url, "emoji", size)
 
     def preload_emoji(self, url, size=24):
         if not url:
             return
-        self._request(f"emoji:{url}:{size}", url, "emoji", size)
+        self._request(f"emoji:{_url_key(url)}:{size}", url, "emoji", size)
 
     def load_url(self, url):
         if not url:
             return None
-        return self._request(f"url:{url}", url, "plain")
+        return self._request(f"url:{_url_key(url)}", url, "plain")
 
     def load_url_circular(self, url, size):
         if not url:
             return None
-        return self._request(f"circ:{url}:{size}", url, "circular", size)
+        return self._request(f"circ:{_url_key(url)}:{size}", url, "circular", size)
 
     def process_pending(self):
         """Upload decoded images to GL textures. Must run on the GL thread."""

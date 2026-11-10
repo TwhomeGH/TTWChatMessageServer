@@ -3,7 +3,7 @@ from network.socket_server import drain_messages
 from core.scene import ChatNode
 from core.ad_overlay import AdOverlayNode
 from core.tts import tts_service
-from core.emoji_parser import strip_image_urls
+from core.emoji_parser import strip_image_urls, display_image_url
 from core.debug_log import log_error
 
 from PyQt6.QtGui import QColor
@@ -205,7 +205,7 @@ class Engine:
                     tl = w.texture_loader
                     for seg in new_node.segments:
                         if seg["type"] == "image":
-                            print(f"preloading emoji: {seg['url'][-40:]}")
+                            print(f"preloading emoji: {display_image_url(seg['url'])}")
                             tl.preload_emoji(seg["url"])
 
             if raw_text and data.get("type") == "StreamMessage":
@@ -270,7 +270,7 @@ class Engine:
                 emoji_size = int(self.ad_overlay_font_size * 1.6)
                 for seg in node.segments:
                     if seg["type"] == "image":
-                        print(f"preloading ad emoji: {seg['url'][-40:]}")
+                        print(f"preloading ad emoji: {display_image_url(seg['url'])}")
                         tl.preload_emoji(seg["url"], emoji_size)
 
         if node.use_tts:

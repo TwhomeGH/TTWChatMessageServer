@@ -77,6 +77,12 @@ class TestParseMessage:
         assert [s["type"] for s in segs] == ["text", "image", "text", "image", "text"]
         assert [s.get("content", "") for s in segs if s["type"] == "text"] == ["a ", " b ", " c"]
 
+    def test_inline_data_uri_image(self):
+        url = "data:image/png;base64,iVBORw0KGgo="
+        segs = parse_message(f"look {url} end")
+        assert [s["type"] for s in segs] == ["text", "image", "text"]
+        assert segs[1]["url"] == url
+
 
 class TestStripImageUrls:
     def test_plain_text(self):
@@ -90,3 +96,7 @@ class TestStripImageUrls:
 
     def test_no_url(self):
         assert strip_image_urls("just text") == "just text"
+
+    def test_inline_data_uri_removed(self):
+        url = "data:image/png;base64,iVBORw0KGgo="
+        assert "data:image" not in strip_image_urls(f"look {url} end")

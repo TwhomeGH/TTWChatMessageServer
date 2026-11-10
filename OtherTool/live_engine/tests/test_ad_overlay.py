@@ -45,6 +45,13 @@ class TestAdOverlayNode:
         assert n.has_emoji
         assert any(s["type"] == "image" for s in n.segments)
 
+    def test_inline_data_uri_icon_and_message(self):
+        url = "data:image/png;base64,iVBORw0KGgo="
+        n = AdOverlayNode({"user": "u", "message": f"hello {url}", "iconURL": url})
+        assert n.icon_url == url
+        assert n.has_emoji
+        assert n.segments[1]["url"] == url
+
     def test_default_duration(self):
         n = AdOverlayNode({"user": "u", "message": "hi"})
         assert n.duration == 10.0

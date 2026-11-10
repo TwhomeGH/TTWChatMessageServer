@@ -1,5 +1,30 @@
 # ChangeHistory
 
+## 2026.11.10 20:20 Python overlay data URI 支援
+
+**類型**: 功能 · **檔案**: `OtherTool/live_engine/core/emoji_parser.py`、`OtherTool/live_engine/renderer/texture_loader.py`、`OtherTool/live_engine/core/engine.py`、`OtherTool/live_engine/renderer/overlay.py`、`OtherTool/live_engine/tests/test_emoji_parser.py`、`OtherTool/live_engine/tests/test_ad_overlay.py`、`OtherTool/live_engine/tests/test_texture_loader.py`、`OtherTool/live_engine/README.md`
+
+### 修改
+
+- 訊息解析器支援 png／jpeg／webp／gif data URI；`strip_image_urls` 也會移除內嵌 base64。
+- TextureLoader 在 worker thread 本機解碼 data URI，不走 HTTP，也不寫入 emoji 磁碟快取。
+- data URI 使用 content hash 作為 texture key，避免把完整 base64 當成快取鍵。
+- 頭像 `img`、禮物 `giftImg`、贊助 `AdOverlay.iconURL` 與訊息內嵌圖片都走同一條解碼路徑。
+- 日誌只輸出 `data:image/...;base64,<N chars>`，不寫入 base64。
+- 補 Python 解析器、AdOverlay 與 texture loader 測試。
+
+### 限制
+
+- data URI 單張 encoded 上限 256 KiB；SVG／PDF 拒絕。
+- 4 MP／2048 px 仍由顯示端解碼限制；伺服器不切片。
+- 通知（Bark／ntfy）仍不帶 inline icon。
+
+### 驗證
+
+- `python -m pytest OtherTool/live_engine/tests/test_emoji_parser.py OtherTool/live_engine/tests/test_ad_overlay.py OtherTool/live_engine/tests/test_texture_loader.py -q`
+
+---
+
 ## 2026.11.10 20:00 Inline data URI 驗證與通知剝離
 
 **類型**: 功能 · **檔案**: `ScriptLib/media/inline.cjs`、`ScriptLib/notify/format.mjs`、`Test/inline_image.test.cjs`、`Test/notify.test.mjs`、`Test/media_cache.test.cjs`、`Docs/CHAT_API.md`、`Docs/MEDIA_CACHE.md`、`Docs/TEST_FILES_REFERENCE.md`

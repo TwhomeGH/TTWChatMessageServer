@@ -11,7 +11,7 @@
 - **文字自動換行**，可選系統字型
 - **訊息平滑動畫** — 進場、滾動、淡出
 - **超出視窗自動滾動** — 最新訊息保持在可見區域
-- **內嵌圖片 URL 解析** — 自動下載並渲染訊息中的圖片 URL（Discord CDN 等）
+- **內嵌圖片 URL 解析** — 自動下載並渲染訊息中的 HTTP(S) 圖片；也接受本機解碼的 png／jpeg／webp／gif data URI（單張上限 256 KiB），不發出 HTTP
 - **非阻塞圖片載入** — 頭像／禮物／表情的網路下載與解碼都在背景下載執行緒（同時最多 4 個），繪製執行緒只負責上傳 GL 紋理（每幀最多 4 張），不會卡住畫面
 - **紋理 LRU 快取** — 頭像／禮物／表情共用最多 300 張的 LRU，長時間直播不會無限成長；表情另有**本地磁碟快取**（`cache/emojis/`）跨啟動復用，同 URL 不下載第二次
 - **表情跟隨字體** — 大小比例跟隨字體設定（font_size × 1.6），不再寫死
@@ -26,9 +26,9 @@
 - **佇列管理** — 佇列上限、滿載策略（跳過/停止舊/清空）
 - **可調參數** — 語速、音量、語音、最小/最大字數
 - **疊加層設定 GUI** — 五頁分頁：基本（字型、大小、快捷鍵）、間距、位置（拖曳）、計時器、贊助橫幅（樣式自訂）
-- **贊助橫幅 (AdOverlay)** — 接收 `AdOverlay` 訊息顯示個性化贊助橫幅：圓形頭像 + 用戶名 + 內嵌表情與自動換行文字，可自訂背景/邊框/文字顏色、頭像大小與垂直微調、顯示時長；顯示期間聊天訊息自動讓路並暫停清理，結束後滑回原位
+- **贊助橫幅 (AdOverlay)** — 接收 `AdOverlay` 訊息顯示個性化贊助橫幅：圓形頭像 + 用戶名 + 內嵌表情與自動換行文字，可自訂背景/邊框/文字顏色、頭像大小與垂直微調、顯示時長；`iconURL` 與文字圖片也接受 data URI；顯示期間聊天訊息自動讓路並暫停清理，結束後滑回原位
 - **字型選擇** — GDI EnumFontFamiliesW 列舉系統所有已安裝字型
-- **pytest 測試** — 核心邏輯 57 項單元測試
+- **pytest 測試** — 核心邏輯 62 項單元測試
 
 ---
 
@@ -72,6 +72,7 @@ live_engine/
 │   ├── test_scene.py
 │   ├── test_overlay_config.py
 │   ├── test_speech_filter.py
+│   ├── test_texture_loader.py   # data URI 本機解碼與大小限制
 │   └── test_ad_overlay.py       # 贊助橫幅節點與引擎讓路/暫停清理測試
 ├── config/
 │   ├── tts_settings.json        # TTS 設定（執行期自動產生）
@@ -304,11 +305,12 @@ edge-tts 合成的音訊透過 `Communicate.stream()` 串流累積在記憶體�
 python -m pytest tests/
 ```
 
-執行 57 項單元測試，涵蓋：
+執行 62 項單元測試，涵蓋：
 
 | 模組 | 測試內容 |
 | ------ | ---------- |
-| `test_emoji_parser` | 圖片 URL 解析、文字分段、`strip_image_urls` |
+| `test_emoji_parser` | 圖片 URL／data URI 解析、文字分段、`strip_image_urls` |
+| `test_texture_loader` | data URI 本機解碼、SVG 與過大資料拒絕 |
 | `test_speech_filter` | URL/Emoji 過濾、關鍵字封鎖與取代、數字過濾 |
 | `test_scene` | ChatNode 資料欄位、生命週期（alpha/dead） |
 | `test_overlay_config` | JSON 讀寫、預設值合併、遺漏鍵值處理 |
