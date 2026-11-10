@@ -30,13 +30,31 @@ Userscript → Server.js → TikTok.js → Socket 顯示與自動剪輯統計
 | `observedAt` | 毫秒時間戳，可省略 | 瀏覽器觀察時間。目前不作為平台發送時間或熱度計算時間。 |
 | `receivedAt` | 伺服器產生 | 入口會覆寫成伺服器接收時間，發送端不用設定。 |
 | `isTest` | 布林，預設 `false` | 只有布林 `true` 標記合成測試資料；仍可顯示、記錄留言，但不參與自動剪輯熱度及觀眾更新。不要傳字串 `"true"`。 |
-| `img` | URL 字串，可省略 | 顯示用圖片位址，不是圖片上傳介面。 |
-| `giftImg` | URL 字串，可省略 | 相容顯示用禮物圖片，不會因此產生原生平台禮物事件。 |
+| `img` | URL 或 data URI 字串，可省略 | 顯示用圖片；HTTP(S) 由 MediaCache 轉本地 URL，data URI 原樣直傳。 |
+| `giftImg` | URL 或 data URI 字串，可省略 | 相容顯示用禮物圖片；同上，不會因此產生原生平台禮物事件。 |
 | `userNum` | 有限且非負的數值，可省略 | 真實總觀眾數；只有知道總數才傳，不要用 `0` 代表未知。 |
 | `audienceKind` | `total` 或 `top-fans`，可省略 | 總觀眾數建議明確標記 `total`；`top-fans` 會略過觀眾熱度更新。 |
 | `userList` | 字串陣列，可省略 | 相容欄位，目前不據此更新總觀眾或自動剪輯熱度。 |
 | `isMain` | 布林，相容欄位 | 目前聊天轉接送往 Socket 時固定使用 `true`，不採用輸入值切換。 |
 | `heatEligible` | 伺服器衍生 | 由 `isTest` 決定，入口會覆寫；不要自行指定。 |
+
+### data URI 圖片
+
+`img`、`giftImg`、`message` 內嵌圖片、`AdOverlay.iconURL`、贊助橫幅與通知圖片接受：
+
+```text
+data:image/png;base64,<payload>
+data:image/jpeg;base64,<payload>
+data:image/webp;base64,<payload>
+data:image/gif;base64,<payload>
+```
+
+- 由顯示端本機解碼；MediaCache 不抓取、不快取、不 hash data URI。
+- 只接受 `;base64`；拒絕 SVG、PDF、非 base64 與超限內容。
+- 單張 encoded 256 KiB、單則合計 768 KiB、最多 20 張。
+- 解碼後 4 MP／最大邊 2048 px 由 App 判斷；伺服器不切片、不截斷，也不 fallback 去下載 HTTP。
+- 通知（Bark／ntfy）會移除內文 data URI，且不把 data URI 當外部 icon，避免把 base64 塞進第三方 API。
+- 歷史持久化不應直接存 base64；需要保留時應 materialize 成 content-addressed 本機 media。
 
 ### 一般留言
 

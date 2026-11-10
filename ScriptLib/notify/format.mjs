@@ -1,5 +1,6 @@
 // 推播文字／圖示格式化：Bark 與 ntfy 共用。
 // emoji 對照表由呼叫端以 getter 注入，本模組不依賴 EmojiMap.js，方便單元測試。
+import inlineMedia from '../media/inline.cjs';
 
 const IMG_URL_RE = /https?:\/\/[^\s]+?\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s]*)?/i;
 
@@ -10,7 +11,9 @@ const IMG_URL_RE = /https?:\/\/[^\s]+?\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s]*)?/i
  */
 export function stripEmojiUrls(text) {
     if (!text || typeof text !== 'string') return text;
-    return text.replace(/https?:\/\/[^\s]+(?:png|jpg|jpeg|gif|webp)[^\s]*/gi, '').trim();
+    const withoutInline = inlineMedia.stripInlineImages(text);
+    const source = withoutInline === text ? text : withoutInline;
+    return source.replace(/https?:\/\/[^\s]+(?:png|jpg|jpeg|gif|webp)[^\s]*/gi, '').trim();
 }
 
 /**
@@ -57,15 +60,17 @@ export function stripEmojiCodes(text, keepCode, map = {}) {
  * @param {string} comment 原始訊息
  * @param {string} [fallbackIcon] 找不到 emoji／圖片時沿用的圖示
  * @param {Object} [map] emoji code → 圖片網址
+ * @param {{allowInlineIcon?: boolean}} [options] 外部通道預設不帶 data URI icon
  * @returns {{icon: (string|undefined), body: string}}
  */
-export function buildNotification(comment, fallbackIcon, map = {}) {
+export function buildNotification(comment, fallbackIcon, map = {}, { allowInlineIcon = false } = {}) {
     const pick = pickEmojiIcon(comment, map);
     let icon = pick ? pick.url : fallbackIcon;
     if (!pick && typeof comment === 'string') {
         const imgMatch = comment.match(IMG_URL_RE);
         if (imgMatch) icon = imgMatch[0];
     }
+    if (!allowInlineIcon && icon && inlineMedia.isInlineImage(icon)) icon = undefined;
     const body = stripEmojiCodes(stripEmojiUrls(comment), pick ? pick.code : null, map);
     return { icon, body };
 }

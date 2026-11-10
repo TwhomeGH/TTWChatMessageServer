@@ -46,6 +46,13 @@ test('格式化：emoji 圖示、移除代碼與圖片網址、圖片網址當�
     const fallback = buildNotification('plain text', 'fallback', {});
     assert.equal(fallback.icon, 'fallback');
     assert.equal(fallback.body, 'plain text');
+
+    const inline = 'data:image/png;base64,iVBORw0KGgo=';
+    const inlineResult = buildNotification(`look ${inline} done`, inline, {});
+    assert.equal(inlineResult.icon, undefined);
+    assert.equal(inlineResult.body.includes('data:image'), false);
+    assert.equal(inlineResult.body.includes('base64'), false);
+    assert.equal(buildNotification(`look ${inline}`, inline, {}, { allowInlineIcon: true }).icon, inline);
 });
 
 test('BarkChannel 依開關與設定啟用，POST 正確 payload', async () => {
