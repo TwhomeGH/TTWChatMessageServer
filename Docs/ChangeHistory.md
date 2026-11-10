@@ -11,7 +11,10 @@
 - 選 emoji 使用目前 `/api/emoji/preview` 的 URL。
 - AdOverlay 模式下同一選擇會同步填入 iconURL。
 - Raw 圖片欄新增 HTTP(S)／data URI 預覽，選單選擇後立即更新。
-- UI 測試補 Raw 圖片選單與預覽。
+- Raw Socket 的使用者名稱與圖片／禮物欄位會存到 `ttw-monitor-raw-prefs`，重新整理後自動帶回；流程測試沿用原本的 `ttw-monitor-test-prefs`。
+- MediaCache／emoji 選單選到的頭貼也會一併記憶。
+- 「清除測試設定」會同時清除兩份使用者偏好。
+- UI 測試補 Raw 圖片選單、預覽與使用者名稱持久化。
 
 ### 驗證
 

@@ -180,6 +180,9 @@ async function main() {
             const image = document.querySelector('#monRawImagePreview');
             return image && !image.hidden && image.src.endsWith('/emoji.png');
         });
+        await page.evaluate(() => { document.querySelector('#monRawPanel').open = true; });
+        await page.type('#monRawUser', 'Raw User');
+        assert.equal(await page.$eval('#monRawUser', node => node.value), 'Raw User');
         await page.waitForFunction(() => {
             const image = document.querySelector('#monTestAvatarPreview');
             return image && !image.hidden && image.src.endsWith('/emoji.png');
@@ -244,12 +247,20 @@ async function main() {
         assert.notEqual(posts[1].data.testId, posts[0].data.testId);
         assert.match(await page.$eval('#monTestStatus', node => node.textContent), /去重保護/);
 
+        const rawPrefsBeforeReload = await page.evaluate(() => localStorage.getItem('ttw-monitor-raw-prefs'));
+        assert.match(rawPrefsBeforeReload || '', /Raw User/);
         await page.reload({ waitUntil: 'load' });
         await page.waitForFunction(() => document.querySelectorAll('#monTestCategory option').length >= 2);
         await page.evaluate(() => { document.querySelector('#monTestPanel').open = true; });
         await page.waitForFunction(() => {
             const image = document.querySelector('#monTestAvatarPreview');
             return image && !image.hidden && image.src.endsWith('/avatar.png');
+        });
+        assert.equal(await page.$eval('#monRawUser', node => node.value), 'Raw User');
+        assert.equal(await page.$eval('#monRawImage', node => node.value), rawEmoji);
+        await page.waitForFunction(() => {
+            const image = document.querySelector('#monRawImagePreview');
+            return image && !image.hidden && image.src.endsWith('/emoji.png');
         });
         const restored = await page.evaluate(() => ({
             user: document.querySelector('#monTestUser').value,

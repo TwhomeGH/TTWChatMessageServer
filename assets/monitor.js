@@ -93,6 +93,7 @@
     const rawSend = document.getElementById('monRawSend');
     const rawStatus = document.getElementById('monRawStatus');
     const TEST_PREFS_KEY = 'ttw-monitor-test-prefs';
+    const RAW_PREFS_KEY = 'ttw-monitor-raw-prefs';
 
     let emojiMap = null;
     let emojiPattern = null;
@@ -388,6 +389,31 @@
         } catch { /* 無痕模式或儲存額度不足時不影響測試 */ }
     }
 
+    function loadRawPrefs() {
+        try {
+            const data = JSON.parse(localStorage.getItem(RAW_PREFS_KEY) || 'null');
+            return data && typeof data === 'object' ? data : null;
+        } catch { return null; }
+    }
+
+    function saveRawPrefs() {
+        try {
+            localStorage.setItem(RAW_PREFS_KEY, JSON.stringify({
+                user: rawUser.value,
+                image: rawImage.value,
+                gift: rawGift.value
+            }));
+        } catch { /* ignore */ }
+    }
+
+    function restoreRawPrefs() {
+        const saved = loadRawPrefs();
+        if (!saved) return;
+        if (typeof saved.user === 'string') rawUser.value = saved.user;
+        if (typeof saved.image === 'string') rawImage.value = saved.image;
+        if (typeof saved.gift === 'string') rawGift.value = saved.gift;
+    }
+
     function restoreTestPrefs() {
         if (!savedTestPrefs) return;
         if (typeof savedTestPrefs.user === 'string') testUser.value = savedTestPrefs.user;
@@ -478,7 +504,12 @@
         clearTestPending();
         clearTestCooldown();
         try { localStorage.removeItem(TEST_PREFS_KEY); } catch { /* ignore */ }
+        try { localStorage.removeItem(RAW_PREFS_KEY); } catch { /* ignore */ }
         savedTestPrefs = null;
+        rawUser.value = '';
+        rawImage.value = '';
+        rawGift.value = '';
+        rawImagePick.value = '';
         testUser.value = '';
         testAvatar.value = '';
         testAvatarPick.value = '';
@@ -489,6 +520,7 @@
         testSocket.checked = true;
         testNotify.checked = false;
         updateAvatarPreview();
+        updateRawImagePreview();
         setTestStatus(t('monitor.test.cleared', {}, '已清除測試設定。'));
     }
 
@@ -1192,15 +1224,21 @@
         if (!rawImagePick.value) return;
         rawImage.value = rawImagePick.value;
         if (rawType.value === 'AdOverlay') rawGift.value = rawImagePick.value;
+        saveRawPrefs();
         updateRawImagePreview();
     });
-    rawImage.addEventListener('input', updateRawImagePreview);
+    rawImage.addEventListener('input', () => {
+        saveRawPrefs();
+        updateRawImagePreview();
+    });
+    rawGift.addEventListener('input', saveRawPrefs);
     rawSend.addEventListener('click', sendRawSocketTest);
 
     testAdd.addEventListener('click', addTestMessage);
     testSend.addEventListener('click', sendSocketTest);
     testClear.addEventListener('click', clearTestPrefs);
     testUser.addEventListener('input', saveTestPrefs);
+    rawUser.addEventListener('input', saveRawPrefs);
     testAvatar.addEventListener('input', () => { saveTestPrefs(); updateAvatarPreview(); });
     testPlatform.addEventListener('change', saveTestPrefs);
     testCategory.addEventListener('change', saveTestPrefs);
@@ -1237,6 +1275,7 @@
     applyTestI18n();
     buildTestCategories();
     restoreTestPrefs();
+    restoreRawPrefs();
     restoreTestCategory();
     updateAvatarPreview();
     updateCount();
