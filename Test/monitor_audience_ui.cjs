@@ -172,6 +172,14 @@ async function main() {
         await page.waitForFunction(() => document.querySelectorAll('#monTestAvatarPick option').length === 2);
         await page.select('#monTestAvatarPick', base + '/emoji.png');
         assert.equal(await page.$eval('#monTestAvatar', node => node.value), base + '/emoji.png');
+        await page.waitForFunction(() => document.querySelectorAll('#monRawImagePick option').length >= 2);
+        const rawEmoji = await page.$eval('#monRawImagePick option:last-child', node => node.value);
+        await page.select('#monRawImagePick', rawEmoji);
+        assert.equal(await page.$eval('#monRawImage', node => node.value), rawEmoji);
+        await page.waitForFunction(() => {
+            const image = document.querySelector('#monRawImagePreview');
+            return image && !image.hidden && image.src.endsWith('/emoji.png');
+        });
         await page.waitForFunction(() => {
             const image = document.querySelector('#monTestAvatarPreview');
             return image && !image.hidden && image.src.endsWith('/emoji.png');

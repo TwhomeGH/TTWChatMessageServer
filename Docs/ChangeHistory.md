@@ -1,5 +1,118 @@
 # ChangeHistory
 
+## 2026.11.11 00:23 Raw Socket 圖片選單
+
+**類型**: 功能 · **檔案**: `monitor.html`、`assets/monitor.js`、`lang/*.json`、`Test/monitor_audience_ui.cjs`
+
+### 修改
+
+- Raw Socket 測試新增「從 MediaCache／emoji 選」下拉，填入頭像／圖片 URL。
+- 選 MediaCache 使用 `/api/media?status=cached` 的本地 `/media/<hash>`。
+- 選 emoji 使用目前 `/api/emoji/preview` 的 URL。
+- AdOverlay 模式下同一選擇會同步填入 iconURL。
+- Raw 圖片欄新增 HTTP(S)／data URI 預覽，選單選擇後立即更新。
+- UI 測試補 Raw 圖片選單與預覽。
+
+### 驗證
+
+- `node Test/monitor_audience_ui.cjs`
+- `npm run lint`、`npm run check:css`
+
+---
+
+## 2026.11.11 00:12 Raw Socket 測試補 isMain
+
+**類型**: 修正 · **檔案**: `monitor.html`、`assets/monitor.js`、`lang/*.json`
+
+### 修改
+
+- Raw Socket 測試新增「主要訊息（isMain）」開關，預設開啟。
+- StreamMessage payload 會帶 `isMain`；AdOverlay 時停用此欄位。
+- 補中英文標籤。
+
+### 驗證
+
+- `npm run lint`
+- `npm run check:css`
+
+---
+
+## 2026.11.11 00:10 MediaCache 改用 LAN IP
+
+**類型**: 修正 · **檔案**: `ScriptLib/media/cache.cjs`、`Test/media_cache.test.cjs`、`.env.example`、`Docs/MEDIA_CACHE.md`
+
+### 問題
+
+`MEDIA_BASE_URL` 預設 `127.0.0.1`，StreamMessage 傳給其他機器的 `/media` URL 在對端無法解析。
+
+### 修改
+
+- 預設自動偵測私有 IPv4，優先 `192.168.x.x`、其次 `10.x`、`172.16–31.x`。
+- 只有找不到私有 IPv4 才退回 `127.0.0.1`。
+- `MEDIA_BASE_URL` 仍可明確覆寫；多網卡／反向代理時使用。
+- 補偵測與覆寫測試。
+
+### 限制
+
+- 多張網卡可能挑到不是預期的介面；用 `MEDIA_BASE_URL` 固定。
+- Windows 防火牆仍需允許 3332。
+
+### 驗證
+
+- `node --test Test/media_cache.test.cjs`
+- `npm run lint`
+
+---
+
+## 2026.11.10 23:59 monitor 歷史 materialize 與 MediaCache LRU
+
+**類型**: 功能 · **檔案**: `ScriptLib/media/cache.cjs`、`ScriptLib/media/inline.cjs`、`ScriptLib/monitor/store.cjs`、`Server.js`、`Test/media_cache.test.cjs`、`Test/monitor_history.test.cjs`、`.env.example`、`Docs/MEDIA_CACHE.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 修改
+
+- monitor 歷史寫入時把 `message`／`img`／`giftImg` 的 data URI 解碼，存成 content-addressed `/media/<hash>`；SQLite 不再保存 base64。
+- 超限／解碼失敗存 placeholder，不切片、不 fallback HTTP。
+- MediaCache 新增 `source`／`pinned`：inline 與歷史引用的 HTTP 圖片会被 pin，一般 LRU 不刪。
+- `MEDIA_CACHE_MAX_MB`、`MEDIA_CACHE_DAYS`；主服務每小時 prune 非 pinned HTTP 快取。
+- monitor 場次／訊息修剪後釋放 inline 檔與 HTTP pin。
+- 補 materialize、pin、prune 測試。
+
+### 限制
+
+- 既有歷史中已存在的 base64 不會自動回溯改寫；只影響新寫入與後續修剪。
+- inline 檔案生命週期跟隨 monitor 歷史引用。
+
+### 驗證
+
+- `node --test Test/media_cache.test.cjs Test/monitor_history.test.cjs`
+- `npm run lint`
+
+---
+
+## 2026.11.10 23:43 MediaCache 複製按鈕回饋
+
+**類型**: 修正 · **檔案**: `assets/monitor.js`、`lang/*.json`
+
+### 問題
+
+MediaCache 的「複製連結」按鈕只更新下方狀態文字，按鈕本身沒有變化，難以感知是否已複製。
+
+### 修改
+
+- 複製成功時按鈕文字變「已複製」、綠色邊框，1.5 秒後恢復。
+- 失敗時顯示「複製失敗」與紅色邊框。
+- 保留原本的狀態列訊息。
+- 只在 secure context（HTTPS／localhost）使用 Clipboard API；LAN HTTP 直接走同步 execCommand fallback，避免 await 消耗使用者手勢。
+- 狀態會標示「Clipboard API」或「瀏覽器 fallback」；兩者都失敗時顯示手動複製 prompt。
+- 補中英文 i18n 短標籤。
+
+### 驗證
+
+- `npm run lint`
+- `npm run check:css`
+
+---
+
 ## 2026.11.10 22:58 YouTube 未啟用時不再輸出斷線收尾
 
 **類型**: 修正 · **檔案**: `ScriptLib/youtube/chat.mjs`、`TikTok.js`、`Test/youtube_stop.test.mjs`

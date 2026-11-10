@@ -84,14 +84,19 @@
     const rawCategory = document.getElementById('monRawCategory');
     const rawMessage = document.getElementById('monRawMessage');
     const rawImage = document.getElementById('monRawImage');
+    const rawImagePick = document.getElementById('monRawImagePick');
+    const rawImagePreview = document.getElementById('monRawImagePreview');
+    const rawImagePreviewStatus = document.getElementById('monRawImagePreviewStatus');
     const rawGift = document.getElementById('monRawGift');
     const rawNormalize = document.getElementById('monRawNormalize');
+    const rawIsMain = document.getElementById('monRawIsMain');
     const rawSend = document.getElementById('monRawSend');
     const rawStatus = document.getElementById('monRawStatus');
     const TEST_PREFS_KEY = 'ttw-monitor-test-prefs';
 
     let emojiMap = null;
     let emojiPattern = null;
+    let rawMediaItems = [];
     let savedTestPrefs = null;
     let pendingTestId = null;
     let pendingTestTimer = null;
@@ -307,6 +312,36 @@
         } catch { return false; }
     }
 
+    function isImageSource(value) {
+        return /^https?:\/\//i.test(value) || /^data:image\/(?:png|jpeg|webp|gif);base64,/i.test(value);
+    }
+
+    function updateRawImagePreview() {
+        const value = rawImage.value.trim();
+        if (!value) {
+            rawImagePreview.hidden = true;
+            rawImagePreview.removeAttribute('src');
+            rawImagePreviewStatus.textContent = '';
+            return;
+        }
+        if (!isImageSource(value)) {
+            rawImagePreview.hidden = true;
+            rawImagePreviewStatus.textContent = t('monitor.test.avatarPreviewInvalid', {}, '需為 HTTP(S) URL 或 data URI。');
+            return;
+        }
+        rawImagePreview.hidden = false;
+        rawImagePreviewStatus.textContent = '';
+        rawImagePreview.onerror = () => {
+            rawImagePreview.hidden = true;
+            rawImagePreviewStatus.textContent = t('monitor.test.avatarPreviewError', {}, '圖片無法載入。');
+        };
+        rawImagePreview.onload = () => {
+            rawImagePreview.hidden = false;
+            rawImagePreviewStatus.textContent = '';
+        };
+        rawImagePreview.src = value;
+    }
+
     function updateAvatarPreview() {
         const value = testAvatar.value.trim();
         if (!value) {
@@ -389,6 +424,54 @@
         testAvatarPick.replaceChildren(...options);
         testAvatarPick.disabled = byUrl.size === 0;
         if (byUrl.has(testAvatar.value)) testAvatarPick.value = testAvatar.value;
+        buildRawImageOptions();
+    }
+
+    function buildRawImageOptions() {
+        const previous = rawImagePick.value;
+        const empty = document.createElement('option');
+        empty.value = '';
+        empty.textContent = t('monitor.test.avatarPickEmpty', {}, '—');
+        const options = [empty];
+        if (rawMediaItems.length) {
+            const group = document.createElement('optgroup');
+            group.label = 'MediaCache';
+            for (const item of rawMediaItems) {
+                const option = document.createElement('option');
+                option.value = item.localUrl;
+                option.textContent = `${item.hash.slice(0, 10)} · ${item.host || item.contentType || 'media'}`;
+                group.append(option);
+            }
+            options.push(group);
+        }
+        const emojiByUrl = new Map();
+        for (const [code, url] of Object.entries(emojiMap || {}).sort(([a], [b]) => a.localeCompare(b))) {
+            if (typeof url === 'string' && !emojiByUrl.has(url)) emojiByUrl.set(url, code);
+        }
+        if (emojiByUrl.size) {
+            const group = document.createElement('optgroup');
+            group.label = 'emoji';
+            for (const [url, code] of emojiByUrl) {
+                const option = document.createElement('option');
+                option.value = url;
+                option.textContent = code;
+                group.append(option);
+            }
+            options.push(group);
+        }
+        rawImagePick.replaceChildren(...options);
+        rawImagePick.disabled = options.length <= 1;
+        if (options.some(option => option.value === previous)) rawImagePick.value = previous;
+    }
+
+    async function loadRawMediaOptions() {
+        try {
+            const response = await fetch('/api/media?pageSize=200&status=cached', { cache: 'no-store' });
+            if (!response.ok) return;
+            const data = await response.json();
+            rawMediaItems = data.ok && Array.isArray(data.items) ? data.items : [];
+            buildRawImageOptions();
+        } catch { /* 無登入或 API 不可用時只顯示 emoji */ }
     }
 
     function clearTestPrefs() {
@@ -557,7 +640,8 @@
         }
         return {
             type, category: rawCategory.value.trim() || 'chat', platform: 'unknown', user,
-            message, img: rawImage.value.trim(), giftImg: rawGift.value.trim()
+            message, img: rawImage.value.trim(), giftImg: rawGift.value.trim(),
+            isMain: rawIsMain.checked
         };
     }
 
@@ -616,12 +700,61 @@
         mediaStatusText.className = error ? 'text-xs text-red-400' : 'text-xs text-gray-400';
     }
 
-    async function copyMediaLink(link) {
+    function copyButtonFeedback(button, label, error = false) {
+        if (!button) return;
+        clearTimeout(button._copyFeedbackTimer);
+        button.textContent = label;
+        button.style.color = error ? '#fca5a5' : '#86efac';
+        button.style.borderColor = error ? '#b91c1c' : '#15803d';
+        button._copyFeedbackTimer = setTimeout(() => {
+            button.textContent = t('monitor.media.copy', {}, '複製連結');
+            button.style.color = '';
+            button.style.borderColor = '';
+        }, 1500);
+    }
+
+    function copyWithExecCommand(value) {
+        const previous = document.activeElement;
+        const area = document.createElement('textarea');
+        area.value = value;
+        area.setAttribute('readonly', '');
+        area.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+        document.body.append(area);
         try {
-            await navigator.clipboard.writeText(link);
-            setMediaStatus(t('monitor.media.copied', {}, '已複製本地連結。'));
+            area.focus();
+            area.select();
+            area.setSelectionRange(0, area.value.length);
+            return document.execCommand('copy');
+        } finally {
+            area.remove();
+            if (previous && typeof previous.focus === 'function') previous.focus();
+        }
+    }
+
+    async function copyText(value) {
+        // 只有 secure context（HTTPS／localhost）才有正確的 Clipboard API。
+        if (window.isSecureContext && navigator.clipboard?.writeText) {
+            try {
+                await navigator.clipboard.writeText(value);
+                return 'clipboard';
+            } catch { /* 權限被拒時再試 fallback */ }
+        }
+        // 非 secure context 直接同步 fallback，避免 await 消耗使用者手勢。
+        if (copyWithExecCommand(value)) return 'fallback';
+        throw new Error('copy-unavailable');
+    }
+
+    async function copyMediaLink(link, button = null) {
+        try {
+            const method = await copyText(link);
+            copyButtonFeedback(button, t('monitor.media.copiedShort', {}, '已複製'));
+            setMediaStatus(method === 'clipboard'
+                ? t('monitor.media.copiedClipboard', {}, '已複製（Clipboard API）。')
+                : t('monitor.media.copiedFallback', {}, '已複製（瀏覽器 fallback）。'));
         } catch {
-            setMediaStatus(t('monitor.media.copyFailed', {}, '複製失敗。'), true);
+            copyButtonFeedback(button, t('monitor.media.copyFailedShort', {}, '複製失敗'), true);
+            setMediaStatus(t('monitor.media.copyManual', {}, '自動複製失敗，請手動複製。'), true);
+            window.prompt(t('monitor.media.copyManualPrompt', {}, '請手動複製以下連結：'), link);
         }
     }
 
@@ -671,7 +804,7 @@
             const copy = document.createElement('button');
             copy.type = 'button';
             copy.textContent = t('monitor.media.copy', {}, '複製連結');
-            copy.addEventListener('click', () => copyMediaLink(item.localUrl));
+            copy.addEventListener('click', () => copyMediaLink(item.localUrl, copy));
             const open = document.createElement('a');
             open.href = item.localUrl;
             open.target = '_blank';
@@ -1053,7 +1186,15 @@
     });
     rawType.addEventListener('change', () => {
         rawCategory.value = rawType.value === 'AdOverlay' ? 'ad' : 'chat';
+        rawIsMain.disabled = rawType.value === 'AdOverlay';
     });
+    rawImagePick.addEventListener('change', () => {
+        if (!rawImagePick.value) return;
+        rawImage.value = rawImagePick.value;
+        if (rawType.value === 'AdOverlay') rawGift.value = rawImagePick.value;
+        updateRawImagePreview();
+    });
+    rawImage.addEventListener('input', updateRawImagePreview);
     rawSend.addEventListener('click', sendRawSocketTest);
 
     testAdd.addEventListener('click', addTestMessage);
@@ -1079,6 +1220,7 @@
         buildTestCategories();
         buildAvatarOptions();
         updateAvatarPreview();
+        updateRawImagePreview();
         if (state.media.loaded) renderMedia();
         if (state.mode === 'history') {
             loadHistorySessions();
@@ -1102,6 +1244,8 @@
     historyBarEl.hidden = true;
     setStatus('monitor.reconnecting');
 
+    updateRawImagePreview();
+    loadRawMediaOptions();
     fetch('/api/emoji/preview')
         .then(response => response.ok ? response.json() : null)
         .then(data => {

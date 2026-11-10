@@ -138,8 +138,11 @@
         <label><span data-i18n="monitor.raw.category">分類</span><input id="monRawCategory" type="text" maxlength="40" value="chat" autocomplete="off"></label>
         <label class="mon-test-message"><span data-i18n="monitor.test.message">訊息</span><textarea id="monRawMessage" rows="2" maxlength="786432"></textarea></label>
         <label><span data-i18n="monitor.test.avatar">頭像／圖片 URL</span><input id="monRawImage" type="text" maxlength="262144" autocomplete="off"></label>
+        <label><span data-i18n="monitor.raw.imagePick">從 MediaCache／emoji 選</span><select id="monRawImagePick"><option value="">—</option></select></label>
+        <label class="mon-test-avatar-preview-wrap"><span data-i18n="monitor.test.avatarPreview">頭貼預覽</span><span class="mon-test-avatar-preview-line"><img id="monRawImagePreview" class="mon-test-avatar-preview" alt="" referrerpolicy="no-referrer" hidden><small id="monRawImagePreviewStatus"></small></span></label>
         <label><span data-i18n="monitor.raw.giftIcon">禮物／Icon URL</span><input id="monRawGift" type="text" maxlength="262144" autocomplete="off"></label>
         <label class="mon-raw-normalize"><input id="monRawNormalize" type="checkbox" checked> <span data-i18n="monitor.raw.normalize">套用 MediaCache／emoji 正式轉換</span></label>
+        <label class="mon-raw-normalize"><input id="monRawIsMain" type="checkbox" checked> <span data-i18n="monitor.raw.isMain">主要訊息（isMain）</span></label>
         <div class="mon-test-actions">
           <button id="monRawSend" type="button" class="mon-test-send" data-i18n="monitor.raw.send">送出 Raw Socket</button>
           <span id="monRawStatus" role="status"></span>
