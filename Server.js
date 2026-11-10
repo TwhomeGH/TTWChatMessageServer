@@ -58,7 +58,9 @@ const audience = createAudienceTracker({
     timezone: () => planner.settings().timezone
 });
 const serveAudience = createAudienceRoutes(audience);
-const serveMedia = require('./MediaRoutes.cjs').createMediaRoutes();
+const mediaRoutes = require('./MediaRoutes.cjs');
+const serveMedia = mediaRoutes.createMediaRoutes();
+const serveMediaAdmin = mediaRoutes.createMediaAdminRoutes();
 const audiencePrune = setInterval(() => {
     try { audience.prune(180); } catch (error) { console.error('[Audience] 清理失敗:', error.message); }
 }, 24 * 3600000);
@@ -126,6 +128,8 @@ function pushTestResult(payload) {
     const notify = payload.notify && typeof payload.notify === 'object' ? payload.notify : {};
     const entry = {
         t: Date.now(), testId: payload.testId,
+        mode: payload.mode === 'raw' ? 'raw' : 'chat',
+        endpoints: Number.isFinite(Number(payload.endpoints)) ? Math.max(0, Number(payload.endpoints)) : null,
         status: typeof payload.status === 'string' ? payload.status : 'unknown',
         remainingMs: Number.isFinite(payload.remainingMs) ? Math.max(0, payload.remainingMs) : 0,
         notify: {
@@ -295,6 +299,12 @@ function sendToTikTok(obj) {
     }
 
 }
+
+const serveSocketTest = require('./SocketTestRoutes.cjs').createSocketTestRoutes({
+    sendToTikTok,
+    pushTestResult,
+    hasChild: () => Boolean(tiktokProcess && !tiktokProcess.killed)
+});
 
 
 
@@ -615,6 +625,8 @@ const server = http.createServer((req, res) => {
     if (serveMonitorHistory(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (require('./RestreamRoutes.cjs').serveRestream(req,res,isValidToken(parseCookies(req).authToken))) return;
     if (serveRuntime(req, res, runtimeState, startRuntime)) return;
+    if (serveMediaAdmin(req, res, isValidToken(parseCookies(req).authToken))) return;
+    if (serveSocketTest(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (serveMedia(req, res)) return;
     if (require('./WebAssets.cjs').serveWebAsset(req, res)) return;
     if (require('./EmojiRoutes.cjs').serveEmoji(req, res, isValidToken(parseCookies(req).authToken))) return;

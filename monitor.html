@@ -86,6 +86,67 @@
       <small data-i18n="monitor.test.note">加入預覽只影響本機；送出測試會依勾選目標經 /chat，需 TikTok 子程序。Socket／overlay 與 Bark／ntfy 是獨立輸出；同時勾選不會重複送 Socket。</small>
     </details>
 
+    <details id="monMediaPanel" class="mon-test-panel">
+      <summary data-i18n="monitor.media.title">MediaCache 資源</summary>
+      <div class="mon-media-toolbar">
+        <input id="monMediaSearch" type="search" maxlength="200" data-i18n-placeholder="monitor.media.search" placeholder="搜尋 hash 或來源 host…">
+        <select id="monMediaType">
+          <option value="" data-i18n="monitor.media.allTypes">全部類型</option>
+          <option value="image/png">PNG</option><option value="image/jpeg">JPEG</option>
+          <option value="image/webp">WebP</option><option value="image/gif">GIF</option>
+        </select>
+        <select id="monMediaStatus">
+          <option value="" data-i18n="monitor.media.allStatus">全部狀態</option>
+          <option value="cached" data-i18n="monitor.media.cached">已快取</option>
+          <option value="failed" data-i18n="monitor.media.failed">失敗過</option>
+          <option value="missing" data-i18n="monitor.media.missing">缺少檔案</option>
+        </select>
+        <button id="monMediaRefresh" type="button" data-i18n="monitor.media.refresh">重新整理</button>
+        <span id="monMediaStats" class="mon-media-stats"></span>
+      </div>
+      <div class="mon-media-table-wrap">
+        <table class="mon-media-table">
+          <thead><tr>
+            <th data-i18n="monitor.media.preview">預覽</th><th>Hash</th><th data-i18n="monitor.media.type">類型</th>
+            <th data-i18n="monitor.media.size">大小</th><th data-i18n="monitor.media.host">來源</th>
+            <th data-i18n="monitor.media.lastAccess">最後存取</th><th data-i18n="monitor.media.status">狀態</th>
+            <th data-i18n="monitor.media.actions">操作</th>
+          </tr></thead>
+          <tbody id="monMediaRows"></tbody>
+        </table>
+      </div>
+      <div class="mon-media-pager">
+        <button id="monMediaPrev" type="button" data-i18n="monitor.history.prev">上一頁</button>
+        <span id="monMediaPage"></span>
+        <button id="monMediaNext" type="button" data-i18n="monitor.history.next">下一頁</button>
+        <span id="monMediaStatusText" role="status"></span>
+      </div>
+      <small data-i18n="monitor.media.note">只列出 HTTP(S) 下載快取；data URI 屬於 inline 直傳，不會出現在這裡。</small>
+    </details>
+
+    <details id="monRawPanel" class="mon-test-panel">
+      <summary data-i18n="monitor.raw.title">Raw Socket 測試（繞過 /chat）</summary>
+      <div class="mon-test-grid">
+        <label><span data-i18n="monitor.raw.type">Payload</span>
+          <select id="monRawType">
+            <option value="StreamMessage">StreamMessage</option>
+            <option value="AdOverlay">AdOverlay</option>
+          </select>
+        </label>
+        <label><span data-i18n="monitor.test.user">使用者</span><input id="monRawUser" type="text" maxlength="80" autocomplete="off"></label>
+        <label><span data-i18n="monitor.raw.category">分類</span><input id="monRawCategory" type="text" maxlength="40" value="chat" autocomplete="off"></label>
+        <label class="mon-test-message"><span data-i18n="monitor.test.message">訊息</span><textarea id="monRawMessage" rows="2" maxlength="786432"></textarea></label>
+        <label><span data-i18n="monitor.test.avatar">頭像／圖片 URL</span><input id="monRawImage" type="text" maxlength="262144" autocomplete="off"></label>
+        <label><span data-i18n="monitor.raw.giftIcon">禮物／Icon URL</span><input id="monRawGift" type="text" maxlength="262144" autocomplete="off"></label>
+        <label class="mon-raw-normalize"><input id="monRawNormalize" type="checkbox" checked> <span data-i18n="monitor.raw.normalize">套用 MediaCache／emoji 正式轉換</span></label>
+        <div class="mon-test-actions">
+          <button id="monRawSend" type="button" class="mon-test-send" data-i18n="monitor.raw.send">送出 Raw Socket</button>
+          <span id="monRawStatus" role="status"></span>
+        </div>
+      </div>
+      <small data-i18n="monitor.raw.note">直接送進 socketHub，不經 /chat、filter、去重、traffic、AutoClip；仍需登入。</small>
+    </details>
+
     <!-- 訊息列：時間 / 平台 / 分類 / 使用者 / 內容 -->
     <div id="monScroll" class="bg-black rounded-lg flex-1 min-h-0 overflow-auto w-full">
       <div id="monRows" class="text-sm min-h-full" role="log" aria-live="polite"></div>

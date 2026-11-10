@@ -45,6 +45,13 @@ MediaCache 將圖片持久化到本機，訊息只傳本地 URL：
 - Live 顯示保留 inline；歷史持久化不應直接寫 base64，必要時 materialize 成 `/media/<content-hash>`。
 - Python overlay 已在 texture worker 本機解碼 png／jpeg／webp／gif data URI；日誌只記錄類型與長度。
 
+## 檢視與手動測試
+
+- `/monitor` 的「MediaCache 資源」面板可查看快取統計、搜尋、預覽、複製本地 `/media/<hash>` 連結與開啟圖片。
+- `GET /api/media`（需登入）支援 `page`、`pageSize`、`q`、`type`、`status`；只回傳 hash、host、型別、大小、時間與狀態，不暴露完整來源 URL。
+- `GET /api/media/stats`（需登入）回傳總數、bytes、cached／failed／missing。
+- `/monitor` 另有 Raw Socket 測試入口：`POST /api/socket/test` 經子程序直接送 `socketHub`，可選擇是否套用 MediaCache／emoji 正式轉換；不經 `/chat`、filter、dedup、traffic 或 AutoClip。
+
 ## 安全限制
 
 - 僅接受 HTTP(S)，拒絕 `data:`、`blob:`、`file:` 與含帳密的 URL。

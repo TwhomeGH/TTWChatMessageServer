@@ -1,5 +1,27 @@
 # ChangeHistory
 
+## 2026.11.10 20:24 monitor MediaCache 檢視與 Raw Socket 測試
+
+**類型**: 功能 · **檔案**: `MediaRoutes.cjs`、`ScriptLib/media/cache.cjs`、`SocketTestRoutes.cjs`、`Server.js`、`TikTok.js`、`monitor.html`、`assets/monitor.js`、`assets/monitor.css`、`lang/*.json`、`Test/media_cache.test.cjs`、`Test/socket_test_routes.test.cjs`、`Docs/MEDIA_CACHE.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 修改
+
+- MediaCache 新增 `list()`／`stats()` 與需登入的 `/api/media`、`/api/media/stats`。
+- monitor 新增 MediaCache 面板：統計、搜尋、型別／狀態篩選、分頁、預覽、複製本地連結與開啟。
+- 新增 Raw Socket 測試面板與 `POST /api/socket/test`（需登入）：子程序直接 `socketHub.send`，可選 MediaCache／emoji 正式轉換。
+- Raw 測試一律 `isTest`，不經 `/chat`、filter、dedup、traffic、AutoClip；結果經既有 test-results SSE 回報。
+- 補 MediaCache／Raw Socket 測試與 i18n、CSS fingerprint。
+
+### 驗證
+
+- `node --test Test/media_cache.test.cjs Test/socket_test_routes.test.cjs`
+- `node Test/monitor_audience_ui.cjs`
+- `npm run test:core`（325 項）
+- `python -m pytest OtherTool/live_engine/tests -q`（62 項）
+- `npm run lint`、`npm run check:css`
+
+---
+
 ## 2026.11.10 20:20 Python overlay data URI 支援
 
 **類型**: 功能 · **檔案**: `OtherTool/live_engine/core/emoji_parser.py`、`OtherTool/live_engine/renderer/texture_loader.py`、`OtherTool/live_engine/core/engine.py`、`OtherTool/live_engine/renderer/overlay.py`、`OtherTool/live_engine/tests/test_emoji_parser.py`、`OtherTool/live_engine/tests/test_ad_overlay.py`、`OtherTool/live_engine/tests/test_texture_loader.py`、`OtherTool/live_engine/README.md`

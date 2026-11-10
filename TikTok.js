@@ -543,6 +543,11 @@ process.stdin.on('data', async (chunk) => {
                 return;
             }
 
+            if (json.type === 'RAW_SOCKET_TEST') {
+                handleRawSocketTest(json);
+                return;
+            }
+
             if (json.type === 'StreamMessage') {
                 // 先存原始值供去重比對
                 const origUser = json.user;
@@ -929,15 +934,43 @@ function sendSocketMessage(user, message, { img = '', giftImg = '', isMain = tru
     return socketHub.sendMessage(user, message, { img, giftImg, isMain, userNum: CacheUserNum, userList: CacheUserList, category, platform, dedupUser, dedupMessage, dedupVariant, session, isTest });
 }
 
+/** Raw Socket 測試：可選擇套用正式 MediaCache／emoji 轉換，直接送 socketHub。 */
+function handleRawSocketTest(message) {
+    try {
+        const payload = { ...(message.payload || {}) };
+        if (message.normalize !== false) {
+            if (payload.type === 'StreamMessage') {
+                payload.message = replaceEmojis(String(payload.message ?? ''));
+                payload.img = cachedMediaUrl(payload.img);
+                payload.giftImg = cachedMediaUrl(payload.giftImg);
+            } else if (payload.type === 'AdOverlay') {
+                payload.text = String(payload.text ?? payload.message ?? '')
+                    .replace(AD_IMAGE_URL_RE, url => cachedMediaUrl(url));
+                payload.iconURL = cachedMediaUrl(payload.iconURL);
+                if (!payload.category) payload.category = 'ad';
+            }
+        }
+        payload.isTest = true;
+        const endpoints = socketHub.endpoints.length;
+        socketHub.send(payload);
+        reportTestResult(message.testId, endpoints > 0 ? 'sent' : 'noendpoints', 0,
+            { status: 'skipped', channels: [] }, { mode: 'raw', endpoints });
+    } catch (error) {
+        reportTestResult(message.testId, 'error', 0, { status: 'skipped', channels: [] },
+            { mode: 'raw', endpoints: 0, error: error.message });
+    }
+}
+
 /** 把測試訊息結果回報給主服務；沒有 testId 或 IPC 時安靜略過。 */
-function reportTestResult(testId, status, remainingMs = 0, notify = null) {
+function reportTestResult(testId, status, remainingMs = 0, notify = null, extra = null) {
     if (!testId || typeof process.send !== 'function') return;
     try {
         process.send({
             type: 'TEST_RESULT',
             data: {
                 testId, status, remainingMs,
-                notify: notify || { status: 'skipped', channels: [] }
+                notify: notify || { status: 'skipped', channels: [] },
+                ...(extra && typeof extra === 'object' ? extra : {})
             }
         });
     } catch { /* IPC 關閉 */ }

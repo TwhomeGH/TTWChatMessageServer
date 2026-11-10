@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const { MediaCache, hashUrl, normalizeImageUrl } = require('../ScriptLib/media/cache.cjs');
-const { createMediaRoutes } = require('../MediaRoutes.cjs');
+const { createMediaRoutes, createMediaAdminRoutes } = require('../MediaRoutes.cjs');
 const { SocketHub } = require('../ScriptLib/socket/hub.mjs');
 
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
@@ -62,6 +62,12 @@ test('MediaCache 把外部 URL 換成本地 hash，下載後可再從快取供�
     assert.equal(first.headers['Content-Type'], 'image/png');
     assert.deepEqual(Buffer.from(first.body), PNG);
     assert.equal(fs.existsSync(cache.filePath(hash)), true);
+    const list = cache.list({ q: '127.0.0.1', status: 'cached' });
+    assert.equal(list.total, 1);
+    assert.equal(list.items[0].hash, hash);
+    assert.equal(list.items[0].host, '127.0.0.1');
+    assert.equal(list.stats.total, 1);
+    assert.ok(list.stats.bytes > 0);
 
     const second = await fakeServe(cache, hash);
     assert.equal(second.status, 200);
@@ -88,6 +94,25 @@ test('MediaCache 拒絕私有位址、SVG 與非 HTTP URL', async t => {
     await assert.rejects(cache.ensure('a'.repeat(64), 'http://127.0.0.1:1234/private.png'));
     assert.equal(normalizeImageUrl('data:image/png;base64,abc'), '');
     assert.equal(normalizeImageUrl('file:///etc/passwd'), '');
+});
+
+test('MediaAdmin 需要登入並回傳統計與列表', async () => {
+    const cache = {
+        stats: () => ({ total: 1, bytes: 10, cached: 1, failed: 0, missing: 0 }),
+        list: value => ({ items: [{ hash: 'a'.repeat(64) }], total: 1, page: value.page, pages: 1, stats: {} })
+    };
+    const route = createMediaAdminRoutes(cache);
+    const call = (url, authorized) => new Promise(resolve => {
+        const req = { url, method: 'GET', headers: {} };
+        const res = { writeHead(status) { this.status = status; }, end(body) { resolve({ status: this.status, body: JSON.parse(body) }); } };
+        route(req, res, authorized);
+    });
+    assert.equal((await call('/api/media', false)).status, 401);
+    assert.equal((await call('/api/media/stats', true)).body.stats.total, 1);
+    const list = await call('/api/media?page=1', true);
+    assert.equal(list.status, 200);
+    assert.equal(list.body.items.length, 1);
+    assert.equal(route({ url: '/other', method: 'GET' }, {}, true), false);
 });
 
 test('MediaRoutes 只接管 /media/<hash> 並呼叫快取', async () => {

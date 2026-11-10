@@ -230,6 +230,59 @@ class MediaCache {
         }
     }
 
+    statusOf(row) {
+        if (!row.content_type || !fs.existsSync(this.filePath(row.hash))) return 'missing';
+        if (row.fail_count > 0) return 'failed';
+        return 'cached';
+    }
+
+    mapRow(row) {
+        let host = '';
+        try { host = new URL(row.url).hostname; } catch { /* ignore */ }
+        return {
+            hash: row.hash,
+            localUrl: `${this.baseUrl}/media/${row.hash}`,
+            host,
+            contentType: row.content_type || '',
+            byteSize: Number(row.byte_size) || 0,
+            fetchedAt: row.fetched_at || null,
+            lastAccess: row.last_access || null,
+            failCount: row.fail_count || 0,
+            status: this.statusOf(row)
+        };
+    }
+
+    stats() {
+        const rows = this.db.prepare('SELECT hash,url,content_type,byte_size,fail_count FROM media').all();
+        const result = { total: rows.length, bytes: 0, cached: 0, failed: 0, missing: 0, byType: {} };
+        for (const row of rows) {
+            result.bytes += Number(row.byte_size) || 0;
+            result[this.statusOf(row)] += 1;
+            if (row.content_type) result.byType[row.content_type] = (result.byType[row.content_type] || 0) + 1;
+        }
+        return result;
+    }
+
+    list({ page = 1, pageSize = 50, q = '', type = '', status = '' } = {}) {
+        const size = Math.min(Math.max(Number(pageSize) || 50, 1), 200);
+        const query = String(q || '').trim().toLowerCase();
+        const rows = this.db.prepare('SELECT * FROM media ORDER BY last_access DESC, hash DESC').all()
+            .map(row => this.mapRow(row))
+            .filter(row => {
+                if (type && row.contentType !== type) return false;
+                if (status && row.status !== status) return false;
+                if (!query) return true;
+                return row.hash.includes(query) || row.host.toLowerCase().includes(query);
+            });
+        const pages = Math.max(1, Math.ceil(rows.length / size));
+        const current = Math.max(1, Math.min(pages, Number(page) || 1));
+        return {
+            items: rows.slice((current - 1) * size, current * size),
+            total: rows.length, page: current, pageSize: size, pages,
+            stats: this.stats()
+        };
+    }
+
     close() {
         try { this.db.close(); } catch { /* ignore */ }
     }

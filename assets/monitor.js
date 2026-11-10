@@ -68,6 +68,26 @@
     const testSend = document.getElementById('monTestSend');
     const testClear = document.getElementById('monTestClear');
     const testStatus = document.getElementById('monTestStatus');
+    const mediaPanel = document.getElementById('monMediaPanel');
+    const mediaSearch = document.getElementById('monMediaSearch');
+    const mediaType = document.getElementById('monMediaType');
+    const mediaStatusFilter = document.getElementById('monMediaStatus');
+    const mediaRefresh = document.getElementById('monMediaRefresh');
+    const mediaStats = document.getElementById('monMediaStats');
+    const mediaRows = document.getElementById('monMediaRows');
+    const mediaPage = document.getElementById('monMediaPage');
+    const mediaPrev = document.getElementById('monMediaPrev');
+    const mediaNext = document.getElementById('monMediaNext');
+    const mediaStatusText = document.getElementById('monMediaStatusText');
+    const rawType = document.getElementById('monRawType');
+    const rawUser = document.getElementById('monRawUser');
+    const rawCategory = document.getElementById('monRawCategory');
+    const rawMessage = document.getElementById('monRawMessage');
+    const rawImage = document.getElementById('monRawImage');
+    const rawGift = document.getElementById('monRawGift');
+    const rawNormalize = document.getElementById('monRawNormalize');
+    const rawSend = document.getElementById('monRawSend');
+    const rawStatus = document.getElementById('monRawStatus');
     const TEST_PREFS_KEY = 'ttw-monitor-test-prefs';
 
     let emojiMap = null;
@@ -88,6 +108,7 @@
         session: null,
         mode: 'live',
         history: { sessions: [], sessionId: '', page: 1, pages: 1, total: 0, messages: [], loading: false },
+        media: { page: 1, pages: 1, total: 0, items: [], q: '', type: '', status: '', loading: false, loaded: false },
         statusKey: 'monitor.reconnecting'
     };
     let lastUserScrollIntent = 0;
@@ -435,6 +456,7 @@
         pendingTestTimer = null;
         pendingTestId = null;
         testSend.disabled = false;
+        rawSend.disabled = false;
     }
 
     function clearTestCooldown() {
@@ -480,6 +502,20 @@
     function handleTestResult(result) {
         if (!result || result.testId !== pendingTestId) return;
         clearTestPending();
+        if (result.mode === 'raw') {
+            const endpoints = Number(result.endpoints) || 0;
+            if (result.status === 'sent') {
+                setRawStatus(t('monitor.raw.sent', { endpoints }, `已送出（${endpoints} 個端點）。`));
+            } else if (result.status === 'noendpoints') {
+                setRawStatus(t('monitor.raw.noendpoints', {}, '沒有啟用中的 Socket 端點。'), true);
+            } else if (result.status === 'offline') {
+                setRawStatus(t('monitor.raw.offline', {}, 'TikTok 子程序未運行。'), true);
+            } else {
+                setRawStatus(t('monitor.raw.error', { error: result.status || 'unknown' },
+                    'Raw Socket 失敗：' + (result.status || 'unknown')), true);
+            }
+            return;
+        }
         const notifyText = describeNotify(result.notify);
         const suffix = notifyText ? ` · ${t('monitor.test.notifyLabel', {}, '通知')}：${notifyText}` : '';
         switch (result.status) {
@@ -501,6 +537,184 @@
                 break;
             default:
                 setTestStatus(t('monitor.test.resultUnknown', { status: result.status }, '未知結果：' + result.status) + suffix);
+        }
+    }
+
+    function setRawStatus(text, error = false) {
+        rawStatus.textContent = text;
+        rawStatus.className = 'text-xs ' + (error ? 'text-red-400' : 'text-green-400');
+    }
+
+    function rawPayload() {
+        const type = rawType.value === 'AdOverlay' ? 'AdOverlay' : 'StreamMessage';
+        const user = rawUser.value.trim() || t('monitor.test.userDefault', {}, '測試使用者');
+        const message = rawMessage.value;
+        if (type === 'AdOverlay') {
+            return {
+                type, category: rawCategory.value.trim() || 'ad', user, text: message,
+                iconURL: rawGift.value.trim() || rawImage.value.trim(), useTTS: false
+            };
+        }
+        return {
+            type, category: rawCategory.value.trim() || 'chat', platform: 'unknown', user,
+            message, img: rawImage.value.trim(), giftImg: rawGift.value.trim()
+        };
+    }
+
+    async function sendRawSocketTest() {
+        const testId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        pendingTestId = testId;
+        rawSend.disabled = true;
+        setRawStatus(t('monitor.raw.waiting', {}, '等待 Raw Socket 結果…'));
+        pendingTestTimer = setTimeout(() => {
+            if (!pendingTestId) return;
+            clearTestPending();
+            setRawStatus(t('monitor.test.resultTimeout', {}, '未收到處理結果；子程序或結果 SSE 可能中斷。'), true);
+        }, 5000);
+        try {
+            const response = await fetch('/api/socket/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    testId,
+                    normalize: rawNormalize.checked,
+                    payload: rawPayload()
+                })
+            });
+            if (response.status === 401) {
+                clearTestPending();
+                setRawStatus(t('monitor.raw.login', {}, 'Raw Socket 測試需要主服務登入。'), true);
+                return;
+            }
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                const offline = response.status === 409;
+                clearTestPending();
+                setRawStatus(offline
+                    ? t('monitor.raw.offline', {}, 'TikTok 子程序未運行。')
+                    : t('monitor.raw.error', { error: data.error || ('HTTP ' + response.status) },
+                        'Raw Socket 失敗：' + (data.error || ('HTTP ' + response.status))), true);
+            }
+        } catch (error) {
+            if (pendingTestId === testId) {
+                clearTestPending();
+                setRawStatus(t('monitor.raw.error', { error: error.message },
+                    'Raw Socket 失敗：' + error.message), true);
+            }
+        }
+    }
+
+    function formatBytes(bytes) {
+        const value = Number(bytes) || 0;
+        if (value < 1024) return value + ' B';
+        if (value < 1024 * 1024) return (value / 1024).toFixed(1) + ' KiB';
+        return (value / 1024 / 1024).toFixed(1) + ' MiB';
+    }
+
+    function setMediaStatus(text, error = false) {
+        mediaStatusText.textContent = text;
+        mediaStatusText.className = error ? 'text-xs text-red-400' : 'text-xs text-gray-400';
+    }
+
+    async function copyMediaLink(link) {
+        try {
+            await navigator.clipboard.writeText(link);
+            setMediaStatus(t('monitor.media.copied', {}, '已複製本地連結。'));
+        } catch {
+            setMediaStatus(t('monitor.media.copyFailed', {}, '複製失敗。'), true);
+        }
+    }
+
+    function mediaStatusLabel(status) {
+        if (status === 'cached') return t('monitor.media.cached', {}, '已快取');
+        if (status === 'failed') return t('monitor.media.failed', {}, '失敗過');
+        return t('monitor.media.missing', {}, '缺少檔案');
+    }
+
+    function renderMedia() {
+        const media = state.media;
+        mediaRows.replaceChildren();
+        if (!media.items.length) {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.colSpan = 8;
+            td.className = 'text-gray-400';
+            td.textContent = t('monitor.media.empty', {}, '沒有符合的媒體。');
+            tr.append(td);
+            mediaRows.append(tr);
+        }
+        for (const item of media.items) {
+            const tr = document.createElement('tr');
+            const preview = document.createElement('td');
+            const image = document.createElement('img');
+            image.src = item.localUrl;
+            image.loading = 'lazy';
+            image.alt = '';
+            image.addEventListener('error', () => { image.hidden = true; });
+            preview.append(image);
+            const hash = document.createElement('td');
+            const code = document.createElement('code');
+            code.textContent = item.hash.slice(0, 12) + '…';
+            code.title = item.hash;
+            hash.append(code);
+            const type = document.createElement('td');
+            type.textContent = item.contentType || '—';
+            const size = document.createElement('td');
+            size.textContent = formatBytes(item.byteSize);
+            const host = document.createElement('td');
+            host.textContent = item.host || '—';
+            const accessed = document.createElement('td');
+            accessed.textContent = item.lastAccess ? new Date(item.lastAccess).toLocaleString(window.TTWI18n.language) : '—';
+            const status = document.createElement('td');
+            status.textContent = mediaStatusLabel(item.status);
+            const actions = document.createElement('td');
+            const copy = document.createElement('button');
+            copy.type = 'button';
+            copy.textContent = t('monitor.media.copy', {}, '複製連結');
+            copy.addEventListener('click', () => copyMediaLink(item.localUrl));
+            const open = document.createElement('a');
+            open.href = item.localUrl;
+            open.target = '_blank';
+            open.rel = 'noopener';
+            open.textContent = t('monitor.media.open', {}, '開啟');
+            actions.append(copy, ' ', open);
+            tr.append(preview, hash, type, size, host, accessed, status, actions);
+            mediaRows.append(tr);
+        }
+        const stats = media.stats || {};
+        mediaStats.textContent = `${stats.total || 0} · ${formatBytes(stats.bytes)} · cached ${stats.cached || 0} · failed ${stats.failed || 0} · missing ${stats.missing || 0}`;
+        mediaPage.textContent = t('monitor.history.page', { page: media.page, pages: media.pages },
+            `第 ${media.page} / ${media.pages} 頁`);
+        mediaPrev.disabled = media.page <= 1;
+        mediaNext.disabled = media.page >= media.pages;
+        setMediaStatus(`${t('monitor.media.title', {}, 'MediaCache 資源')} · ${media.total}`);
+    }
+
+    async function loadMedia() {
+        if (state.media.loading) return;
+        state.media.loading = true;
+        try {
+            const params = new URLSearchParams({
+                page: String(state.media.page), pageSize: '50',
+                q: state.media.q, type: state.media.type, status: state.media.status
+            });
+            const response = await fetch('/api/media?' + params, { cache: 'no-store' });
+            if (response.status === 401) {
+                mediaRows.replaceChildren();
+                setMediaStatus(t('monitor.media.login', {}, 'MediaCache 需要主服務登入。'), true);
+                return;
+            }
+            const data = await response.json();
+            if (!response.ok || !data.ok) throw new Error(data.error || ('HTTP ' + response.status));
+            state.media = {
+                ...state.media, page: data.page, pages: data.pages, total: data.total,
+                items: data.items || [], stats: data.stats || {}, loading: false, loaded: true
+            };
+            renderMedia();
+        } catch (error) {
+            setMediaStatus(t('monitor.media.error', { error: error.message }, '讀取失敗：' + error.message), true);
+        } finally {
+            state.media.loading = false;
         }
     }
 
@@ -809,6 +1023,39 @@
     historyNextEl.addEventListener('click', () => {
         if (state.history.page < state.history.pages) loadHistoryMessages(state.history.page + 1);
     });
+    mediaPanel.addEventListener('toggle', () => {
+        if (mediaPanel.open && !state.media.loaded) loadMedia();
+    });
+    mediaSearch.addEventListener('input', () => {
+        clearTimeout(state.media.timer);
+        state.media.timer = setTimeout(() => {
+            state.media.q = mediaSearch.value.trim().toLowerCase();
+            state.media.page = 1;
+            loadMedia();
+        }, 250);
+    });
+    mediaType.addEventListener('change', () => {
+        state.media.type = mediaType.value;
+        state.media.page = 1;
+        loadMedia();
+    });
+    mediaStatusFilter.addEventListener('change', () => {
+        state.media.status = mediaStatusFilter.value;
+        state.media.page = 1;
+        loadMedia();
+    });
+    mediaRefresh.addEventListener('click', () => loadMedia());
+    mediaPrev.addEventListener('click', () => {
+        if (state.media.page > 1) { state.media.page--; loadMedia(); }
+    });
+    mediaNext.addEventListener('click', () => {
+        if (state.media.page < state.media.pages) { state.media.page++; loadMedia(); }
+    });
+    rawType.addEventListener('change', () => {
+        rawCategory.value = rawType.value === 'AdOverlay' ? 'ad' : 'chat';
+    });
+    rawSend.addEventListener('click', sendRawSocketTest);
+
     testAdd.addEventListener('click', addTestMessage);
     testSend.addEventListener('click', sendSocketTest);
     testClear.addEventListener('click', clearTestPrefs);
@@ -832,6 +1079,7 @@
         buildTestCategories();
         buildAvatarOptions();
         updateAvatarPreview();
+        if (state.media.loaded) renderMedia();
         if (state.mode === 'history') {
             loadHistorySessions();
         } else {
