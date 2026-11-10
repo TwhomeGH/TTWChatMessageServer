@@ -2,8 +2,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
+const inlineMedia = require('../media/inline.cjs');
 
 const DAY = 86400000;
+const INLINE_IMAGE_RE = /data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/]+={0,2}/gi;
 
 /**
  * 直播訊息歷史：每個子程序啟動是一場，訊息以 SQLite 保存，供重啟後回顧。
@@ -17,14 +19,16 @@ class MonitorHistoryStore {
      * @param {number} [options.maxSessions=10]
      * @param {number} [options.maxMessagesPerSession=20000]
      * @param {() => number} [options.now]
+     * @param {Object} [options.mediaCache] MediaCache；提供時把 data URI materialize 成 /media。
      */
     constructor({ file = path.join(__dirname, '../../data/monitor.sqlite'), retentionDays = 14,
-        maxSessions = 10, maxMessagesPerSession = 20000, now = Date.now } = {}) {
+        maxSessions = 10, maxMessagesPerSession = 20000, now = Date.now, mediaCache = null } = {}) {
         this.file = file;
         this.retentionDays = Math.max(1, retentionDays);
         this.maxSessions = Math.max(1, maxSessions);
         this.maxMessagesPerSession = Math.max(1, maxMessagesPerSession);
         this.now = now;
+        this.mediaCache = mediaCache;
         this.appended = 0;
         if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
         this.db = new DatabaseSync(file);
@@ -56,10 +60,17 @@ class MonitorHistoryStore {
             );
             CREATE INDEX IF NOT EXISTS messages_session_t ON messages(session_id, t, id);
             CREATE INDEX IF NOT EXISTS messages_t ON messages(t);
+            CREATE TABLE IF NOT EXISTS message_media (
+                message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+                hash TEXT NOT NULL,
+                PRIMARY KEY(message_id, hash)
+            );
+            CREATE INDEX IF NOT EXISTS message_media_hash ON message_media(hash);
         `);
         // 主服務重啟時，上一個子程序已不在；把殘留的開放場次收尾。
         this.db.prepare('UPDATE sessions SET ended_at=COALESCE(last_message_at,started_at) WHERE ended_at IS NULL').run();
         this.prune();
+        this.syncInlineReferences();
     }
 
     startSession({ startedAt = this.now() } = {}) {
@@ -72,6 +83,71 @@ class MonitorHistoryStore {
     endSession(id, endedAt = this.now()) {
         if (!id) return;
         this.db.prepare('UPDATE sessions SET ended_at=? WHERE id=? AND ended_at IS NULL').run(Number(endedAt), id);
+    }
+
+    collectLocalHashes(value, hashes) {
+        if (typeof value !== 'string') return;
+        for (const match of value.matchAll(/\/media\/([a-f0-9]{64})/g)) hashes.add(match[1]);
+    }
+
+    storeInline(value, hashes) {
+        if (!this.mediaCache || typeof value !== 'string' || !inlineMedia.isInlineImage(value)) return value;
+        try {
+            const local = this.mediaCache.storeInlineDataUri(value);
+            const hash = /\/media\/([a-f0-9]{64})$/.exec(local || '')?.[1];
+            if (hash) {
+                hashes.add(hash);
+                return local;
+            }
+        } catch { /* fall through */ }
+        return '';
+    }
+
+    materializeMessage(message, hashes) {
+        const dataUris = inlineMedia.extractDataImages(message);
+        if (!dataUris.length) return message;
+        if (!this.mediaCache) return inlineMedia.stripInlineImages(message) || '[inline image]';
+        if (!inlineMedia.validateInlineImages({ message }).ok) {
+            return message.replace(INLINE_IMAGE_RE, '[inline image]');
+        }
+        let result = message;
+        for (const dataUri of dataUris) {
+            const local = this.storeInline(dataUri, hashes);
+            result = result.replace(dataUri, local || '[inline image]');
+        }
+        return result;
+    }
+
+    /** 只影響寫入歷史的副本；live socket/SSE 仍保留原始 data URI。 */
+    prepareEntry(entry) {
+        const hashes = new Set();
+        const validation = inlineMedia.validateInlineImages({
+            img: entry.img, giftImg: entry.giftImg, message: entry.message
+        });
+        if (!validation.ok) {
+            return {
+                message: String(entry.message).replace(INLINE_IMAGE_RE, '[inline image]'),
+                img: inlineMedia.isInlineImage(entry.img) ? '' : entry.img,
+                giftImg: inlineMedia.isInlineImage(entry.giftImg) ? '' : entry.giftImg,
+                hashes
+            };
+        }
+        return {
+            message: this.materializeMessage(String(entry.message), hashes),
+            img: this.storeInline(entry.img, hashes),
+            giftImg: this.storeInline(entry.giftImg, hashes),
+            hashes
+        };
+    }
+
+    /** 清掉 monitor 已不再引用的 inline media；由場次／訊息修剪後呼叫。 */
+    syncInlineReferences() {
+        if (!this.mediaCache || typeof this.mediaCache.releaseInlineExcept !== 'function') return;
+        const referenced = new Set(
+            this.db.prepare('SELECT DISTINCT hash FROM message_media').all().map(row => row.hash)
+        );
+        this.mediaCache.releaseInlineExcept(referenced);
+        if (typeof this.mediaCache.unpinExcept === 'function') this.mediaCache.unpinExcept(referenced);
     }
 
     /**
@@ -87,14 +163,25 @@ class MonitorHistoryStore {
         const stats = entry.session && typeof entry.session === 'object' ? entry.session : {};
         const audience = entry.audience && typeof entry.audience === 'object'
             ? JSON.stringify(entry.audience) : null;
+        const prepared = this.prepareEntry(entry);
+        // 已是 /media/<hash> 的 HTTP 圖片也要 pin，避免 LRU 刪掉歷史還在用的檔。
+        for (const value of [prepared.message, prepared.img, prepared.giftImg]) {
+            this.collectLocalHashes(value, prepared.hashes);
+        }
+        if (this.mediaCache && typeof this.mediaCache.pin === 'function') {
+            for (const hash of prepared.hashes) this.mediaCache.pin(hash);
+        }
         this.db.exec('BEGIN IMMEDIATE');
         try {
             this.db.prepare(`INSERT INTO messages(session_id,t,category,platform,user,message,img,gift_img,audience)
                 VALUES(?,?,?,?,?,?,?,?,?)`).run(
                 sessionId, t,
-                entry.category ?? null, entry.platform ?? null, entry.user ?? null, entry.message,
-                entry.img ?? null, entry.giftImg ?? null, audience
+                entry.category ?? null, entry.platform ?? null, entry.user ?? null, prepared.message,
+                prepared.img ?? null, prepared.giftImg ?? null, audience
             );
+            const messageId = Number(this.db.prepare('SELECT last_insert_rowid() AS id').get().id);
+            const insertMedia = this.db.prepare('INSERT OR IGNORE INTO message_media(message_id,hash) VALUES(?,?)');
+            for (const hash of prepared.hashes) insertMedia.run(messageId, hash);
             this.db.prepare(`UPDATE sessions SET
                 last_message_at=?, message_count=message_count+1,
                 joins=MAX(joins, ?), likes=MAX(likes, ?), chats=MAX(chats, ?)
@@ -102,6 +189,7 @@ class MonitorHistoryStore {
             this.db.exec('COMMIT');
         } catch (error) {
             try { this.db.exec('ROLLBACK'); } catch { /* ignore */ }
+            this.syncInlineReferences();
             throw error;
         }
         this.appended += 1;
@@ -119,6 +207,7 @@ class MonitorHistoryStore {
             SELECT id FROM messages WHERE session_id=? ORDER BY t ASC, id ASC LIMIT ?
         )`).run(sessionId, removed);
         this.db.prepare('UPDATE sessions SET message_count=MAX(0, message_count-?) WHERE id=?').run(removed, sessionId);
+        this.syncInlineReferences();
     }
 
     /** 刪除超過天數或場次上限的歷史。 */
@@ -128,6 +217,7 @@ class MonitorHistoryStore {
         this.db.prepare(`DELETE FROM sessions WHERE id NOT IN (
             SELECT id FROM sessions ORDER BY started_at DESC LIMIT ?
         )`).run(this.maxSessions);
+        this.syncInlineReferences();
     }
 
     getSession(id) {

@@ -2,6 +2,7 @@
  * Inline data URI 圖片驗證。這不是 URL 快取：data URI 由 App 本機解碼，
  * 伺服器只檢查格式與 encoded 大小，不抓取、不切片、不改寫。
  */
+const crypto = require('node:crypto');
 const ALLOWED_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 const MAX_IMAGE_BYTES = 256 * 1024;
 const MAX_TOTAL_BYTES = 768 * 1024;
@@ -26,6 +27,20 @@ function parseDataImage(value) {
     const encodedBytes = Buffer.byteLength(value, 'utf8');
     if (!match[2].length || match[2].length % 4 === 1) return { ok: false, reason: 'invalid-base64' };
     return { ok: true, mime, encodedBytes, payload: match[2] };
+}
+
+/** 解碼已驗證的 data URI；供歷史 materialize 使用，不做外部請求。 */
+function decodeDataImage(value) {
+    const parsed = parseDataImage(value);
+    if (!parsed.ok) return parsed;
+    if (parsed.encodedBytes > MAX_IMAGE_BYTES) return { ok: false, reason: 'image-too-large' };
+    const payload = parsed.payload + '='.repeat((-parsed.payload.length) % 4);
+    const body = Buffer.from(payload, 'base64');
+    if (!body.length) return { ok: false, reason: 'empty-image' };
+    return {
+        ok: true, mime: parsed.mime, body,
+        hash: crypto.createHash('sha256').update(body).digest('hex')
+    };
 }
 
 /** 從文字抽出所有 data image URI（包含不支援的 MIME，讓驗證層回報）。 */
@@ -73,5 +88,5 @@ function validateInlineImages({ img = '', giftImg = '', message = '' } = {}) {
 
 module.exports = {
     ALLOWED_MIME, MAX_IMAGE_BYTES, MAX_TOTAL_BYTES, MAX_COUNT,
-    isInlineImage, parseDataImage, extractDataImages, stripInlineImages, validateInlineImages
+    isInlineImage, parseDataImage, decodeDataImage, extractDataImages, stripInlineImages, validateInlineImages
 };

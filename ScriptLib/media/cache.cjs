@@ -4,7 +4,9 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const dns = require('node:dns/promises');
 const net = require('node:net');
+const os = require('node:os');
 const { DatabaseSync } = require('node:sqlite');
+const inlineMedia = require('./inline.cjs');
 
 const ROOT = path.resolve(__dirname, '../..');
 const DEFAULT_DB = path.join(ROOT, 'data/media.sqlite');
@@ -17,6 +19,26 @@ const ALLOWED_TYPES = new Set([
 ]);
 
 const hashUrl = value => crypto.createHash('sha256').update(value).digest('hex');
+
+/**
+ * Media URL 給其他機器使用，預設挑目前區網私有 IPv4，而不是 localhost。
+ * MEDIA_BASE_URL 可明確覆寫（例如反向代理或固定 hostname）。
+ */
+function detectMediaBaseUrl({ interfaces = os.networkInterfaces(), port = 3332, env = process.env } = {}) {
+    const explicit = String(env.MEDIA_BASE_URL || '').trim();
+    if (explicit) return explicit.replace(/\/+$/, '');
+    const candidates = [];
+    for (const addresses of Object.values(interfaces || {})) {
+        for (const item of addresses || []) {
+            if (![4, 'IPv4'].includes(item.family) || item.internal || !isPrivateAddress(item.address)) continue;
+            candidates.push(item.address);
+        }
+    }
+    const rank = address => address.startsWith('192.168.') ? 0
+        : address.startsWith('10.') ? 1 : 2;
+    candidates.sort((a, b) => rank(a) - rank(b));
+    return `http://${candidates[0] || '127.0.0.1'}:${Number(port) || 3332}`;
+}
 
 /** URL 只接受一般 HTTP(S)，避免 data/blob/file 或帳密進入快取。 */
 function normalizeImageUrl(value) {
@@ -58,14 +80,18 @@ function isPrivateAddress(address) {
  * 只存圖片位元組與來源 metadata，不存 HTML。
  */
 class MediaCache {
-    constructor({ dbFile = DEFAULT_DB, imageDir = DEFAULT_DIR, baseUrl = process.env.MEDIA_BASE_URL || 'http://127.0.0.1:3332',
-        fetchImpl = fetch, allowPrivateHosts = false, now = Date.now } = {}) {
+    constructor({ dbFile = DEFAULT_DB, imageDir = DEFAULT_DIR, baseUrl = detectMediaBaseUrl(),
+        fetchImpl = fetch, allowPrivateHosts = false, now = Date.now,
+        maxBytes = (Number(process.env.MEDIA_CACHE_MAX_MB) || 1024) * 1024 * 1024,
+        maxAgeMs = (Number(process.env.MEDIA_CACHE_DAYS) || 90) * 86400000 } = {}) {
         this.dbFile = dbFile;
         this.imageDir = imageDir;
         this.baseUrl = String(baseUrl || '').replace(/\/+$/, '');
         this.fetchImpl = fetchImpl;
         this.allowPrivateHosts = allowPrivateHosts;
         this.now = now;
+        this.maxBytes = Math.max(0, Number(maxBytes) || 0);
+        this.maxAgeMs = Math.max(0, Number(maxAgeMs) || 0);
         this.inflight = new Map();
         fs.mkdirSync(path.dirname(dbFile), { recursive: true });
         fs.mkdirSync(imageDir, { recursive: true });
@@ -83,10 +109,14 @@ class MediaCache {
                 fetched_at INTEGER,
                 last_access INTEGER,
                 fail_count INTEGER NOT NULL DEFAULT 0,
-                last_fail_at INTEGER
+                last_fail_at INTEGER,
+                source TEXT NOT NULL DEFAULT 'http',
+                pinned INTEGER NOT NULL DEFAULT 0
             );
         `);
-        this.known = new Set(this.db.prepare('SELECT hash FROM media').all().map(row => row.hash));
+        const columns = new Set(this.db.prepare('PRAGMA table_info(media)').all().map(row => row.name));
+        if (!columns.has('source')) this.db.exec("ALTER TABLE media ADD COLUMN source TEXT NOT NULL DEFAULT 'http'");
+        if (!columns.has('pinned')) this.db.exec('ALTER TABLE media ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
     }
 
     filePath(hash) {
@@ -100,9 +130,8 @@ class MediaCache {
         if (url.startsWith(this.baseUrl + '/media/')) return url;
         const hash = hashUrl(url);
         try {
-            this.db.prepare(`INSERT INTO media(hash,url,last_access) VALUES(?,?,?)
-                ON CONFLICT(hash) DO UPDATE SET url=excluded.url`).run(hash, url, this.now());
-            this.known.add(hash);
+            this.db.prepare(`INSERT INTO media(hash,url,last_access,source,pinned) VALUES(?,?,?,?,?)
+                ON CONFLICT(hash) DO UPDATE SET url=excluded.url`).run(hash, url, this.now(), 'http', 0);
             this.warm(hash, url);
         } catch {
             return value;
@@ -110,9 +139,74 @@ class MediaCache {
         return `${this.baseUrl}/media/${hash}`;
     }
 
+    /** 背景預抓 HTTP 圖片；失敗不影響原訊息。 */
     warm(hash, url) {
         if (this.inflight.has(hash) || fs.existsSync(this.filePath(hash))) return;
         this.ensure(hash, url).catch(() => {});
+    }
+
+    /**
+     * 把已驗證的 data URI 解碼為 content-addressed 檔案；只供歷史持久化使用。
+     * 回傳本地 URL，不把 base64 寫進 SQLite。
+     */
+    storeInlineDataUri(value) {
+        const decoded = inlineMedia.decodeDataImage(value);
+        if (!decoded.ok) return null;
+        const file = this.filePath(decoded.hash);
+        if (!fs.existsSync(file)) {
+            fs.mkdirSync(this.imageDir, { recursive: true });
+            const temporary = file + '.' + process.pid + '.tmp';
+            fs.writeFileSync(temporary, decoded.body);
+            fs.renameSync(temporary, file);
+        }
+        this.db.prepare(`INSERT INTO media(hash,url,content_type,byte_size,etag,fetched_at,last_access,source,pinned)
+            VALUES(?,?,?,?,?,?,?,'inline',1)
+            ON CONFLICT(hash) DO UPDATE SET content_type=excluded.content_type,byte_size=excluded.byte_size,
+                source='inline',pinned=1,last_access=excluded.last_access`).run(
+            decoded.hash, 'inline:' + decoded.hash, decoded.mime, decoded.body.length,
+            decoded.hash, this.now(), this.now()
+        );
+        return `${this.baseUrl}/media/${decoded.hash}`;
+    }
+
+    /** 讓 monitor 歷史引用的 HTTP 快取不被 LRU 清掉。 */
+    pin(hash) {
+        if (!/^[a-f0-9]{64}$/.test(String(hash || ''))) return;
+        this.db.prepare('UPDATE media SET pinned=1 WHERE hash=?').run(hash);
+    }
+
+    /** 歷史不再引用時解除 HTTP pin；inline 由 releaseInlineExcept 處理。 */
+    unpinExcept(referenced = new Set()) {
+        const rows = this.db.prepare("SELECT hash FROM media WHERE pinned=1 AND source='http'").all();
+        for (const row of rows) {
+            if (!referenced.has(row.hash)) this.db.prepare('UPDATE media SET pinned=0 WHERE hash=?').run(row.hash);
+        }
+    }
+
+    /** 釋放不再被 monitor 歷史引用的 inline 檔。 */
+    releaseInlineExcept(referenced = new Set()) {
+        const rows = this.db.prepare("SELECT hash FROM media WHERE source='inline'").all();
+        for (const row of rows) {
+            if (referenced.has(row.hash)) continue;
+            try { fs.unlinkSync(this.filePath(row.hash)); } catch { /* ignore */ }
+            this.db.prepare('DELETE FROM media WHERE hash=?').run(row.hash);
+        }
+    }
+
+    /** 清除過期或超出容量的非 pinned HTTP 快取；inline 由引用方管理。 */
+    prune() {
+        const rows = this.db.prepare(`SELECT hash,byte_size,last_access FROM media
+            WHERE pinned=0 ORDER BY last_access ASC, hash ASC`).all();
+        let total = rows.reduce((sum, row) => sum + (Number(row.byte_size) || 0), 0);
+        const cutoff = this.now() - this.maxAgeMs;
+        for (const row of rows) {
+            const expired = this.maxAgeMs > 0 && Number(row.last_access || 0) < cutoff;
+            if (!expired && total <= this.maxBytes) continue;
+            try { fs.unlinkSync(this.filePath(row.hash)); } catch { /* ignore */ }
+            this.db.prepare('DELETE FROM media WHERE hash=?').run(row.hash);
+            total -= Number(row.byte_size) || 0;
+        }
+        return { remainingBytes: total };
     }
 
     async assertPublicUrl(url) {
@@ -248,6 +342,8 @@ class MediaCache {
             fetchedAt: row.fetched_at || null,
             lastAccess: row.last_access || null,
             failCount: row.fail_count || 0,
+            source: row.source || 'http',
+            pinned: row.pinned === 1,
             status: this.statusOf(row)
         };
     }
@@ -290,4 +386,4 @@ class MediaCache {
 
 const defaultMediaCache = new MediaCache();
 
-module.exports = { MediaCache, defaultMediaCache, hashUrl, normalizeImageUrl, isPrivateAddress };
+module.exports = { MediaCache, defaultMediaCache, hashUrl, normalizeImageUrl, isPrivateAddress, detectMediaBaseUrl };

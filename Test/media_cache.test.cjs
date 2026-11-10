@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
-const { MediaCache, hashUrl, normalizeImageUrl } = require('../ScriptLib/media/cache.cjs');
+const { MediaCache, hashUrl, normalizeImageUrl, detectMediaBaseUrl } = require('../ScriptLib/media/cache.cjs');
 const { createMediaRoutes, createMediaAdminRoutes } = require('../MediaRoutes.cjs');
 const { SocketHub } = require('../ScriptLib/socket/hub.mjs');
 
@@ -22,6 +22,17 @@ function fakeServe(cache, hash, method = 'GET', headers = {}) {
         cache.serve(req, res, hash).catch(error => resolve({ status: 500, error }));
     });
 }
+
+test('Media base 預設使用私有 LAN IPv4，且允許環境變數覆寫', () => {
+    const interfaces = {
+        lo: [{ family: 'IPv4', internal: true, address: '127.0.0.1' }],
+        wifi: [{ family: 'IPv4', internal: false, address: '192.168.1.20' }],
+        other: [{ family: 'IPv4', internal: false, address: '10.0.0.5' }]
+    };
+    assert.equal(detectMediaBaseUrl({ interfaces, env: {} }), 'http://192.168.1.20:3332');
+    assert.equal(detectMediaBaseUrl({ interfaces, env: { MEDIA_BASE_URL: 'http://ttw.local/' } }), 'http://ttw.local');
+    assert.equal(detectMediaBaseUrl({ interfaces: { lo: interfaces.lo }, env: {} }), 'http://127.0.0.1:3332');
+});
 
 test('MediaCache 把外部 URL 換成本地 hash，下載後可再從快取供應', async t => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ttw-media-'));
@@ -130,6 +141,44 @@ test('MediaRoutes 只接管 /media/<hash> 並呼叫快取', async () => {
     assert.equal(response, true);
     assert.deepEqual(calls, ['a'.repeat(64)]);
     assert.equal(route({ url: '/other', method: 'GET', headers: {} }, {}), false);
+});
+
+test('inline 圖片 pinned，LRU 不刪；釋放引用後才清檔', t => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ttw-media-inline-'));
+    const cache = new MediaCache({
+        dbFile: path.join(dir, 'media.sqlite'), imageDir: path.join(dir, 'images'),
+        baseUrl: 'http://media.test', maxBytes: 1
+    });
+    t.after(() => {
+        cache.close();
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+    const local = cache.storeInlineDataUri('data:image/png;base64,iVBORw0KGgo=');
+    assert.match(local, /\/media\/[a-f0-9]{64}$/);
+    const hash = local.split('/').pop();
+    assert.equal(fs.existsSync(cache.filePath(hash)), true);
+    cache.prune();
+    assert.equal(fs.existsSync(cache.filePath(hash)), true);
+    cache.releaseInlineExcept(new Set());
+    assert.equal(fs.existsSync(cache.filePath(hash)), false);
+});
+
+test('非 pinned HTTP 快取會依容量上限 prune', t => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ttw-media-lru-'));
+    const cache = new MediaCache({
+        dbFile: path.join(dir, 'media.sqlite'), imageDir: path.join(dir, 'images'),
+        baseUrl: 'http://media.test', maxBytes: 1
+    });
+    t.after(() => {
+        cache.close();
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+    const hash = 'b'.repeat(64);
+    fs.writeFileSync(cache.filePath(hash), PNG);
+    cache.db.prepare(`INSERT INTO media(hash,url,content_type,byte_size,last_access,source,pinned)
+        VALUES(?,?,?,?,?,'http',0)`).run(hash, 'http://example/x.png', 'image/png', PNG.length, Date.now());
+    cache.prune();
+    assert.equal(fs.existsSync(cache.filePath(hash)), false);
 });
 
 test('SocketHub 送出前改寫 img 與 giftImg', () => {

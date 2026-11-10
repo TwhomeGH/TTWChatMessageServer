@@ -59,6 +59,7 @@ const audience = createAudienceTracker({
 });
 const serveAudience = createAudienceRoutes(audience);
 const mediaRoutes = require('./MediaRoutes.cjs');
+const { defaultMediaCache } = require('./ScriptLib/media/cache.cjs');
 const serveMedia = mediaRoutes.createMediaRoutes();
 const serveMediaAdmin = mediaRoutes.createMediaAdminRoutes();
 const { DiagnosticsStore } = require('./ScriptLib/diagnostics/store.cjs');
@@ -89,9 +90,14 @@ const { createMonitorHistoryStore } = require('./ScriptLib/monitor/store.cjs');
 const monitorHistory = createMonitorHistoryStore({
     retentionDays: Number(process.env.MONITOR_HISTORY_DAYS) || 14,
     maxSessions: Number(process.env.MONITOR_HISTORY_SESSIONS) || 10,
-    maxMessagesPerSession: Number(process.env.MONITOR_HISTORY_MAX_MESSAGES) || 20000
+    maxMessagesPerSession: Number(process.env.MONITOR_HISTORY_MAX_MESSAGES) || 20000,
+    mediaCache: defaultMediaCache
 });
 const serveMonitorHistory = require('./MonitorRoutes.cjs').createMonitorRoutes(monitorHistory);
+const mediaPrune = setInterval(() => {
+    try { defaultMediaCache.prune(); } catch (error) { console.error('[MediaCache] prune 失敗:', error.message); }
+}, 3600000);
+mediaPrune.unref();
 let monitorSessionId = null;
 
 let tiktokProcess = null;

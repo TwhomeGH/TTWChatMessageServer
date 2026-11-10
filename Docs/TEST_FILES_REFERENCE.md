@@ -58,11 +58,11 @@ node Test/xxx.mjs
 | `Test/runtime_ui.cjs` | 運行狀態頁的狀態卡、聊天來源 badge、manual／browser 顯示、重新檢查／停止 toast、390px 無溢出；輸出 `runtime-desktop.png`、`runtime-mobile.png` |
 | `Test/audience_ui.cjs` | 常客關係 badge／avatar、關係篩選、總頁數、分數組成、等級門檻、最近場次與手機寬度 |
 | `Test/monitor_audience_ui.cjs` | 監控聊天列、本場統計、測試訊息、Socket／通知派發、精確結果與即時／歷史切換 |
-| `Test/monitor_history.test.cjs` | 監控歷史 SQLite 的場次、分頁、搜尋、保留與測試訊息排除 |
+| `Test/monitor_history.test.cjs` | 監控歷史 SQLite、data URI materialize 與保留／釋放 |
 | `Test/monitor_routes.test.cjs` | 監控歷史 API 的登入、場次、訊息與缺少場次 |
 | `Test/navigation_guard.test.mjs` | Signer TikTok 導航最小間隔與 WAF 冷卻 |
 | `Test/video_tk_ui.cjs` | videoTK 劇院樣式還原、可拖動按鈕與拖曳不誤觸 |
-| `Test/media_cache.test.cjs` | 圖片快取本地 URL、下載、SVG／私有位址拒絕、路由與 SocketHub 改寫 |
+| `Test/media_cache.test.cjs` | 圖片快取、inline pin、LRU／大小上限、SVG／私有位址拒絕、路由與 SocketHub 改寫 |
 | `Test/inline_image.test.cjs` | data URI 圖片格式、大小／數量限制與通知剝離 |
 | `Test/socket_test_routes.test.cjs` | Raw Socket 測試入口的登入、子程序檢查與 payload 轉送 |
 | `Test/diagnostics.test.cjs` | 診斷 store、`/post`、diagnostic、token、Socket 外部事件訂閱與 API |

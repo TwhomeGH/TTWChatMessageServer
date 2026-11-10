@@ -1,7 +1,11 @@
 /** 常客頁以外的監控歷史 SQLite：場次、分頁、篩選、保留與測試訊息排除。 */
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { MonitorHistoryStore } = require('../ScriptLib/monitor/store.cjs');
+const { MediaCache } = require('../ScriptLib/media/cache.cjs');
 
 function entry(t, overrides = {}) {
     return {
@@ -78,4 +82,34 @@ test('每場只保留最新訊息且同步 message_count', t => {
     assert.equal(result.total, 2);
     assert.deepEqual(result.messages.map(item => item.message), ['hello 3', 'hello 2']);
     assert.equal(store.getSession(session).messageCount, 2);
+});
+
+test('歷史把 data URI materialize 成 /media，不把 base64 寫進 SQLite', t => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ttw-monitor-media-'));
+    let now = 1000;
+    const cache = new MediaCache({
+        dbFile: path.join(dir, 'media.sqlite'), imageDir: path.join(dir, 'images'),
+        baseUrl: 'http://media.test', now: () => now
+    });
+    const store = new MonitorHistoryStore({
+        file: path.join(dir, 'monitor.sqlite'), retentionDays: 1, now: () => now, mediaCache: cache
+    });
+    t.after(() => {
+        store.close();
+        cache.close();
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+    const png = 'data:image/png;base64,iVBORw0KGgo=';
+    const session = store.startSession({ startedAt: now });
+    store.append(session, entry(1001, { message: `look ${png}`, img: png, giftImg: png }));
+    const page = store.listMessages({ sessionId: session, page: 1, pageSize: 10 });
+    assert.equal(page.messages[0].message.includes('data:image'), false);
+    assert.match(page.messages[0].message, /http:\/\/media\.test\/media\/[a-f0-9]{64}/);
+    assert.match(page.messages[0].img, /http:\/\/media\.test\/media\//);
+    assert.equal(cache.list({ type: 'image/png' }).items[0].source, 'inline');
+    assert.equal(fs.readdirSync(path.join(dir, 'images')).length, 1);
+
+    now += 2 * 86400000;
+    store.prune();
+    assert.equal(fs.readdirSync(path.join(dir, 'images')).length, 0);
 });

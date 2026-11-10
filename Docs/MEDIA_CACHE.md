@@ -17,6 +17,8 @@ MediaCache 將圖片持久化到本機，訊息只傳本地 URL：
   → 第一次請求時下載並寫入本機
 ```
 
+主服務綁定 `0.0.0.0:3332`；Media URL 預設使用目前私有 IPv4（優先 192.168.x.x），不再使用 `127.0.0.1`，讓同網域的其他機器能取得圖片。只有找不到私有 IPv4 時才退回 loopback。
+
 ## 檔案
 
 - `ScriptLib/media/cache.cjs`：快取、下載、SSRF 檢查與供應。
@@ -39,10 +41,11 @@ MediaCache 將圖片持久化到本機，訊息只傳本地 URL：
 
 `img`、`giftImg`、`message` 內嵌圖片、`AdOverlay.iconURL`、贊助橫幅與通知圖片都接受 png／jpeg／webp／gif data URI。
 
-- MediaCache 只處理 HTTP(S)；data URI 原樣直傳，不抓取、不寫 DB。
+- MediaCache 一般只處理 HTTP(S)；data URI 在 live 路徑原樣直傳，不抓取。只有 monitor 歷史會把 data URI materialize 成 content-addressed 本機檔。
 - `ScriptLib/media/inline.cjs` 驗證格式、encoded 大小、數量與總量；不切片、不 fallback HTTP。
 - 通知會移除 body 中的 data URI，且外部 Bark／ntfy 不帶 data URI icon。
-- Live 顯示保留 inline；歷史持久化不應直接寫 base64，必要時 materialize 成 `/media/<content-hash>`。
+- Live 顯示保留 inline；monitor 歷史會 materialize 成 `/media/<content-hash>`，SQLite 只存本地 URL，不存 base64。
+- inline 與歷史引用的 HTTP 圖片會 pin，一般 LRU 不會刪掉；歷史場次／訊息被修剪後才釋放引用。
 - Python overlay 已在 texture worker 本機解碼 png／jpeg／webp／gif data URI；日誌只記錄類型與長度。
 
 ## 檢視與手動測試
@@ -68,9 +71,11 @@ DNS rebinding 仍是殘餘風險；若來源不需要任意主機，之後可加
 
 | 變數 | 預設 | 說明 |
 | --- | --- | --- |
-| `MEDIA_BASE_URL` | `http://127.0.0.1:3332` | 回傳給 overlay 的本地 URL 前綴；跨機請改區網 IP |
+| `MEDIA_BASE_URL` | 自動挑私有 LAN IPv4（例如 `http://192.168.0.102:3332`） | 回傳給 overlay 的本地 URL 前綴；有多張網卡或要反向代理時再覆寫 |
+| `MEDIA_CACHE_MAX_MB` | `1024` | 非 pinned HTTP 快取容量上限 |
+| `MEDIA_CACHE_DAYS` | `90` | 非 pinned HTTP 快取保留天數 |
 
-目前沒有自動 LRU／總容量上限；Phase 2 再補保留期限、容量與清理介面。
+主服務每小時 prune 一次；inline 與 monitor 歷史引用的檔案是 pinned，不會被一般 LRU 刪除。歷史修剪後會解除 HTTP pin，inline 則直接刪檔。
 
 ## 驗證
 
