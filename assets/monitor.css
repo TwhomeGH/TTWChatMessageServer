@@ -31,7 +31,8 @@ body.app-ui {
     position: relative;
     flex: 1;
     display: grid;
-    grid-template-rows: auto auto auto minmax(8rem, 1fr);
+    /* 標題、工具列、測試、MediaCache、Raw Socket 都只佔內容高度；訊息列拿剩餘空間。 */
+    grid-template-rows: auto auto auto auto auto minmax(8rem, 1fr);
     min-height: min-content;
     padding: 1rem;
 }
@@ -88,6 +89,7 @@ body.app-ui {
 
 /* 本機測試訊息：只影響畫面，不送 /chat；測試列加左側琥珀色標記。 */
 .mon-test-panel {
+    align-self: start;
     margin-bottom: 0.75rem;
     padding: 0.5rem 0.75rem;
     border: 1px solid #334155;

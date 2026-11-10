@@ -145,6 +145,13 @@ async function main() {
             chats: document.querySelector('#monSessionChats').textContent
         }));
         assert.deepEqual(session, { hidden: false, joins: '2', likes: '7', chats: '3' });
+        const collapsedLayout = await page.evaluate(() => {
+            const box = id => document.querySelector(id).getBoundingClientRect().toJSON();
+            return { media: box('#monMediaPanel'), raw: box('#monRawPanel'), scroll: box('#monScroll') };
+        });
+        assert.ok(collapsedLayout.media.height < 80, '折疊的 MediaCache 不應佔用大塊空白');
+        assert.ok(collapsedLayout.scroll.height >= 120, '訊息列應保留可讀高度');
+        assert.ok(collapsedLayout.scroll.top >= collapsedLayout.raw.bottom, '訊息列應在工具面板之後');
 
         await page.evaluate(() => { document.querySelector('#monTestPanel').open = true; });
         const targetLayout = await page.evaluate(() => {

@@ -1,5 +1,27 @@
 # ChangeHistory
 
+## 2026.11.10 20:30 monitor 工具面板不再撐滿版面
+
+**類型**: 修正 · **檔案**: `assets/monitor.css`、`Test/monitor_audience_ui.cjs`
+
+### 問題
+
+新增 MediaCache／Raw Socket 兩個 `<details>` 後，`.monitor-panel` 仍只有四列 grid；MediaCache 被放進 `minmax(8rem, 1fr)` 的列，折疊時仍吃掉整個剩餘高度，訊息列被推到下方。
+
+### 修改
+
+- grid 改為六列：標題、工具列、測試、MediaCache、Raw Socket、訊息列。
+- 只有最後的訊息列使用 `minmax(8rem, 1fr)`。
+- `.mon-test-panel` 設為 `align-self:start`，折疊時只佔內容高度。
+- monitor UI 測試新增折疊高度與訊息列位置斷言。
+
+### 驗證
+
+- `node Test/monitor_audience_ui.cjs`
+- `npm run lint`、`npm run check:css`
+
+---
+
 ## 2026.11.10 20:24 monitor MediaCache 檢視與 Raw Socket 測試
 
 **類型**: 功能 · **檔案**: `MediaRoutes.cjs`、`ScriptLib/media/cache.cjs`、`SocketTestRoutes.cjs`、`Server.js`、`TikTok.js`、`monitor.html`、`assets/monitor.js`、`assets/monitor.css`、`lang/*.json`、`Test/media_cache.test.cjs`、`Test/socket_test_routes.test.cjs`、`Docs/MEDIA_CACHE.md`、`Docs/TEST_FILES_REFERENCE.md`
