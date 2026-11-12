@@ -1,5 +1,83 @@
 # ChangeHistory
 
+## 2026.11.11 01:15 MediaCache URL 補圖片副檔名
+
+**類型**: 修正 · **檔案**: `ScriptLib/media/cache.cjs`、`MediaRoutes.cjs`、`ScriptLib/monitor/store.cjs`、`OtherTool/live_engine/core/emoji_parser.py`、`Test/media_cache.test.cjs`、`OtherTool/live_engine/tests/test_emoji_parser.py`、`Docs/MEDIA_CACHE.md`、`Docs/RUNTIME.md`
+
+### 問題
+
+MediaCache 對外只有 `/media/<sha256>`，沒有 `.png`／`.jpg` 等副檔名。以 URL 副檔名分類圖片的客戶端與 Python overlay 會把它當成一般文字；若是未知的無副檔名 emoji URL，也無法辨識。
+
+### 修改
+
+- MediaCache 對外 URL 改成 `/media/<sha256>.<ext>`：優先使用已快取的 `Content-Type`，其次來源 URL 副檔名，未知時用 `.png`。
+- 路由同時接受舊的無副檔名形式；副檔名只用於客戶端分類，實際格式由 `Content-Type` 決定。
+- inline data URI materialize 後也帶正確副檔名。
+- Python overlay 的圖片 URL 規則額外接受 `/media/<64 hex>`（含可選副檔名），涵蓋舊資料。
+- 表情映射中沒有副檔名的 HTTP URL 透過 MediaCache 改寫成 `/media/<hash>.<ext>`；已有副檔名者維持遠端 URL。
+- 補 MediaCache、history materialize、emoji resolver 與 overlay parser 測試。
+
+### 限制
+
+- 來源與實際 `Content-Type` 不一致時，副檔名可能只是提示；瀏覽器與 ImageIO 仍以內容為準。
+- 任意網域的無副檔名 emoji URL 仍不會被自動當成圖片；需要伺服器改寫成 `/media/<hash>.<ext>`，或客戶端改用明確的 `imageURLs` 清單。
+
+### 驗證
+
+- `node --test Test/media_cache.test.cjs Test/monitor_history.test.cjs`
+- `python -m pytest OtherTool/live_engine/tests/test_emoji_parser.py -q`
+- `npm run lint`
+
+---
+
+## 2026.11.11 00:55 診斷 Socket 沿用 SOCKET_API
+
+**類型**: 修正 · **檔案**: `ScriptLib/diagnostics/target.cjs`、`DiagnosticsRoutes.cjs`、`Server.js`、`assets/diagnostics.js`、`diagnostics.html`、`.env.example`、`Docs/DIAGNOSTICS.md`、`Docs/RUNTIME.md`、`Test/diagnostics.test.cjs`
+
+### 問題
+
+診斷訂閱原本額外要求 `DIAGNOSTICS_SOCKET_HOST`／`PORT`，與聊天輸出的 `SOCKET_API` 重複指定同一個 ReplyKit SocketServer。
+
+### 修改
+
+- 新增 `resolveDiagnosticsTarget()`：優先解析 `SOCKET_API`，其次 `SOCKET_APIS` 第一個可用端點。
+- 移除 `DIAGNOSTICS_SOCKET_HOST`／`PORT`；`DIAGNOSTICS_SOCKET_ENABLED` 只控制啟動時自動訂閱。
+- `/diagnostics` 顯示解析出的目標與來源；未設定時提示補 `SOCKET_API`。
+- 套用訂閱時重新解析目前 `SOCKET_API`，設定變更後重新套用即可重連。
+- 補 target 解析與 route 測試。
+
+### 驗證
+
+- `node --test Test/diagnostics.test.cjs`
+- `node Test/diagnostics_ui.cjs`
+- `npm run lint`
+
+---
+
+## 2026.11.11 00:40 診斷 Socket 目標顯示
+
+**類型**: 修正 · **檔案**: `assets/diagnostics.js`、`DiagnosticsRoutes.cjs`、`Docs/DIAGNOSTICS.md`、`Test/diagnostics_ui.cjs`
+
+### 問題
+
+已設定 `DIAGNOSTICS_SOCKET_HOST` 時，未連線前 `socketClient.snapshot().host` 仍是空字串，`/diagnostics` 因此顯示「未設定 · 錯誤」，看起來像設定失效。
+
+### 修改
+
+- 狀態列優先用 `defaults.host` 顯示 `.env` 目標，其次才用目前連線 host。
+- 真正未設定時顯示可行動提示：補 `DIAGNOSTICS_SOCKET_HOST`／`PORT` 並重啟主服務。
+- GET 回傳 `defaults.configured`。
+- POST 目標無效時回傳同樣明確的設定提示。
+- UI 測試 fake 補 `defaults`。
+
+### 驗證
+
+- `node --test Test/diagnostics.test.cjs`
+- `node Test/diagnostics_ui.cjs`
+- `npm run lint`
+
+---
+
 ## 2026.11.11 00:23 Raw Socket 圖片選單
 
 **類型**: 功能 · **檔案**: `monitor.html`、`assets/monitor.js`、`lang/*.json`、`Test/monitor_audience_ui.cjs`

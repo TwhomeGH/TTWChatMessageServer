@@ -83,6 +83,15 @@ class TestParseMessage:
         assert [s["type"] for s in segs] == ["text", "image", "text"]
         assert segs[1]["url"] == url
 
+    def test_media_cache_urls(self):
+        for url in [
+            "http://192.168.0.102:3332/media/" + "a" * 64,
+            "http://192.168.0.102:3332/media/" + "b" * 64 + ".png",
+        ]:
+            segs = parse_message(f"look {url} end")
+            assert [s["type"] for s in segs] == ["text", "image", "text"]
+            assert segs[1]["url"] == url
+
 
 class TestStripImageUrls:
     def test_plain_text(self):

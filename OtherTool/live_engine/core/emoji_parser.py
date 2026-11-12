@@ -7,6 +7,8 @@ INLINE_IMAGE_RE = re.compile(
 
 IMAGE_URL_RE = re.compile(
     r'(?:https?://[^\s]+?\.(?:png|jpg|jpeg|gif|webp)(?:\?[^\s]*)?'
+    # MediaCache 舊版或自訂路徑可能沒有副檔名；/media/<sha256> 仍是明確圖片。
+    r'|https?://[^\s]+/media/[a-f0-9]{64}(?:\.[a-z0-9]+)?(?:\?[^\s]*)?'
     r'|data:image/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2})',
     re.IGNORECASE
 )

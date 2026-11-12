@@ -22,7 +22,7 @@
 - [ ] 獨立 `/dedup`（或 `/diagnostics/dedup`）診斷頁：最近 test results、其他送入訊息的去重狀態查詢與剩餘冷卻；由 monitor／runtime 提供入口。
 - [x] monitor 歷史 SQLite 持久化、最近場次 API 與即時／歷史切換。
 - [x] Signer TikTok 導航節流與 WAF 403 冷卻，避免 fetch page 重建風暴。
-- [x] 圖片媒體快取 Phase 1：本地 `/media/<hash>`、SocketHub 頭像／禮物圖與 AdOverlay 圖片改寫。
+- [x] 圖片媒體快取 Phase 1：本地 `/media/<hash>.<ext>`、SocketHub 頭像／禮物圖與 AdOverlay 圖片改寫。
 - [x] Python overlay 支援 img／giftImg／AdOverlay icon 與訊息內嵌 data URI。
 - [x] monitor MediaCache 檢視／本地連結複製與 Raw Socket 測試入口。
 - [x] 應用診斷 `/diagnostics`、LogServer 相容 `/post` 與可選 token。

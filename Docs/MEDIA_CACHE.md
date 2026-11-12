@@ -13,7 +13,7 @@ MediaCache 將圖片持久化到本機，訊息只傳本地 URL：
 ```text
 外部圖片 URL
   → MediaCache.localUrl(url)
-  → http://127.0.0.1:3332/media/<sha256>
+  → http://127.0.0.1:3332/media/<sha256>.<ext>
   → 第一次請求時下載並寫入本機
 ```
 
@@ -22,11 +22,11 @@ MediaCache 將圖片持久化到本機，訊息只傳本地 URL：
 ## 檔案
 
 - `ScriptLib/media/cache.cjs`：快取、下載、SSRF 檢查與供應。
-- `MediaRoutes.cjs`：公開的 `GET /media/<sha256>` 路由。
+- `MediaRoutes.cjs`：公開的 `GET /media/<sha256>[.<ext>]` 路由；副檔名只供客戶端分類，實際格式仍看 `Content-Type`。
 - `cache/media/<sha256>.bin`：圖片位元組。
 - `data/media.sqlite`：來源 URL、Content-Type、大小、ETag、存取時間與失敗次數。
 
-`/media/` 只接受 hash，**不提供 `?url=` 任意抓取**。資料庫與圖片目錄已排除 Git。
+`/media/` 只接受 hash（可帶 png／jpg／gif／webp／avif／bmp 副檔名），**不提供 `?url=` 任意抓取**。資料庫與圖片目錄已排除 Git。對外 URL 會依內容類型或來源副檔名產生 `.png`／`.jpg` 等後綴，讓依副檔名分類的客戶端也能辨識。
 
 ## 整合位置
 
@@ -44,13 +44,15 @@ MediaCache 將圖片持久化到本機，訊息只傳本地 URL：
 - MediaCache 一般只處理 HTTP(S)；data URI 在 live 路徑原樣直傳，不抓取。只有 monitor 歷史會把 data URI materialize 成 content-addressed 本機檔。
 - `ScriptLib/media/inline.cjs` 驗證格式、encoded 大小、數量與總量；不切片、不 fallback HTTP。
 - 通知會移除 body 中的 data URI，且外部 Bark／ntfy 不帶 data URI icon。
-- Live 顯示保留 inline；monitor 歷史會 materialize 成 `/media/<content-hash>`，SQLite 只存本地 URL，不存 base64。
+- Live 顯示保留 inline；monitor 歷史會 materialize 成 `/media/<content-hash>.<ext>`，SQLite 只存本地 URL，不存 base64。
 - inline 與歷史引用的 HTTP 圖片會 pin，一般 LRU 不會刪掉；歷史場次／訊息被修剪後才釋放引用。
+- 表情映射中沒有圖片副檔名的 HTTP URL 會先轉進 MediaCache，輸出 `/media/<hash>.<ext>`；已有 `.png`／`.jpg` 等副檔名者維持遠端 URL。
+- 舊的無副檔名 `/media/<hash>` 仍可讀取；Python overlay 也接受這種路徑，避免舊資料變回文字。
 - Python overlay 已在 texture worker 本機解碼 png／jpeg／webp／gif data URI；日誌只記錄類型與長度。
 
 ## 檢視與手動測試
 
-- `/monitor` 的「MediaCache 資源」面板可查看快取統計、搜尋、預覽、複製本地 `/media/<hash>` 連結與開啟圖片。
+- `/monitor` 的「MediaCache 資源」面板可查看快取統計、搜尋、預覽、複製本地 `/media/<hash>.<ext>` 連結與開啟圖片。
 - `GET /api/media`（需登入）支援 `page`、`pageSize`、`q`、`type`、`status`；只回傳 hash、host、型別、大小、時間與狀態，不暴露完整來源 URL。
 - `GET /api/media/stats`（需登入）回傳總數、bytes、cached／failed／missing。
 - `/monitor` 另有 Raw Socket 測試入口：`POST /api/socket/test` 經子程序直接送 `socketHub`，可選擇是否套用 MediaCache／emoji 正式轉換；不經 `/chat`、filter、dedup、traffic 或 AutoClip。

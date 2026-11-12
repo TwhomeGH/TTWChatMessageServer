@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
-const { MediaCache, hashUrl, normalizeImageUrl, detectMediaBaseUrl } = require('../ScriptLib/media/cache.cjs');
+const { MediaCache, hashUrl, normalizeImageUrl, detectMediaBaseUrl, imageExtension, mediaHash } = require('../ScriptLib/media/cache.cjs');
 const { createMediaRoutes, createMediaAdminRoutes } = require('../MediaRoutes.cjs');
 const { SocketHub } = require('../ScriptLib/socket/hub.mjs');
 
@@ -22,6 +22,15 @@ function fakeServe(cache, hash, method = 'GET', headers = {}) {
         cache.serve(req, res, hash).catch(error => resolve({ status: 500, error }));
     });
 }
+
+test('Media URL 依內容類型或來源補上圖片副檔名', () => {
+    assert.equal(imageExtension('image/jpeg'), '.jpg');
+    assert.equal(imageExtension('image/webp'), '.webp');
+    assert.equal(imageExtension('', 'https://cdn.example/a.WEBP?x=1'), '.webp');
+    assert.equal(imageExtension('', 'https://cdn.example/a.jpeg'), '.jpg');
+    assert.equal(imageExtension('', 'https://cdn.example/no-extension'), '.png');
+    assert.equal(mediaHash('a'.repeat(64) + '.jpg'), 'a'.repeat(64));
+});
 
 test('Media base 預設使用私有 LAN IPv4，且允許環境變數覆寫', () => {
     const interfaces = {
@@ -65,7 +74,7 @@ test('MediaCache 把外部 URL 換成本地 hash，下載後可再從快取供�
     const source = `http://127.0.0.1:${server.address().port}/img.png`;
     const local = cache.localUrl(source);
     const hash = hashUrl(source);
-    assert.equal(local, `http://127.0.0.1:3332/media/${hash}`);
+    assert.equal(local, `http://127.0.0.1:3332/media/${hash}.png`);
     assert.equal(cache.localUrl(source), local);
 
     const first = await fakeServe(cache, hash);
@@ -83,6 +92,7 @@ test('MediaCache 把外部 URL 換成本地 hash，下載後可再從快取供�
     const second = await fakeServe(cache, hash);
     assert.equal(second.status, 200);
     assert.equal(second.headers.ETag, '"' + hash + '"');
+    assert.equal((await fakeServe(cache, hash + '.png')).status, 200);
     const notModified = await fakeServe(cache, hash, 'GET', { 'if-none-match': second.headers.ETag });
     assert.equal(notModified.status, 304);
 
@@ -132,7 +142,7 @@ test('MediaRoutes 只接管 /media/<hash> 並呼叫快取', async () => {
         serve(req, res, hash) { calls.push(hash); res.writeHead(200); res.end(); return Promise.resolve(); }
     });
     const response = await new Promise(resolve => {
-        const req = { url: '/media/' + 'a'.repeat(64), method: 'GET', headers: {} };
+        const req = { url: '/media/' + 'a'.repeat(64) + '.png', method: 'GET', headers: {} };
         const res = {
             writeHead() {}, end() { resolve(true); }
         };
@@ -154,8 +164,8 @@ test('inline 圖片 pinned，LRU 不刪；釋放引用後才清檔', t => {
         fs.rmSync(dir, { recursive: true, force: true });
     });
     const local = cache.storeInlineDataUri('data:image/png;base64,iVBORw0KGgo=');
-    assert.match(local, /\/media\/[a-f0-9]{64}$/);
-    const hash = local.split('/').pop();
+    assert.match(local, /\/media\/[a-f0-9]{64}\.png$/);
+    const hash = local.split('/').pop().replace(/\.[a-z0-9]+$/i, '');
     assert.equal(fs.existsSync(cache.filePath(hash)), true);
     cache.prune();
     assert.equal(fs.existsSync(cache.filePath(hash)), true);

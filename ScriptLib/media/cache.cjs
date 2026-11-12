@@ -17,8 +17,28 @@ const CACHE_CONTROL = 'public, max-age=31536000, immutable';
 const ALLOWED_TYPES = new Set([
     'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp'
 ]);
+const EXTENSION_BY_TYPE = new Map([
+    ['image/png', '.png'], ['image/jpeg', '.jpg'], ['image/gif', '.gif'],
+    ['image/webp', '.webp'], ['image/avif', '.avif'], ['image/bmp', '.bmp']
+]);
+const KNOWN_EXTENSION_RE = /\.(?:png|jpe?g|gif|webp|avif|bmp)$/i;
 
 const hashUrl = value => crypto.createHash('sha256').update(value).digest('hex');
+
+/** 給客戶端的 URL 一律帶可辨識的圖片副檔名，讓以副檔名分類的客戶端也能處理。 */
+function imageExtension(contentType, sourceUrl = '') {
+    const fromType = EXTENSION_BY_TYPE.get(String(contentType || '').toLowerCase());
+    if (fromType) return fromType;
+    try {
+        const match = KNOWN_EXTENSION_RE.exec(new URL(sourceUrl).pathname);
+        if (match) return match[0].toLowerCase().replace(/\.jpeg$/i, '.jpg');
+    } catch { /* ignore */ }
+    return '.png';
+}
+
+function mediaHash(value) {
+    return String(value || '').replace(KNOWN_EXTENSION_RE, '');
+}
 
 /**
  * Media URL 給其他機器使用，預設挑目前區網私有 IPv4，而不是 localhost。
@@ -136,7 +156,8 @@ class MediaCache {
         } catch {
             return value;
         }
-        return `${this.baseUrl}/media/${hash}`;
+        const row = this.db.prepare('SELECT content_type FROM media WHERE hash=?').get(hash);
+        return `${this.baseUrl}/media/${hash}${imageExtension(row?.content_type, url)}`;
     }
 
     /** 背景預抓 HTTP 圖片；失敗不影響原訊息。 */
@@ -166,7 +187,7 @@ class MediaCache {
             decoded.hash, 'inline:' + decoded.hash, decoded.mime, decoded.body.length,
             decoded.hash, this.now(), this.now()
         );
-        return `${this.baseUrl}/media/${decoded.hash}`;
+        return `${this.baseUrl}/media/${decoded.hash}${imageExtension(decoded.mime)}`;
     }
 
     /** 讓 monitor 歷史引用的 HTTP 快取不被 LRU 清掉。 */
@@ -285,6 +306,7 @@ class MediaCache {
             res.end('Method Not Allowed');
             return;
         }
+        hash = mediaHash(hash);
         if (!/^[a-f0-9]{64}$/.test(String(hash || ''))) {
             res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
             res.end('Not Found');
@@ -335,7 +357,7 @@ class MediaCache {
         try { host = new URL(row.url).hostname; } catch { /* ignore */ }
         return {
             hash: row.hash,
-            localUrl: `${this.baseUrl}/media/${row.hash}`,
+            localUrl: `${this.baseUrl}/media/${row.hash}${imageExtension(row.content_type)}`,
             host,
             contentType: row.content_type || '',
             byteSize: Number(row.byte_size) || 0,
@@ -386,4 +408,7 @@ class MediaCache {
 
 const defaultMediaCache = new MediaCache();
 
-module.exports = { MediaCache, defaultMediaCache, hashUrl, normalizeImageUrl, isPrivateAddress, detectMediaBaseUrl };
+module.exports = {
+    MediaCache, defaultMediaCache, hashUrl, normalizeImageUrl, isPrivateAddress,
+    detectMediaBaseUrl, imageExtension, mediaHash
+};

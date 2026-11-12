@@ -43,7 +43,7 @@ import { TikTokLiveConnection } from 'tiktok-live-connector';
 import { setupCustomSignServer, waitForSigner, setStreamerName } from './SignServer/index.js';
 import Translate from "./TranslateTest.js"
 import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFilter, clearStats, takeThrottleSummaries } from "./MessageFilter.js"
-import { replaceEmojis, loadEmojiMap, getEmojiMap } from "./EmojiMap.js"
+import { replaceEmojis, setEmojiMediaResolver, loadEmojiMap, getEmojiMap } from "./EmojiMap.js"
 import { startKickChat } from './ScriptLib/kick/chat.mjs';
 import mediaCacheModule from './ScriptLib/media/cache.cjs';
 import console from 'console';
@@ -886,6 +886,15 @@ function cachedMediaUrl(value) {
         return value;
     }
 }
+
+// 只有沒有圖片副檔名的表情 URL 才轉進 MediaCache；已有副檔名者維持原遠端 URL。
+// 轉換後固定是 /media/<hash>.<ext>，以副檔名分類的客戶端也能辨識。
+const EMOJI_IMAGE_EXT_RE = /\.(?:png|jpe?g|gif|webp|avif|bmp)(?:[?#]|$)/i;
+setEmojiMediaResolver(url => {
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return url;
+    if (EMOJI_IMAGE_EXT_RE.test(url)) return url;
+    return cachedMediaUrl(url);
+});
 
 function sendAdOverylayMessage(user, text, iconURL, useTTS) {
     // 只改 overlay 使用的圖片；通知仍保留原始 URL，手機才連得到外部站。

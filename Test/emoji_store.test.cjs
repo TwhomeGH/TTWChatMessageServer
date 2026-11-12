@@ -123,6 +123,10 @@ test('方括號按字面匹配，插入網址中的代碼與替換符號不會�
     await emojiMap.loadEmojiMap(file);
 
     assert.equal(emojiMap.replaceEmojis('[x]'), 'https://example.com/$&/long.png');
+    emojiMap.setEmojiMediaResolver(url => url.endsWith('.png')
+        ? 'http://media.test/media/' + 'a'.repeat(64) + '.png' : url);
+    t.after(() => emojiMap.setEmojiMediaResolver(null));
+    assert.match(emojiMap.replaceEmojis('[x]'), /^http:\/\/media\.test\/media\/[a-f0-9]{64}\.png$/);
 });
 
 test('管理 API 檢查登入、持久化修改，並回報版本衝突', async t => {

@@ -94,7 +94,7 @@ class MonitorHistoryStore {
         if (!this.mediaCache || typeof value !== 'string' || !inlineMedia.isInlineImage(value)) return value;
         try {
             const local = this.mediaCache.storeInlineDataUri(value);
-            const hash = /\/media\/([a-f0-9]{64})$/.exec(local || '')?.[1];
+            const hash = /\/media\/([a-f0-9]{64})(?:\.[a-z0-9]+)?$/.exec(local || '')?.[1];
             if (hash) {
                 hashes.add(hash);
                 return local;

@@ -6,6 +6,16 @@ const EMOJI_MAP_FILE = path.resolve('./emoji_map.json');
 let emojiMap = {};
 let activeStore = emojiStoreModule.store;
 let stopWatching;
+let emojiMediaResolver = null;
+
+/**
+ * 設定表情圖片的媒體改寫器（例如轉成 MediaCache 的 /media/<hash>.<ext>）。
+ * 設為 null 可還原原始 URL；解析失敗時退回原 URL。
+ * @param {((url: string) => string)|null} resolver
+ */
+export function setEmojiMediaResolver(resolver) {
+    emojiMediaResolver = typeof resolver === 'function' ? resolver : null;
+}
 
 /**
  * 切換使用中的映射檔、載入內容並啟動每秒監看；先停止前一次監看。
@@ -36,7 +46,11 @@ export function replaceEmojis(text) {
     const codes=Object.keys(emojiMap).sort((a,b)=>b.length-a.length);
     if(!codes.length)return text;
     const escaped=codes.map(code=>code.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
-    return text.replace(new RegExp(escaped.join('|'),'g'),code=>emojiMap[code]);
+    return text.replace(new RegExp(escaped.join('|'),'g'),code=>{
+        const url=emojiMap[code];
+        if (!emojiMediaResolver || typeof url !== 'string') return url;
+        try { return emojiMediaResolver(url) || url; } catch { return url; }
+    });
 }
 
 /**
@@ -87,6 +101,7 @@ export async function saveEmojiMap(filePath = EMOJI_MAP_FILE) {
 export default {
     loadEmojiMap,
     replaceEmojis,
+    setEmojiMediaResolver,
     getEmojiMap,
     addEmoji,
     removeEmoji,
