@@ -12,9 +12,13 @@ function json(res, status, value) {
  * 診斷入口：HTTP LogServer 相容 /post、帶外 diagnostic、以及唯讀診斷頁。
  * 資料只存在記憶體，不寫 log 檔或聊天歷史。
  * @param {import('./ScriptLib/diagnostics/store.cjs').DiagnosticsStore} store
- * @param {{token?: string, socketClient?: Object, socketDefaults?: {host?: string, port?: number}}} [options]
+ * @param {{token?: string, socketClient?: Object, resolveTarget?: () => {host: string, port: number, source: string, configured: boolean}}} [options]
  */
-function createDiagnosticsRoutes(store, { token = '', socketClient = null, socketDefaults = {} } = {}) {
+function createDiagnosticsRoutes(store, { token = '', socketClient = null, resolveTarget = null } = {}) {
+    function target() {
+        if (typeof resolveTarget === 'function') return resolveTarget();
+        return { host: '', port: 0, source: '', configured: false };
+    }
     function authorizedIntake(req) {
         if (!token) return true;
         const header = req.headers['x-diagnostics-token'];
@@ -118,7 +122,7 @@ function createDiagnosticsRoutes(store, { token = '', socketClient = null, socke
             json(res, 200, {
                 ok: true,
                 ...socketClient.snapshot(),
-                defaults: { host: socketDefaults.host || '', port: socketDefaults.port || 0 }
+                defaults: target()
             });
             return true;
         }
@@ -140,10 +144,12 @@ function createDiagnosticsRoutes(store, { token = '', socketClient = null, socke
             try {
                 const data = JSON.parse(body);
                 if (data.enabled === true) {
-                    const host = String(socketDefaults.host || '').trim();
-                    const port = Number(socketDefaults.port || 0);
+                    const { host, port } = target();
                     if (!socketClient.start(host, port)) {
-                        json(res, 400, { ok: false, error: '需要有效的 host 與 port' });
+                        json(res, 400, {
+                            ok: false,
+                            error: '未設定 Socket 目標：請設定 SOCKET_API（或 SOCKET_APIS 第一個端點），儲存後重啟主服務。'
+                        });
                         return;
                     }
                 } else {

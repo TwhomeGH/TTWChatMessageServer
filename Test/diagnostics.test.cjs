@@ -5,6 +5,7 @@ const { EventEmitter } = require('node:events');
 const { DiagnosticsStore } = require('../ScriptLib/diagnostics/store.cjs');
 const { DiagnosticsSocketClient } = require('../ScriptLib/diagnostics/socket-client.cjs');
 const { createDiagnosticsRoutes } = require('../DiagnosticsRoutes.cjs');
+const { resolveDiagnosticsTarget } = require('../ScriptLib/diagnostics/target.cjs');
 
 function request(route, { url = '/post', method = 'POST', body = '', headers = {} } = {}) {
     return new Promise(resolve => {
@@ -146,6 +147,20 @@ test('Socket client 訂閱 externalLogs 並接收 batch／diagnostic', async () 
     }
 });
 
+test('診斷 Socket 目標沿用 SOCKET_API，其次 SOCKET_APIS', () => {
+    assert.deepEqual(resolveDiagnosticsTarget({ SOCKET_API: 'http://192.168.0.159:9322' }), {
+        host: '192.168.0.159', port: 9322, source: 'SOCKET_API', configured: true
+    });
+    assert.deepEqual(resolveDiagnosticsTarget({
+        SOCKET_APIS: 'tcp://10.0.0.5:9322?filter=chat;tcp://10.0.0.6:9322'
+    }), {
+        host: '10.0.0.5', port: 9322, source: 'SOCKET_APIS', configured: true
+    });
+    assert.deepEqual(resolveDiagnosticsTarget({}), {
+        host: '', port: 9322, source: '', configured: false
+    });
+});
+
 test('Socket 訂閱 API 需登入，GET 狀態與 POST 開關', async () => {
     const calls = [];
     const fake = {
@@ -154,7 +169,8 @@ test('Socket 訂閱 API 需登入，GET 狀態與 POST 開關', async () => {
         unsubscribe: () => calls.push(['unsubscribe'])
     };
     const routes = createDiagnosticsRoutes(new DiagnosticsStore(), {
-        socketClient: fake, socketDefaults: { host: 'default', port: 9322 }
+        socketClient: fake,
+        resolveTarget: () => ({ host: 'default', port: 9322, source: 'SOCKET_API', configured: true })
     });
     const call = (method, body, authorized = true) => new Promise(resolve => {
         const req = new EventEmitter();
@@ -172,6 +188,7 @@ test('Socket 訂閱 API 需登入，GET 狀態與 POST 開關', async () => {
     assert.equal((await call('GET', null, false)).status, 401);
     const status = await call('GET');
     assert.equal(status.body.subscribed, true);
+    assert.equal(status.body.defaults.source, 'SOCKET_API');
     const enabled = await call('POST', { enabled: true });
     assert.equal(enabled.status, 200);
     assert.deepEqual(calls[0], ['start', 'default', 9322]);

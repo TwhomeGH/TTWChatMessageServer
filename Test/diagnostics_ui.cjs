@@ -26,8 +26,9 @@ async function main() {
                     socketPosts.push(data);
                     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
                     res.end(JSON.stringify({
-                        ok: true, enabled: data.enabled, host: data.host, port: data.port,
-                        state: data.enabled ? 'connecting' : 'off', subscribed: false, defaults: {}
+                        ok: true, enabled: data.enabled, host: '192.168.0.242', port: 9322,
+                        state: data.enabled ? 'connecting' : 'off', subscribed: false,
+                        defaults: { host: '192.168.0.242', port: 9322, configured: true }
                     }));
                 });
                 return;

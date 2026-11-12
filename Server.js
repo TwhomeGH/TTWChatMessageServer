@@ -64,21 +64,22 @@ const serveMedia = mediaRoutes.createMediaRoutes();
 const serveMediaAdmin = mediaRoutes.createMediaAdminRoutes();
 const { DiagnosticsStore } = require('./ScriptLib/diagnostics/store.cjs');
 const { DiagnosticsSocketClient } = require('./ScriptLib/diagnostics/socket-client.cjs');
+const { resolveDiagnosticsTarget } = require('./ScriptLib/diagnostics/target.cjs');
 const { createDiagnosticsRoutes } = require('./DiagnosticsRoutes.cjs');
 const diagnosticsStore = new DiagnosticsStore();
 const diagnosticsSocket = new DiagnosticsSocketClient({ store: diagnosticsStore });
 const diagnosticsRoutes = createDiagnosticsRoutes(diagnosticsStore, {
     token: process.env.DIAGNOSTICS_TOKEN || '',
     socketClient: diagnosticsSocket,
-    socketDefaults: {
-        host: process.env.DIAGNOSTICS_SOCKET_HOST || '',
-        port: Number(process.env.DIAGNOSTICS_SOCKET_PORT) || 9322
-    }
+    resolveTarget: () => resolveDiagnosticsTarget(process.env)
 });
-if (/^(1|true|yes|on)$/i.test(process.env.DIAGNOSTICS_SOCKET_ENABLED || '')
-    && process.env.DIAGNOSTICS_SOCKET_HOST) {
-    diagnosticsSocket.start(process.env.DIAGNOSTICS_SOCKET_HOST,
-        Number(process.env.DIAGNOSTICS_SOCKET_PORT) || 9322);
+if (/^(1|true|yes|on)$/i.test(process.env.DIAGNOSTICS_SOCKET_ENABLED || '')) {
+    const target = resolveDiagnosticsTarget(process.env);
+    if (target.configured) {
+        diagnosticsSocket.start(target.host, target.port);
+    } else {
+        console.warn('[Diagnostics] DIAGNOSTICS_SOCKET_ENABLED=1，但 SOCKET_API 尚未設定；略過自動訂閱。');
+    }
 }
 const audiencePrune = setInterval(() => {
     try { audience.prune(180); } catch (error) { console.error('[Audience] 清理失敗:', error.message); }

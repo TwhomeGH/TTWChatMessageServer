@@ -163,8 +163,14 @@
             off: '未啟用', connecting: '連線中', connected: '已連線', subscribed: '已訂閱',
             reconnecting: '重連中', error: '錯誤'
         };
+        const configured = data.defaults?.configured !== false;
+        const host = data.host || data.defaults?.host || '';
+        const port = data.host ? data.port : (data.defaults?.port || 0);
+        if (!host || !configured) {
+            return '未設定連線目標：請設定 SOCKET_API（或 SOCKET_APIS 第一個端點），儲存後重啟主服務。';
+        }
         const label = stateLabels[data.state] || data.state || '未知';
-        const where = data.host ? `${data.host}:${data.port}` : '未設定';
+        const where = `${host}:${port}${data.defaults?.source ? `（${data.defaults.source}）` : ''}`;
         const extra = data.lastError ? ` · ${data.lastError}` : '';
         return `${where} · ${label}${data.subscribed ? '（外部事件）' : ''}${extra}`;
     }

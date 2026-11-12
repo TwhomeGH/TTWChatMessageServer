@@ -30,18 +30,20 @@ http://<TTWChat主機>:3332/post?token=<token>
 
 ### Socket 外部事件訂閱
 
-ReplyKit 的 SocketServer 預設 port `9322`。連線目標只在環境變數設定一次：
+連線目標沿用聊天輸出的 Socket 設定，不另外維護一份 host／port：
 
 ```text
-DIAGNOSTICS_SOCKET_HOST=192.168.0.242
-DIAGNOSTICS_SOCKET_PORT=9322
+# 聊天輸出與診斷訂閱共用同一個 ReplyKit SocketServer
+SOCKET_API=http://192.168.0.159:9322
+# 只有 SOCKET_API 為空時，才取 SOCKET_APIS 的第一個可用端點
+
 # 可選：主服務啟動時自動訂閱
 DIAGNOSTICS_SOCKET_ENABLED=1
 ```
 
-`/diagnostics` 只保留「訂閱外部事件」開關，不再要求填 host／port。TTWChat 會：
+`/diagnostics` 只保留「訂閱外部事件」開關，不再要求填 host／port。狀態列會顯示目前解析到的目標與來源（`SOCKET_API`／`SOCKET_APIS`）；若未設定，會提示補上 `SOCKET_API` 並重啟。TTWChat 會：
 
-1. 第一次啟用時建立 TCP 連線到設定的 host／port。
+1. 第一次啟用時建立 TCP 連線到 `SOCKET_API` 解析出的 host／port。
 2. 在既有連線上送 `{"type":"subscribeExternalLogs","enabled":true}`。
 3. 接收 `externalLogSubscription`、`externalLogBatch`、`diagnostic`。
 4. 取消時只送 `enabled:false`，保留連線；再次啟用直接在同一條連線重新訂閱。
