@@ -7,7 +7,12 @@
     await window.TTWI18n.ready;
     const t = (key, params = {}, fallback) => window.TTWI18n.t('audience.' + key, params, fallback);
     const el = id => document.getElementById(id);
-    const state = { page: 1, pageSize: 50, total: 0, platform: '', q: '', sort: 'score', tenures: new Set(), list: null, detail: null, timer: null };
+    const state = {
+        page: 1, pageSize: 50, total: 0, platform: '', q: '', sort: 'score',
+        tenures: new Set(), list: null, detail: null, timer: null,
+        latestMerge: null,
+        merge: { source: null, preview: null, timer: null, candidates: [] }
+    };
 
     const fmtDate = value => Number.isFinite(Number(value))
         ? new Date(Number(value)).toLocaleString(window.TTWI18n.language, { dateStyle: 'medium', timeStyle: 'short' })
@@ -135,6 +140,7 @@
         state.list = await response.json();
         state.total = state.list.total;
         renderRows();
+        void loadMergeStatus();
     }
 
     function renderDetails(data) {
@@ -219,6 +225,266 @@
         history.replaceState(null, '', '?platform=' + encodeURIComponent(platform) + '&user=' + encodeURIComponent(userKey));
     }
 
+    async function loadMergeStatus() {
+        const button = el('audience-undo');
+        const status = el('audience-undo-status');
+        const params = new URLSearchParams({ platform: state.platform || '' });
+        try {
+            const response = await fetch('/api/audience/merge/latest?' + params, { cache: 'no-store' });
+            if (response.status === 401) return;
+            const data = await response.json().catch(() => ({}));
+            const latest = data.ok ? data.latest : null;
+            state.latestMerge = latest;
+            if (!latest) {
+                button.hidden = true;
+                status.textContent = '';
+                return;
+            }
+            button.hidden = false;
+            button.disabled = !latest.undoable;
+            button.title = latest.undoable
+                ? t('undo.ready', {
+                    source: latest.source?.displayName || latest.source?.key || '',
+                    target: latest.target?.displayName || latest.target?.key || ''
+                }, '')
+                : latest.reason || '';
+            status.textContent = latest.undoable
+                ? t('undo.available', { target: latest.target?.displayName || latest.target?.key || '' }, '')
+                : latest.reason || '';
+            status.style.color = latest.undoable ? '' : '#fca5a5';
+        } catch {
+            button.hidden = true;
+            status.textContent = '';
+        }
+    }
+
+    async function undoMerge() {
+        const latest = state.latestMerge;
+        if (!latest?.undoable) return;
+        const message = t('undo.confirm', {
+            source: latest.source?.displayName || latest.source?.key || '',
+            target: latest.target?.displayName || latest.target?.key || ''
+        }, '');
+        if (!window.confirm(message)) return;
+        const response = await fetch('/api/audience/merge/undo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ platform: latest.platform, batchId: latest.id })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.status === 401) { location.href = '/'; return; }
+        if (!response.ok) {
+            el('audience-undo-status').textContent = data.error || t('undo.error', {}, '還原失敗。');
+            el('audience-undo-status').style.color = '#fca5a5';
+            return;
+        }
+        await loadList();
+        if (state.detail) await loadDetails(state.detail.platform, state.detail.userKey);
+    }
+
+    function updateMergeTargetMeta() {
+        const selected = el('audience-merge-target').value;
+        const user = (state.merge.candidates || []).find(item => item.userKey === selected);
+        const node = el('audience-merge-target-meta');
+        if (!user) {
+            node.textContent = '';
+            return;
+        }
+        node.textContent = t('merge.targetMeta', {
+            name: user.displayName,
+            key: user.userKey,
+            score: user.score,
+            sessions: user.activeStreams,
+            messages: user.messages
+        }, `userKey: ${user.userKey}`);
+    }
+
+    function mergeStatus(message, error = false) {
+        const node = el('audience-merge-status');
+        node.textContent = message;
+        node.style.color = error ? '#fca5a5' : '';
+    }
+
+    function mergeSourceText() {
+        if (!state.merge.source) return '';
+        return t('merge.source', {
+            name: state.merge.source.displayName, key: state.merge.source.userKey
+        }, state.merge.source.displayName);
+    }
+
+    function mergeSummaryColumn(title, summary, lifetime) {
+        const column = document.createElement('div');
+        column.className = 'audience-merge-column';
+        const heading = document.createElement('h3');
+        heading.textContent = title;
+        column.append(heading);
+        for (const [label, value] of [
+            [t('merge.name', {}, '名稱'), summary?.displayName || '—'],
+            [t('merge.sessions', {}, '出席場次'), summary?.activeStreams ?? '—'],
+            [t('merge.messages', {}, '有效訊息'), summary?.messages ?? '—'],
+            [t('merge.gifts', {}, '送禮'), summary?.gifts ?? '—'],
+            [t('merge.firstSeen', {}, '首次出現'), fmtDate(lifetime?.firstSeen)],
+            [t('merge.lastSeen', {}, '最後出現'), fmtDate(lifetime?.lastSeen)]
+        ]) {
+            const row = document.createElement('div');
+            row.className = 'audience-merge-metric';
+            const key = document.createElement('span');
+            key.textContent = label;
+            const valueNode = document.createElement('strong');
+            valueNode.textContent = String(value);
+            row.append(key, valueNode);
+            column.append(row);
+        }
+        return column;
+    }
+
+    function renderMergePreview(data) {
+        const box = el('audience-merge-preview');
+        box.replaceChildren(
+            mergeSummaryColumn(t('merge.sourceColumn', {}, '來源'), data.source?.summary, data.source?.lifetime),
+            mergeSummaryColumn(t('merge.targetColumn', {}, '目標'), data.target?.summary, data.target?.lifetime),
+            mergeSummaryColumn(t('merge.mergedColumn', {}, '合併後'), data.merged, {
+                firstSeen: data.merged?.firstSeen, lastSeen: data.merged?.lastSeen
+            })
+        );
+        const calculation = document.createElement('p');
+        calculation.className = 'audience-merge-warning';
+        calculation.textContent = t('merge.calculation', {
+            overlap: data.overlapSessions,
+            newSessions: data.newSessions,
+            newDays: data.newDays
+        }, '');
+        box.append(calculation);
+        const alias = document.createElement('p');
+        alias.className = 'audience-merge-warning';
+        alias.textContent = t('merge.alias', {
+            source: data.alias?.source || data.source?.key || '',
+            target: data.alias?.target || data.target?.key || ''
+        }, '');
+        box.append(alias);
+        box.hidden = false;
+        el('audience-merge-apply').disabled = false;
+    }
+
+    async function loadMergeCandidates(q = '') {
+        if (!state.merge.source) return;
+        const select = el('audience-merge-target');
+        const previous = select.value;
+        const loading = document.createElement('option');
+        loading.textContent = t('merge.loading', {}, '載入中…');
+        loading.disabled = true;
+        select.replaceChildren(loading);
+        const params = new URLSearchParams({
+            platform: state.merge.source.platform, q, sort: 'recent', pageSize: '100'
+        });
+        const response = await fetch('/api/audience?' + params, { cache: 'no-store' });
+        if (response.status === 401) { location.href = '/'; return; }
+        if (!response.ok) {
+            mergeStatus(t('merge.loadError', {}, '無法載入可合併的觀眾。'), true);
+            return;
+        }
+        const data = await response.json();
+        const users = (data.users || []).filter(user => user.userKey !== state.merge.source.userKey);
+        state.merge.candidates = users;
+        const options = [];
+        if (!users.length) {
+            const empty = document.createElement('option');
+            empty.value = '';
+            empty.textContent = t('merge.noTargets', {}, '沒有其他可合併的觀眾。');
+            empty.disabled = true;
+            options.push(empty);
+        }
+        for (const user of users) {
+            const option = document.createElement('option');
+            option.value = user.userKey;
+            option.textContent = `${user.displayName} · ${user.userKey} · ${user.score} 分`;
+            options.push(option);
+        }
+        select.replaceChildren(...options);
+        if (users.some(user => user.userKey === previous)) select.value = previous;
+        el('audience-merge-preview').hidden = true;
+        el('audience-merge-apply').disabled = true;
+        state.merge.preview = null;
+        updateMergeTargetMeta();
+    }
+
+    function openMergeDialog() {
+        if (!state.detail) return;
+        state.merge.source = {
+            platform: state.detail.platform,
+            userKey: state.detail.userKey,
+            displayName: state.detail.displayName
+        };
+        state.merge.preview = null;
+        el('audience-merge-source').textContent = mergeSourceText();
+        el('audience-merge-search').value = '';
+        el('audience-merge-preview').hidden = true;
+        el('audience-merge-apply').disabled = true;
+        mergeStatus('');
+        const dialog = el('audience-merge-dialog');
+        if (typeof dialog.showModal === 'function') dialog.showModal();
+        else dialog.setAttribute('open', '');
+        loadMergeCandidates();
+    }
+
+    function closeMergeDialog() {
+        const dialog = el('audience-merge-dialog');
+        if (typeof dialog.close === 'function') dialog.close();
+        else dialog.removeAttribute('open');
+        state.merge.source = null;
+        state.merge.preview = null;
+    }
+
+    async function previewMerge() {
+        if (!state.merge.source) return;
+        const targetKey = el('audience-merge-target').value;
+        if (!targetKey) {
+            mergeStatus(t('merge.chooseTarget', {}, '請先選擇目標觀眾。'), true);
+            return;
+        }
+        const params = new URLSearchParams({
+            platform: state.merge.source.platform,
+            source: state.merge.source.userKey,
+            target: targetKey
+        });
+        const response = await fetch('/api/audience/merge/preview?' + params, { cache: 'no-store' });
+        const data = await response.json().catch(() => ({}));
+        if (response.status === 401) { location.href = '/'; return; }
+        if (!response.ok) {
+            mergeStatus(data.error || t('merge.previewError', {}, '預覽失敗。'), true);
+            return;
+        }
+        state.merge.preview = data;
+        renderMergePreview(data);
+        mergeStatus(t('merge.previewReady', {}, '預覽完成；確認後才會寫入。'));
+    }
+
+    async function applyMerge() {
+        if (!state.merge.source || !state.merge.preview) return;
+        const targetKey = el('audience-merge-target').value;
+        if (!targetKey) return;
+        el('audience-merge-apply').disabled = true;
+        const response = await fetch('/api/audience/merge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                platform: state.merge.source.platform,
+                sourceKey: state.merge.source.userKey,
+                targetKey
+            })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.status === 401) { location.href = '/'; return; }
+        if (!response.ok) {
+            mergeStatus(data.error || t('merge.applyError', {}, '合併失敗。'), true);
+            el('audience-merge-apply').disabled = false;
+            return;
+        }
+        closeMergeDialog();
+        await loadList();
+        await loadDetails(state.detail.platform, targetKey);
+    }
+
     el('audience-search').addEventListener('input', () => {
         clearTimeout(state.timer);
         state.timer = setTimeout(() => {
@@ -265,10 +531,33 @@
     el('audience-next').addEventListener('click', () => {
         if (state.page * state.pageSize < state.total) { state.page++; loadList(); }
     });
+    el('audience-undo').addEventListener('click', undoMerge);
+    el('audience-merge-open').addEventListener('click', openMergeDialog);
+    el('audience-merge-cancel').addEventListener('click', closeMergeDialog);
+    el('audience-merge-preview-button').addEventListener('click', previewMerge);
+    el('audience-merge-apply').addEventListener('click', applyMerge);
+    el('audience-merge-dialog').addEventListener('close', () => {
+        state.merge.source = null;
+        state.merge.preview = null;
+    });
+    el('audience-merge-target').addEventListener('change', () => {
+        state.merge.preview = null;
+        el('audience-merge-preview').hidden = true;
+        el('audience-merge-apply').disabled = true;
+        updateMergeTargetMeta();
+        mergeStatus('');
+    });
+    el('audience-merge-search').addEventListener('input', () => {
+        clearTimeout(state.merge.timer);
+        state.merge.timer = setTimeout(() => loadMergeCandidates(el('audience-merge-search').value.trim()), 250);
+    });
     document.addEventListener('languagechange', () => {
         el('audience-search').placeholder = t('search', {}, '搜尋觀眾…');
+        el('audience-merge-source').textContent = mergeSourceText();
+        updateMergeTargetMeta();
         if (state.list) renderRows();
         if (state.detail) renderDetails(state.detail);
+        void loadMergeStatus();
     });
 
     el('audience-search').placeholder = t('search', {}, '搜尋觀眾…');

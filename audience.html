@@ -39,6 +39,8 @@
         <option value="recent" data-i18n="audience.sort.recent">依最近出現</option>
       </select>
       <span id="audience-count" class="audience-count"></span>
+      <button id="audience-undo" type="button" class="audience-undo" hidden data-i18n="audience.undo.button">還原最近合併</button>
+      <span id="audience-undo-status" class="audience-undo-status"></span>
     </div>
 
     <div class="audience-legend" aria-label="關係圖例">
@@ -79,7 +81,10 @@
     <section id="audience-detail" class="audience-detail" hidden>
       <header class="audience-detail-head">
         <h2 id="audience-detail-name"></h2>
-        <span id="audience-detail-level" class="audience-level"></span>
+        <div class="audience-detail-actions">
+          <span id="audience-detail-level" class="audience-level"></span>
+          <button id="audience-merge-open" type="button" class="audience-merge-open" data-i18n="audience.merge.open">合併資料</button>
+        </div>
       </header>
       <p id="audience-detail-meta" class="audience-note"></p>
       <div id="audience-detail-stats" class="audience-cards"></div>
@@ -133,6 +138,26 @@
       </div>
     </section>
   </main>
+
+  <dialog id="audience-merge-dialog" class="audience-merge-dialog" aria-labelledby="audience-merge-title">
+    <h2 id="audience-merge-title" data-i18n="audience.merge.title">合併常客資料</h2>
+    <p id="audience-merge-source" class="audience-note"></p>
+    <p class="audience-note" data-i18n="audience.merge.help">把重複出現的同一個人合併到目標身分；舊名稱會保留為別名，之後的活動仍會累計到目標。這個動作不會自動發生。</p>
+    <label class="audience-merge-field">
+      <span data-i18n="audience.merge.search">搜尋目標觀眾</span>
+      <input id="audience-merge-search" type="search" autocomplete="off" spellcheck="false">
+    </label>
+    <p class="audience-note audience-merge-identity" data-i18n="audience.merge.identityHelp">選項以 userKey 區分；顯示名稱相近不代表同一人，請用 userKey 與預覽統計確認。</p>
+    <select id="audience-merge-target" class="audience-merge-target" size="7" aria-label="合併目標"></select>
+    <p id="audience-merge-target-meta" class="audience-merge-target-meta"></p>
+    <div id="audience-merge-preview" class="audience-merge-preview" hidden></div>
+    <p id="audience-merge-status" class="audience-note" role="status"></p>
+    <div class="audience-merge-actions">
+      <button id="audience-merge-preview-button" type="button" data-i18n="audience.merge.preview">預覽合併</button>
+      <button id="audience-merge-apply" type="button" class="is-danger" disabled data-i18n="audience.merge.apply">確認合併</button>
+      <button id="audience-merge-cancel" type="button" data-i18n="audience.merge.cancel">取消</button>
+    </div>
+  </dialog>
 
   <script src="/assets/i18n.js"></script>
   <script src="/assets/audience.js"></script>

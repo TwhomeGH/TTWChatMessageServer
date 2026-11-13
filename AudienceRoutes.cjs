@@ -24,7 +24,10 @@ function serveLogin(res) {
 function createAudienceRoutes(tracker) {
     return function serveAudience(req, res, authorized = false) {
         const url = new URL(req.url, 'http://localhost');
-        if (!['/audience', '/api/audience', '/api/audience/user'].includes(url.pathname)) return false;
+        const paths = ['/audience', '/api/audience', '/api/audience/user',
+            '/api/audience/merge/preview', '/api/audience/merge',
+            '/api/audience/merge/latest', '/api/audience/merge/undo'];
+        if (!paths.includes(url.pathname)) return false;
         res.setHeader('Cache-Control', 'no-store');
 
         if (url.pathname === '/audience') {
@@ -37,14 +40,85 @@ function createAudienceRoutes(tracker) {
         }
 
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        if (req.method !== 'GET') {
-            res.writeHead(405);
-            res.end(JSON.stringify({ error: 'method' }));
-            return true;
-        }
         if (!authorized) {
             res.writeHead(401);
             res.end(JSON.stringify({ error: 'auth' }));
+            return true;
+        }
+
+        if (url.pathname === '/api/audience/merge/latest') {
+            if (req.method !== 'GET') {
+                res.writeHead(405);
+                res.end(JSON.stringify({ error: 'method' }));
+                return true;
+            }
+            try {
+                res.writeHead(200);
+                res.end(JSON.stringify({
+                    ok: true,
+                    latest: tracker.latestMerge(platformName(url.searchParams.get('platform') || ''))
+                }));
+            } catch (error) {
+                res.writeHead(Number(error.status) || 400);
+                res.end(JSON.stringify({ error: error.message }));
+            }
+            return true;
+        }
+
+        if (url.pathname === '/api/audience/merge/preview' || url.pathname === '/api/audience/merge'
+            || url.pathname === '/api/audience/merge/undo') {
+            const preview = url.pathname.endsWith('/preview');
+            const undo = url.pathname.endsWith('/undo');
+            if ((preview && req.method !== 'GET') || (!preview && req.method !== 'POST')) {
+                res.writeHead(405);
+                res.end(JSON.stringify({ error: 'method' }));
+                return true;
+            }
+            const run = payload => {
+                try {
+                    const result = preview ? tracker.mergePreview(payload)
+                        : undo ? tracker.undoLastMerge(payload) : tracker.merge(payload);
+                    res.writeHead(200);
+                    res.end(JSON.stringify(result));
+                } catch (error) {
+                    const status = Number(error.status) || 400;
+                    res.writeHead(status);
+                    res.end(JSON.stringify({ error: error.message }));
+                }
+            };
+            if (preview) {
+                run({
+                    platform: platformName(url.searchParams.get('platform') || ''),
+                    sourceKey: url.searchParams.get('source') || '',
+                    targetKey: url.searchParams.get('target') || ''
+                });
+                return true;
+            }
+            let body = '';
+            let tooLarge = false;
+            req.on('data', chunk => {
+                body += chunk;
+                if (Buffer.byteLength(body) > 64 * 1024) tooLarge = true;
+            });
+            req.on('end', () => {
+                if (tooLarge) {
+                    res.writeHead(413);
+                    res.end(JSON.stringify({ error: 'body too large' }));
+                    return;
+                }
+                try {
+                    run(JSON.parse(body));
+                } catch {
+                    res.writeHead(400);
+                    res.end(JSON.stringify({ error: 'JSON 解析失敗' }));
+                }
+            });
+            return true;
+        }
+
+        if (req.method !== 'GET') {
+            res.writeHead(405);
+            res.end(JSON.stringify({ error: 'method' }));
             return true;
         }
 

@@ -81,8 +81,28 @@ async function main() {
         await page.setViewport({ width: 390, height: 844 });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         await page.screenshot({ path: path.join(__dirname, '../output/playwright/audience-mobile.png'), fullPage: true });
+
+        await page.setViewport({ width: 1100, height: 950 });
+        await page.click('#audience-merge-open');
+        await page.waitForFunction(() => document.querySelector('#audience-merge-dialog').open);
+        await page.waitForFunction(() => [...document.querySelectorAll('#audience-merge-target option')]
+            .some(option => option.value === 'bob'));
+        await page.select('#audience-merge-target', 'bob');
+        await page.waitForFunction(() => document.querySelector('#audience-merge-target-meta').textContent.includes('bob'));
+        await page.click('#audience-merge-preview-button');
+        await page.waitForFunction(() => document.querySelectorAll('.audience-merge-column').length === 3);
+        assert.match(await page.$eval('#audience-merge-preview', el => el.textContent), /1/);
+        await page.click('#audience-merge-apply');
+        await page.waitForFunction(() => !document.querySelector('#audience-merge-dialog').open);
+        await page.waitForFunction(() => document.querySelectorAll('#audience-rows tr').length === 1);
+        assert.equal(await page.$eval('#audience-detail-name', el => el.textContent), 'Bob');
+        await page.waitForFunction(() => !document.querySelector('#audience-undo').hidden);
+        page.on('dialog', dialog => dialog.accept());
+        await page.click('#audience-undo');
+        await page.waitForFunction(() => document.querySelectorAll('#audience-rows tr').length === 2);
+        assert.equal(await page.$eval('#audience-undo', el => el.hidden), true);
         assert.deepEqual(errors, []);
-        console.log('Audience UI passed: list, detail breakdown, levels, recent sessions, 390px overflow check; screenshots in output/playwright.');
+        console.log('Audience UI passed: list, detail, merge preview/apply/undo, 390px overflow check; screenshots in output/playwright.');
     } finally {
         await browser?.close();
         tracker.close();

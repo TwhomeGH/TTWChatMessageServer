@@ -101,6 +101,78 @@ test('訊息與送禮都有單場、每分鐘上限，指令不計訊息', t => 
     assert.equal(afterCommand.activeStreams, 2);
 });
 
+test('手動合併預覽不寫入，套用後舊名稱成為別名並繼承歷史', t => {
+    const f = fixture(t);
+    f.tracker.observe(f.entry(0, 'chat', 'Old Name', { message: 'old' }));
+    f.tracker.observe(f.entry(1, 'gift', 'Old Name', { message: 'rose' }));
+    f.tracker.observe(f.entry(0, 'chat', 'New Name', { message: 'new' }));
+    f.tracker.observe(f.entry(2, 'chat', 'New Name', { message: 'new2' }));
+
+    const preview = f.tracker.mergePreview({
+        platform: 'tiktok', sourceKey: 'old name', targetKey: 'new name'
+    });
+    assert.equal(preview.applied, false);
+    assert.equal(preview.alias.source, 'old name');
+    assert.equal(preview.alias.target, 'new name');
+    assert.equal(preview.overlapSessions, 1);
+    assert.equal(preview.newSessions, 1);
+    assert.equal(preview.newDays, 1);
+    assert.equal(preview.merged.activeStreams, 3);
+    assert.equal(f.tracker.list({ platform: 'TikTok' }).total, 2);
+
+    const applied = f.tracker.merge({
+        platform: 'tiktok', sourceKey: 'old name', targetKey: 'new name'
+    });
+    assert.equal(applied.applied, true);
+    assert.equal(f.tracker.list({ platform: 'TikTok' }).total, 1);
+    assert.equal(f.tracker.details('TikTok', 'new name').activeStreams, 3);
+    assert.equal(f.tracker.details('TikTok', 'old name').displayName, 'New Name');
+
+    // 舊名稱之後仍然累計到 target，不會再長出第二個人。
+    f.tracker.observe(f.entry(3, 'chat', 'Old Name', { message: 'after merge' }));
+    assert.equal(f.tracker.list({ platform: 'TikTok' }).total, 1);
+    assert.equal(f.tracker.details('TikTok', 'new name').activeStreams, 4);
+    assert.equal(f.tracker.details('TikTok', 'new name').messages, 4);
+});
+
+test('最近一次合併可還原；合併後有新活動則拒絕', t => {
+    const f = fixture(t);
+    f.tracker.observe(f.entry(0, 'chat', 'Old Name', { message: 'old' }));
+    f.tracker.observe(f.entry(1, 'chat', 'Old Name', { message: 'old2' }));
+    f.tracker.observe(f.entry(0, 'chat', 'New Name', { message: 'new' }));
+
+    const applied = f.tracker.merge({
+        platform: 'tiktok', sourceKey: 'old name', targetKey: 'new name'
+    });
+    const latest = f.tracker.latestMerge('TikTok');
+    assert.equal(latest.id, applied.batchId);
+    assert.equal(latest.undoable, true);
+    const restored = f.tracker.undoLastMerge({ platform: 'TikTok', batchId: latest.id });
+    assert.equal(restored.applied, true);
+    assert.equal(f.tracker.list({ platform: 'TikTok' }).total, 2);
+    assert.equal(f.tracker.details('TikTok', 'old name').messages, 2);
+    assert.equal(f.tracker.details('TikTok', 'new name').messages, 1);
+
+    // 重新合併後，只要 target 有新活動，就不能用還原覆蓋掉。
+    f.tracker.merge({ platform: 'TikTok', sourceKey: 'old name', targetKey: 'new name' });
+    f.setNow(BASE + 20 * DAY);
+    f.tracker.observe({ t: BASE + 20 * DAY, platform: 'tiktok', category: 'chat', user: 'New Name', message: 'later' });
+    assert.throws(() => f.tracker.undoLastMerge({ platform: 'TikTok' }),
+        error => error.status === 409 && /新活動/.test(error.message));
+});
+
+test('合併拒絕同身分、缺少來源與跨平台', t => {
+    const f = fixture(t);
+    f.tracker.observe(f.entry(0, 'chat', 'Alice', { message: 'a' }));
+    f.tracker.observe(f.entry(0, 'chat', 'Bob', { message: 'b' }));
+    assert.throws(() => f.tracker.mergePreview({ platform: 'TikTok', sourceKey: 'alice', targetKey: 'alice' }),
+        error => error.status === 409);
+    assert.throws(() => f.tracker.mergePreview({ platform: 'TikTok', sourceKey: 'missing', targetKey: 'bob' }),
+        error => error.status === 404);
+    assert.throws(() => f.tracker.mergePreview({ platform: 'Twitch', sourceKey: 'alice', targetKey: 'bob' }),
+        error => error.status === 404);
+});
+
 test('userId 優先於顯示名稱，列表可搜尋與分頁', t => {
     const f = fixture(t);
     f.tracker.observe(f.entry(0, 'chat', 'Alice', { userId: 'u1', message: 'hi' }));
