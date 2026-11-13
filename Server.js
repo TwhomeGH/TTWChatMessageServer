@@ -525,10 +525,13 @@ function startRuntime(url) {
             else if (event?.type === 'TEST_RESULT') pushTestResult(event.data);
             else if (event?.type === 'PLATFORM_STATE' && event.data?.platform) {
                 runtimeState.setPlatformState(event.data.platform, event.data.state, event.data.error || null);
+            } else if (event?.type === 'TRANSPORT_STATE' && event.data) {
+                runtimeState.setTransports(event.data);
             }
         });
         runtimeState.attach(launchedProcess, activePlatforms);
         runtimeState.data.features = { isSocket, isBark, isNtfy };
+        runtimeState.setTransports({ socket: isSocket, bark: isBark, ntfy: isNtfy });
         launchedProcess.once('error', error => {
             pushLog('[SYSTEM] 程序啟動失敗:', error.code || 'PROCESS_ERROR');
             if (tiktokProcess === launchedProcess) tiktokProcess = null;
@@ -646,6 +649,36 @@ function startRuntime(url) {
     return runtimeState.snapshot();
 }
 
+/** 執行中切換 socket／Bark／ntfy；只送差異，不重啟子程序。 */
+function setRuntimeTransports(next = {}) {
+    if (!next || typeof next !== 'object' || Array.isArray(next)) {
+        throw Object.assign(new Error('收發參數無效'), { status: 400, code: 'INVALID_TRANSPORTS' });
+    }
+    const payload = {};
+    for (const key of ['socket', 'bark', 'ntfy']) {
+        if (next[key] !== undefined) {
+            if (typeof next[key] !== 'boolean') {
+                throw Object.assign(new Error(`${key} 必須是布林值`), { status: 400, code: 'INVALID_TRANSPORTS' });
+            }
+            payload[key] = next[key];
+        }
+    }
+    if (!Object.keys(payload).length) {
+        throw Object.assign(new Error('沒有要套用的收發設定'), { status: 400, code: 'INVALID_TRANSPORTS' });
+    }
+    if (!tiktokProcess || tiktokProcess.connected === false) {
+        throw Object.assign(new Error('目前沒有執行中的聊天子程序'), { status: 409, code: 'RUNTIME_STOPPED' });
+    }
+    try {
+        tiktokProcess.send({ type: 'SET_TRANSPORTS', data: payload });
+    } catch (error) {
+        throw Object.assign(new Error(`無法通知子程序：${error.message}`), { status: 500, code: 'TRANSPORT_UPDATE_FAILED' });
+    }
+    runtimeState.setTransports(payload);
+    pushLog(`[RUNTIME] 收發設定: ${Object.entries(payload).map(([key, value]) => `${key}=${value}`).join(', ')}`);
+    return { ok: true, transports: runtimeState.snapshot().transports };
+}
+
 /** 執行中加開平台；不重啟子程序，monitor 場次與統計保持連續。 */
 function addRuntimePlatform(platform) {
     const name = String(platform || '').trim().toLowerCase();
@@ -688,7 +721,7 @@ const server = http.createServer((req, res) => {
     if (require('./TrafficRoutes.cjs').serveTraffic(req,res,isValidToken(parseCookies(req).authToken))) return;
     if (serveMonitorHistory(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (require('./RestreamRoutes.cjs').serveRestream(req,res,isValidToken(parseCookies(req).authToken))) return;
-    if (serveRuntime(req, res, runtimeState, startRuntime, addRuntimePlatform)) return;
+    if (serveRuntime(req, res, runtimeState, startRuntime, addRuntimePlatform, setRuntimeTransports)) return;
     if (diagnosticsRoutes.serveIntake(req, res)) return;
     if (diagnosticsRoutes.servePage(req, res)) return;
     if (diagnosticsRoutes.serveApi(req, res, isValidToken(parseCookies(req).authToken))) return;

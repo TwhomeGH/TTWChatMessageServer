@@ -264,6 +264,49 @@ const Ntfy = process.env.NTFY_API;
 const notifier = createNotifier({ isBark, isNtfy, barkApi: Bark, ntfyApi: Ntfy, getEmojiMap, axios });
 const notify = (title, comment, icon, url) => notifier.notify(title, comment, icon, url);
 
+/** 目前收發／通知狀態；configured 表示有設定，active 才是實際啟用。 */
+function transportSnapshot() {
+    const channel = name => notifier.channels.find(item => item.name === name);
+    return {
+        socket: isSocket,
+        bark: isBark,
+        ntfy: isNtfy,
+        socketConfigured: socketHub.endpoints.length > 0,
+        socketConnected: Boolean(socketHub.primary?.connected),
+        socketEndpoints: socketHub.endpoints.length,
+        barkConfigured: Boolean(channel('bark')?.enabled),
+        ntfyConfigured: Boolean(channel('ntfy')?.enabled)
+    };
+}
+
+function reportTransportState() {
+    if (typeof process.send !== 'function') return;
+    try { process.send({ type: 'TRANSPORT_STATE', data: transportSnapshot() }); } catch { /* IPC 已關閉 */ }
+}
+
+/**
+ * 執行中開關收發與通知；只套用有帶入的布林值。
+ * @param {{socket?: boolean, bark?: boolean, ntfy?: boolean}} next
+ * @returns {Object} 套用後狀態。
+ */
+function applyTransports(next = {}) {
+    if (typeof next.socket === 'boolean') {
+        isSocket = next.socket;
+        socketHub.setEnabled(isSocket);
+    }
+    if (typeof next.bark === 'boolean') {
+        isBark = next.bark;
+        notifier.setEnabled('bark', isBark);
+    }
+    if (typeof next.ntfy === 'boolean') {
+        isNtfy = next.ntfy;
+        notifier.setEnabled('ntfy', isNtfy);
+    }
+    const state = transportSnapshot();
+    reportTransportState();
+    return state;
+}
+
 /**
  * 產生一組平台綁定的 socket 送出器（固定 category 與 platform）。
  * @param {string} platform 來源平台名稱。
@@ -980,7 +1023,7 @@ function handleRawSocketTest(message) {
             }
         }
         payload.isTest = true;
-        const endpoints = socketHub.endpoints.length;
+        const endpoints = socketHub.endpoints.filter(endpoint => endpoint.enabled).length;
         socketHub.send(payload);
         reportTestResult(message.testId, endpoints > 0 ? 'sent' : 'noendpoints', 0,
             { status: 'skipped', channels: [] }, { mode: 'raw', endpoints });
@@ -1368,12 +1411,19 @@ const addPlatform = platform => platformManager.add(platform);
 
 if (typeof process.on === 'function') {
     process.on('message', message => {
+        if (message?.type === 'SET_TRANSPORTS') {
+            try { applyTransports(message.data); }
+            catch (error) { console.error('[TRANSPORT] 套用失敗:', error.message || error); }
+            return;
+        }
         if (message?.type !== 'ADD_PLATFORM') return;
         void addPlatform(message.platform).catch(error => {
             console.error(`[PLATFORM] 加開 ${message.platform} 失敗:`, error.message || error);
         });
     });
 }
+
+reportTransportState();
 
 for (const [platform, enabled] of [
     ['tiktok', isTK], ['twitch', isTwitch], ['kick', isKick],

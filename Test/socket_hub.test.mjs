@@ -110,6 +110,26 @@ test('createHub：停用時無端點；啟用時建立單一端點', () => {
     assert.equal(hub.primary.accepts('chat'), true);
 });
 
+test('SocketHub 保留停用端點並可執行中開關', () => {
+    const calls = [];
+    const endpoint = {
+        enabled: false,
+        accepts: () => true,
+        send: payload => calls.push(payload),
+        connect: () => calls.push('connect'),
+        setEnabled(enabled) { this.enabled = enabled; calls.push(['enabled', enabled]); }
+    };
+    const hub = new SocketHub({ endpoints: [endpoint] });
+    assert.equal(hub.enabled, false);
+    assert.equal(hub.endpoints.length, 1);
+    hub.send({ type: 'chat' });
+    assert.deepEqual(calls, []);
+    hub.setEnabled(true);
+    assert.equal(hub.enabled, true);
+    hub.send({ type: 'chat' });
+    assert.deepEqual(calls, [['enabled', true], 'connect', { type: 'chat' }]);
+});
+
 test('parseEndpointSpec：拆出 ?filter= 與網址', () => {
     assert.deepEqual(parseEndpointSpec('tcp://localhost:9322'), { url: 'tcp://localhost:9322', filter: undefined });
     assert.deepEqual(parseEndpointSpec('tcp://localhost:9322?filter=chat,gift'), { url: 'tcp://localhost:9322', filter: 'chat,gift' });

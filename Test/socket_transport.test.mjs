@@ -74,6 +74,24 @@ test('queue bounds, latest audience state, expiration, disabled transport', t =>
     assert.equal(disabled.send({ n: 1 }), false);
     assert.equal(disabled.queue.length, 0);
 });
+test('setEnabled 可執行中關閉並清空佇列，再開啟時重新連線', t => {
+    const { transport, sockets, socket } = setup(t, { retryMs: 5 });
+    socket.emit('connect');
+    transport.send({ n: 1 });
+    assert.equal(transport.enabled, true);
+    transport.setEnabled(false);
+    assert.equal(transport.enabled, false);
+    assert.equal(transport.connected, false);
+    assert.equal(transport.queue.length, 0);
+    assert.equal(socket.destroyed, true);
+    transport.setEnabled(true);
+    assert.equal(transport.enabled, true);
+    assert.equal(sockets.length, 2);
+    sockets[1].emit('connect');
+    assert.equal(transport.send({ n: 2 }), true);
+    assert.deepEqual(sockets[1].writes, [{ n: 2 }]);
+});
+
 test('disconnect during backpressure retains only unsent frames and reconnects once', async t => {
     const { transport, socket, sockets } = setup(t, { retryMs: 5 });
     socket.emit('connect');

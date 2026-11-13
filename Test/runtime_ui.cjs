@@ -18,7 +18,13 @@ const state = {
     signal: null,
     error: null,
     platforms: ['tiktok', 'twitch'],
-    features: { isSocket: true, isBark: false, isNtfy: true },
+    platformStates: { tiktok: 'running', twitch: 'running' },
+    transports: {
+        socket: false, bark: true, ntfy: true,
+        socketConfigured: true, socketConnected: false,
+        barkConfigured: true, ntfyConfigured: true
+    },
+    features: { isSocket: false, isBark: true, isNtfy: true },
     resources: { cpuPercent: 3.2, rssBytes: 220 * 1024 * 1024, sampledAt: Date.now() },
     uptimeMs: 125000,
     stopDelayed: false,
@@ -53,6 +59,17 @@ function previewServer() {
         if (url.pathname === '/api/runtime/options') {
             res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
             res.end(JSON.stringify({ options }));
+            return;
+        }
+        if (req.method === 'POST' && url.pathname === '/api/runtime/transports') {
+            let body = '';
+            req.on('data', chunk => { body += chunk; });
+            req.on('end', () => {
+                const update = JSON.parse(body || '{}');
+                state.transports = { ...state.transports, ...update };
+                res.writeHead(202, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ ok: true, transports: state.transports }));
+            });
             return;
         }
         if (req.method === 'POST' && url.pathname === '/api/runtime/platforms') {
@@ -116,6 +133,21 @@ async function main() {
         assert.match(await page.$eval('#mode-youtube', el => el.textContent), /手動 userscript/);
         assert.equal(await page.$eval('#mode-youtube-badge', el => el.dataset.mode), 'manual');
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        assert.equal(await page.$eval('#runtime-transport-card', el => el.hidden), false);
+        const transportText = await page.$eval('#runtime-transport-list', el => el.textContent);
+        assert.match(transportText, /Socket／overlay：關閉/);
+        assert.match(transportText, /Bark：開啟/);
+        const [transportResponse] = await Promise.all([
+            page.waitForResponse(response => response.url().endsWith('/api/runtime/transports')),
+            page.evaluate(() => {
+                const button = Array.from(document.querySelectorAll('#runtime-transport-list button'))
+                    .find(node => node.textContent.includes('開啟 Socket'));
+                button.click();
+            })
+        ]);
+        assert.equal(transportResponse.status(), 202);
+        await page.waitForFunction(() => document.querySelector('#runtime-transport-list').textContent.includes('Socket／overlay：連線中'));
+
         assert.equal(await page.$eval('#runtime-add-card', el => el.hidden), false);
         const addButtons = await page.$$eval('#runtime-add-platforms button', nodes => nodes.map(node => node.textContent));
         assert.ok(addButtons.some(label => label.includes('Kick')));

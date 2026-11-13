@@ -6,7 +6,15 @@
     const addCard = document.getElementById('runtime-add-card');
     const addList = document.getElementById('runtime-add-platforms');
     const addStatus = document.getElementById('runtime-add-status');
+    const transportCard = document.getElementById('runtime-transport-card');
+    const transportList = document.getElementById('runtime-transport-list');
+    const transportStatus = document.getElementById('runtime-transport-status');
     const platformKeys = { isTK: 'tiktok', isTwitch: 'twitch', isKick: 'kick', isOdysee: 'odysee', isYouTube: 'youtube' };
+    const transportKeys = [
+        { key: 'socket', label: 'Socket／overlay', configured: 'socketConfigured' },
+        { key: 'bark', label: 'Bark', configured: 'barkConfigured' },
+        { key: 'ntfy', label: 'ntfy', configured: 'ntfyConfigured' }
+    ];
     function toast(message, tone = 'info') { window.runtimeToast?.(message, tone); }
     /** 僅讀寫白名單欄位；儲存不可用時仍能在當頁啟動。 */
     function values() {
@@ -34,7 +42,66 @@
         }).catch(failure => {
             addStatus.textContent = failure.message;
             toast(i18n.t('runtime.addPlatformFailed', {message:failure.message}, '加開失敗：{message}'), 'error');
-        }).finally(() => { busy = false; renderAddPlatforms(state); });
+        }).finally(() => { busy = false; renderTransports(state); renderAddPlatforms(state); });
+    }
+
+    function setTransport(key, enabled) {
+        if (busy) return;
+        busy = true;
+        transportStatus.textContent = '';
+        fetch('/api/runtime/transports', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [key]: enabled })
+        }).then(async response => {
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw Error(i18n.t('error.' + result.code, {}, result.error || '切換失敗'));
+            toast(i18n.t('runtime.transportUpdated', { key }, '已更新 {key}'), 'success');
+            await window.runtimeRefresh?.(false);
+        }).catch(failure => {
+            transportStatus.textContent = failure.message;
+            toast(i18n.t('runtime.transportFailed', { message: failure.message }, '切換失敗：{message}'), 'error');
+        }).finally(() => { busy = false; renderTransports(state); renderAddPlatforms(state); });
+    }
+
+    function transportStateText(item, transports) {
+        const active = transports[item.key] === true;
+        const configured = transports[item.configured] === true;
+        if (!configured) return i18n.t('runtime.transportUnconfigured', {}, '未設定');
+        if (!active) return i18n.t('runtime.transportOff', {}, '關閉');
+        if (item.key === 'socket') {
+            return transports.socketConnected
+                ? i18n.t('runtime.transportConnected', {}, '已連線')
+                : i18n.t('runtime.transportConnecting', {}, '連線中');
+        }
+        return i18n.t('runtime.transportOn', {}, '開啟');
+    }
+
+    function renderTransports(next) {
+        if (!transportCard || !transportList) return;
+        const running = next && ['running', 'starting'].includes(next.state);
+        transportCard.hidden = !running;
+        if (!running) return;
+        const transports = next.transports || {};
+        const rows = transportKeys.map(item => {
+            const configured = transports[item.configured] === true;
+            const active = transports[item.key] === true;
+            const row = document.createElement('div');
+            row.className = 'flex items-center gap-2 px-3 py-2 border border-gray-700 rounded-lg';
+            const status = document.createElement('span');
+            status.className = 'text-sm text-gray-300';
+            status.textContent = item.label + '：' + transportStateText(item, transports);
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'runtime-button runtime-button-secondary';
+            button.disabled = busy || !configured;
+            button.textContent = i18n.t(active ? 'runtime.transportTurnOff' : 'runtime.transportTurnOn',
+                { name: item.label }, active ? '關閉 ' + item.label : '開啟 ' + item.label);
+            button.addEventListener('click', () => setTransport(item.key, !active));
+            row.append(status, button);
+            return row;
+        });
+        transportList.replaceChildren(...rows);
     }
 
     function renderAddPlatforms(next) {
@@ -81,6 +148,7 @@
         const active = state?.features ? options.filter(o => o.group === 'transport' && state.features[o.key]).map(o => o.label) : [];
         document.getElementById('active-features').textContent = active.length
             ? i18n.t('runtime.activeFeatures', {}, '本次功能：') + active.join(', ') : '';
+        renderTransports(state);
         renderAddPlatforms(state);
     }
     /** 平台名稱與欄位由後端提供；所有文字使用 textContent。 */

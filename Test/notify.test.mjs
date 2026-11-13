@@ -94,6 +94,24 @@ test('Notifier 扇出到所有已啟用通道；單一通道失敗不影響其�
     assert.equal(barkAxios.calls.length, 1);
 });
 
+test('Notifier 可在執行中個別開關通道，只送出目前啟用的通道', async () => {
+    const barkAxios = fakeAxios();
+    const ntfyAxios = fakeAxios();
+    const notifier = createNotifier({
+        isBark: false, isNtfy: true,
+        barkApi: 'https://api.day.app/key', ntfyApi: 'https://ntfy.sh/topic',
+        axios: { post: (...args) => (args[0] === 'https://api.day.app/key' ? barkAxios.post(...args) : ntfyAxios.post(...args)) }
+    });
+    assert.deepEqual(notifier.enabled, ['ntfy']);
+    assert.equal(notifier.isEnabled('bark'), false);
+    assert.equal(notifier.setEnabled('bark', true).sort().join(','), 'bark,ntfy');
+    const results = await notifier.notify('T', 'hello');
+    assert.deepEqual(results.map(item => item.channel), ['bark', 'ntfy']);
+    notifier.setEnabled('ntfy', false);
+    assert.deepEqual(notifier.enabled, ['bark']);
+    assert.equal(notifier.setEnabled('unknown', true).includes('unknown'), false);
+});
+
 test('createNotifier 依旗標與設定建立，未設定 URL 或關閉的通道不加入', async () => {
     const axios = fakeAxios();
     assert.deepEqual(createNotifier({ isBark: false, isNtfy: false, axios }).enabled, []);

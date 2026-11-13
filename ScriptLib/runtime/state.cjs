@@ -8,7 +8,8 @@ class RuntimeState {
         this.child = null;
         this.data = {
             state: 'stopped', pid: null, startedAt: null, stoppedAt: null, stopRequestedAt: null,
-            exitCode: null, signal: null, error: null, platforms: [], platformStates: {}
+            exitCode: null, signal: null, error: null, platforms: [], platformStates: {},
+            transports: { socket: false, bark: false, ntfy: false }
         };
     }
     _log(...parts) {
@@ -31,7 +32,8 @@ class RuntimeState {
         this.data = {
             state: 'starting', pid: null, startedAt: null, stoppedAt: null, stopRequestedAt: null,
             exitCode: null, signal: null, error: null, platforms: [...platforms],
-            platformStates: Object.fromEntries(platforms.map(platform => [platform, 'starting']))
+            platformStates: Object.fromEntries(platforms.map(platform => [platform, 'starting'])),
+            transports: { socket: false, bark: false, ntfy: false }
         };
         child.once('spawn', () => {
             if (this.child !== child) return;
@@ -55,6 +57,24 @@ class RuntimeState {
             this.child = null;
         });
     }
+    /** 更新收發／通知狀態；只接受物件，保留既有欄位。 */
+    setTransports(next = {}) {
+        if (!next || typeof next !== 'object' || Array.isArray(next)) return this.data.transports;
+        this.data.transports = { ...(this.data.transports || {}), ...next };
+        for (const key of ['socket', 'bark', 'ntfy']) {
+            if (typeof this.data.transports[key] !== 'boolean') this.data.transports[key] = false;
+        }
+        if (this.data.features) {
+            this.data.features = {
+                ...this.data.features,
+                isSocket: this.data.transports.socket,
+                isBark: this.data.transports.bark,
+                isNtfy: this.data.transports.ntfy
+            };
+        }
+        return this.data.transports;
+    }
+
     /** 執行中加開平台；重複平台不重複加入。 */
     addPlatform(platform) {
         const name = String(platform || '').trim();
@@ -146,7 +166,7 @@ class RuntimeState {
      * @returns {Object}
      */
     snapshot() {
-        return { ...this.data, resources: this.child && ['running', 'stopping'].includes(this.data.state) && this.resources && this.now() - this.resources.sampledAt <= 10000 ? { ...this.resources } : null, platforms: [...this.data.platforms], platformStates: { ...(this.data.platformStates || {}) }, platformErrors: { ...(this.data.platformErrors || {}) },
+        return { ...this.data, resources: this.child && ['running', 'stopping'].includes(this.data.state) && this.resources && this.now() - this.resources.sampledAt <= 10000 ? { ...this.resources } : null, platforms: [...this.data.platforms], platformStates: { ...(this.data.platformStates || {}) }, platformErrors: { ...(this.data.platformErrors || {}) }, transports: { ...(this.data.transports || {}) },
             uptimeMs: this.data.startedAt === null ? 0 : Math.max(0, (this.data.stoppedAt ?? this.now()) - this.data.startedAt),
             stopDelayed: this.data.state === 'stopping' && this.now() - this.data.stopRequestedAt >= 15000 };
     }

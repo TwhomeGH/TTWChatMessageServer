@@ -34,6 +34,19 @@ test('啟動、運行與優雅停止依實際程序事件更新', () => {
     assert.equal(state.snapshot().pid, null);
 });
 
+test('執行中收發設定會更新狀態與 features', () => {
+    const state = new RuntimeState();
+    const proc = child();
+    state.attach(proc, ['twitch']);
+    proc.emit('spawn');
+    state.data.features = { isSocket: false, isBark: true, isNtfy: false };
+    state.setTransports({ socket: true, bark: false, ntfy: true, socketConnected: false });
+    assert.equal(state.snapshot().transports.socket, true);
+    assert.equal(state.snapshot().features.isSocket, true);
+    assert.equal(state.snapshot().features.isBark, false);
+    assert.equal(state.snapshot().transports.ntfy, true);
+});
+
 test('執行中加開平台會更新平台清單與個別狀態', () => {
     const state = new RuntimeState();
     const proc = child();
@@ -161,6 +174,31 @@ test('執行中加開平台 API 驗證來源、方法與平台', async () => {
     assert.deepEqual(added, ['tiktok']);
     assert.equal(result.data.platform, 'tiktok');
     assert.equal((await request('POST', 'http://localhost:3332', { platform: 'twitch' })).status, 409);
+});
+
+test('執行中收發 API 驗證來源、方法與布林值', async () => {
+    const { Readable } = require('node:stream');
+    const state = new RuntimeState();
+    const updated = [];
+    const setTransports = body => {
+        if (!Object.keys(body).length) throw Object.assign(new Error('empty'), { status: 400, code: 'INVALID_TRANSPORTS' });
+        updated.push(body);
+        state.setTransports(body);
+        return { ok: true, transports: state.snapshot().transports };
+    };
+    function request(method, origin, body) {
+        return new Promise(resolve => {
+            const req = Readable.from([JSON.stringify(body)]);
+            Object.assign(req, { url: '/api/runtime/transports', method, headers: { host: 'localhost:3332', origin, 'content-type': 'application/json' } });
+            serveRuntime(req, { writeHead(status) { this.status = status; }, end(data) { resolve({ status: this.status, data: data && JSON.parse(data) }); } }, state, null, null, setTransports);
+        });
+    }
+    assert.equal((await request('GET', 'http://localhost:3332', {})).status, 405);
+    assert.equal((await request('POST', 'https://other.test', { socket: true })).status, 403);
+    const result = await request('POST', 'http://localhost:3332', { ntfy: true });
+    assert.equal(result.status, 202);
+    assert.deepEqual(updated, [{ ntfy: true }]);
+    assert.equal((await request('POST', 'http://localhost:3332', {})).status, 400);
 });
 
 test('子程序統計以摘要記錄，完整快照仍更新快取且分段輸出不遺失', () => {

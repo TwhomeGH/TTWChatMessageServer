@@ -1,5 +1,31 @@
 # ChangeHistory
 
+## 2026.11.13 14:10 執行中切換收發與通知
+
+**類型**: 功能 · **檔案**: `TikTok.js`、`ScriptLib/notify/index.mjs`、`ScriptLib/socket/transport.mjs`、`ScriptLib/socket/endpoint.mjs`、`ScriptLib/socket/hub.mjs`、`ScriptLib/runtime/state.cjs`、`RuntimeRoutes.cjs`、`Server.js`、`runtime.html`、`assets/runtime-start.js`、`lang/*.json`、`Test/notify.test.mjs`、`Test/socket_hub.test.mjs`、`Test/socket_transport.test.mjs`、`Test/runtime_state.test.cjs`、`Test/runtime_ui.cjs`、`Docs/RUNTIME.md`、`Docs/SOCKET_TRANSPORT.md`
+
+### 修改
+
+- 新增 `POST /api/runtime/transports` 與 IPC `SET_TRANSPORTS`；執行中可個別開關 Socket、Bark、ntfy。
+- Socket 即使啟動時停用仍保留端點設定，可透過 `setEnabled` 重新連線；關閉會斷線並清空待送佇列。
+- Bark／ntfy 即使啟動時未勾選仍保留通道，可動態啟用；未設定 URL 的通道不會被誤開。
+- monitor 的即時鏡像與本場統計不受 Socket 開關影響。
+- runtime 頁新增「收發與通知」卡片、狀態與開關按鈕；父程序保存 `transports` 狀態。
+
+### 限制
+
+- 只切換既有 `SOCKET_API`／`SOCKET_APIS`、`BARK_API`、`NTFY_API` 設定，不在執行中修改 URL。
+- Socket 關閉期間的訊息不補送；重新開啟只送之後的訊息。
+
+### 驗證
+
+- `node --test Test/notify.test.mjs Test/socket_hub.test.mjs Test/socket_transport.test.mjs Test/runtime_state.test.cjs`
+- `node Test/runtime_ui.cjs`
+- 子程序 IPC smoke test：`TRANSPORT_STATE` 可反映 Bark／ntfy 開關
+- `npm run lint`、`npm run check:css`
+
+---
+
 ## 2026.11.13 12:40 執行中加開平台
 
 **類型**: 功能 · **檔案**: `TikTok.js`、`ScriptLib/runtime/platform-manager.mjs`、`ScriptLib/runtime/state.cjs`、`ScriptLib/lifecycle/autoStop.mjs`、`RuntimeRoutes.cjs`、`Server.js`、`runtime.html`、`assets/runtime-start.js`、`lang/*.json`、`Test/runtime_state.test.cjs`、`Test/runtime_ui.cjs`、`Test/platform_manager.test.mjs`、`Test/auto_stop.test.mjs`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`

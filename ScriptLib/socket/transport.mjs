@@ -134,6 +134,33 @@ export class SocketTransport {
      * 建立連線；未啟用、已停止或已有連線時不做事。
      * @returns {void}
      */
+    /**
+     * 執行中開關傳輸；關閉時清掉佇列並斷線，開啟時重新連線。
+     * @param {boolean} enabled
+     * @returns {void}
+     */
+    setEnabled(enabled) {
+        const next = Boolean(enabled);
+        if (this.enabled === next) return;
+        this.enabled = next;
+        if (!next) {
+            clearTimeout(this.retryTimer);
+            clearTimeout(this.connectTimer);
+            clearTimeout(this.stallTimer);
+            this.retryTimer = this.connectTimer = this.stallTimer = null;
+            const socket = this.socket;
+            this.socket = null;
+            this.connected = false;
+            this.blocked = false;
+            this.queue = [];
+            this.bytes = 0;
+            if (socket && !socket.destroyed) socket.destroy();
+            return;
+        }
+        this.stopped = false;
+        this.retries = 0;
+        this.connect();
+    }
     connect() {
         if (!this.enabled || this.stopped || (this.socket && !this.socket.destroyed)) return;
         clearTimeout(this.retryTimer);
@@ -172,7 +199,7 @@ export class SocketTransport {
             clearTimeout(this.stallTimer);
             this.connected = false;
             this.blocked = false;
-            if (this.stopped) return;
+            if (this.stopped || !this.enabled) return;
             this.retries++;
             this.stats.reconnects++;
             this.report();

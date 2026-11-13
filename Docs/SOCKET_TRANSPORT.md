@@ -8,7 +8,7 @@
 
 測試派發可分別關閉 socket／通知；`Notifier.notify` 回傳 `[{ channel, ok }]`，子程序再彙整成 `sent`／`partial`／`failed`／`nochannels`。一般聊天仍同時走 socket 與通知，不受測試選項影響。
 
-所有平台的 StreamMessage 會附上 `session: { joins, likes, chats, follows, subscriptions, gifts, peakViewers }`，供 monitor 顯示本場累計；一般 socket 端點可忽略此欄位。`peakViewers` 是合併觀眾數的場次峰值，不是目前人數。點讚通知以 3 秒窗口合併，monitor 的逐筆點讚列不受影響。
+所有平台的 StreamMessage 會附上 `session: { joins, likes, chats, follows, subscriptions, gifts, peakViewers }`，供 monitor 顯示本場累計；一般 socket 端點可忽略此欄位。`peakViewers` 是合併觀眾數的場次峰值，不是目前人數。點讚通知以 3 秒窗口合併，monitor 的逐筆點讚列不受影響。Socket 端點可在程式執行中透過 runtime 頁開關；關閉時保留端點設定但停止連線與送出。
 通訊格式維持 UTF-8 JSON，每筆以換行結尾，不需修改既有接收端協定。
 
 ## 預設限制

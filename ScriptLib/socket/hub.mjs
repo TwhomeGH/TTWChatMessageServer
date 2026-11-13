@@ -8,7 +8,8 @@ import { MessageDedup } from './dedup.mjs';
 export class SocketHub {
     constructor({ endpoints = [], dedup = new MessageDedup(), replaceEmojis = (value) => value, onSend,
         mediaCache = null, logger = console } = {}) {
-        this.endpoints = endpoints.filter(endpoint => endpoint && endpoint.enabled);
+        // 保留停用端點，才能執行中重新開啟；send／connect 會自行檢查 enabled。
+        this.endpoints = endpoints.filter(endpoint => endpoint);
         this.dedup = dedup;
         this.replaceEmojis = replaceEmojis;
         this.onSend = onSend;
@@ -22,12 +23,23 @@ export class SocketHub {
         try { return this.mediaCache.localUrl(value) || value; } catch { return value; }
     }
 
-    /** 主要（第一個）端點，供既有診斷讀取連線狀態。 */
-    get primary() { return this.endpoints[0] || null; }
-    get enabled() { return this.endpoints.length > 0; }
+    /** 主要（第一個啟用）端點，供既有診斷讀取連線狀態。 */
+    get primary() { return this.endpoints.find(endpoint => endpoint.enabled) || this.endpoints[0] || null; }
+    get enabled() { return this.endpoints.some(endpoint => endpoint.enabled); }
 
-    /** 建立所有端點連線。 */
-    connect() { for (const endpoint of this.endpoints) endpoint.connect(); }
+    /**
+     * 執行中開關所有 socket 端點。
+     * @param {boolean} enabled
+     * @returns {boolean} 套用後是否有啟用端點。
+     */
+    setEnabled(enabled) {
+        for (const endpoint of this.endpoints) endpoint.setEnabled(enabled);
+        if (enabled) this.connect();
+        return this.enabled;
+    }
+
+    /** 建立所有已啟用端點連線。 */
+    connect() { for (const endpoint of this.endpoints) if (endpoint.enabled) endpoint.connect(); }
 
     /**
      * 關閉所有端點（受各端點的 timeoutMs 保護）。
@@ -45,7 +57,7 @@ export class SocketHub {
      */
     send(payload) {
         for (const endpoint of this.endpoints) {
-            if (endpoint.accepts(payload.category)) endpoint.send(payload);
+            if (endpoint.enabled && endpoint.accepts(payload.category)) endpoint.send(payload);
         }
         this.onSend?.(payload);
     }
@@ -169,11 +181,10 @@ export function createHub({ socketApi, apis = [], enabled = true, onConnect, onS
     }
 
     const endpoints = [];
-    if (enabled) {
-        for (const [url, filters] of byUrl) {
-            const filter = filters.has(null) ? undefined : [...filters];
-            endpoints.push(new SocketEndpoint({ url, enabled, filter, onConnect, logger }));
-        }
+    for (const [url, filters] of byUrl) {
+        const filter = filters.has(null) ? undefined : [...filters];
+        // 即使 enabled=false 也建立端點，之後才能透過 setEnabled 動態連線。
+        endpoints.push(new SocketEndpoint({ url, enabled, filter, onConnect, logger }));
     }
     return new SocketHub({ endpoints, dedup, replaceEmojis, onSend, mediaCache, logger });
 }

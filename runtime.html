@@ -91,6 +91,18 @@
       </div>
     </section>
 
+    <section id="runtime-transport-card" class="runtime-card" aria-labelledby="transportTitle" hidden>
+      <div class="runtime-card-head">
+        <div>
+          <p class="text-xs uppercase tracking-widest text-blue-300">Output</p>
+          <h2 id="transportTitle" class="text-xl font-bold" data-i18n="runtime.transports">收發與通知</h2>
+          <p class="text-sm text-gray-400 mt-1" data-i18n="runtime.transportHint">執行中可切換 Socket、Bark、ntfy；不重啟子程序。</p>
+        </div>
+      </div>
+      <div id="runtime-transport-list" class="flex flex-wrap gap-2"></div>
+      <p id="runtime-transport-status" class="text-sm mt-3" role="status"></p>
+    </section>
+
     <section id="runtime-add-card" class="runtime-card" aria-labelledby="addPlatformTitle" hidden>
       <div class="runtime-card-head">
         <div>

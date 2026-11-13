@@ -15,7 +15,7 @@
 /runtime 與 /api/runtime 沿用原啟停／日誌端點的公開存取範圍，只回傳程序摘要，不提供環境變數、完整啟動 query 或日誌。
 原 /status 純文字及 /status/stream 日誌介面保持相容；需要純文字的外部工具可改查 /status。
 
-驗證：node --test Test/runtime_state.test.cjs Test/platform_manager.test.mjs Test/auto_stop.test.mjs；測試使用假程序，不啟動直播或通知。`node Test/runtime_ui.cjs` 使用 mock API 檢查來源卡、加開平台、toast、390px 寬度並輸出 `output/playwright/runtime-desktop.png`、`runtime-mobile.png`（需 Chrome／Edge，不在 `test:ci`）。
+驗證：node --test Test/runtime_state.test.cjs Test/platform_manager.test.mjs Test/auto_stop.test.mjs；測試使用假程序，不啟動直播或通知。`node Test/runtime_ui.cjs` 使用 mock API 檢查來源卡、收發開關、加開平台、toast、390px 寬度並輸出 `output/playwright/runtime-desktop.png`、`runtime-mobile.png`（需 Chrome／Edge，不在 `test:ci`）。
 
 ## 可視化啟動
 
@@ -33,6 +33,15 @@
 - Kick、Odysee、YouTube 沒有可靠的直播結束訊號，加開後會停用自動停止，避免誤停既有平台。
 - 目前只支援「加開」，不支援執行中移除單一平台；需要移除時仍停止整個子程序。
 - 加開 Twitch 時 AutoClip 不會在事後補建；AutoClip 仍以啟動時是否已啟用 Twitch 為準。
+
+### 執行中切換收發與通知
+
+程序執行中可在「收發與通知」卡片個別開關 Socket、Bark、ntfy，不需要重啟子程序。`POST /api/runtime/transports` 接受 `{ "socket": true, "bark": false, "ntfy": true }` 的部分組合，主服務以 IPC `SET_TRANSPORTS` 通知子程序，子程序回報 `TRANSPORT_STATE`。
+
+- Socket 端點由 `SOCKET_API`／`SOCKET_APIS` 設定；即使啟動時沒有勾選 Socket，端點仍會建立但保持停用，之後可動態連線。
+- Bark／ntfy 由 `BARK_API`／`NTFY_API` 設定；啟動時未勾選的通道仍保留，可之後動態開啟。未設定 URL 的通道按鈕會停用。
+- 關閉 Socket 會斷線並清空待送佇列；重新開啟會重新建立連線。關閉通知通道只停止該通道的推播，不影響另一通道。
+- Monitor 的即時鏡像與本場統計不屬於 Socket 輸出，切換 Socket 不會停止 monitor 更新。
 
 Socket 使用既有 SOCKET_API 設定（可再用 SOCKET_APIS 加開多個端點，每端點可用 `?filter=類別` 只收指定分類）；Bark 與 ntfy 使用既有通知設定（BARK_API／NTFY_API）。「開啟設定」只導向設定頁。程序啟動成功不代表各平台已完成登入。
 

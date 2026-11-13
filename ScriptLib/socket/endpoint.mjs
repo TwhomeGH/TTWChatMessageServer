@@ -55,6 +55,13 @@ export class SocketEndpoint {
     connect() { this.transport.connect(); }
 
     /**
+     * 執行中開關此端點。
+     * @param {boolean} enabled
+     * @returns {void}
+     */
+    setEnabled(enabled) { this.transport.setEnabled(enabled); }
+
+    /**
      * @param {Object} [finalPayload] 關閉前送出的最後一則訊息。
      * @param {number} [timeoutMs]
      * @returns {Promise<void>}
