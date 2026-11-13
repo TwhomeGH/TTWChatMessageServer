@@ -3,6 +3,10 @@
     const launch = document.getElementById('launch'), reset = document.getElementById('reset-options');
     const error = document.getElementById('launch-error'), key = 'ttw.runtime.options';
     let options = [], state = null, busy = false;
+    const addCard = document.getElementById('runtime-add-card');
+    const addList = document.getElementById('runtime-add-platforms');
+    const addStatus = document.getElementById('runtime-add-status');
+    const platformKeys = { isTK: 'tiktok', isTwitch: 'twitch', isKick: 'kick', isOdysee: 'odysee', isYouTube: 'youtube' };
     function toast(message, tone = 'info') { window.runtimeToast?.(message, tone); }
     /** 僅讀寫白名單欄位；儲存不可用時仍能在當頁啟動。 */
     function values() {
@@ -14,6 +18,61 @@
         return result;
     }
     function save() { try { localStorage.setItem(key, JSON.stringify(values())); } catch (err) { console.warn('無法儲存啟動選項:', err?.message || err); } }
+    function addPlatform(platform) {
+        if (busy) return;
+        busy = true;
+        addStatus.textContent = '';
+        fetch('/api/runtime/platforms', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ platform })
+        }).then(async response => {
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw Error(i18n.t('error.' + result.code, {}, result.error || '加開失敗'));
+            toast(i18n.t('runtime.addPlatformSent', {platform}, '已送出加開 {platform} 要求'), 'success');
+            await window.runtimeRefresh?.(false);
+        }).catch(failure => {
+            addStatus.textContent = failure.message;
+            toast(i18n.t('runtime.addPlatformFailed', {message:failure.message}, '加開失敗：{message}'), 'error');
+        }).finally(() => { busy = false; renderAddPlatforms(state); });
+    }
+
+    function renderAddPlatforms(next) {
+        if (!addCard || !addList) return;
+        const running = next && ['running', 'starting'].includes(next.state);
+        addCard.hidden = !running;
+        if (!running) return;
+        const active = new Set((next.platforms || []).map(value => String(value).toLowerCase()));
+        const failed = next.platformErrors || {};
+        const errors = Object.entries(failed);
+        addStatus.textContent = errors.length
+            ? errors.map(([platform, message]) => `${platform}: ${message}`).join(' · ')
+            : '';
+        const candidates = options.filter(option => option.group === 'platforms');
+        const buttons = [];
+        for (const option of candidates) {
+            const platform = platformKeys[option.key];
+            if (!platform || (active.has(platform) && !failed[platform])) continue;
+            const retry = Boolean(failed[platform]);
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'runtime-button runtime-button-secondary';
+            button.textContent = retry
+                ? i18n.t('runtime.retryPlatformButton', { platform: option.label }, '重新加開 ' + option.label)
+                : i18n.t('runtime.addPlatformButton', { platform: option.label }, '加開 ' + option.label);
+            button.disabled = busy;
+            button.addEventListener('click', () => addPlatform(platform));
+            buttons.push(button);
+        }
+        if (!buttons.length) {
+            const done = document.createElement('span');
+            done.className = 'text-sm text-gray-400';
+            done.textContent = i18n.t('runtime.allPlatformsActive', {}, '所有已設定的平台都已在本次執行中。');
+            buttons.push(done);
+        }
+        addList.replaceChildren(...buttons);
+    }
+
     function update(next) {
         state = next;
         const locked = busy || !state || !['stopped', 'failed'].includes(state.state) || !options.length;
@@ -22,6 +81,7 @@
         const active = state?.features ? options.filter(o => o.group === 'transport' && state.features[o.key]).map(o => o.label) : [];
         document.getElementById('active-features').textContent = active.length
             ? i18n.t('runtime.activeFeatures', {}, '本次功能：') + active.join(', ') : '';
+        renderAddPlatforms(state);
     }
     /** 平台名稱與欄位由後端提供；所有文字使用 textContent。 */
     async function init() {

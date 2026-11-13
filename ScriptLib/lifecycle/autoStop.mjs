@@ -27,10 +27,11 @@ export function createAutoStop({
     clearTimeout: cancel = clearTimeout
 } = {}) {
     const states = new Map(platforms.map(platform => [platform, 'live']));
+    const blockedSet = new Set(blocked);
     let timer = null;
     let stopped = false;
     let sawLive = false;
-    const active = enabled && platforms.length > 0 && blocked.length === 0;
+    let active = enabled && platforms.length > 0 && blockedSet.size === 0;
 
     if (enabled && blocked.length > 0) {
         log(`自動停止未啟用：${blocked.join('、')} 沒有可靠的結束訊號`);
@@ -51,7 +52,7 @@ export function createAutoStop({
         log(`所有平台已結束，${seconds} 秒後自動停止`);
         timer = schedule(() => {
             timer = null;
-            if (stopped || !allEnded()) return;
+            if (!active || stopped || !allEnded()) return;
             stopped = true;
             log('自動停止程序');
             onStop();
@@ -59,6 +60,19 @@ export function createAutoStop({
     };
 
     return {
+        /** 執行中加開平台：blocked 平台會停用自動停止，避免沒有結束訊號時誤停。 */
+        addPlatform(platform, { blocked = false } = {}) {
+            if (!platform || states.has(platform)) return false;
+            states.set(platform, 'live');
+            if (blocked) blockedSet.add(platform);
+            else platforms.push(platform);
+            active = enabled && platforms.length > 0 && blockedSet.size === 0;
+            if (blocked) {
+                clear(`${platform} 沒有可靠的結束訊號`);
+                log(`自動停止未啟用：${[...blockedSet].join('、')} 沒有可靠的結束訊號`);
+            }
+            return true;
+        },
         /** 平台恢復直播時取消倒數。 */
         markLive(platform) {
             if (!states.has(platform)) return;

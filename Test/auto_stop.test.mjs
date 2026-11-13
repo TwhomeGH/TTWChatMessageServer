@@ -98,6 +98,38 @@ test('停用、單一平台與有未知結束訊號的平台', () => {
     assert.ok(logs.some(message => message.includes('Kick')));
 });
 
+test('執行中加開平台：可加入結束判斷；blocked 平台會取消倒數', () => {
+    const timers = clock();
+    let stopped = 0;
+    const auto = createAutoStop({
+        enabled: true, platforms: ['TikTok'], graceMs: 1000,
+        onStop: () => { stopped++; },
+        setTimeout: timers.setTimeout, clearTimeout: timers.clearTimeout
+    });
+    assert.equal(auto.addPlatform('Twitch'), true);
+    assert.equal(auto.addPlatform('Twitch'), false);
+    auto.markLive('TikTok');
+    auto.markLive('Twitch');
+    auto.markEnded('TikTok');
+    auto.markEnded('Twitch');
+    assert.equal(timers.pending(), 1);
+    timers.run(timers.ids()[0]);
+    assert.equal(stopped, 1);
+
+    const blockedTimers = clock();
+    const blocked = createAutoStop({
+        enabled: true, platforms: ['TikTok'], graceMs: 1000,
+        onStop: () => { throw new Error('should not stop'); },
+        setTimeout: blockedTimers.setTimeout, clearTimeout: blockedTimers.clearTimeout
+    });
+    blocked.markLive('TikTok');
+    blocked.markEnded('TikTok');
+    assert.equal(blockedTimers.pending(), 1);
+    blocked.addPlatform('Kick', { blocked: true });
+    assert.equal(blockedTimers.pending(), 0);
+    assert.equal(blocked.state().Kick, 'live');
+});
+
 test('啟動時還沒觀測到直播，不會因為離線訊號而停止', () => {
     const timers = clock();
     const auto = createAutoStop({

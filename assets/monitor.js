@@ -43,8 +43,12 @@
     const statusEl = document.getElementById('monStatus');
     const jumpLatestEl = document.getElementById('monJumpLatest');
     const sessionEl = document.getElementById('monSession');
+    const sessionViewersEl = document.getElementById('monSessionViewers');
     const sessionJoinsEl = document.getElementById('monSessionJoins');
     const sessionLikesEl = document.getElementById('monSessionLikes');
+    const sessionFollowsEl = document.getElementById('monSessionFollows');
+    const sessionSubscriptionsEl = document.getElementById('monSessionSubscriptions');
+    const sessionGiftsEl = document.getElementById('monSessionGifts');
     const sessionChatsEl = document.getElementById('monSessionChats');
     const modeLiveEl = document.getElementById('monModeLive');
     const modeHistoryEl = document.getElementById('monModeHistory');
@@ -113,7 +117,7 @@
         unseen: 0,
         session: null,
         mode: 'live',
-        history: { sessions: [], sessionId: '', page: 1, pages: 1, total: 0, messages: [], loading: false },
+        history: { sessions: [], sessionId: '', session: null, page: 1, pages: 1, total: 0, messages: [], loading: false },
         media: { page: 1, pages: 1, total: 0, items: [], q: '', type: '', status: '', loading: false, loaded: false },
         statusKey: 'monitor.reconnecting'
     };
@@ -129,12 +133,16 @@
 
     /** 顯示子程序維護的本場累計；缺少欄位視為 0。 */
     function updateSession() {
-        const session = state.session;
+        const session = state.mode === 'history' ? state.history.session : state.session;
         if (!session) { sessionEl.hidden = true; return; }
         const count = value => Math.max(0, Number(value) || 0);
         sessionEl.hidden = false;
+        sessionViewersEl.textContent = String(count(session.peakViewers));
         sessionJoinsEl.textContent = String(count(session.joins));
         sessionLikesEl.textContent = String(count(session.likes));
+        sessionFollowsEl.textContent = String(count(session.follows));
+        sessionSubscriptionsEl.textContent = String(count(session.subscriptions));
+        sessionGiftsEl.textContent = String(count(session.gifts));
         sessionChatsEl.textContent = String(count(session.chats));
     }
 
@@ -174,6 +182,7 @@
             shown: history.messages.length, total: history.total
         }, `${history.messages.length} / ${history.total}`);
         jumpLatestEl.hidden = true;
+        updateSession();
         setHistoryStatus(t('monitor.history.status', {}, '歷史模式'));
     }
 
@@ -184,6 +193,8 @@
         historyTotalEl.textContent = '';
         historyPrevEl.disabled = true;
         historyNextEl.disabled = true;
+        state.history.session = null;
+        updateSession();
     }
 
     async function loadHistoryMessages(page = 1) {
@@ -206,7 +217,7 @@
             if (!response.ok || !data.ok) throw new Error(data.error || 'HTTP ' + response.status);
             state.history = {
                 ...history,
-                sessionId: data.session.id, page: data.page, pages: data.pages,
+                sessionId: data.session.id, session: data.session, page: data.page, pages: data.pages,
                 total: data.total, messages: data.messages || [], loading: false
             };
             renderHistory();
@@ -239,14 +250,18 @@
             }));
             historySessionEl.disabled = sessions.length === 0;
             if (!sessions.length) {
-                state.history = { ...state.history, sessionId: '', page: 1, pages: 1, total: 0, messages: [] };
+                state.history = {
+                    ...state.history, sessionId: '', session: null, page: 1, pages: 1, total: 0, messages: []
+                };
                 clearHistoryRows();
+                updateSession();
                 setHistoryStatus(t('monitor.history.noSessions', {}, '尚無歷史場次。'));
                 return;
             }
             const selected = sessions.some(session => session.id === state.history.sessionId)
                 ? state.history.sessionId : sessions[0].id;
             state.history.sessionId = selected;
+            state.history.session = sessions.find(session => session.id === selected) || null;
             historySessionEl.value = selected;
             await loadHistoryMessages(1);
         } catch (error) {
@@ -266,6 +281,7 @@
         clearEl.disabled = !live;
         if (live) {
             renderAll();
+            updateSession();
             updateJump();
             setStatus(state.statusKey);
         } else {

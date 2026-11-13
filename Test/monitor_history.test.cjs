@@ -84,6 +84,28 @@ test('每場只保留最新訊息且同步 message_count', t => {
     assert.equal(store.getSession(session).messageCount, 2);
 });
 
+test('場次保存跨平台本場統計與峰值人數', t => {
+    const store = new MonitorHistoryStore({ file: ':memory:', now: () => 1000 });
+    t.after(() => store.close());
+    const session = store.startSession({ startedAt: 1000 });
+    store.append(session, entry(1001, {
+        userNum: 10,
+        session: { joins: 2, likes: 7, chats: 3, follows: 1, subscriptions: 2, gifts: 4, peakViewers: 30 }
+    }));
+    store.append(session, entry(1002, {
+        userNum: 55,
+        session: { joins: 4, likes: 7, chats: 5, follows: 2, subscriptions: 3, gifts: 4, peakViewers: 20 }
+    }));
+    const saved = store.listSessions()[0];
+    assert.equal(saved.joins, 4);
+    assert.equal(saved.likes, 7);
+    assert.equal(saved.chats, 5);
+    assert.equal(saved.follows, 2);
+    assert.equal(saved.subscriptions, 3);
+    assert.equal(saved.gifts, 4);
+    assert.equal(saved.peakViewers, 55);
+});
+
 test('歷史把 data URI materialize 成 /media，不把 base64 寫進 SQLite', t => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ttw-monitor-media-'));
     let now = 1000;

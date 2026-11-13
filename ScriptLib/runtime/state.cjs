@@ -6,7 +6,10 @@ class RuntimeState {
         this.logger = options.logger || null;
         this._stopTimer = null;
         this.child = null;
-        this.data = { state: 'stopped', pid: null, startedAt: null, stoppedAt: null, stopRequestedAt: null, exitCode: null, signal: null, error: null, platforms: [] };
+        this.data = {
+            state: 'stopped', pid: null, startedAt: null, stoppedAt: null, stopRequestedAt: null,
+            exitCode: null, signal: null, error: null, platforms: [], platformStates: {}
+        };
     }
     _log(...parts) {
         if (this.logger) this.logger(...parts);
@@ -25,7 +28,11 @@ class RuntimeState {
             if (!Number.isFinite(message.cpuPercent) || message.cpuPercent < 0 || !Number.isFinite(message.rssBytes) || message.rssBytes < 0) return;
             this.resources = { cpuPercent: message.cpuPercent, rssBytes: message.rssBytes, sampledAt: this.now() };
         });
-        this.data = { state: 'starting', pid: null, startedAt: null, stoppedAt: null, stopRequestedAt: null, exitCode: null, signal: null, error: null, platforms: [...platforms] };
+        this.data = {
+            state: 'starting', pid: null, startedAt: null, stoppedAt: null, stopRequestedAt: null,
+            exitCode: null, signal: null, error: null, platforms: [...platforms],
+            platformStates: Object.fromEntries(platforms.map(platform => [platform, 'starting']))
+        };
         child.once('spawn', () => {
             if (this.child !== child) return;
             this.data.pid = child.pid;
@@ -48,6 +55,38 @@ class RuntimeState {
             this.child = null;
         });
     }
+    /** 執行中加開平台；重複平台不重複加入。 */
+    addPlatform(platform) {
+        const name = String(platform || '').trim();
+        if (!name) return false;
+        if (!this.data.platforms.includes(name)) this.data.platforms.push(name);
+        this.data.platformStates[name] = 'starting';
+        return true;
+    }
+
+    /** 移除平台（只用於失敗後重試；不影響其他平台）。 */
+    removePlatform(platform) {
+        const name = String(platform || '').trim();
+        if (!name) return;
+        this.data.platforms = this.data.platforms.filter(item => item !== name);
+        delete (this.data.platformStates || {})[name];
+        if (this.data.platformErrors) delete this.data.platformErrors[name];
+    }
+
+    /** 子程序回報的平台狀態；未知平台也保留，方便顯示失敗原因。 */
+    setPlatformState(platform, state, error = null) {
+        const name = String(platform || '').trim();
+        if (!name) return;
+        if (!this.data.platforms.includes(name)) this.data.platforms.push(name);
+        this.data.platformStates[name] = state || 'unknown';
+        if (error) this.data.platformErrors = { ...(this.data.platformErrors || {}), [name]: error };
+        else if (this.data.platformErrors?.[name]) {
+            const next = { ...this.data.platformErrors };
+            delete next[name];
+            this.data.platformErrors = next;
+        }
+    }
+
     clearStopTimer() {
         if (this._stopTimer) {
             clearTimeout(this._stopTimer);
@@ -107,7 +146,7 @@ class RuntimeState {
      * @returns {Object}
      */
     snapshot() {
-        return { ...this.data, resources: this.child && ['running', 'stopping'].includes(this.data.state) && this.resources && this.now() - this.resources.sampledAt <= 10000 ? { ...this.resources } : null, platforms: [...this.data.platforms],
+        return { ...this.data, resources: this.child && ['running', 'stopping'].includes(this.data.state) && this.resources && this.now() - this.resources.sampledAt <= 10000 ? { ...this.resources } : null, platforms: [...this.data.platforms], platformStates: { ...(this.data.platformStates || {}) }, platformErrors: { ...(this.data.platformErrors || {}) },
             uptimeMs: this.data.startedAt === null ? 0 : Math.max(0, (this.data.stoppedAt ?? this.now()) - this.data.startedAt),
             stopDelayed: this.data.state === 'stopping' && this.now() - this.data.stopRequestedAt >= 15000 };
     }

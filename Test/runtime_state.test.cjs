@@ -34,6 +34,24 @@ test('啟動、運行與優雅停止依實際程序事件更新', () => {
     assert.equal(state.snapshot().pid, null);
 });
 
+test('執行中加開平台會更新平台清單與個別狀態', () => {
+    const state = new RuntimeState();
+    const proc = child();
+    state.attach(proc, ['twitch']);
+    proc.emit('spawn');
+    assert.deepEqual(state.snapshot().platforms, ['twitch']);
+    state.addPlatform('tiktok');
+    assert.deepEqual(state.snapshot().platforms, ['twitch', 'tiktok']);
+    assert.equal(state.snapshot().platformStates.tiktok, 'starting');
+    state.setPlatformState('tiktok', 'running');
+    assert.equal(state.snapshot().platformStates.tiktok, 'running');
+    state.setPlatformState('tiktok', 'failed', 'no credentials');
+    assert.equal(state.snapshot().platformErrors.tiktok, 'no credentials');
+    state.removePlatform('tiktok');
+    assert.deepEqual(state.snapshot().platforms, ['twitch']);
+    assert.equal(state.snapshot().platformStates.tiktok, undefined);
+});
+
 test('啟動失敗、异常退出及舊程序遲到事件不混淆', () => {
     const state = new RuntimeState();
     const first = child();
@@ -118,6 +136,32 @@ test('JSON 啟動入口驗證方法、來源與重複啟動，回報即時狀態
     assert.equal(calls, 1);
 });
 
+
+test('執行中加開平台 API 驗證來源、方法與平台', async () => {
+    const { Readable } = require('node:stream');
+    const state = new RuntimeState();
+    const added = [];
+    const addPlatform = platform => {
+        if (platform === 'twitch') throw Object.assign(new Error('already'), { status: 409, code: 'PLATFORM_ALREADY_RUNNING' });
+        added.push(platform);
+        state.addPlatform(platform);
+        return { ok: true, platform, state: state.snapshot() };
+    };
+    function request(method, origin, body) {
+        return new Promise(resolve => {
+            const req = Readable.from([JSON.stringify(body)]);
+            Object.assign(req, { url: '/api/runtime/platforms', method, headers: { host: 'localhost:3332', origin, 'content-type': 'application/json' } });
+            serveRuntime(req, { writeHead(status) { this.status = status; }, end(data) { resolve({ status: this.status, data: data && JSON.parse(data) }); } }, state, null, addPlatform);
+        });
+    }
+    assert.equal((await request('GET', 'http://localhost:3332', {})).status, 405);
+    assert.equal((await request('POST', 'https://other.test', { platform: 'tiktok' })).status, 403);
+    const result = await request('POST', 'http://localhost:3332', { platform: 'tiktok' });
+    assert.equal(result.status, 202);
+    assert.deepEqual(added, ['tiktok']);
+    assert.equal(result.data.platform, 'tiktok');
+    assert.equal((await request('POST', 'http://localhost:3332', { platform: 'twitch' })).status, 409);
+});
 
 test('子程序統計以摘要記錄，完整快照仍更新快取且分段輸出不遺失', () => {
     const fs = require('node:fs');

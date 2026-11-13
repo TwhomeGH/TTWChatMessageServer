@@ -6,7 +6,7 @@ import { startYoutubeChat, stopYoutubeChat } from './ScriptLib/youtube/chat.mjs'
 import { createNotifier } from './ScriptLib/notify/index.mjs';
 import { normalizeSource } from './MessageSource.mjs';
 import { startTwitchClient, stopTwitchClient, getUserIcon, apiClient, tuser } from './ScriptLib/twitch/client.mjs';
-import { onViewer as twitchOnViewer, onError as twitchOnError, onStreamOnline as twitchOnStreamOnline, onStreamOffline as twitchOnStreamOffline, onFollow as twitchOnFollow, onCheer as twitchOnCheer } from './ScriptLib/twitch/events.mjs';
+import { onViewer as twitchOnViewer, onError as twitchOnError, onStreamOnline as twitchOnStreamOnline, onStreamOffline as twitchOnStreamOffline, onFollow as twitchOnFollow, onCheer as twitchOnCheer, onSubscription as twitchOnSubscription } from './ScriptLib/twitch/events.mjs';
 import { createClipService } from './ScriptLib/twitch/clip.mjs';
 import { onChat as twitchOnChat } from './ScriptLib/twitch/chat.mjs';
 import { promises as fs, readFileSync, existsSync, writeFileSync } from 'fs';
@@ -22,6 +22,7 @@ import { buildConnectionOptions } from './ScriptLib/tiktok/signing.mjs';
 import { createTikTokConnectionManager } from './ScriptLib/tiktok/connection.mjs';
 import tiktokSource from './ScriptLib/tiktok/source.cjs';
 import { registerTikTokEvents } from './ScriptLib/tiktok/events.mjs';
+import { createPlatformManager } from './ScriptLib/runtime/platform-manager.mjs';
 import { createSponsorStore } from './ScriptLib/sponsor/store.mjs';
 import { createAdScheduler } from './ScriptLib/sponsor/scheduler.mjs';
 import { createSentCache } from './ScriptLib/sponsor/sent-cache.mjs';
@@ -152,12 +153,13 @@ const viewerCounts = createViewerCounts({
     })[platform] === true,
 });
 
-const tiktokSourceMode = isTK ? tiktokSource.tiktokChatSource() : 'native';
+// 來源模式必須在啟動平台之前解析；動態加開 TikTok 時 isTK 會從 false 變成 true。
+const tiktokSourceMode = tiktokSource.tiktokChatSource();
 const tiktokBrowserMode = tiktokSourceMode === 'browser';
 const tiktokManualMode = tiktokSourceMode === 'manual';
 const tiktokNativeDisabled = tiktokBrowserMode || tiktokManualMode;
-if (tiktokBrowserMode) console.log('[TikTok] 使用程式專用瀏覽器，略過原生 TikTok 連線');
-if (tiktokManualMode) console.log('[TikTok] manual 模式：不啟動原生／專用瀏覽器，只收外部 userscript 的 /chat');
+if (isTK && tiktokBrowserMode) console.log('[TikTok] 使用程式專用瀏覽器，略過原生 TikTok 連線');
+if (isTK && tiktokManualMode) console.log('[TikTok] manual 模式：不啟動原生／專用瀏覽器，只收外部 userscript 的 /chat');
 
 console.log('收到參數:', keyword, isTK ? '(TikTok)' : '', isTwitch ? '(Twitch)' : '', isKick ? '(Kick)' : '', isOdysee ? '(Odysee)' : '', isYoutube ? '(Youtube)' : '');
 
@@ -270,8 +272,12 @@ const notify = (title, comment, icon, url) => notifier.notify(title, comment, ic
 function platformSenders(platform) {
     return {
         system: (text) => sendSocketMessage("系統", text, { isMain: false, category: 'system', platform }),
-        chat: (user, message, img) => sendSocketMessage(user, message, { img, category: 'chat', platform }),
-        notice: (user, message, img) => sendSocketMessage(user, message, { img, isMain: false, category: 'system', platform }),
+        chat: (user, message, img) => {
+            sessionStats.chats += 1;
+            return sendSocketMessage(user, message, { img, category: 'chat', platform });
+        },
+        notice: (user, message, img, category = 'system') =>
+            sendSocketMessage(user, message, { img, isMain: false, category, platform }),
     };
 }
 const kickSenders = platformSenders('kick');
@@ -524,12 +530,8 @@ process.stdin.on('data', async (chunk) => {
 
         // 🔴 Kick 啟動指令
         if (msg === 'KICK_START') {
-            // Kick 沒有可靠的結束訊號；一旦啟用就停用自動停止，避免誤停。
-            autoStop?.dispose();
-            if (!isKick) {
-                isKick = true;
-                startKickChat(kickDeps);
-            }
+            // Kick 沒有可靠的結束訊號；平台管理器會把它加入 AutoStop 的 blocked 集合。
+            void addPlatform('kick');
             return;
         }
 
@@ -875,6 +877,12 @@ const connection = new TikTokLiveConnection(tiktokName, connOpts)
 var CacheUserList = [] // 用於去重的用戶列表
 var CacheUserNum = 0 // 合併觀眾數（由 viewerCounts 計算）
 
+// 本場累計；所有平台的 socket payload 都帶同一份 snapshot，monitor 場次統計才不會只算 TikTok。
+const sessionStats = {
+    joins: 0, likes: 0, chats: 0, follows: 0, subscriptions: 0, gifts: 0, peakViewers: 0
+};
+const sessionSnapshot = () => ({ ...sessionStats });
+
 
 const AD_IMAGE_URL_RE = /https?:\/\/[^\s<>"']+\.(?:png|jpe?g|gif|webp|avif|bmp)(?:\?[^\s<>"']*)?/gi;
 
@@ -912,7 +920,11 @@ function sendAdOverylayMessage(user, text, iconURL, useTTS) {
  * @return {*} 
  */
 function sendAudienceUpdate() {
-    const payload = { type: 'audience', category: 'audience', userNum: CacheUserNum, userList: CacheUserList };
+    sessionStats.peakViewers = Math.max(sessionStats.peakViewers, Number(CacheUserNum) || 0);
+    const payload = {
+        type: 'audience', category: 'audience', userNum: CacheUserNum, userList: CacheUserList,
+        session: sessionSnapshot()
+    };
     socketHub.send(payload);
 }
 
@@ -943,7 +955,12 @@ function updateCombinedViewerCount(force = false) {
  * @returns {boolean} 是否實際送出（false = 被去重擋下）。
  */
 function sendSocketMessage(user, message, { img = '', giftImg = '', isMain = true, category, platform, dedupUser, dedupMessage, dedupVariant = '', session = null, isTest = false } = {}) {
-    return socketHub.sendMessage(user, message, { img, giftImg, isMain, userNum: CacheUserNum, userList: CacheUserList, category, platform, dedupUser, dedupMessage, dedupVariant, session, isTest });
+    sessionStats.peakViewers = Math.max(sessionStats.peakViewers, Number(CacheUserNum) || 0);
+    return socketHub.sendMessage(user, message, {
+        img, giftImg, isMain, userNum: CacheUserNum, userList: CacheUserList, category, platform,
+        dedupUser, dedupMessage, dedupVariant,
+        session: session || sessionSnapshot(), isTest
+    });
 }
 
 /** Raw Socket 測試：可選擇套用正式 MediaCache／emoji 轉換，直接送 socketHub。 */
@@ -1015,8 +1032,15 @@ function connectSocket() {
 
 
 
-if (isTK && !tiktokNativeDisabled) {
+/** 啟動 TikTok 原生連線；browser／manual 模式由外部 user script 提供訊息。 */
+async function startTikTokPlatform() {
     console.log("連接 TikTok 直播間:", tiktokName)
+    if (tiktokNativeDisabled) {
+        console.log('[TikTok] browser／manual 模式：不建立原生連線');
+        autoStop.addPlatform('TikTok', { blocked: true });
+        return 'external';
+    }
+    autoStop.addPlatform('TikTok');
 
     // 初始化簽名服務（僅 TikTok 模式需要）
     setupCustomSignServer();
@@ -1030,7 +1054,6 @@ if (isTK && !tiktokNativeDisabled) {
         console.info(`Connected to roomId ${state.roomId}`);
         tiktokConn.onConnected(state);
         // fetchAndSyncGifts(); // eulerstream 需付費，禮物名稱由收到事件時即時翻譯
-        
     }).catch(err => {
         const errDetail = err.exception || err;
         console.error('Failed to connect', errDetail.message || errDetail);
@@ -1047,6 +1070,7 @@ if (isTK && !tiktokNativeDisabled) {
         tiktokConn.scheduleReconnect();
     });
 
+    return 'connecting';
 }
 
 
@@ -1069,7 +1093,7 @@ if (tiktokLiveBeforeAutoStop) autoStop.markLive('TikTok');
 
 // 註冊所有 TikTok 事件處理器（實作在 ScriptLib/tiktok/events.mjs）
 registerTikTokEvents(connection, {
-    tiktokName, isTK,
+    tiktokName, isTK: () => isTK,
     notify, sendSocketMessage,
     logRawEvent, writeLog, writeFileSync,
     dedup, sentCache, processFilter, reportFiltered, reportTraffic,
@@ -1081,6 +1105,7 @@ registerTikTokEvents(connection, {
     updateCombinedViewerCount,
     setCacheUserList: (n) => { CacheUserList = n; },
     getAutoClip: () => autoClip,
+    sessionStats,
     isEnd: () => isEnd, getStreamEnded: () => streamEnded, setStreamEnded: () => { streamEnded = true; },
     onStreamEnd: () => autoStop.markEnded('TikTok'),
     stopViewCache: () => tiktokConn.stopViewCache(),
@@ -1115,6 +1140,7 @@ const twitchDeps = {
     notify,
     sendSystem: twitchSenders.system,
     sendNotice: twitchSenders.notice,
+    sessionStats,
     setViewerCount: (count) => { viewerCounts.set('Twitch', count); return viewerCounts.get('Twitch'); },
     resetViewerCount: () => { viewerCounts.reset('Twitch'); },
     updateCombinedViewerCount,
@@ -1144,23 +1170,29 @@ const twitchChatDeps = {
     logger: console,
 };
 
-await startTwitchClient({
-    userName: process.env.TWITCH_USER_NAME || "coffeelatte0709",
-    enabled: isTwitch,
-    writeLog,
-    onError: (err) => twitchOnError(err, twitchDeps),
-    onStreamOnline: (event) => { autoStop.markLive('Twitch'); twitchOnStreamOnline(event, twitchDeps); },
-    onStreamOffline: (event) => { autoStop.markEnded('Twitch'); twitchOnStreamOffline(event, twitchDeps); },
-    onFollow: (event) => twitchOnFollow(event, twitchDeps),
-    onCheer: (event) => twitchOnCheer(event, twitchDeps),
-    onChat: (event) => twitchOnChat(event, twitchChatDeps),
-    onSocketDisconnect: () => autoClip?.reset(),
-    onViewer: (stream) => {
-        if (stream) autoStop.markLive('Twitch');
-        else autoStop.markEnded('Twitch');
-        twitchOnViewer(stream, twitchDeps);
-    },
-});
+async function startTwitchPlatform() {
+    isTwitch = true;
+    await startTwitchClient({
+        userName: process.env.TWITCH_USER_NAME || "coffeelatte0709",
+        enabled: true,
+        writeLog,
+        onError: (err) => twitchOnError(err, twitchDeps),
+        onStreamOnline: (event) => { autoStop.markLive('Twitch'); twitchOnStreamOnline(event, twitchDeps); },
+        onStreamOffline: (event) => { autoStop.markEnded('Twitch'); twitchOnStreamOffline(event, twitchDeps); },
+        onFollow: (event) => twitchOnFollow(event, twitchDeps),
+        onCheer: (event) => twitchOnCheer(event, twitchDeps),
+        onSubscription: (event) => twitchOnSubscription(event, twitchDeps),
+        onChat: (event) => twitchOnChat(event, twitchChatDeps),
+        onSocketDisconnect: () => autoClip?.reset(),
+        onViewer: (stream) => {
+            if (stream) autoStop.markLive('Twitch');
+            else autoStop.markEnded('Twitch');
+            twitchOnViewer(stream, twitchDeps);
+        },
+    });
+    autoStop.addPlatform('Twitch');
+    return 'running';
+}
 
 
 
@@ -1242,7 +1274,8 @@ function pushAutoClipStats() {
 
 
 
-if (isOdysee) {
+function startOdyseePlatform() {
+    isOdysee = true;
     startOdyseeChat(odyseeChannelName, {
         axios,
         writeLog,
@@ -1263,9 +1296,12 @@ if (isOdysee) {
             updateCombinedViewerCount()
         },
     })
+    autoStop.addPlatform('Odysee', { blocked: true });
+    return 'running';
 }
 
-if (isYoutube) {
+function startYoutubePlatform() {
+    isYoutube = true;
     startYoutubeChat(youtubeChannelName, {
         axios,
         apiKey: youtubeApiKey,
@@ -1291,8 +1327,59 @@ if (isYoutube) {
             updateCombinedViewerCount()
         },
     })
+    autoStop.addPlatform('Youtube', { blocked: true });
+    return 'running';
 }
 
-if (isKick) {
+function startKickPlatform() {
+    isKick = true;
     startKickChat(kickDeps);
+    autoStop.addPlatform('Kick', { blocked: true });
+    return 'running';
+}
+
+// ─── 執行中加開平台；同一平台只啟動一次，IPC 回報狀態給主服務 ───
+function reportPlatformState(platform, state, error = '') {
+    if (typeof process.send !== 'function') return;
+    try {
+        process.send({ type: 'PLATFORM_STATE', data: { platform, state, error } });
+    } catch { /* IPC 已關閉 */ }
+}
+
+const platformManager = createPlatformManager({
+    starts: {
+        tiktok: startTikTokPlatform,
+        twitch: startTwitchPlatform,
+        kick: startKickPlatform,
+        youtube: startYoutubePlatform,
+        odysee: startOdyseePlatform
+    },
+    report: reportPlatformState,
+    onStart: name => {
+        if (name === 'tiktok') isTK = true;
+        if (name === 'twitch') isTwitch = true;
+        if (name === 'kick') isKick = true;
+        if (name === 'youtube') isYoutube = true;
+        if (name === 'odysee') isOdysee = true;
+    },
+    log: message => console.error(message)
+});
+const addPlatform = platform => platformManager.add(platform);
+
+if (typeof process.on === 'function') {
+    process.on('message', message => {
+        if (message?.type !== 'ADD_PLATFORM') return;
+        void addPlatform(message.platform).catch(error => {
+            console.error(`[PLATFORM] 加開 ${message.platform} 失敗:`, error.message || error);
+        });
+    });
+}
+
+for (const [platform, enabled] of [
+    ['tiktok', isTK], ['twitch', isTwitch], ['kick', isKick],
+    ['youtube', isYoutube], ['odysee', isOdysee]
+]) {
+    if (!enabled) continue;
+    try { await addPlatform(platform); }
+    catch (error) { console.error(`[PLATFORM] ${platform} 啟動失敗:`, error.message || error); }
 }

@@ -263,7 +263,7 @@ GIFT_TRANSLATE_PREFILL_LIMIT=10
 
 ### 4. Twitch OAuth Scope 自動檢查與重新授權
 
-啟動 Twitch 模式時，系統會自動檢查 `tokens.json` 內的 scope 是否包含 `user:read:subscriptions`（用於檢查聊天室的訂閱者身份）。
+啟動 Twitch 模式時，系統會自動檢查 `tokens.json` 內的 scope 是否包含 `user:read:subscriptions`（檢查聊天室訂閱者身份）與 `channel:read:subscriptions`（接收訂閱／贈訂 EventSub 事件）。
 
 若缺少 scope，系統會：
 

@@ -1,12 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { onViewer, onError, onStreamOnline, onStreamOffline, onFollow, onCheer } from '../ScriptLib/twitch/events.mjs';
+import { onViewer, onError, onStreamOnline, onStreamOffline, onFollow, onCheer, onSubscription } from '../ScriptLib/twitch/events.mjs';
 
 const silent = { log() {}, error() {} };
 
 /** 建立一組記錄呼叫的假 deps。 */
 function makeDeps(overrides = {}) {
     const calls = [];
+    const sessionStats = { follows: 0, subscriptions: 0, gifts: 0 };
     const autoClip = { resets: 0, viewers: [], reset() { this.resets++; }, updateViewers(v) { this.viewers.push(v); } };
     const deps = {
         getAutoClip: () => autoClip,
@@ -14,7 +15,8 @@ function makeDeps(overrides = {}) {
         writeLog: (...a) => calls.push(['log', ...a]),
         notify: async (...a) => calls.push(['notify', ...a]),
         sendSystem: (t) => calls.push(['system', t]),
-        sendNotice: (u, t, i) => calls.push(['notice', u, t, i]),
+        sendNotice: (u, t, i, category = 'system') => calls.push(['notice', u, t, i, category]),
+        sessionStats,
         setViewerCount: (n) => { calls.push(['viewers', n]); return n; },
         resetViewerCount: () => calls.push(['resetViewer']),
         updateCombinedViewerCount: () => calls.push(['combined']),
@@ -22,7 +24,7 @@ function makeDeps(overrides = {}) {
         logger: silent,
         ...overrides
     };
-    return { deps, calls, autoClip };
+    return { deps, calls, autoClip, sessionStats };
 }
 
 test('onViewer：stream 為 null 時重置 autoClip 並歸零', () => {
@@ -49,17 +51,29 @@ test('onViewer：使用收斂後的有效值（短暫 0 被保留）', () => {
     assert.ok(calls.some(c => c[0] === 'traffic' && c[1].userNum === 42));
 });
 
-test('onFollow：取頭像、通知與系統訊息', async () => {
-    const { deps, calls } = makeDeps();
+test('onFollow：取頭像、通知與 follow 分類，並累計本場關注', async () => {
+    const { deps, calls, sessionStats } = makeDeps();
     await onFollow({ userId: 'u1', userDisplayName: 'Alice' }, deps);
     assert.ok(calls.some(c => c[0] === 'notify' && c[1] === 'Alice'));
-    assert.ok(calls.some(c => c[0] === 'notice' && c[1] === 'Alice' && c[3] === 'icon:u1'));
+    assert.ok(calls.some(c => c[0] === 'notice' && c[1] === 'Alice' && c[3] === 'icon:u1' && c[4] === 'follow'));
+    assert.equal(sessionStats.follows, 1);
 });
 
-test('onCheer：帶上小奇點數量', async () => {
-    const { deps, calls } = makeDeps();
+test('onCheer：帶上小奇點數量、gift 分類與本場送禮', async () => {
+    const { deps, calls, sessionStats } = makeDeps();
     await onCheer({ userId: 'u2', userDisplayName: 'Bob', bits: 500 }, deps);
     assert.ok(calls.some(c => c[0] === 'notify' && c[2] === '送出 500 小奇點'));
+    assert.ok(calls.some(c => c[0] === 'notice' && c[4] === 'gift'));
+    assert.equal(sessionStats.gifts, 1);
+});
+
+test('onSubscription：訂閱與贈訂都計入 subscribe 分類', async () => {
+    const { deps, calls, sessionStats } = makeDeps();
+    await onSubscription({ userId: 'u3', userDisplayName: 'Cara', tier: '1000', isGift: false }, deps);
+    await onSubscription({ userId: 'u4', userDisplayName: 'Dan', tier: '2000', isGift: true }, deps);
+    assert.ok(calls.some(c => c[0] === 'notice' && c[1] === 'Cara' && c[4] === 'subscribe' && c[2].includes('Tier 1')));
+    assert.ok(calls.some(c => c[0] === 'notice' && c[1] === 'Dan' && c[4] === 'subscribe' && c[2].includes('贈訂')));
+    assert.equal(sessionStats.subscriptions, 2);
 });
 
 test('onError：送出系統訊息並重置 autoClip', () => {

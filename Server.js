@@ -523,6 +523,9 @@ function startRuntime(url) {
             if (event?.type === 'TRAFFIC_EVENT') require('./TrafficRoutes.cjs').traffic.record(event.data);
             else if (event?.type === 'STREAM_MESSAGE') pushStreamMessage(event.data);
             else if (event?.type === 'TEST_RESULT') pushTestResult(event.data);
+            else if (event?.type === 'PLATFORM_STATE' && event.data?.platform) {
+                runtimeState.setPlatformState(event.data.platform, event.data.state, event.data.error || null);
+            }
         });
         runtimeState.attach(launchedProcess, activePlatforms);
         runtimeState.data.features = { isSocket, isBark, isNtfy };
@@ -643,13 +646,49 @@ function startRuntime(url) {
     return runtimeState.snapshot();
 }
 
+/** 執行中加開平台；不重啟子程序，monitor 場次與統計保持連續。 */
+function addRuntimePlatform(platform) {
+    const name = String(platform || '').trim().toLowerCase();
+    const allowed = new Set(['tiktok', 'twitch', 'kick', 'youtube', 'odysee']);
+    if (!allowed.has(name)) {
+        throw Object.assign(new Error('不支援的平台'), { status: 400, code: 'INVALID_PLATFORM' });
+    }
+    if (!tiktokProcess || tiktokProcess.connected === false) {
+        throw Object.assign(new Error('目前沒有執行中的聊天子程序'), { status: 409, code: 'RUNTIME_STOPPED' });
+    }
+    const current = runtimeState.snapshot();
+    if ((current.platforms || []).includes(name)) {
+        if (current.platformStates?.[name] !== 'failed') {
+            throw Object.assign(new Error(`${name} 已在本次執行中`), { status: 409, code: 'PLATFORM_ALREADY_RUNNING' });
+        }
+        // 上次加開失敗：允許重新嘗試，子程序端也已清除啟動狀態。
+        runtimeState.removePlatform(name);
+    }
+    runtimeState.addPlatform(name);
+    try {
+        tiktokProcess.send({ type: 'ADD_PLATFORM', platform: name });
+    } catch (error) {
+        runtimeState.setPlatformState(name, 'failed', error.message);
+        throw Object.assign(new Error(`無法通知子程序：${error.message}`), { status: 500, code: 'PLATFORM_ADD_FAILED' });
+    }
+    pushLog(`[RUNTIME] 加開平台: ${name}`);
+    if (name === 'tiktok' && tiktokChatSource() === 'browser') {
+        const handle = process.env.TIKTOK_NAME || '';
+        if (handle) {
+            const { openTikTokLive } = require('./BrowserRoutes.cjs');
+            void openTikTokLive(handle).catch(error => pushLog('[BROWSER] 加開 TikTok 瀏覽器失敗:', error.message));
+        }
+    }
+    return { ok: true, platform: name, state: runtimeState.snapshot() };
+}
+
 const server = http.createServer((req, res) => {
     if (serveAudience(req,res,isValidToken(parseCookies(req).authToken))) return;
     if (servePlanner(req,res)) return;
     if (require('./TrafficRoutes.cjs').serveTraffic(req,res,isValidToken(parseCookies(req).authToken))) return;
     if (serveMonitorHistory(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (require('./RestreamRoutes.cjs').serveRestream(req,res,isValidToken(parseCookies(req).authToken))) return;
-    if (serveRuntime(req, res, runtimeState, startRuntime)) return;
+    if (serveRuntime(req, res, runtimeState, startRuntime, addRuntimePlatform)) return;
     if (diagnosticsRoutes.serveIntake(req, res)) return;
     if (diagnosticsRoutes.servePage(req, res)) return;
     if (diagnosticsRoutes.serveApi(req, res, isValidToken(parseCookies(req).authToken))) return;

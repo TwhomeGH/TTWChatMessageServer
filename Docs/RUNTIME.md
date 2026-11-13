@@ -15,13 +15,24 @@
 /runtime 與 /api/runtime 沿用原啟停／日誌端點的公開存取範圍，只回傳程序摘要，不提供環境變數、完整啟動 query 或日誌。
 原 /status 純文字及 /status/stream 日誌介面保持相容；需要純文字的外部工具可改查 /status。
 
-驗證：node --test Test/runtime_state.test.cjs；測試使用假程序，不啟動直播或通知。`node Test/runtime_ui.cjs` 使用 mock API 檢查來源卡、toast、390px 寬度並輸出 `output/playwright/runtime-desktop.png`、`runtime-mobile.png`（需 Chrome／Edge，不在 `test:ci`）。
+驗證：node --test Test/runtime_state.test.cjs Test/platform_manager.test.mjs Test/auto_stop.test.mjs；測試使用假程序，不啟動直播或通知。`node Test/runtime_ui.cjs` 使用 mock API 檢查來源卡、加開平台、toast、390px 寬度並輸出 `output/playwright/runtime-desktop.png`、`runtime-mobile.png`（需 Chrome／Edge，不在 `test:ci`）。
 
 ## 可視化啟動
 
 在 /runtime 的「啟動選項」勾選 TikTok、Twitch、Kick、Odysee、YouTube 或 Socket、Bark、ntfy。平台勾選後顯示帳號／頻道欄位；留空沿用服務现有設定。帳號與開關存在此來源 localStorage 的 ttw.runtime.options，頁面不儲存 Token。預設全部不勾選，至少選一項才能啟動。「恢復預設」清空已記憶的選項與帳號。
 
 按「啟動服務」透過 POST /api/runtime/start 送出 JSON，原頁顯示程序狀態。執行中或停止中鎖定選單；跨分頁重複啟動會回傳 409。GET /api/runtime/options 提供後端白名單。JSON 啟動要求必須來自相同 Origin。原 /open query 入口維持相容，共用同一程序啟動函數。
+
+### 執行中加開平台
+
+程序執行中可在「執行中加開平台」按鈕加開尚未啟用的平台，不需停止再啟動，monitor 場次、本場統計與觀眾數會延續。流程是 `POST /api/runtime/platforms`（JSON `{ "platform": "tiktok" | "twitch" | "kick" | "youtube" | "odysee" }`）→ 主服務以 IPC `ADD_PLATFORM` 通知既有子程序 → 子程序只啟動該平台並回報 `PLATFORM_STATE`。
+
+- 同一平台在本次執行中只啟動一次；重複請求回 409 `PLATFORM_ALREADY_RUNNING`。
+- 加開失敗會保留平台狀態與錯誤，允許再次嘗試；失敗不會中斷既有平台。
+- TikTok browser／manual 模式加開時仍由既有來源設定決定是否開啟專用瀏覽器；不建立第二個原生連線。
+- Kick、Odysee、YouTube 沒有可靠的直播結束訊號，加開後會停用自動停止，避免誤停既有平台。
+- 目前只支援「加開」，不支援執行中移除單一平台；需要移除時仍停止整個子程序。
+- 加開 Twitch 時 AutoClip 不會在事後補建；AutoClip 仍以啟動時是否已啟用 Twitch 為準。
 
 Socket 使用既有 SOCKET_API 設定（可再用 SOCKET_APIS 加開多個端點，每端點可用 `?filter=類別` 只收指定分類）；Bark 與 ntfy 使用既有通知設定（BARK_API／NTFY_API）。「開啟設定」只導向設定頁。程序啟動成功不代表各平台已完成登入。
 

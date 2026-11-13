@@ -44,7 +44,11 @@ class MonitorHistoryStore {
                 message_count INTEGER NOT NULL DEFAULT 0,
                 joins INTEGER NOT NULL DEFAULT 0,
                 likes INTEGER NOT NULL DEFAULT 0,
-                chats INTEGER NOT NULL DEFAULT 0
+                chats INTEGER NOT NULL DEFAULT 0,
+                follows INTEGER NOT NULL DEFAULT 0,
+                subscriptions INTEGER NOT NULL DEFAULT 0,
+                gifts INTEGER NOT NULL DEFAULT 0,
+                peak_viewers INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,6 +64,18 @@ class MonitorHistoryStore {
             );
             CREATE INDEX IF NOT EXISTS messages_session_t ON messages(session_id, t, id);
             CREATE INDEX IF NOT EXISTS messages_t ON messages(t);
+        `);
+        // 既有資料庫補上新統計欄位。
+        const sessionColumns = new Set(this.db.prepare('PRAGMA table_info(sessions)').all().map(row => row.name));
+        for (const [name, ddl] of [
+            ['follows', 'INTEGER NOT NULL DEFAULT 0'],
+            ['subscriptions', 'INTEGER NOT NULL DEFAULT 0'],
+            ['gifts', 'INTEGER NOT NULL DEFAULT 0'],
+            ['peak_viewers', 'INTEGER NOT NULL DEFAULT 0']
+        ]) {
+            if (!sessionColumns.has(name)) this.db.exec(`ALTER TABLE sessions ADD COLUMN ${name} ${ddl}`);
+        }
+        this.db.exec(`
             CREATE TABLE IF NOT EXISTS message_media (
                 message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
                 hash TEXT NOT NULL,
@@ -182,10 +198,16 @@ class MonitorHistoryStore {
             const messageId = Number(this.db.prepare('SELECT last_insert_rowid() AS id').get().id);
             const insertMedia = this.db.prepare('INSERT OR IGNORE INTO message_media(message_id,hash) VALUES(?,?)');
             for (const hash of prepared.hashes) insertMedia.run(messageId, hash);
+            const peakViewers = Math.max(Number(stats.peakViewers) || 0, Number(entry.userNum) || 0);
             this.db.prepare(`UPDATE sessions SET
                 last_message_at=?, message_count=message_count+1,
-                joins=MAX(joins, ?), likes=MAX(likes, ?), chats=MAX(chats, ?)
-                WHERE id=?`).run(t, Number(stats.joins) || 0, Number(stats.likes) || 0, Number(stats.chats) || 0, sessionId);
+                joins=MAX(joins, ?), likes=MAX(likes, ?), chats=MAX(chats, ?),
+                follows=MAX(follows, ?), subscriptions=MAX(subscriptions, ?),
+                gifts=MAX(gifts, ?), peak_viewers=MAX(peak_viewers, ?)
+                WHERE id=?`).run(t,
+                Number(stats.joins) || 0, Number(stats.likes) || 0, Number(stats.chats) || 0,
+                Number(stats.follows) || 0, Number(stats.subscriptions) || 0,
+                Number(stats.gifts) || 0, peakViewers, sessionId);
             this.db.exec('COMMIT');
         } catch (error) {
             try { this.db.exec('ROLLBACK'); } catch { /* ignore */ }
@@ -237,6 +259,10 @@ class MonitorHistoryStore {
             joins: row.joins,
             likes: row.likes,
             chats: row.chats,
+            follows: row.follows || 0,
+            subscriptions: row.subscriptions || 0,
+            gifts: row.gifts || 0,
+            peakViewers: row.peak_viewers || 0,
             platforms
         };
     }

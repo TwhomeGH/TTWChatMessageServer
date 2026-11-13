@@ -55,6 +55,18 @@ function previewServer() {
             res.end(JSON.stringify({ options }));
             return;
         }
+        if (req.method === 'POST' && url.pathname === '/api/runtime/platforms') {
+            let body = '';
+            req.on('data', chunk => { body += chunk; });
+            req.on('end', () => {
+                const { platform } = JSON.parse(body || '{}');
+                if (!state.platforms.includes(platform)) state.platforms.push(platform);
+                state.platformStates = { ...(state.platformStates || {}), [platform]: 'starting' };
+                res.writeHead(202, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ ok: true, platform, state }));
+            });
+            return;
+        }
         if (req.method === 'POST' && url.pathname === '/close') {
             res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
             res.end(JSON.stringify({ success: true }));
@@ -104,6 +116,16 @@ async function main() {
         assert.match(await page.$eval('#mode-youtube', el => el.textContent), /手動 userscript/);
         assert.equal(await page.$eval('#mode-youtube-badge', el => el.dataset.mode), 'manual');
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+        assert.equal(await page.$eval('#runtime-add-card', el => el.hidden), false);
+        const addButtons = await page.$$eval('#runtime-add-platforms button', nodes => nodes.map(node => node.textContent));
+        assert.ok(addButtons.some(label => label.includes('Kick')));
+        const [addResponse] = await Promise.all([
+            page.waitForResponse(response => response.url().endsWith('/api/runtime/platforms')),
+            page.click('#runtime-add-platforms button')
+        ]);
+        assert.equal(addResponse.status(), 202);
+        await page.waitForFunction(() => Array.from(document.querySelectorAll('#runtime-add-platforms button'))
+            .every(node => !node.textContent.includes('Kick')));
 
         fs.mkdirSync(path.join(root, 'output/playwright'), { recursive: true });
         await page.screenshot({ path: path.join(root, 'output/playwright/runtime-desktop.png'), fullPage: true });

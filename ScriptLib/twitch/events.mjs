@@ -12,7 +12,8 @@
  * @property {(file: string, message: string, type?: string) => void} writeLog 寫入日誌檔。
  * @property {(title: string, body: string, icon?: string, url?: string) => Promise<void>} notify 推播通知。
  * @property {(text: string) => void} sendSystem 送出一則系統訊息到 socket。
- * @property {(user: string, text: string, icon: string) => void} sendNotice 送出一則使用者訊息到 socket。
+ * @property {(user: string, text: string, icon: string, category?: string) => void} sendNotice 送出一則使用者訊息到 socket。
+ * @property {{follows:number, subscriptions:number, gifts:number}} sessionStats 本場累計。
  * @property {(count: number) => number} setViewerCount 更新 Twitch 觀眾數並回傳套用後的有效值（無效值會被忽略）。
  * @property {() => void} resetViewerCount 明確離線時歸零。
  * @property {() => void} updateCombinedViewerCount 重算合併觀眾數並送出。
@@ -107,12 +108,13 @@ export async function onStreamOffline(event, deps) {
 export async function onFollow(event, deps) {
     const icon = await deps.getUserIcon(event.userId);
     const message = `關注了主播`;
+    deps.sessionStats.follows += 1;
 
     deps.logger.log(message);
 
     await deps.notify(event.userDisplayName, "關注了主播", icon);
 
-    deps.sendNotice(event.userDisplayName, message, icon);
+    deps.sendNotice(event.userDisplayName, message, icon, 'follow');
 
     deps.writeLog("Default", `${event.userDisplayName} ${message}`, "Twitch Follow");
 }
@@ -126,11 +128,32 @@ export async function onFollow(event, deps) {
 export async function onCheer(event, deps) {
     const message = `送出 ${event.bits} 小奇點`;
     const icon = await deps.getUserIcon(event.userId);
+    deps.sessionStats.gifts += 1;
 
     deps.logger.log(`${event.userDisplayName} ${message}`);
 
     await deps.notify(event.userDisplayName, message, icon);
-    deps.sendNotice(event.userDisplayName, message, icon);
+    deps.sendNotice(event.userDisplayName, message, icon, 'gift');
 
     deps.writeLog("Default", `${event.userDisplayName} ${message}`, "Twitch Cheer");
+}
+
+/**
+ * 訂閱／贈訂事件；計入本場 subscriptions 並送 subscribe 分類訊息。
+ * @param {{userId: string, userDisplayName: string, tier?: string, isGift?: boolean}} event
+ * @param {TwitchEventDeps} deps
+ * @returns {Promise<void>}
+ */
+export async function onSubscription(event, deps) {
+    const name = event.userDisplayName || event.userName || '匿名';
+    const tier = event.tier ? `Tier ${Math.max(1, Math.round(Number(event.tier) / 1000) || 1)}` : '訂閱';
+    const message = event.isGift ? `收到贈訂（${tier}）` : `訂閱了（${tier}）`;
+    const icon = event.userId ? await deps.getUserIcon(event.userId).catch(() => '') : '';
+    deps.sessionStats.subscriptions += 1;
+
+    deps.logger.log(`${name} ${message}`);
+    await deps.notify(name, message, icon);
+    deps.sendNotice(name, message, icon, 'subscribe');
+
+    deps.writeLog("Default", `${name} ${message}`, "Twitch Subscription");
 }

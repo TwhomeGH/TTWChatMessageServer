@@ -1,5 +1,91 @@
 # ChangeHistory
 
+## 2026.11.13 12:40 執行中加開平台
+
+**類型**: 功能 · **檔案**: `TikTok.js`、`ScriptLib/runtime/platform-manager.mjs`、`ScriptLib/runtime/state.cjs`、`ScriptLib/lifecycle/autoStop.mjs`、`RuntimeRoutes.cjs`、`Server.js`、`runtime.html`、`assets/runtime-start.js`、`lang/*.json`、`Test/runtime_state.test.cjs`、`Test/runtime_ui.cjs`、`Test/platform_manager.test.mjs`、`Test/auto_stop.test.mjs`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 修改
+
+- 新增 `POST /api/runtime/platforms` 與「執行中加開平台」按鈕；以 IPC `ADD_PLATFORM` 通知既有子程序，不重啟程序。
+- 平台啟動抽為 `startPlatform()`；同一平台只啟動一次，失敗回報 `PLATFORM_STATE` 並允許重試。
+- RuntimeState 保存 `platformStates`／`platformErrors`；子程序回報狀態時更新。
+- `viewerCounts` 的平台 include 改為讀取動態旗標，加開後立即納入合併觀眾數。
+- AutoStop 支援 `addPlatform()`；Kick／Odysee／YouTube 加開後加入 blocked 並取消既有倒數。
+- Runtime UI 在執行中顯示可加開平台按鈕；i18n 與測試同步。
+
+### 限制
+
+- 只支援加開，不支援執行中移除單一平台；移除仍需停止整個子程序。
+- 加開 Twitch 不會事後建立 AutoClip；AutoClip 仍以啟動時已啟用 Twitch 為準。
+- TikTok browser／manual 模式加開只開啟對應來源，不建立第二個原生連線；來源模式不再受啟動時 `isTK` 影響，避免先開 Twitch、之後才加開 TikTok manual 時誤走原生連線。
+
+### 驗證
+
+- `node --test Test/runtime_state.test.cjs Test/platform_manager.test.mjs Test/auto_stop.test.mjs`
+- `node Test/runtime_ui.cjs`
+- `npm run lint`、`npm run check:css`
+
+---
+
+## 2026.11.13 04:12 monitor 場次統計與 Twitch 訂閱
+
+**類型**: 功能 · **檔案**: `TikTok.js`、`ScriptLib/tiktok/events.mjs`、`ScriptLib/twitch/events.mjs`、`ScriptLib/twitch/client.mjs`、`ScriptLib/monitor/store.cjs`、`monitor.html`、`assets/monitor.js`、`lang/*.json`、`Test/monitor_history.test.cjs`、`Test/monitor_audience_ui.cjs`、`Test/twitch_events.test.mjs`、`Docs/SOCKET_TRANSPORT.md`、`README.md`
+
+### 修改
+
+- 本場統計改為所有平台共用：`joins`、`likes`、`chats`、`follows`、`subscriptions`、`gifts`、`peakViewers`。
+- monitor 工具列新增人數、關注、訂閱、送禮統計；歷史模式切換場次時同步顯示該場統計。
+- `monitor_sessions` 新增欄位並自動遷移既有資料庫；峰值人數取 `session.peakViewers` 與訊息 `userNum` 較大者。
+- Twitch follow 改送 `follow` 分類、cheer 改送 `gift` 分類，新增 `onChannelSubscription` 處理訂閱／贈訂並送 `subscribe` 分類。
+- Twitch 必要 scope 加入 `channel:read:subscriptions`。
+- 補場次統計、歷史 UI 與 Twitch 事件測試。
+
+### 限制
+
+- 訂閱事件依 Twitch EventSub 與 token scope；舊 token 需重新授權。
+- 歷史統計只從新版子程序開始累計；舊場次沒有新增欄位時顯示 0。
+
+### 驗證
+
+- `node --test Test/monitor_history.test.cjs Test/twitch_events.test.mjs`
+- `node Test/monitor_audience_ui.cjs`
+- `npm run lint`、`npm run check:css`
+
+---
+
+## 2026.11.13 03:33 常客手動合併與別名
+
+**類型**: 功能 · **檔案**: `ScriptLib/audience/tracker.cjs`、`AudienceRoutes.cjs`、`audience.html`、`assets/audience.js`、`assets/audience.css`、`lang/*.json`、`Test/audience_tracker.test.cjs`、`Test/audience_routes.test.cjs`、`Test/audience_ui.cjs`、`Docs/AUDIENCE.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 問題
+
+同一人可能因改名、或一次帶 userId、一次只帶名稱而被記成兩個 key；自動猜測容易誤併不同人。
+
+### 修改
+
+- 常客明細新增「合併資料」，只允許手動操作。
+- `GET /api/audience/merge/preview` 先顯示來源、目標、合併後統計、共同場次與別名關係，不寫入。
+- `POST /api/audience/merge` 才套用；同平台限制、預覽使用 savepoint／rollback。
+- `audience_aliases` 保存舊 key → target；之後舊名稱的活動仍累計到目標。
+- 合併時 first_seen 取較早、last_seen 取較晚；共同場次訊息／送禮套用單場上限、進房不重複。
+- 顯示名稱保留目標；不自動合併、不做相似名稱猜測。
+- 補 tracker／route／UI 測試。
+
+### 限制
+
+- 合併選單標示 displayName／userKey／分數，選取後顯示完整 userKey、場次與訊息數；避免同名不同身分誤選。
+- 新增「還原最近合併」：batch 快照可還原來源／目標 preimage、alias 與統計。
+- 合併後有新活動、或之後又合併到其他身分時拒絕還原；只保留 90 天 snapshot。
+- 只合併同平台身分；沒有任意歷史時間點還原。
+
+### 驗證
+
+- `node --test Test/audience_tracker.test.cjs Test/audience_routes.test.cjs`
+- `node Test/audience_ui.cjs`
+- `npm run lint`、`npm run check:css`
+
+---
+
 ## 2026.11.11 01:15 MediaCache URL 補圖片副檔名
 
 **類型**: 修正 · **檔案**: `ScriptLib/media/cache.cjs`、`MediaRoutes.cjs`、`ScriptLib/monitor/store.cjs`、`OtherTool/live_engine/core/emoji_parser.py`、`Test/media_cache.test.cjs`、`OtherTool/live_engine/tests/test_emoji_parser.py`、`Docs/MEDIA_CACHE.md`、`Docs/RUNTIME.md`

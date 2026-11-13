@@ -32,7 +32,8 @@ async function main() {
                 ok: true,
                 sessions: [{
                     id: 'history-1', startedAt: Date.now() - 3600000, endedAt: Date.now() - 1800000,
-                    messageCount: 2, joins: 2, likes: 7, chats: 3, platforms: ['TikTok']
+                    messageCount: 2, joins: 2, likes: 7, chats: 3, follows: 1,
+                    subscriptions: 2, gifts: 4, peakViewers: 42, platforms: ['TikTok']
                 }]
             }));
             return;
@@ -41,7 +42,10 @@ async function main() {
             res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
             res.end(JSON.stringify({
                 ok: true, total: 2, page: 1, pages: 1, pageSize: 200,
-                session: { id: 'history-1', startedAt: Date.now() - 3600000, endedAt: Date.now() - 1800000 },
+                session: {
+                    id: 'history-1', startedAt: Date.now() - 3600000, endedAt: Date.now() - 1800000,
+                    joins: 2, likes: 7, chats: 3, follows: 1, subscriptions: 2, gifts: 4, peakViewers: 42
+                },
                 messages: [
                     { id: 2, t: Date.now() - 1800000, category: 'chat', platform: 'TikTok', user: 'History Two', message: 'older' },
                     { id: 1, t: Date.now() - 1900000, category: 'like', platform: 'TikTok', user: 'History One', message: 'newer' }
@@ -105,7 +109,7 @@ async function main() {
                     level: 3, score: 70, labels: ['alwaysHere', 'giftRegular'],
                     sessions: 12, streak: 6, messages: 40, gifts: 4, tenureDays: 60
                 },
-                session: { joins: 2, likes: 7, chats: 3 }
+                session: { joins: 2, likes: 7, chats: 3, follows: 1, subscriptions: 2, gifts: 4, peakViewers: 42 }
             }) + '\n\n');
             return;
         }
@@ -140,11 +144,18 @@ async function main() {
         assert.equal(await page.$eval('.mon-tags', node => node.title.includes('12')), true);
         const session = await page.evaluate(() => ({
             hidden: document.querySelector('#monSession').hidden,
+            viewers: document.querySelector('#monSessionViewers').textContent,
             joins: document.querySelector('#monSessionJoins').textContent,
             likes: document.querySelector('#monSessionLikes').textContent,
+            follows: document.querySelector('#monSessionFollows').textContent,
+            subscriptions: document.querySelector('#monSessionSubscriptions').textContent,
+            gifts: document.querySelector('#monSessionGifts').textContent,
             chats: document.querySelector('#monSessionChats').textContent
         }));
-        assert.deepEqual(session, { hidden: false, joins: '2', likes: '7', chats: '3' });
+        assert.deepEqual(session, {
+            hidden: false, viewers: '42', joins: '2', likes: '7',
+            follows: '1', subscriptions: '2', gifts: '4', chats: '3'
+        });
         const collapsedLayout = await page.evaluate(() => {
             const box = id => document.querySelector(id).getBoundingClientRect().toJSON();
             return { media: box('#monMediaPanel'), raw: box('#monRawPanel'), scroll: box('#monScroll') };
@@ -303,13 +314,19 @@ async function main() {
             page: document.querySelector('#monHistoryPage').textContent,
             total: document.querySelector('#monHistoryTotal').textContent,
             status: document.querySelector('#monStatus').textContent,
-            clearDisabled: document.querySelector('#monClear').disabled
+            clearDisabled: document.querySelector('#monClear').disabled,
+            viewers: document.querySelector('#monSessionViewers').textContent,
+            follows: document.querySelector('#monSessionFollows').textContent,
+            subscriptions: document.querySelector('#monSessionSubscriptions').textContent,
+            gifts: document.querySelector('#monSessionGifts').textContent
         }));
         assert.equal(history.options, 1);
         assert.match(history.page, /1 \/ 1/);
         assert.match(history.total, /2/);
         assert.match(history.status, /歷史模式/);
         assert.equal(history.clearDisabled, true);
+        assert.deepEqual([history.viewers, history.follows, history.subscriptions, history.gifts],
+            ['42', '1', '2', '4']);
         await page.click('#monModeLive');
         await page.waitForFunction(() => document.querySelector('#monHistoryBar').hidden);
         assert.equal(posts.length, 2);

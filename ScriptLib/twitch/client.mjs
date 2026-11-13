@@ -8,7 +8,7 @@
 //   writeLog(file, message, type),
 //   onError(err),
 //   onStreamOnline(event), onStreamOffline(event),
-//   onFollow(event), onCheer(event), onChat(event),
+//   onFollow(event), onCheer(event), onSubscription(event), onChat(event),
 //   onSocketDisconnect(),
 //   onViewer(stream|null),
 // }
@@ -20,7 +20,7 @@ import { ApiClient } from '@twurple/api';
 import { EventSubWsListener } from '@twurple/eventsub-ws';
 
 const tokenPath = path.resolve('./tokens.json');
-const REQUIRED_TWITCH_SCOPES = ['user:read:subscriptions'];
+const REQUIRED_TWITCH_SCOPES = ['user:read:subscriptions', 'channel:read:subscriptions'];
 
 const emptyTokenTemplate = {
     accessToken: "",
@@ -191,6 +191,7 @@ function registerHandlers(deps) {
     listener.onStreamOffline(tuser, async event => deps.onStreamOffline?.(event));
     listener.onChannelFollow(tuser, tuser, async event => deps.onFollow?.(event));
     listener.onChannelCheer(tuser, tuser, async event => deps.onCheer?.(event));
+    listener.onChannelSubscription(tuser, tuser, async event => deps.onSubscription?.(event));
     listener.onChannelChatMessage(tuser, tuser, async event => deps.onChat?.(event));
     listener.onUserSocketDisconnect?.(() => deps.onSocketDisconnect?.());
 }

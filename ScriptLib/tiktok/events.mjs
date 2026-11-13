@@ -41,8 +41,11 @@ export function registerTikTokEvents(connection, deps) {
     } = deps;
 
     // 本場累計；隨每則 socket payload 帶給 monitor。
-    const sessionStats = { joins: 0, likes: 0, chats: 0 };
+    const sessionStats = deps.sessionStats || {
+        joins: 0, likes: 0, chats: 0, follows: 0, subscriptions: 0, gifts: 0, peakViewers: 0
+    };
     const sessionSnapshot = () => ({ ...sessionStats });
+    const tiktokEnabled = () => (typeof isTK === 'function' ? isTK() : isTK === true);
 
     const handlerErrorLog = new Map();
     function describeException(value) {
@@ -335,6 +338,7 @@ export function registerTikTokEvents(connection, deps) {
         let iconn = getTikTokProfilePic(data.user);
         logger.log(data.user.nickname, "關注了主播");
 
+        sessionStats.follows += 1;
         notify(data.user.nickname, "關注了主播", iconn);
         sendCat('follow', data.user.nickname, "關注了主播", iconn, "", false);
         dedup.add(data.user.nickname.trim(), "關注了主播");
@@ -343,7 +347,7 @@ export function registerTikTokEvents(connection, deps) {
     safeEvent(WebcastEvent.CHAT, data => {
         if (!data?.user?.nickname) return;
         reportTraffic({ platform: 'TikTok', eventType: 'chat', id: data.msgId || data.common?.msgId, sentAt: data.createTime || data.common?.createTime, userId: data.user?.userId || data.user?.id, user: data.user?.nickname, message: data.comment });
-        if (isTK) {
+        if (tiktokEnabled()) {
             const result = tikTokChatGuard.check(data);
             if (!result.accepted) {
                 tikTokReplayDropped++;
@@ -520,6 +524,7 @@ export function registerTikTokEvents(connection, deps) {
         // 連擊結束 / 非連擊禮物 → 送出最終通知
         let mess = `送出了 ${giftNameForDisplay} ${data.repeatCount} 個`;
         logger.log(`送出了 ${data.user.nickname} : ${giftNameForDisplay} ${data.repeatCount} 個`);
+        sessionStats.gifts += 1;
 
         notify(data.user.nickname, mess, giftImg);
         sendCat('gift', data.user.nickname, mess, iconn, giftImg, true);

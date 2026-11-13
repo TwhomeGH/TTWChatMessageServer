@@ -25,9 +25,32 @@ function sendRuntimePage(res) {
         res.end(error ? '無法載入運行狀態頁' : html);
     });
 }
-function serveRuntime(req, res, runtime, start) {
+function serveRuntime(req, res, runtime, start, addPlatform = null) {
     const pathname = req.url.split('?')[0];
-    if (!['/runtime', '/api/runtime', '/api/runtime/options', '/api/runtime/start'].includes(pathname)) return false;
+    if (!['/runtime', '/api/runtime', '/api/runtime/options', '/api/runtime/start',
+        '/api/runtime/platforms'].includes(pathname)) return false;
+    if (pathname === '/api/runtime/platforms') {
+        if (req.method !== 'POST') { res.writeHead(405); res.end(); return true; }
+        const origin = (req.socket?.encrypted ? 'https://' : 'http://') + req.headers.host;
+        if (req.headers.origin !== origin) { sendJson(res, 403, { code: 'ORIGIN_DENIED', error: '請由主服務管理頁操作' }); return true; }
+        void (async () => {
+            try {
+                const body = await readJson(req, 4096);
+                if (!body || typeof body !== 'object' || Array.isArray(body)) {
+                    sendJson(res, 400, { code: 'INVALID_PLATFORM', error: '平台參數無效' });
+                    return;
+                }
+                if (!addPlatform) {
+                    sendJson(res, 409, { code: 'RUNTIME_UNAVAILABLE', error: '目前沒有可加開的子程序' });
+                    return;
+                }
+                sendJson(res, 202, addPlatform(body.platform));
+            } catch (error) {
+                sendJson(res, error.status || 400, { code: error.code || 'PLATFORM_ADD_FAILED', error: error.message });
+            }
+        })();
+        return true;
+    }
     if (pathname === '/api/runtime/start') {
         if (req.method !== 'POST') { res.writeHead(405); res.end(); return true; }
         const origin = (req.socket?.encrypted ? 'https://' : 'http://') + req.headers.host;
