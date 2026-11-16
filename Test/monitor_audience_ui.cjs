@@ -1,5 +1,5 @@
 /** 監控頁常客標記冒煙檢查：node Test/monitor_audience_ui.cjs；使用假 SSE。 */
-/* global document, getComputedStyle -- 僅在瀏覽器回呼中使用。 */
+/* global document, getComputedStyle, window -- 僅在瀏覽器回呼中使用。 */
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const fs = require('node:fs');
@@ -330,6 +330,41 @@ async function main() {
         await page.click('#monModeLive');
         await page.waitForFunction(() => document.querySelector('#monHistoryBar').hidden);
         assert.equal(posts.length, 2);
+
+        // 大量訊息時頁面本身不可被撐高；只有 #monScroll 內部捲動，且自動貼底。
+        await page.evaluate(() => {
+            for (const details of document.querySelectorAll('details')) details.open = false;
+            const rows = document.querySelector('#monRows');
+            const fragment = document.createDocumentFragment();
+            for (let index = 0; index < 100; index++) {
+                const row = document.createElement('div');
+                row.className = 'mon-row flex items-start gap-2 px-3 py-1 border-b border-gray-800/60';
+                row.innerHTML = '<span class="mon-time shrink-0 text-gray-500">06:29:46</span>' +
+                    '<span class="mon-platform shrink-0 text-[11px] leading-5 px-1.5 rounded bg-gray-800 text-gray-400">TikTok</span>' +
+                    '<span class="mon-body flex-1 min-w-0"><span class="mon-user font-semibold text-gray-100">測試 </span>' +
+                    '<span class="mon-msg text-gray-300">大量訊息版面測試 ' + index + '</span></span>';
+                fragment.append(row);
+            }
+            rows.append(fragment);
+        });
+        await page.waitForFunction(() => {
+            const scroll = document.querySelector('#monScroll');
+            return scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 4;
+        });
+        const liveLayout = await page.evaluate(() => {
+            const scroll = document.querySelector('#monScroll');
+            return {
+                bodyScrollHeight: document.body.scrollHeight,
+                viewportHeight: window.innerHeight,
+                scrollHeight: scroll.scrollHeight,
+                clientHeight: scroll.clientHeight,
+                atBottom: scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 4
+            };
+        });
+        assert.ok(liveLayout.bodyScrollHeight <= liveLayout.viewportHeight + 1, '頁面不應被訊息撐高');
+        assert.ok(liveLayout.scrollHeight > liveLayout.clientHeight, '訊息區應在固定高度內捲動');
+        assert.equal(liveLayout.atBottom, true, '自動捲動應貼在最底部');
+
         assert.deepEqual(errors, []);
         console.log('Monitor UI passed: audience badges, emoji preview, exact results, and history mode.');
     } finally {

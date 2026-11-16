@@ -1,5 +1,34 @@
 # ChangeHistory
 
+## 2026.11.17 monitor 訊息區恢復固定高度與自動貼底
+
+**類型**: 修正 · **檔案**: `assets/monitor.css`、`Test/monitor_audience_ui.cjs`
+
+### 原因
+
+monitor 的自動捲動本身沒有壞，問題是捲動容器根本沒有被限制高度。`.monitor-panel` 設了 `min-height: min-content`，作為 flex 子項時會被 1000 筆訊息撐高；`#monScroll` 跟著長成內容高度，`scrollHeight === clientHeight`，所以 `scrollTop = scrollHeight` 沒有作用，實際溢出的是整個頁面，使用者只能手動往下追。
+
+以 1900×954 視窗、100 列訊息實測：修正前 panel 高 3177.6px、`#monScroll` 高 2900px（`clientHeight` 同為 2900），body 高 3194px；修正後 panel 922px、訊息區 644px、`scrollHeight` 2900px，`scrollTop` 正確落在底部。
+
+### 修改
+
+- `.monitor-panel` 改為 `min-height: 0`，允許 flex 子項縮到視窗剩餘高度，讓 `#monScroll` 成為真正的內部捲動區。
+- `body.app-ui` 加上 `overflow: hidden`，避免訊息把頁面撐高；寬螢幕與 390px 窄螢幕都維持「頁面不捲、訊息區內捲」。
+- monitor UI 測試加入 100 列大量訊息：檢查 body 不被撐高、訊息區有內部 overflow，且自動捲動仍貼在最底部。
+
+### 限制
+
+- 這是版面修正，不改變訊息保留策略；即時模式仍在記憶體保留最多 1000 筆，超出後丟最舊資料。
+- 目前沒有改成固定 10 筆的上一頁／下一頁模式；先修掉實際造成失效的高度限制，避免用分頁掩蓋根因。
+
+### 驗證
+
+- `node Test/monitor_audience_ui.cjs`
+- 手動量測 1900×954 與 390×844：body 高度等於視窗高度，`#monScroll` 內部捲動且自動貼底
+- `npm run check:css`
+
+---
+
 ## 2026.11.13 14:10 執行中切換收發與通知
 
 **類型**: 功能 · **檔案**: `TikTok.js`、`ScriptLib/notify/index.mjs`、`ScriptLib/socket/transport.mjs`、`ScriptLib/socket/endpoint.mjs`、`ScriptLib/socket/hub.mjs`、`ScriptLib/runtime/state.cjs`、`RuntimeRoutes.cjs`、`Server.js`、`runtime.html`、`assets/runtime-start.js`、`lang/*.json`、`Test/notify.test.mjs`、`Test/socket_hub.test.mjs`、`Test/socket_transport.test.mjs`、`Test/runtime_state.test.cjs`、`Test/runtime_ui.cjs`、`Docs/RUNTIME.md`、`Docs/SOCKET_TRANSPORT.md`
