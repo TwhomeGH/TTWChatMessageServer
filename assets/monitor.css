@@ -4,6 +4,9 @@ body.app-ui {
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
+    /* 高度足夠時只有訊息區內部捲動；工具列在矮視窗塞不下時仍保留頁面捲動，
+       不要把訊息區或控制項直接裁掉。 */
+    overflow-y: auto;
 }
 
 /* 常客標記：只佔一小段寬度，hover 由 title 顯示細部統計。 */
@@ -33,7 +36,9 @@ body.app-ui {
     display: grid;
     /* 標題、工具列、測試、MediaCache、Raw Socket 都只佔內容高度；訊息列拿剩餘空間。 */
     grid-template-rows: auto auto auto auto auto minmax(8rem, 1fr);
-    min-height: min-content;
+    /* flex 子項預設 min-height:auto 會被內容撐高；必須允許縮到剩餘高度，
+       否則 #monScroll 會長成內容高度、沒有內部捲動，scrollTop 永遠無效。 */
+    min-height: 0;
     padding: 1rem;
 }
 .mon-session {
