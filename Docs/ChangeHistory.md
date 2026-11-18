@@ -1,5 +1,34 @@
 # ChangeHistory
 
+## 2026.11.19 TikTok 初次連線安全冷卻與舊訊息防重播
+
+**類型**: 修正 · **檔案**: `TikTokChatGuard.mjs`、`TikTok.js`、`ScriptLib/socket/hub.mjs`、`Server.js`、`monitor.html`、`assets/monitor.js`、`assets/monitor.css`、`lang/*.json`、`Test/tiktok_chat_guard.test.mjs`、`Test/monitor_audience_ui.cjs`、`.env.example`、`Docs/envExample`、`Docs/TIKTOK_CHAT_GUARD.md`、`Docs/ChangeHistory.md`
+
+### 原因
+
+`TikTokChatGuard` 原本只在重連前設定時間界線；初次 `connect()` 前沒有界線，平台補送的幾筆舊聊天會被當成新訊息送進 monitor／socket。
+
+### 修改
+
+- 新增 `beginConnection()`：在初次 `connect()` 前設定時間戳界線，預設忽略連線前 5 秒以前的聊天。
+- 保留 30 秒的「安全冷卻」提示期（`TIKTOK_INITIAL_GUARD_MS`）；期間 monitor 顯示安全冷卻 badge，但不封鎖連線後的新訊息。
+- 時間戳容差可由 `TIKTOK_INITIAL_TOLERANCE_MS` 調整；重連仍使用原本 3 秒 `TIKTOK_GUARD_TOLERANCE_MS`。
+- guard 狀態以結構化 `guard` 欄位送到 monitor；不寫入 monitor 歷史、不計入常客活動。
+- 安全冷卻結束時再送一次狀態，monitor 自動隱藏 badge。
+
+### 限制
+
+- 平台若沒有提供可用的 `createTime`，只能依 msgId 去重，無法判斷沒見過的舊訊息。
+- 5 秒是時間戳容差，不是把前 30 秒所有聊天都丟掉；真正的連線後訊息仍會通過。
+
+### 驗證
+
+- `node --test Test/tiktok_chat_guard.test.mjs`
+- `node Test/monitor_audience_ui.cjs`
+- `npm run lint`、`npm run check:css`
+
+---
+
 ## 2026.11.19 Runtime IPC 診斷工具
 
 **類型**: 功能 · **檔案**: `ScriptLib/runtime/diagnostics.cjs`、`TikTok.js`、`Server.js`、`RuntimeRoutes.cjs`、`runtime.html`、`assets/runtime-start.js`、`lang/*.json`、`Test/runtime_diagnostics.test.cjs`、`Test/runtime_state.test.cjs`、`Test/runtime_ui.cjs`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`

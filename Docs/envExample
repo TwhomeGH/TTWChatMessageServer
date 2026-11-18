@@ -34,8 +34,12 @@ TWITCH_USER_NAME=你的Twitch頻道 用戶名
 # AUTO_STOP_ENABLED=0
 # AUTO_STOP_GRACE_SEC=60
 
+
 # ─── TikTok ──────────────────────────────────────────
 TIKTOK_NAME=你的TikTok 用戶名
+# 初次連線防重播：安全冷卻提示期與時間戳容差（毫秒）
+TIKTOK_INITIAL_GUARD_MS=30000
+TIKTOK_INITIAL_TOLERANCE_MS=5000
 
 # [方法A] TikTok Cookie 完整字串（建議）
 # 從瀏覽器 DevTools → Application → Cookies → tiktok.com

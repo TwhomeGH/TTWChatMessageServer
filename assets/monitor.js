@@ -41,6 +41,7 @@
     const clearEl = document.getElementById('monClear');
     const countEl = document.getElementById('monCount');
     const statusEl = document.getElementById('monStatus');
+    const guardEl = document.getElementById('monGuard');
     const jumpLatestEl = document.getElementById('monJumpLatest');
     const sessionEl = document.getElementById('monSession');
     const sessionViewersEl = document.getElementById('monSessionViewers');
@@ -116,6 +117,7 @@
         shown: 0,
         unseen: 0,
         session: null,
+        guard: null,
         mode: 'live',
         history: { sessions: [], sessionId: '', session: null, page: 1, pages: 1, total: 0, messages: [], loading: false },
         media: { page: 1, pages: 1, total: 0, items: [], q: '', type: '', status: '', loading: false, loaded: false },
@@ -144,6 +146,17 @@
         sessionSubscriptionsEl.textContent = String(count(session.subscriptions));
         sessionGiftsEl.textContent = String(count(session.gifts));
         sessionChatsEl.textContent = String(count(session.chats));
+    }
+
+    /** 顯示／隱藏 TikTok 初次連線的安全冷卻提示；不寫入訊息清單或歷史。 */
+    function renderGuard() {
+        if (!guardEl) return;
+        const active = state.mode === 'live' && state.guard?.active === true;
+        guardEl.hidden = !active;
+        if (!active) { guardEl.textContent = ''; guardEl.title = ''; return; }
+        const seconds = Math.max(1, Math.ceil(Number(state.guard.remainingMs || 0) / 1000));
+        guardEl.textContent = t('monitor.guard.active', { seconds }, `安全冷卻中（${seconds} 秒）`);
+        guardEl.title = t('monitor.guard.detail', {}, '連線前後短時間內忽略平台補送的舊聊天，避免重播；新訊息仍會正常接收。');
     }
 
     function setHistoryStatus(text, error = false) {
@@ -274,6 +287,8 @@
         if (state.mode === mode) return;
         state.mode = mode;
         const live = mode === 'live';
+        if (!live) state.guard = null;
+        renderGuard();
         modeLiveEl.classList.toggle('is-active', live);
         modeHistoryEl.classList.toggle('is-active', !live);
         historyBarEl.hidden = live;
@@ -1069,6 +1084,11 @@
     }
 
     function append(entry) {
+        if (entry.guard) {
+            state.guard = entry.guard;
+            renderGuard();
+            return;
+        }
         state.entries.push(entry);
         if (entry.session && typeof entry.session === 'object') {
             state.session = entry.session;
@@ -1147,6 +1167,8 @@
         rowsEl.replaceChildren();
         state.shown = 0;
         state.unseen = 0;
+        state.guard = null;
+        renderGuard();
         updateCount();
         updateJump();
     });
@@ -1343,7 +1365,8 @@
             message: entry.message,
             img: typeof entry.img === 'string' ? entry.img : '',
             audience: entry.audience && typeof entry.audience === 'object' ? entry.audience : undefined,
-            session: entry.session && typeof entry.session === 'object' ? entry.session : undefined
+            session: entry.session && typeof entry.session === 'object' ? entry.session : undefined,
+            guard: entry.guard && typeof entry.guard === 'object' ? entry.guard : undefined
         });
     };
 })();

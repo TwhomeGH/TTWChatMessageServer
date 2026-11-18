@@ -333,6 +333,8 @@
   "monitor.autoscroll": "自動捲動",
   "monitor.newMessages": "{count} 則新訊息 ↓",
   "monitor.session.title": "本場",
+  "monitor.guard.active": "安全冷卻中（{seconds} 秒）",
+  "monitor.guard.detail": "連線前後短時間內忽略平台補送的舊聊天，避免重播；新訊息仍會正常接收。",
   "monitor.session.viewers": "人數峰值",
   "monitor.session.follows": "關注",
   "monitor.session.subscriptions": "訂閱",

@@ -12,7 +12,19 @@ test('original metadata accepts seconds/milliseconds and preserves large IDs', (
         assert.equal(chatMetadata({ createTime }).time, null);
     }
 });
-test('first connection allows history, reconnect discards old chat including unseen IDs', () => {
+test('initial connection rejects chat older than the connect cutoff and reports cooldown', () => {
+    const guard = new TikTokChatGuard({ now: () => epoch, initialToleranceMs: 5000, initialGuardMs: 30000 });
+    const status = guard.beginConnection();
+    assert.equal(status.mode, 'initial');
+    assert.equal(status.active, true);
+    assert.equal(status.remainingMs, 30000);
+    assert.equal(guard.check({ msgId: 'old', createTime: epoch - 30000 }).reason, 'before-connect');
+    assert.equal(guard.check({ msgId: 'new', createTime: epoch - 1000 }).accepted, true);
+    assert.equal(guard.status().rejected, 1);
+    assert.equal(guard.status().lastReason, 'before-connect');
+});
+
+test('first connection allows history without guard, reconnect discards old chat including unseen IDs', () => {
     const guard = new TikTokChatGuard({ now: () => epoch });
     assert.equal(guard.check({ msgId: '1', createTime: epoch - 60000 }).accepted, true);
     guard.beginReconnect();

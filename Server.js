@@ -163,15 +163,17 @@ const MESSAGE_CATEGORIES = require('./ScriptLib/messages/categories.cjs').MESSAG
 function pushStreamMessage(payload) {
     if (!payload || typeof payload !== 'object') return;
     const entry = { t: Date.now(), ...payload };
-    try {
-        const audienceInfo = audience.observe(entry);
-        if (audienceInfo) entry.audience = audienceInfo;
-    } catch (error) {
-        console.error('[Audience] 活躍度寫入失敗:', error.message);
+    if (!entry.guard) {
+        try {
+            const audienceInfo = audience.observe(entry);
+            if (audienceInfo) entry.audience = audienceInfo;
+        } catch (error) {
+            console.error('[Audience] 活躍度寫入失敗:', error.message);
+        }
     }
     streamMessages.push(entry);
     if (streamMessages.length > MAX_STREAM_MESSAGES) streamMessages.shift();
-    if (monitorSessionId) {
+    if (monitorSessionId && !entry.guard) {
         try { monitorHistory.append(monitorSessionId, entry); }
         catch (error) { console.error('[MonitorHistory] 寫入失敗:', error.message); }
     }

@@ -104,6 +104,11 @@ async function main() {
                 Connection: 'keep-alive'
             });
             res.write('data: ' + JSON.stringify({
+                t: Date.now(), category: 'system', platform: 'tiktok', user: '系統',
+                message: 'TikTok 安全冷卻中：30 秒內忽略連線前舊訊息',
+                guard: { mode: 'initial', active: true, remainingMs: 30000, rejected: 0 }
+            }) + '\n\n');
+            res.write('data: ' + JSON.stringify({
                 t: Date.now(), category: 'chat', platform: 'tiktok', user: 'Alice', message: 'hello',
                 audience: {
                     level: 3, score: 70, labels: ['alwaysHere', 'giftRegular'],
@@ -139,6 +144,12 @@ async function main() {
         page.on('dialog', dialog => dialog.accept());
         await page.goto(`http://127.0.0.1:${server.address().port}/monitor`);
         await page.waitForFunction(() => document.querySelectorAll('.mon-tag').length === 2);
+        const guard = await page.evaluate(() => ({
+            hidden: document.querySelector('#monGuard').hidden,
+            text: document.querySelector('#monGuard').textContent
+        }));
+        assert.equal(guard.hidden, false);
+        assert.match(guard.text, /安全冷卻中.*30/);
         const tags = await page.$$eval('.mon-tag', nodes => nodes.map(node => node.textContent));
         assert.deepEqual(tags, ['每次都來', '送禮常客']);
         assert.equal(await page.$eval('.mon-tags', node => node.title.includes('12')), true);

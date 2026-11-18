@@ -231,7 +231,17 @@ function reportFiltered(fr, meta) {
     reportTraffic({ ...meta, type: 'filter', rule: fr.reason, ad: fr.ad === true });
 }
 
-const tikTokChatGuard = new TikTokChatGuard();
+/** 讀取非負毫秒設定；空白或無效值使用預設。 */
+function guardMs(name, fallback) {
+    const value = Number(process.env[name]);
+    return Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+const tikTokChatGuard = new TikTokChatGuard({
+    toleranceMs: guardMs('TIKTOK_GUARD_TOLERANCE_MS', 3000),
+    initialToleranceMs: guardMs('TIKTOK_INITIAL_TOLERANCE_MS', 5000),
+    initialGuardMs: guardMs('TIKTOK_INITIAL_GUARD_MS', 30000)
+});
 
 // TikTok 直播間斷線自動重連（有限次數 + 指數退避）
 let streamEnded = false;       // 直播真正結束（使用者主動結束 / 平台封鎖）→ 不再重連
@@ -395,6 +405,7 @@ const tiktokConn = createTikTokConnectionManager({
     handleExit,
     isEnd: () => isEnd,
     getStreamEnded: () => streamEnded,
+    onGuard: () => sendGuardStatus(tikTokChatGuard.status()),
     onLive: () => {
         if (autoStop) autoStop.markLive('TikTok');
         else tiktokLiveBeforeAutoStop = true;
@@ -995,15 +1006,29 @@ function updateCombinedViewerCount(force = false) {
  * @param {string} [options.dedupMessage] 覆寫去重比對的訊息。
  * @param {string} [options.dedupVariant] 額外去重辨識（測試訊息用頭貼區分）。
  * @param {Object} [options.session] 本場累計（加入／點讚／聊天）。
+ * @param {Object} [options.guard] 安全冷卻狀態；monitor 只顯示提示，不寫入歷史。
  * @param {boolean} [options.isTest] 測試訊息；歷史不保存。
  * @returns {boolean} 是否實際送出（false = 被去重擋下）。
  */
-function sendSocketMessage(user, message, { img = '', giftImg = '', isMain = true, category, platform, dedupUser, dedupMessage, dedupVariant = '', session = null, isTest = false } = {}) {
+function sendSocketMessage(user, message, { img = '', giftImg = '', isMain = true, category, platform, dedupUser, dedupMessage, dedupVariant = '', session = null, guard = null, isTest = false } = {}) {
     sessionStats.peakViewers = Math.max(sessionStats.peakViewers, Number(CacheUserNum) || 0);
     return socketHub.sendMessage(user, message, {
         img, giftImg, isMain, userNum: CacheUserNum, userList: CacheUserList, category, platform,
         dedupUser, dedupMessage, dedupVariant,
-        session: session || sessionSnapshot(), isTest
+        session: session || sessionSnapshot(), guard, isTest
+    });
+}
+
+/** 通知 monitor 目前的安全冷卻狀態；不推播到 Bark／ntfy。 */
+function sendGuardStatus(status) {
+    if (!status) return;
+    const active = status.active === true;
+    const seconds = Math.max(1, Math.ceil(Number(status.remainingMs || 0) / 1000));
+    const text = active
+        ? `TikTok 安全冷卻中：${seconds} 秒內忽略連線前舊訊息`
+        : 'TikTok 安全冷卻結束';
+    sendSocketMessage('系統', text, {
+        isMain: false, category: 'system', platform: 'tiktok', guard: status
     });
 }
 
@@ -1092,6 +1117,14 @@ async function startTikTokPlatform() {
     // 等待簽名服務就緒
     console.log("等待簽名服務就緒...");
     await waitForSigner();
+
+    // 在 connect() 前設定界線；重播事件可能在 promise resolve 前就抵達。
+    const guardStatus = tikTokChatGuard.beginConnection();
+    sendGuardStatus(guardStatus);
+    setTimeout(() => {
+        // 初次提示期結束、或期間已進入重連，都要讓 monitor 隱藏 badge。
+        sendGuardStatus(tikTokChatGuard.status());
+    }, guardStatus.remainingMs + 250);
 
     // Connect to the chat (await can be used as well)
     connection.connect().then(state => {
