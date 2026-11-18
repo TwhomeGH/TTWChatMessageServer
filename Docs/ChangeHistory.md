@@ -1,5 +1,31 @@
 # ChangeHistory
 
+## 2026.11.19 liveCenter 回到前景不重播背景補齊訊息
+
+**類型**: 修正 · **檔案**: `UserScript/liveCenter.user.js`、`Test/userscript_source.test.mjs`、`Docs/USERSCRIPT_SOURCES.md`
+
+### 原因
+
+liveCenter 只在 observer 啟動時做一次 hydration 保護。分頁進入背景後聊天室可能被凍結、重建，回到前景時 TikTok 會把背景期間累積的舊訊息補進 DOM；這些節點對 observer 來說是新節點，因此被逐筆送到 `/chat`，造成重播。
+
+### 修改
+
+- 將既有聊天節點標記與補齊保護抽成 `markExistingChatMessages()`／`beginHydration()`。
+- 分頁回到前景、或 BFCache `pageshow` 返回時重新標記既有訊息並進入 4 秒保護期。
+- 分頁隱藏期間 observer 只標記新節點，不送出；回到前景後才恢復。
+- 版本 1.19 → 1.20。
+
+### 限制
+
+- 保護期內新產生的訊息也會被跳過；這是避免重播的刻意取捨。
+- 仍依賴 TikTok 監控頁的 `[data-e2e="chat-message"]` 結構。
+
+### 驗證
+
+- `node --test Test/userscript_source.test.mjs`
+
+---
+
 ## 2026.11.19 Twitch 剪輯中繼資料延遲不再誤判失敗
 
 **類型**: 修正 · **檔案**: `ScriptLib/twitch/clip.mjs`、`Test/twitch_clip.test.mjs`、`Docs/KEYWORD_AUTOCLIP_V2.md`

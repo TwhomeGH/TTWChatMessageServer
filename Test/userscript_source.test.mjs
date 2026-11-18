@@ -172,6 +172,16 @@ test('TikTokChat 只在目標直播頁且可見時掛 observer，離開就拆除
     assert.doesNotMatch(source, /const viewers = getViewerCount\(\);\s*console\.log\('觀眾人數:'/);
 });
 
+test('liveCenter 回到前景時跳過背景補齊的舊訊息', () => {
+    const source = fs.readFileSync(new URL('../UserScript/liveCenter.user.js', import.meta.url), 'utf8');
+    assert.match(source, /@version\s+1\.20/);
+    assert.match(source, /function markExistingChatMessages\(/);
+    assert.match(source, /function beginHydration\(/);
+    assert.match(source, /document\.visibilityState !== 'visible'/);
+    assert.match(source, /Number\.POSITIVE_INFINITY/);
+    assert.match(source, /addEventListener\('pageshow'/);
+});
+
 test('videoTK 使用事件驅動尺寸更新與可拖動劇院按鈕', () => {
     const source = fs.readFileSync(new URL('../UserScript/videoTK.user.js', import.meta.url), 'utf8');
     assert.match(source, /@version\s+2\.5/);

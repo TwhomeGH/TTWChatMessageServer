@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat → Socket Bridge
 // @namespace    pip-chat-bridge
-// @version      1.19
+// @version      1.20
 // @description  Listen TikTok live chat and forward to socket server
 // @author       Nuclear0709
 // @match        https://livecenter.tiktok.com/*
@@ -87,9 +87,21 @@
 
     // 已處理過的訊息集合
     const processedMessages = new WeakSet();
-// 頁面刷新時聊天室會先補上舊訊息；觀察器啟動後短暫忽略新增節點，避免重播。
+// 頁面刷新或分頁回到前景時，聊天室可能先補上舊訊息；短暫忽略新增節點，避免重播。
 const HYDRATION_MS = 4000;
+const CHAT_SELECTOR = '[data-e2e="chat-message"]';
 let hydrateUntil = 0;
+
+/** 把目前 DOM 裡既有的聊天節點標成已處理，避免把它們當成新訊息。 */
+function markExistingChatMessages() {
+    document.querySelectorAll(CHAT_SELECTOR).forEach(element => processedMessages.add(element));
+}
+
+/** 開始一段補齊保護期；期間新節點先標記，不送到 /chat。 */
+function beginHydration() {
+    markExistingChatMessages();
+    hydrateUntil = Date.now() + HYDRATION_MS;
+}
 
     var FailCount = 0;
     const MaxFail = 5;
@@ -258,21 +270,20 @@ function getTopFanUsers() {
     let observer = null;
     function startObserver() {
         // 先標記已存在的訊息，再忽略觀察器啟動後的短暫補齊期，避免刷新重播。
-        document.querySelectorAll('[data-e2e="chat-message"]')
-            .forEach(element => processedMessages.add(element));
-        hydrateUntil = Date.now() + HYDRATION_MS;
+        beginHydration();
 
         observer = new MutationObserver((mutations) => {
+            const hidden = document.visibilityState !== 'visible';
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
                     if (!(node instanceof HTMLElement)) continue;
-
-                    // 只處理一次
-                    if (node.matches('[data-e2e="chat-message"]')) {
-                        handleChatMessage(node);
-                    } else {
-                        node.querySelectorAll?.('[data-e2e="chat-message"]')
-                            .forEach(handleChatMessage);
+                    const messages = node.matches(CHAT_SELECTOR)
+                        ? [node]
+                        : Array.from(node.querySelectorAll?.(CHAT_SELECTOR) || []);
+                    for (const message of messages) {
+                        // 背景期間補進來的節點只標記，回到前景不重播。
+                        if (hidden) processedMessages.add(message);
+                        else handleChatMessage(message);
                     }
                 }
             }
@@ -515,11 +526,22 @@ function getTopFanUsers() {
 
     // 分頁從凍結/背景回到前景時，重新檢查並觸發頭號觀眾更新
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && running) {
-            console.log('liveCenter 分頁回到前景，重新整理觀眾資料');
+        if (!running) return;
+        if (document.visibilityState === 'visible') {
+            // 背景期間聊天室可能被凍結或重建；先標記已存在的舊訊息，再恢復觀察。
+            beginHydration();
+            console.log('liveCenter 分頁回到前景，跳過補齊的舊訊息並重新整理觀眾資料');
             const users = getTopFanUsers();
             sendAudienceUpdate(users.length, users);
+        } else {
+            // 隱藏期間到來的節點不送；回到前景時由 beginHydration 再保護一次。
+            hydrateUntil = Number.POSITIVE_INFINITY;
         }
+    });
+
+    // BFCache 返回時 DOM 可能原封不動但聊天室已補齊，套用同樣的補齊保護。
+    window.addEventListener('pageshow', event => {
+        if (event.persisted && running) beginHydration();
     });
 
 })();
