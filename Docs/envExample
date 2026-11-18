@@ -34,6 +34,10 @@ TWITCH_USER_NAME=你的Twitch頻道 用戶名
 # AUTO_STOP_ENABLED=0
 # AUTO_STOP_GRACE_SEC=60
 
+# ─── 系統日誌 ────────────────────────────────────────
+# /logs 結構化 SQLite 日誌保留天數與筆數上限
+LOG_RETENTION_DAYS=14
+LOG_MAX_ROWS=200000
 
 # ─── TikTok ──────────────────────────────────────────
 TIKTOK_NAME=你的TikTok 用戶名

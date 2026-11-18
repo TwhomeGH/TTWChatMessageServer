@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>系統日誌搜尋</title>
+  <link rel="stylesheet" href="/assets/log-explorer.css">
+</head>
+<body>
+  <header class="log-header">
+    <div>
+      <h1>系統日誌搜尋</h1>
+      <p id="logMeta" class="log-meta">載入中…</p>
+    </div>
+    <nav class="log-nav" aria-label="頁面導覽">
+      <a href="/">即時 Console</a>
+      <a href="/logViewer">原始日誌檔</a>
+      <a href="/runtime">運行狀態</a>
+      <a href="/diagnostics">應用診斷</a>
+    </nav>
+  </header>
+
+  <div class="log-layout">
+    <aside class="log-aside">
+      <h2>分類</h2>
+      <div id="logCategories" class="log-categories"></div>
+      <p class="log-aside-note">分類依日誌 tag 與內容推斷；可搭配等級、Session 與關鍵字縮小範圍。</p>
+    </aside>
+
+    <main class="log-main">
+      <div id="logCards" class="log-cards"></div>
+
+      <div class="log-toolbar">
+        <input id="logSearch" type="search" placeholder="搜尋訊息、分類、來源…" autocomplete="off">
+        <select id="logLevel" aria-label="等級">
+          <option value="">全部等級</option>
+          <option value="error">錯誤</option>
+          <option value="warn">警告</option>
+          <option value="info">一般</option>
+          <option value="debug">輸出／除錯</option>
+        </select>
+        <select id="logSession" aria-label="Session">
+          <option value="">全部 Session</option>
+        </select>
+        <button id="logReset" class="log-pill" type="button">清除篩選</button>
+      </div>
+
+      <div id="logStatus" class="log-status" role="status"></div>
+      <div class="log-table-wrap">
+        <table class="log-table">
+          <thead><tr><th>時間</th><th>等級</th><th>分類</th><th>來源</th><th>內容</th></tr></thead>
+          <tbody id="logRows"></tbody>
+        </table>
+        <div id="logEmpty" class="log-empty" hidden>沒有符合條件的日誌。</div>
+      </div>
+      <button id="logMore" class="log-more" type="button" hidden>載入更多</button>
+    </main>
+  </div>
+
+  <script src="/assets/log-explorer.js"></script>
+</body>
+</html>

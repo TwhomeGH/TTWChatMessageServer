@@ -102,6 +102,7 @@ mediaPrune.unref();
 let monitorSessionId = null;
 
 let tiktokProcess = null;
+let logStore = null;
 const { RuntimeState } = require('./ScriptLib/runtime/state.cjs');
 const runtimeState = new RuntimeState(Date.now, { stopTimeoutMs: 15000, logger: (...parts) => pushLog('[RUNTIME]', ...parts) });
 const { sendRuntimePage, serveRuntime } = require('./RuntimeRoutes.cjs');
@@ -146,7 +147,22 @@ function runRuntimeDiagnostic(command) {
 }
 
 let logs = [];
-const MAX_LOG_LINES = 200; // 最多保留 200 行
+const MAX_LOG_LINES = 200; // 記憶體即時 console；歷史請查 /logs
+const { LogStore } = require('./ScriptLib/logs/store.cjs');
+try {
+    logStore = new LogStore({
+        file: path.join(__dirname, 'data', 'logs.sqlite'),
+        retentionDays: Number(process.env.LOG_RETENTION_DAYS) || 14,
+        maxRows: Number(process.env.LOG_MAX_ROWS) || 200000
+    });
+} catch (error) {
+    console.error('[LogStore] 初始化失敗，歷史日誌停用:', error.message);
+}
+const serveLogs = logStore ? require('./LogRoutes.cjs').createLogRoutes(logStore) : null;
+if (logStore) {
+    const logPrune = setInterval(() => logStore.prune(), 3600000);
+    logPrune.unref?.();
+}
 
 const sseClients = new Set();
 
@@ -337,6 +353,8 @@ function pushLog(...line) {
         typeof item === 'object' ? JSON.stringify(item) : String(item)
     ).join(' ');
     const entry = { t: Date.now(), level: classifyLogLevel(text), text };
+    try { logStore?.append({ t: entry.t, text, session: monitorSessionId || null }); }
+    catch (error) { console.error('[LogStore] 寫入失敗:', error.message); }
 
     logs.push(entry);
     if (logs.length > MAX_LOG_LINES) logs.shift();
@@ -777,6 +795,7 @@ const server = http.createServer((req, res) => {
     if (servePlanner(req,res)) return;
     if (require('./TrafficRoutes.cjs').serveTraffic(req,res,isValidToken(parseCookies(req).authToken))) return;
     if (serveMonitorHistory(req, res, isValidToken(parseCookies(req).authToken))) return;
+    if (serveLogs && serveLogs(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (require('./RestreamRoutes.cjs').serveRestream(req,res,isValidToken(parseCookies(req).authToken))) return;
     if (serveRuntime(req, res, runtimeState, startRuntime, addRuntimePlatform, setRuntimeTransports, runRuntimeDiagnostic)) return;
     if (diagnosticsRoutes.serveIntake(req, res)) return;
@@ -2082,6 +2101,28 @@ const server = http.createServer((req, res) => {
             }
 
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.end(html);
+        });
+    }
+    else if (req.url === '/logs') {
+        const cookies = parseCookies(req);
+        if (!isValidToken(cookies.authToken)) {
+            const loginPath = path.join(__dirname, 'login.html');
+            fs.readFile(loginPath, 'utf8', (err, html) => {
+                if (err) { res.writeHead(500, { 'Content-Type': 'text/plain' }); res.end('Server Error'); return; }
+                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+                res.end(html);
+            });
+            return;
+        }
+        const filePath = path.join(__dirname, 'log-explorer.html');
+        fs.readFile(filePath, 'utf8', (err, html) => {
+            if (err) {
+                res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Failed to load log-explorer.html');
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
             res.end(html);
         });
     }

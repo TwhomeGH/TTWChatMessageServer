@@ -1,0 +1,179 @@
+:root {
+    color-scheme: dark;
+    --log-bg: #0f1218;
+    --log-panel: #171b23;
+    --log-panel-2: #202631;
+    --log-border: #303846;
+    --log-text: #e7eaf0;
+    --log-muted: #98a3b3;
+    --log-accent: #6ea8fe;
+    --log-warn: #f0b429;
+    --log-error: #ff6b6b;
+    --log-ok: #4ade80;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--log-bg);
+    color: var(--log-text);
+    font: 14px/1.5 "Segoe UI", "Microsoft JhengHei", sans-serif;
+}
+
+.log-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--log-border);
+    background: linear-gradient(180deg, #1b2029, #141820);
+}
+
+.log-header h1 { margin: 0 0 4px; font-size: 18px; font-weight: 650; }
+.log-meta { margin: 0; color: var(--log-muted); font-size: 12px; overflow-wrap: anywhere; }
+.log-nav { display: flex; flex-wrap: wrap; gap: 8px; }
+.log-nav a {
+    padding: 6px 10px;
+    border: 1px solid var(--log-border);
+    border-radius: 7px;
+    background: var(--log-panel-2);
+    color: var(--log-text);
+    text-decoration: none;
+    font-size: 12px;
+}
+.log-nav a:hover { border-color: var(--log-accent); color: #dbe8ff; }
+
+.log-layout {
+    display: grid;
+    grid-template-columns: 250px minmax(0, 1fr);
+    min-height: calc(100dvh - 82px);
+}
+.log-aside {
+    padding: 14px;
+    border-right: 1px solid var(--log-border);
+    background: var(--log-panel);
+}
+.log-aside h2 {
+    margin: 0 0 10px;
+    color: var(--log-muted);
+    font-size: 12px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+.log-categories { display: grid; gap: 2px; }
+.log-cat {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 9px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--log-text);
+    text-align: left;
+    cursor: pointer;
+}
+.log-cat:hover { background: var(--log-panel-2); }
+.log-cat.active { background: #2a3a55; color: #dbe8ff; }
+.log-cat .count { color: var(--log-muted); font-variant-numeric: tabular-nums; }
+.log-aside-note { margin: 16px 0 0; color: var(--log-muted); font-size: 11px; line-height: 1.6; }
+
+.log-main { min-width: 0; padding: 16px; }
+.log-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+}
+.log-card { padding: 10px 12px; border: 1px solid var(--log-border); border-radius: 10px; background: var(--log-panel); }
+.log-card-label { color: var(--log-muted); font-size: 11px; }
+.log-card-value { margin-top: 3px; font-size: 18px; font-weight: 650; overflow-wrap: anywhere; }
+.log-card-value.is-warn { color: var(--log-warn); }
+.log-card-value.is-error { color: var(--log-error); }
+
+.log-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.log-toolbar input,
+.log-toolbar select {
+    min-height: 34px;
+    padding: 7px 10px;
+    border: 1px solid var(--log-border);
+    border-radius: 8px;
+    background: var(--log-panel-2);
+    color: var(--log-text);
+    font: inherit;
+}
+.log-toolbar input { flex: 1 1 320px; min-width: 220px; }
+.log-toolbar input:focus,
+.log-toolbar select:focus { outline: 2px solid #2a4f86; outline-offset: 1px; }
+.log-pill {
+    min-height: 34px;
+    padding: 6px 12px;
+    border: 1px solid var(--log-border);
+    border-radius: 999px;
+    background: var(--log-panel-2);
+    color: var(--log-muted);
+    cursor: pointer;
+}
+.log-pill:hover { color: var(--log-text); border-color: var(--log-accent); }
+.log-status { min-height: 20px; margin: 8px 0; color: var(--log-muted); font-size: 12px; }
+
+.log-table-wrap { overflow: auto; border: 1px solid var(--log-border); border-radius: 9px; background: var(--log-panel); }
+.log-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.log-table th,
+.log-table td { padding: 8px 9px; border-bottom: 1px solid var(--log-border); vertical-align: top; text-align: left; }
+.log-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--log-panel);
+    color: var(--log-muted);
+    font-size: 11px;
+    font-weight: 600;
+}
+.log-table td { font-size: 12px; }
+.log-time { width: 148px; color: var(--log-muted); white-space: nowrap; }
+.log-level { width: 82px; }
+.log-category { width: 130px; color: var(--log-accent); overflow-wrap: anywhere; }
+.log-source { width: 92px; color: var(--log-muted); }
+.log-message { overflow-wrap: anywhere; }
+.log-level-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    line-height: 1.5;
+}
+.log-level-error { background: #4b1d24; color: #ffc2c2; }
+.log-level-warn { background: #4a3512; color: #ffe2a3; }
+.log-level-info { background: #17324a; color: #b9dcff; }
+.log-level-debug { background: #2a3038; color: #b6c1d1; }
+.log-row.is-error .log-message { color: #ffc2c2; }
+.log-row.is-warn .log-message { color: #ffe2a3; }
+.log-fields { margin-top: 4px; color: var(--log-muted); }
+.log-fields summary { cursor: pointer; font-size: 11px; }
+.log-fields pre { margin: 6px 0 0; padding: 8px; border: 1px solid var(--log-border); border-radius: 6px; background: #0d1015; white-space: pre-wrap; font-size: 11px; }
+.log-empty { padding: 24px; color: var(--log-muted); text-align: center; font-size: 12px; }
+.log-more {
+    margin: 12px 0;
+    padding: 8px 16px;
+    border: 1px solid var(--log-border);
+    border-radius: 8px;
+    background: var(--log-panel-2);
+    color: var(--log-text);
+    cursor: pointer;
+}
+.log-more:hover { border-color: var(--log-accent); }
+
+@media (max-width: 820px) {
+    .log-header { flex-direction: column; }
+    .log-layout { grid-template-columns: 1fr; }
+    .log-aside { border-right: 0; border-bottom: 1px solid var(--log-border); max-height: 230px; overflow: auto; }
+    .log-time { width: 110px; }
+    .log-level { width: 70px; }
+    .log-category { width: 100px; }
+    .log-source { width: 72px; }
+}

@@ -1,5 +1,36 @@
 # ChangeHistory
 
+## 2026.11.19 系統日誌持久化與分類搜尋
+
+**類型**: 功能 · **檔案**: `ScriptLib/logs/classify.cjs`、`ScriptLib/logs/store.cjs`、`LogRoutes.cjs`、`Server.js`、`log-explorer.html`、`assets/log-explorer.js`、`assets/log-explorer.css`、`log.html`、`WebAssets.cjs`、`Test/log_store.test.cjs`、`Test/log_routes.test.cjs`、`Test/log_explorer_ui.cjs`、`Docs/LOGS.md`、`Docs/TEST_FILES_REFERENCE.md`、`.env.example`、`Docs/envExample`
+
+### 原因
+
+`/log` 只保留記憶體 200 行，重啟即消失；`Main_Log.log`／`TikTokRun.log` 雖有原始檔，但 `/logViewer` 只能一次載入全文，不能分類、搜尋或分頁。
+
+### 修改
+
+- 新增 `data/logs.sqlite` 結構化日誌 store；`pushLog()` 同步雙寫，含 `level`、`category`、`source`、`session` 與訊息。
+- 新增分類器：`[OUT] [AutoClip]` 歸 `autoclip`、`[ERR] Socket` 歸 `socket` 且 level error；等級與主題分開。
+- 新增 `GET /api/logs/summary`、`GET /api/logs`；以 `beforeId` keyset 分頁，支援分類、等級、Session、關鍵字與時間範圍。
+- 新增 `/logs` 頁面：分類側欄、摘要卡、搜尋、等級／Session 篩選、欄位展開與載入更多；需要主服務登入。
+- 新增 `LOG_RETENTION_DAYS`（14 天）與 `LOG_MAX_ROWS`（200,000）保留策略，啟動及每小時 prune。
+- `/log` 新增「日誌搜尋」入口；`/logViewer` 原始檔 fallback 保留。
+
+### 限制
+
+- Phase 1 只記錄部署後的新日誌；既有 raw log 尚未自動回填。
+- 搜尋目前用索引＋`LIKE`，尚未加入 FTS5。
+- 日誌可能含敏感資訊，`/logs` 與 API 需登入。
+
+### 驗證
+
+- `node --test Test/log_store.test.cjs Test/log_routes.test.cjs`
+- `node Test/log_explorer_ui.cjs`
+- `npm run lint`、`npm run check:css`
+
+---
+
 ## 2026.11.19 TikTok 初次連線安全冷卻與舊訊息防重播
 
 **類型**: 修正 · **檔案**: `TikTokChatGuard.mjs`、`TikTok.js`、`ScriptLib/socket/hub.mjs`、`Server.js`、`monitor.html`、`assets/monitor.js`、`assets/monitor.css`、`lang/*.json`、`Test/tiktok_chat_guard.test.mjs`、`Test/monitor_audience_ui.cjs`、`.env.example`、`Docs/envExample`、`Docs/TIKTOK_CHAT_GUARD.md`、`Docs/ChangeHistory.md`

@@ -71,6 +71,9 @@ node Test/xxx.mjs
 | `Test/media_cache.test.cjs` | 圖片快取、`.ext` URL、inline pin、LRU／大小上限、SVG／私有位址拒絕、路由與 SocketHub 改寫 |
 | `Test/inline_image.test.cjs` | data URI 圖片格式、大小／數量限制與通知剝離 |
 | `Test/socket_test_routes.test.cjs` | Raw Socket 測試入口的登入、子程序檢查與 payload 轉送 |
+| `Test/log_store.test.cjs` | 系統日誌分類、SQLite 寫入、摘要、篩選與 keyset 分頁 |
+| `Test/log_routes.test.cjs` | `/api/logs` 登入、summary 與列表篩選 |
+| `Test/log_explorer_ui.cjs` | `/logs` 摘要卡、分類／等級篩選與欄位展開 |
 | `Test/diagnostics.test.cjs` | 診斷 store、`/post`、diagnostic、token、Socket 外部事件訂閱與 API |
 | `Test/diagnostics_ui.cjs` | `/diagnostics` 日誌順序、自動滾到最新、logio 卡片與無 page error |
 | `Test/youtube_stop.test.mjs` | 未啟用 YouTube 時收尾不輸出聊天室斷線 |
