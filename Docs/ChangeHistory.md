@@ -1,5 +1,25 @@
 # ChangeHistory
 
+## 2026.11.19 Twitch 剪輯中繼資料延遲不再誤判失敗
+
+**類型**: 修正 · **檔案**: `ScriptLib/twitch/clip.mjs`、`Test/twitch_clip.test.mjs`、`Docs/KEYWORD_AUTOCLIP_V2.md`
+
+### 原因
+
+`createClip` 回傳 clip ID 只代表 Twitch 已受理，`getClipById` 的中繼資料可能超過 10 秒才出現。原本自動剪輯在 5 次查詢後直接把「查不到中繼資料」當成建立失敗，送出「剪輯建立失敗」通知並計入 failed；實際上剪輯網址已可用，且系統刻意不重送。
+
+### 修改
+
+- 已取得 clip ID 後，中繼資料查不到改標記為「待確認」，保留剪輯網址並照常記錄歷史，不再送失敗通知或計入失敗。
+- 中繼資料查詢錯誤與等待時間可注入，測試不再實際等待 10 秒。
+- 手動剪輯與真正的建立 API 錯誤維持原本失敗行為。
+
+### 驗證
+
+- `node --test Test/twitch_clip.test.mjs`
+
+---
+
 ## 2026.11.17 monitor 訊息區恢復固定高度與自動貼底
 
 **類型**: 修正 · **檔案**: `assets/monitor.css`、`Test/monitor_audience_ui.cjs`

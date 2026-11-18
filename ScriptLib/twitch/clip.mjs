@@ -27,7 +27,8 @@ const DEFAULT_ICON = "https://github.com/TwhomeGH/TTWChatMessageServer/blob/main
  * @param {Console} [deps.logger=console]
  * @returns {ClipService}
  */
-export function createClipService({ getApiClient, getTuser, fs, file, writeLog, notify, sendSocketMessage, logger = console }) {
+export function createClipService({ getApiClient, getTuser, fs, file, writeLog, notify, sendSocketMessage,
+    confirmAttempts = 5, confirmDelayMs = 2000, logger = console }) {
     const { existsSync, readFileSync, writeFileSync } = fs;
 
     /**
@@ -62,10 +63,10 @@ export function createClipService({ getApiClient, getTuser, fs, file, writeLog, 
 
     /**
      * 在歷史最前插入一筆剪輯（保留最近 200 筆）。
-     * @param {{id: string, url: string, title?: (string|null), source?: string, timing?: (Object|null)}} entry
+     * @param {{id: string, url: string, title?: (string|null), source?: string, timing?: (Object|null), confirmed?: boolean, verification?: (string|null)}} entry
      * @returns {void}
      */
-    function recordHistory({ id, url, title = null, source = 'manual', timing = null }) {
+    function recordHistory({ id, url, title = null, source = 'manual', timing = null, confirmed = true, verification = null }) {
         const clips = loadHistory();
         clips.unshift({
             id,
@@ -73,6 +74,8 @@ export function createClipService({ getApiClient, getTuser, fs, file, writeLog, 
             title: title || '',
             source,
             timing,
+            confirmed,
+            verification,
             createdAt: new Date().toISOString()
         });
         saveHistory(clips.slice(0, 200));
@@ -123,18 +126,33 @@ export function createClipService({ getApiClient, getTuser, fs, file, writeLog, 
 
         }).then(async (clipId) => {
             let confirmedClip = null;
+            let confirmationError = null;
             if (source === 'auto') {
-                // A creation response is only a request acknowledgement; verify availability.
-                for (let attempt = 0; attempt < 5; attempt++) {
-                    confirmedClip = await apiClient.clips.getClipById(clipId);
+                // 建立請求成功只代表 Twitch 已受理；中繼資料可能晚於 10 秒才出現。
+                // 查不到時不要把已建立的剪輯判成失敗，也不要重送（避免重複剪輯）。
+                for (let attempt = 0; attempt < confirmAttempts; attempt++) {
+                    try {
+                        confirmedClip = await apiClient.clips.getClipById(clipId);
+                    } catch (err) {
+                        confirmationError = err;
+                    }
                     if (confirmedClip) break;
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    if (attempt < confirmAttempts - 1) await new Promise(resolve => setTimeout(resolve, confirmDelayMs));
                 }
-                if (!confirmedClip) throw new Error(`剪輯 ${clipId} 尚未確認可用，請人工核對；不自動重送`);
+            }
+            const unconfirmed = source === 'auto' && !confirmedClip;
+            if (unconfirmed) {
+                logger.warn(`⚠️ [AutoClip] 剪輯 ${clipId} 已建立，但 Twitch 尚未提供中繼資料；保留剪輯網址，稍後可由人工核對`);
+                if (confirmationError) logger.warn(`⚠️ [AutoClip] 查詢剪輯中繼資料失敗: ${confirmationError.message}`);
             }
             const clipURL = `https://clips.twitch.tv/${clipId}`
-            const finalTitle = await resolveTitle(clipId, title);
-            const displayText = finalTitle ? `🎬 剪輯已建立「${finalTitle}」：${clipURL}` : `🎬 剪輯已建立：${clipURL}`
+            const slugTitle = String(clipId).split('-')[0];
+            const fallbackTitle = slugTitle && slugTitle !== String(clipId) ? slugTitle : '';
+            const finalTitle = title || confirmedClip?.title || (unconfirmed ? fallbackTitle : await resolveTitle(clipId, title));
+            const suffix = unconfirmed ? '（Twitch 尚未提供中繼資料，待確認）' : '';
+            const displayText = finalTitle
+                ? `🎬 剪輯已建立「${finalTitle}」${suffix}：${clipURL}`
+                : `🎬 剪輯已建立${suffix}：${clipURL}`
 
             logger.log("剪輯資訊", clipURL)
 
@@ -143,7 +161,8 @@ export function createClipService({ getApiClient, getTuser, fs, file, writeLog, 
                 peakAt: context?.peakAt ?? null,
                 requestedAt,
                 requestLagMs: context?.peakAt != null ? requestedAt - context.peakAt : null,
-                verified: false
+                verified: false,
+                metadataAvailable: Boolean(confirmedClip)
             };
             if (context) {
                 for (let attempt = 1; attempt <= 3 && !timing.verified; attempt++) {
@@ -177,13 +196,16 @@ export function createClipService({ getApiClient, getTuser, fs, file, writeLog, 
                 writeLog("Default", `[AutoClip] 時間量測: ${summary}`, "Twitch AutoClip");
                 context.clipTiming = timing;
             }
-            recordHistory({ id: clipId, url: clipURL, title: finalTitle, source, timing });
+            recordHistory({
+                id: clipId, url: clipURL, title: finalTitle, source, timing,
+                confirmed: !unconfirmed, verification: unconfirmed ? 'unconfirmed' : 'confirmed'
+            });
             logger.log(`📜 剪輯歷史已記錄 (來源: ${source})`);
 
             writeLog("Default", `[剪輯建立] ${displayText}`)
             notify("剪輯建立", displayText, icon)
             sendSocketMessage("剪輯建立", displayText, { img: icon, category: 'clip', platform: 'twitch' })
-            return { id: clipId, url: clipURL, timing };
+            return { id: clipId, url: clipURL, timing, confirmed: !unconfirmed };
 
         }).catch(err => {
             const errMsg = `剪輯建立失敗: ${err.message} (status=${err.response?.status || 'N/A'})`
