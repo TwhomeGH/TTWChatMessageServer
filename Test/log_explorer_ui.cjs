@@ -1,5 +1,5 @@
 /** 日誌搜尋頁 UI 冒煙檢查：node Test/log_explorer_ui.cjs；使用假 API。 */
-/* global document -- 僅在瀏覽器回呼中使用。 */
+/* global document, window -- 僅在瀏覽器回呼中使用。 */
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const fs = require('node:fs');
@@ -64,6 +64,7 @@ async function main() {
     try {
         browser = await puppeteer.launch({ executablePath: browserPath(), headless: true });
         const page = await browser.newPage();
+        await page.setViewport({ width: 1280, height: 800 });
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
         await page.goto(`http://127.0.0.1:${server.address().port}/logs`, { waitUntil: 'domcontentloaded' });
@@ -85,6 +86,32 @@ async function main() {
         await page.waitForFunction(() => document.querySelectorAll('#logRows tr').length === 1);
         assert.match(await page.$eval('#logRows', el => el.textContent), /Socket failed/);
         assert.equal(await page.$eval('.log-fields', details => details.open), false);
+
+        // 超長日誌只能在表格區內捲動；分類與工具列不可以被推出畫面。
+        await page.evaluate(() => {
+            const row = document.querySelector('#logRows tr');
+            const clone = row.cloneNode(true);
+            clone.querySelector('.log-message').append(document.createTextNode(' ' + 'x'.repeat(5000)));
+            document.querySelector('#logRows').prepend(clone);
+        });
+        const layout = await page.evaluate(() => {
+            const wrap = document.querySelector('.log-table-wrap').getBoundingClientRect();
+            const aside = document.querySelector('.log-aside').getBoundingClientRect();
+            const toolbar = document.querySelector('.log-toolbar').getBoundingClientRect();
+            const scroll = document.querySelector('.log-table-wrap');
+            return {
+                wrapBottom: wrap.bottom,
+                asideTop: aside.top,
+                asideBottom: aside.bottom,
+                toolbarTop: toolbar.top,
+                viewport: window.innerHeight,
+                innerScroll: scroll.scrollHeight > scroll.clientHeight
+            };
+        });
+        assert.ok(layout.innerScroll, '長日誌應在表格區內捲動');
+        assert.ok(layout.asideTop >= 0 && layout.asideBottom <= layout.viewport + 1, '分類不可被推出畫面');
+        assert.ok(layout.toolbarTop >= 0, '查詢工具列不可被推出畫面');
+        assert.ok(layout.wrapBottom <= layout.viewport + 1, '表格區不可超出視窗');
         assert.deepEqual(errors, []);
         console.log('Log explorer UI passed: summary cards, category/severity filters and fields.');
     } finally {
