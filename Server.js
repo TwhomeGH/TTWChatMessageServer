@@ -2100,7 +2100,7 @@ const server = http.createServer((req, res) => {
                 return;
             }
 
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
             res.end(html);
         });
     }
@@ -2110,8 +2110,8 @@ const server = http.createServer((req, res) => {
             const loginPath = path.join(__dirname, 'login.html');
             fs.readFile(loginPath, 'utf8', (err, html) => {
                 if (err) { res.writeHead(500, { 'Content-Type': 'text/plain' }); res.end('Server Error'); return; }
-                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-                res.end(html);
+                res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+                res.end(html.replace('</head>', '<script>const REDIRECT_AFTER_LOGIN = "/logs";</script>\n</head>'));
             });
             return;
         }
