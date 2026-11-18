@@ -1,5 +1,5 @@
 /** 日誌搜尋頁 UI 冒煙檢查：node Test/log_explorer_ui.cjs；使用假 API。 */
-/* global document, window -- 僅在瀏覽器回呼中使用。 */
+/* global document, window, getComputedStyle -- 僅在瀏覽器回呼中使用。 */
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const fs = require('node:fs');
@@ -70,6 +70,20 @@ async function main() {
         await page.goto(`http://127.0.0.1:${server.address().port}/logs`, { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(() => document.querySelectorAll('#logRows tr').length === 4);
         assert.match(await page.$eval('#logMeta', el => el.textContent), /共 4 筆/);
+        const cardLayout = await page.evaluate(() => {
+            const cards = [...document.querySelectorAll('.log-card')];
+            return {
+                display: getComputedStyle(document.querySelector('.log-cards')).display,
+                count: cards.length,
+                firstTop: cards[0]?.getBoundingClientRect().top,
+                secondTop: cards[1]?.getBoundingClientRect().top,
+                border: getComputedStyle(cards[0]).borderTopWidth
+            };
+        });
+        assert.equal(cardLayout.display, 'grid');
+        assert.equal(cardLayout.count, 5);
+        assert.equal(cardLayout.firstTop, cardLayout.secondTop, '摘要卡應橫向排列');
+        assert.notEqual(cardLayout.border, '0px', '摘要卡應有可見邊框');
         assert.equal(await page.$$eval('.log-cat', nodes => nodes.length), 4);
         assert.match(await page.$eval('#logRows', el => el.textContent), /Socket failed/);
 

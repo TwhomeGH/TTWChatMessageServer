@@ -98,8 +98,9 @@ body {
     overflow: hidden;
     padding: 16px;
 }
-.log-cards { flex: 0 0 auto; }
+.log-cards {
     display: grid;
+    flex: 0 0 auto;
     grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
     gap: 10px;
     margin-bottom: 14px;
