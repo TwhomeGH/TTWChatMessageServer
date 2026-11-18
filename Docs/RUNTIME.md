@@ -45,6 +45,25 @@
 
 Socket 使用既有 SOCKET_API 設定（可再用 SOCKET_APIS 加開多個端點，每端點可用 `?filter=類別` 只收指定分類）；Bark 與 ntfy 使用既有通知設定（BARK_API／NTFY_API）。「開啟設定」只導向設定頁。程序啟動成功不代表各平台已完成登入。
 
+### IPC 診斷
+
+Runtime 頁的「IPC 診斷」卡片可對目前執行中的子程序送出唯讀命令，不需要重啟程序：
+
+| 命令 | 內容 |
+| --- | --- |
+| `snapshot` | 程序、平台、收發、觀眾、本場、Socket、AutoClip、Twitch、剪輯摘要 |
+| `ping` | PID、uptime、Node 版本與記憶體 |
+| `platforms` | 已啟動平台 |
+| `transports` | Socket／Bark／ntfy 狀態 |
+| `viewers` | 各平台觀眾數與合併值 |
+| `session` | 本場加入／點讚／聊天／關注／訂閱／送禮／峰值 |
+| `socket` | 端點數、連線、佇列與重連次數 |
+| `autoclip` | 設定、樣本數與最近 3 次觸發摘要 |
+| `twitch` | UserID、API client 是否就緒 |
+| `clips` | 最近 3 筆剪輯摘要（含待確認狀態） |
+
+主服務以 `POST /api/runtime/diagnostics` 接收命令，透過既有 IPC 送出 `DIAGNOSTIC_REQUEST`，子程序回覆 `DIAGNOSTIC_RESULT`。只接受白名單命令，不提供任意程式碼執行；原始 console／錯誤日誌仍在系統日誌頁。子程序結束或 5 秒內未回應時回傳明確錯誤，不會留下懸掛請求。
+
 ## 直播訊息監控面板
 
 `/monitor`（別名 `/messages`）以 SSE 訂閱 `/status/stream/messages`，顯示子程序鏡像回主服務的每則 socket 訊息（時間／平台／分類／使用者／內容），可依分類（清單來自 `/api/message-categories`）與關鍵字篩選。此頁**不需要連線任何 socket 端點**：子程序每送出一則訊息都會鏡像回主服務（`ScriptLib/socket/monitor-relay.mjs`，具背壓上限）。

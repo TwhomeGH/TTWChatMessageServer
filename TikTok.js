@@ -23,6 +23,7 @@ import { createTikTokConnectionManager } from './ScriptLib/tiktok/connection.mjs
 import tiktokSource from './ScriptLib/tiktok/source.cjs';
 import { registerTikTokEvents } from './ScriptLib/tiktok/events.mjs';
 import { createPlatformManager } from './ScriptLib/runtime/platform-manager.mjs';
+import runtimeDiagnostics from './ScriptLib/runtime/diagnostics.cjs';
 import { createSponsorStore } from './ScriptLib/sponsor/store.mjs';
 import { createAdScheduler } from './ScriptLib/sponsor/scheduler.mjs';
 import { createSentCache } from './ScriptLib/sponsor/sent-cache.mjs';
@@ -1409,8 +1410,48 @@ const platformManager = createPlatformManager({
 });
 const addPlatform = platform => platformManager.add(platform);
 
+/** 收集 IPC 診斷需要的可序列化狀態；不包含原始聊天內容或憑證。 */
+function diagnosticState() {
+    const primary = socketHub.primary;
+    return {
+        process: {
+            pid: process.pid,
+            uptimeSec: Math.round(process.uptime()),
+            node: process.version,
+            memory: process.memoryUsage()
+        },
+        platforms: platformManager.list(),
+        transports: transportSnapshot(),
+        viewers: viewerCounts.snapshot(),
+        combinedViewers: viewerCounts.combined(),
+        session: sessionSnapshot(),
+        socket: {
+            enabled: socketHub.enabled,
+            endpoints: socketHub.endpoints.filter(endpoint => endpoint.enabled).length,
+            connected: Boolean(primary?.connected),
+            queued: primary?.transport?.queue?.length || 0,
+            reconnects: primary?.transport?.stats?.reconnects || 0
+        },
+        autoClip: autoClip ? {
+            config: autoClip.getConfig(),
+            count: autoClip.getHistory().length,
+            recent: runtimeDiagnostics.recentAutoClipRows(autoClip)
+        } : null,
+        twitch: { enabled: isTwitch, userId: tuser || null, apiReady: Boolean(apiClient) },
+        clips: runtimeDiagnostics.recentClips(clipService)
+    };
+}
+
 if (typeof process.on === 'function') {
     process.on('message', message => {
+        if (message?.type === 'DIAGNOSTIC_REQUEST') {
+            let result;
+            try { result = runtimeDiagnostics.runDiagnostic(message.command, diagnosticState()); }
+            catch (error) { result = { ok: false, command: message.command, error: error.message || String(error) }; }
+            try { process.send({ type: 'DIAGNOSTIC_RESULT', requestId: message.requestId, ...result }); }
+            catch { /* IPC 已關閉 */ }
+            return;
+        }
         if (message?.type === 'SET_TRANSPORTS') {
             try { applyTransports(message.data); }
             catch (error) { console.error('[TRANSPORT] 套用失敗:', error.message || error); }

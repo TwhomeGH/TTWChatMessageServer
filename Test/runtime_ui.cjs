@@ -61,6 +61,22 @@ function previewServer() {
             res.end(JSON.stringify({ options }));
             return;
         }
+        if (req.method === 'POST' && url.pathname === '/api/runtime/diagnostics') {
+            let body = '';
+            req.on('data', chunk => { body += chunk; });
+            req.on('end', () => {
+                const { command } = JSON.parse(body || '{}');
+                res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({
+                    ok: true,
+                    command,
+                    result: command === 'twitch'
+                        ? { enabled: true, userId: '12345', apiReady: true }
+                        : { command, pid: 4242 }
+                }));
+            });
+            return;
+        }
         if (req.method === 'POST' && url.pathname === '/api/runtime/transports') {
             let body = '';
             req.on('data', chunk => { body += chunk; });
@@ -158,6 +174,15 @@ async function main() {
         assert.equal(addResponse.status(), 202);
         await page.waitForFunction(() => Array.from(document.querySelectorAll('#runtime-add-platforms button'))
             .every(node => !node.textContent.includes('Kick')));
+
+        assert.equal(await page.$eval('#runtime-diagnostic-card', el => el.hidden), false);
+        await page.select('#runtime-diagnostic-command', 'twitch');
+        const [diagnosticResponse] = await Promise.all([
+            page.waitForResponse(response => response.url().endsWith('/api/runtime/diagnostics')),
+            page.click('#runtime-diagnostic-run')
+        ]);
+        assert.equal(diagnosticResponse.status(), 200);
+        await page.waitForFunction(() => document.querySelector('#runtime-diagnostic-output').textContent.includes('12345'));
 
         fs.mkdirSync(path.join(root, 'output/playwright'), { recursive: true });
         await page.screenshot({ path: path.join(root, 'output/playwright/runtime-desktop.png'), fullPage: true });

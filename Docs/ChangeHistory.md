@@ -1,5 +1,30 @@
 # ChangeHistory
 
+## 2026.11.19 Runtime IPC 診斷工具
+
+**類型**: 功能 · **檔案**: `ScriptLib/runtime/diagnostics.cjs`、`TikTok.js`、`Server.js`、`RuntimeRoutes.cjs`、`runtime.html`、`assets/runtime-start.js`、`lang/*.json`、`Test/runtime_diagnostics.test.cjs`、`Test/runtime_state.test.cjs`、`Test/runtime_ui.cjs`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 修改
+
+- Runtime 頁新增「IPC 診斷」卡片，可對目前執行中的子程序查詢 `snapshot`、`ping`、`platforms`、`transports`、`viewers`、`session`、`socket`、`autoclip`、`twitch`、`clips`。
+- 新增 `POST /api/runtime/diagnostics`；主服務以 `DIAGNOSTIC_REQUEST` 經既有 IPC 詢問子程序，子程序回 `DIAGNOSTIC_RESULT`。
+- 只接受白名單命令，不提供任意程式碼執行；回傳不含原始聊天內容或憑證。
+- 請求具 5 秒 timeout，子程序結束時會拒絕未完成請求。
+
+### 限制
+
+- 診斷命令是唯讀快照，不是完整 Node REPL；原始 console 仍請看系統日誌。
+- 尚未加入任意 JavaScript 執行，避免從瀏覽器直接操作子程序。
+
+### 驗證
+
+- `node --test Test/runtime_diagnostics.test.cjs Test/runtime_state.test.cjs`
+- `node Test/runtime_ui.cjs`
+- 子程序 IPC smoke test：snapshot 回傳程序、平台、收發、觀眾、本場與剪輯摘要
+- `npm run lint`、`npm run check:css`
+
+---
+
 ## 2026.11.19 liveCenter 回到前景不重播背景補齊訊息
 
 **類型**: 修正 · **檔案**: `UserScript/liveCenter.user.js`、`Test/userscript_source.test.mjs`、`Docs/USERSCRIPT_SOURCES.md`

@@ -103,6 +103,34 @@
       <p id="runtime-transport-status" class="text-sm mt-3" role="status"></p>
     </section>
 
+    <section id="runtime-diagnostic-card" class="runtime-card" aria-labelledby="diagnosticTitle" hidden>
+      <div class="runtime-card-head">
+        <div>
+          <p class="text-xs uppercase tracking-widest text-blue-300">Diagnostics</p>
+          <h2 id="diagnosticTitle" class="text-xl font-bold" data-i18n="runtime.diag.title">IPC 診斷</h2>
+          <p class="text-sm text-gray-400 mt-1" data-i18n="runtime.diag.hint">直接詢問目前執行中的子程序；只提供唯讀白名單命令，不執行任意程式碼。</p>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <select id="runtime-diagnostic-command" class="bg-gray-900 border border-gray-700 rounded-lg px-2 py-1 text-sm">
+          <option value="snapshot" data-i18n="runtime.diag.snapshot">完整狀態快照</option>
+          <option value="ping" data-i18n="runtime.diag.ping">Ping／程序資訊</option>
+          <option value="platforms" data-i18n="runtime.diag.platforms">平台清單</option>
+          <option value="transports" data-i18n="runtime.diag.transports">收發狀態</option>
+          <option value="viewers" data-i18n="runtime.diag.viewers">觀眾數</option>
+          <option value="session" data-i18n="runtime.diag.session">本場統計</option>
+          <option value="socket" data-i18n="runtime.diag.socket">Socket 狀態</option>
+          <option value="autoclip" data-i18n="runtime.diag.autoclip">AutoClip</option>
+          <option value="twitch" data-i18n="runtime.diag.twitch">Twitch</option>
+          <option value="clips" data-i18n="runtime.diag.clips">剪輯歷史摘要</option>
+        </select>
+        <button id="runtime-diagnostic-run" type="button" class="runtime-button runtime-button-primary" data-i18n="runtime.diag.run">執行診斷</button>
+        <span id="runtime-diagnostic-status" class="text-sm text-gray-400" role="status"></span>
+      </div>
+      <pre id="runtime-diagnostic-output" class="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-gray-700 bg-gray-950 p-3 text-xs text-gray-300" data-i18n="runtime.diag.empty">尚無結果。</pre>
+      <small class="text-xs text-gray-500 mt-2 block" data-i18n="runtime.diag.note">這是目前子程序的 IPC 回應，不會重啟程序；原始 console 與錯誤日誌仍可在系統日誌查看。</small>
+    </section>
+
     <section id="runtime-add-card" class="runtime-card" aria-labelledby="addPlatformTitle" hidden>
       <div class="runtime-card-head">
         <div>

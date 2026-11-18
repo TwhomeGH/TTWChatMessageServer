@@ -9,6 +9,11 @@
     const transportCard = document.getElementById('runtime-transport-card');
     const transportList = document.getElementById('runtime-transport-list');
     const transportStatus = document.getElementById('runtime-transport-status');
+    const diagnosticCard = document.getElementById('runtime-diagnostic-card');
+    const diagnosticCommand = document.getElementById('runtime-diagnostic-command');
+    const diagnosticRun = document.getElementById('runtime-diagnostic-run');
+    const diagnosticStatus = document.getElementById('runtime-diagnostic-status');
+    const diagnosticOutput = document.getElementById('runtime-diagnostic-output');
     const platformKeys = { isTK: 'tiktok', isTwitch: 'twitch', isKick: 'kick', isOdysee: 'odysee', isYouTube: 'youtube' };
     const transportKeys = [
         { key: 'socket', label: 'Socket／overlay', configured: 'socketConfigured' },
@@ -42,7 +47,7 @@
         }).catch(failure => {
             addStatus.textContent = failure.message;
             toast(i18n.t('runtime.addPlatformFailed', {message:failure.message}, '加開失敗：{message}'), 'error');
-        }).finally(() => { busy = false; renderTransports(state); renderAddPlatforms(state); });
+        }).finally(() => { busy = false; renderTransports(state); renderAddPlatforms(state); renderDiagnostics(state); });
     }
 
     function setTransport(key, enabled) {
@@ -61,7 +66,7 @@
         }).catch(failure => {
             transportStatus.textContent = failure.message;
             toast(i18n.t('runtime.transportFailed', { message: failure.message }, '切換失敗：{message}'), 'error');
-        }).finally(() => { busy = false; renderTransports(state); renderAddPlatforms(state); });
+        }).finally(() => { busy = false; renderTransports(state); renderAddPlatforms(state); renderDiagnostics(state); });
     }
 
     function transportStateText(item, transports) {
@@ -102,6 +107,39 @@
             return row;
         });
         transportList.replaceChildren(...rows);
+    }
+
+    function runDiagnostic() {
+        if (busy || !diagnosticCommand) return;
+        busy = true;
+        diagnosticRun.disabled = true;
+        diagnosticStatus.textContent = i18n.t('runtime.diag.running', {}, '診斷中…');
+        const command = diagnosticCommand.value;
+        const commandLabel = diagnosticCommand.selectedOptions?.[0]?.textContent || command;
+        fetch('/api/runtime/diagnostics', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command })
+        }).then(async response => {
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw Error(i18n.t('error.' + payload.code, {}, payload.error || '診斷失敗'));
+            diagnosticOutput.textContent = JSON.stringify(payload.result ?? null, null, 2);
+            diagnosticStatus.textContent = i18n.t('runtime.diag.ok', { command: commandLabel }, '已完成 ' + commandLabel);
+        }).catch(failure => {
+            diagnosticStatus.textContent = failure.message;
+            diagnosticOutput.textContent = failure.message;
+        }).finally(() => {
+            busy = false;
+            diagnosticRun.disabled = false;
+            renderDiagnostics(state);
+        });
+    }
+
+    function renderDiagnostics(next) {
+        if (!diagnosticCard) return;
+        const running = next && ['running', 'starting'].includes(next.state);
+        diagnosticCard.hidden = !running;
+        diagnosticRun.disabled = busy || !running;
     }
 
     function renderAddPlatforms(next) {
@@ -150,6 +188,7 @@
             ? i18n.t('runtime.activeFeatures', {}, '本次功能：') + active.join(', ') : '';
         renderTransports(state);
         renderAddPlatforms(state);
+        renderDiagnostics(state);
     }
     /** 平台名稱與欄位由後端提供；所有文字使用 textContent。 */
     async function init() {
@@ -181,6 +220,7 @@
             toast(failure.message, 'error');
         }
     }
+    diagnosticRun?.addEventListener('click', runDiagnostic);
     box.addEventListener('input', () => { save(); update(state); });
     reset.onclick = () => {
         for (const option of options) {

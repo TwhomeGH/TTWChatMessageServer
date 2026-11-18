@@ -176,6 +176,30 @@ test('執行中加開平台 API 驗證來源、方法與平台', async () => {
     assert.equal((await request('POST', 'http://localhost:3332', { platform: 'twitch' })).status, 409);
 });
 
+test('執行中診斷 API 驗證來源、命令與回傳結果', async () => {
+    const { Readable } = require('node:stream');
+    const state = new RuntimeState();
+    const commands = [];
+    const diagnose = async command => {
+        commands.push(command);
+        return { connected: true, command };
+    };
+    function request(method, origin, body) {
+        return new Promise(resolve => {
+            const req = Readable.from([JSON.stringify(body)]);
+            Object.assign(req, { url: '/api/runtime/diagnostics', method, headers: { host: 'localhost:3332', origin, 'content-type': 'application/json' } });
+            serveRuntime(req, { writeHead(status) { this.status = status; }, end(data) { resolve({ status: this.status, data: data && JSON.parse(data) }); } }, state, null, null, null, diagnose);
+        });
+    }
+    assert.equal((await request('GET', 'http://localhost:3332', { command: 'snapshot' })).status, 405);
+    assert.equal((await request('POST', 'https://other.test', { command: 'snapshot' })).status, 403);
+    const result = await request('POST', 'http://localhost:3332', { command: 'snapshot' });
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.data.result, { connected: true, command: 'snapshot' });
+    assert.deepEqual(commands, ['snapshot']);
+    assert.equal((await request('POST', 'http://localhost:3332', {})).status, 400);
+});
+
 test('執行中收發 API 驗證來源、方法與布林值', async () => {
     const { Readable } = require('node:stream');
     const state = new RuntimeState();

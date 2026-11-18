@@ -25,10 +25,33 @@ function sendRuntimePage(res) {
         res.end(error ? '無法載入運行狀態頁' : html);
     });
 }
-function serveRuntime(req, res, runtime, start, addPlatform = null, setTransports = null) {
+function serveRuntime(req, res, runtime, start, addPlatform = null, setTransports = null, diagnose = null) {
     const pathname = req.url.split('?')[0];
     if (!['/runtime', '/api/runtime', '/api/runtime/options', '/api/runtime/start',
-        '/api/runtime/platforms', '/api/runtime/transports'].includes(pathname)) return false;
+        '/api/runtime/platforms', '/api/runtime/transports', '/api/runtime/diagnostics'].includes(pathname)) return false;
+    if (pathname === '/api/runtime/diagnostics') {
+        if (req.method !== 'POST') { res.writeHead(405); res.end(); return true; }
+        const origin = (req.socket?.encrypted ? 'https://' : 'http://') + req.headers.host;
+        if (req.headers.origin !== origin) { sendJson(res, 403, { code: 'ORIGIN_DENIED', error: '請由主服務管理頁操作' }); return true; }
+        void (async () => {
+            try {
+                const body = await readJson(req, 8192);
+                if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.command !== 'string') {
+                    sendJson(res, 400, { code: 'INVALID_DIAGNOSTIC_COMMAND', error: '診斷命令無效' });
+                    return;
+                }
+                if (!diagnose) {
+                    sendJson(res, 409, { code: 'RUNTIME_UNAVAILABLE', error: '目前沒有可診斷的子程序' });
+                    return;
+                }
+                const result = await diagnose(body.command);
+                sendJson(res, 200, { ok: true, command: body.command, result });
+            } catch (error) {
+                sendJson(res, error.status || 500, { code: error.code || 'DIAGNOSTIC_FAILED', error: error.message });
+            }
+        })();
+        return true;
+    }
     if (pathname === '/api/runtime/transports') {
         if (req.method !== 'POST') { res.writeHead(405); res.end(); return true; }
         const origin = (req.socket?.encrypted ? 'https://' : 'http://') + req.headers.host;

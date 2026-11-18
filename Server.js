@@ -105,6 +105,45 @@ let tiktokProcess = null;
 const { RuntimeState } = require('./ScriptLib/runtime/state.cjs');
 const runtimeState = new RuntimeState(Date.now, { stopTimeoutMs: 15000, logger: (...parts) => pushLog('[RUNTIME]', ...parts) });
 const { sendRuntimePage, serveRuntime } = require('./RuntimeRoutes.cjs');
+const { DIAGNOSTIC_COMMANDS } = require('./ScriptLib/runtime/diagnostics.cjs');
+const pendingDiagnostics = new Map();
+let diagnosticSeq = 0;
+
+/**
+ * 透過既有 IPC 詢問執行中的子程序；只接受白名單命令，不執行任意程式碼。
+ * @param {string} command
+ * @returns {Promise<Object>}
+ */
+function runRuntimeDiagnostic(command) {
+    const name = String(command || '').trim().toLowerCase();
+    if (!DIAGNOSTIC_COMMANDS.includes(name)) {
+        throw Object.assign(new Error(`不支援的診斷命令：${name || '(空白)'}`), { status: 400, code: 'INVALID_DIAGNOSTIC_COMMAND' });
+    }
+    if (!tiktokProcess || !tiktokProcess.connected) {
+        throw Object.assign(new Error('目前沒有執行中的聊天子程序'), { status: 409, code: 'RUNTIME_STOPPED' });
+    }
+    const requestId = `diag-${Date.now().toString(36)}-${++diagnosticSeq}`;
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            pendingDiagnostics.delete(requestId);
+            reject(Object.assign(new Error('子程序診斷逾時'), { status: 504, code: 'DIAGNOSTIC_TIMEOUT' }));
+        }, 5000);
+        timer.unref?.();
+        pendingDiagnostics.set(requestId, { resolve, reject, timer, command: name });
+        try {
+            tiktokProcess.send({ type: 'DIAGNOSTIC_REQUEST', requestId, command: name }, error => {
+                if (!error) return;
+                clearTimeout(timer);
+                pendingDiagnostics.delete(requestId);
+                reject(Object.assign(new Error(`無法送出診斷請求：${error.message}`), { status: 500, code: 'DIAGNOSTIC_SEND_FAILED' }));
+            });
+        } catch (error) {
+            clearTimeout(timer);
+            pendingDiagnostics.delete(requestId);
+            reject(Object.assign(new Error(`無法送出診斷請求：${error.message}`), { status: 500, code: 'DIAGNOSTIC_SEND_FAILED' }));
+        }
+    });
+}
 
 let logs = [];
 const MAX_LOG_LINES = 200; // 最多保留 200 行
@@ -527,6 +566,17 @@ function startRuntime(url) {
                 runtimeState.setPlatformState(event.data.platform, event.data.state, event.data.error || null);
             } else if (event?.type === 'TRANSPORT_STATE' && event.data) {
                 runtimeState.setTransports(event.data);
+            } else if (event?.type === 'DIAGNOSTIC_RESULT' && event.requestId) {
+                const pending = pendingDiagnostics.get(event.requestId);
+                if (pending) {
+                    clearTimeout(pending.timer);
+                    pendingDiagnostics.delete(event.requestId);
+                    if (event.ok === false) {
+                        pending.reject(Object.assign(new Error(event.error || '診斷失敗'), { status: 502, code: 'DIAGNOSTIC_FAILED' }));
+                    } else {
+                        pending.resolve(event.data ?? null);
+                    }
+                }
             }
         });
         runtimeState.attach(launchedProcess, activePlatforms);
@@ -619,6 +669,11 @@ function startRuntime(url) {
 
         tiktokProcess.on('exit', (code, signal) => {
             pushLog(`[SYSTEM] Exit code=${code} signal=${signal}`);
+            for (const [requestId, pending] of pendingDiagnostics) {
+                clearTimeout(pending.timer);
+                pending.reject(Object.assign(new Error('子程序已結束，診斷未完成'), { status: 410, code: 'RUNTIME_STOPPED' }));
+                pendingDiagnostics.delete(requestId);
+            }
             if (tiktokProcess === launchedProcess) tiktokProcess = null;
             if (monitorSessionId && monitorSessionId === launchMonitorSession) {
                 try { monitorHistory.endSession(monitorSessionId); } catch { /* ignore */ }
@@ -721,7 +776,7 @@ const server = http.createServer((req, res) => {
     if (require('./TrafficRoutes.cjs').serveTraffic(req,res,isValidToken(parseCookies(req).authToken))) return;
     if (serveMonitorHistory(req, res, isValidToken(parseCookies(req).authToken))) return;
     if (require('./RestreamRoutes.cjs').serveRestream(req,res,isValidToken(parseCookies(req).authToken))) return;
-    if (serveRuntime(req, res, runtimeState, startRuntime, addRuntimePlatform, setRuntimeTransports)) return;
+    if (serveRuntime(req, res, runtimeState, startRuntime, addRuntimePlatform, setRuntimeTransports, runRuntimeDiagnostic)) return;
     if (diagnosticsRoutes.serveIntake(req, res)) return;
     if (diagnosticsRoutes.servePage(req, res)) return;
     if (diagnosticsRoutes.serveApi(req, res, isValidToken(parseCookies(req).authToken))) return;
