@@ -1,5 +1,27 @@
 # ChangeHistory
 
+## 2026.11.19 表情網址與相鄰文字補空白
+
+**類型**: 修正 · **檔案**: `EmojiMap.js`、`Test/emoji_store.test.cjs`、`Docs/EMOJI_MAP.md`
+
+### 原因
+
+表情代碼直接替換成圖片網址時，若前後緊鄰一般文字，會產生 `.../1f602.pngsw` 這類字串；下游 URL 解析器會把 `sw` 併入網址，導致圖片被當成一般文字。
+
+### 修改
+
+- `replaceEmojis` 在替換後檢查前後字元；與非空白文字相鄰時補一個空白。
+- 相鄰表情只保留一個分隔空白，避免 `[a][b]` 產生兩個空白。
+- 直接 URL 與 MediaCache 的 `/media/<hash>.<ext>` 都套用相同邊界規則；`img`／`giftImg` 欄位不受影響。
+
+### 驗證
+
+- `node --test Test/emoji_store.test.cjs`
+- `npm run test:core`（363 項）
+- `npm run lint`
+
+---
+
 ## 2026.11.19 系統日誌持久化與分類搜尋
 
 **類型**: 功能 · **檔案**: `ScriptLib/logs/classify.cjs`、`ScriptLib/logs/store.cjs`、`LogRoutes.cjs`、`Server.js`、`log-explorer.html`、`assets/log-explorer.js`、`assets/log-explorer.css`、`log.html`、`WebAssets.cjs`、`Test/log_store.test.cjs`、`Test/log_routes.test.cjs`、`Test/log_explorer_ui.cjs`、`Docs/LOGS.md`、`Docs/TEST_FILES_REFERENCE.md`、`.env.example`、`Docs/envExample`

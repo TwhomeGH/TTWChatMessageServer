@@ -129,6 +129,26 @@ test('方括號按字面匹配，插入網址中的代碼與替換符號不會�
     assert.match(emojiMap.replaceEmojis('[x]'), /^http:\/\/media\.test\/media\/[a-f0-9]{64}\.png$/);
 });
 
+test('表情網址與相鄰文字之間補空白，避免尾端文字黏進 URL', async t => {
+    const { file } = await createFixture(t);
+    await fs.writeFile(file, JSON.stringify({
+        '[x]': 'https://example.com/a.png',
+        '[y]': 'https://example.com/b.png'
+    }));
+    const emojiMap = await import('../EmojiMap.js');
+    await emojiMap.loadEmojiMap(file);
+
+    assert.equal(emojiMap.replaceEmojis('哈[x]sw'), '哈 https://example.com/a.png sw');
+    assert.equal(emojiMap.replaceEmojis('哈 [x] sw'), '哈 https://example.com/a.png sw');
+    assert.equal(emojiMap.replaceEmojis('[x][y]'), 'https://example.com/a.png https://example.com/b.png');
+    assert.equal(emojiMap.replaceEmojis('[x]'), 'https://example.com/a.png');
+
+    // MediaCache 改成 /media/<hash>.png 後也要保留邊界。
+    emojiMap.setEmojiMediaResolver(_url => '/media/' + 'a'.repeat(64) + '.png');
+    t.after(() => emojiMap.setEmojiMediaResolver(null));
+    assert.equal(emojiMap.replaceEmojis('哈[x]sw'), '哈 /media/' + 'a'.repeat(64) + '.png sw');
+});
+
 test('管理 API 檢查登入、持久化修改，並回報版本衝突', async t => {
     const { file } = await createFixture(t);
     const { store } = require('../EmojiStore.cjs');

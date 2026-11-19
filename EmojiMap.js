@@ -37,6 +37,7 @@ export async function loadEmojiMap(filePath = null) {
 /**
  * 使用目前映射快照，將訊息中的表情代碼替換成圖片網址。
  * 代碼以字面值比對（包含 []），長代碼優先；單次替換不再處理插入的網址。
+ * 網址與相鄰文字之間補一個空白，避免 `...pngsw` 被 URL 解析器當成同一個網址。
  * @param {*} text 原始訊息；空值或非字串直接原樣回傳。
  * @returns {*} 替換後的字串，或原始非字串值。
  */
@@ -46,10 +47,22 @@ export function replaceEmojis(text) {
     const codes=Object.keys(emojiMap).sort((a,b)=>b.length-a.length);
     if(!codes.length)return text;
     const escaped=codes.map(code=>code.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
-    return text.replace(new RegExp(escaped.join('|'),'g'),code=>{
+    let previousMatchEnd = -1;
+    return text.replace(new RegExp(escaped.join('|'),'g'),(code, offset, source)=>{
         const url=emojiMap[code];
-        if (!emojiMediaResolver || typeof url !== 'string') return url;
-        try { return emojiMediaResolver(url) || url; } catch { return url; }
+        let replacement = url;
+        if (emojiMediaResolver && typeof url === 'string') {
+            try { replacement = emojiMediaResolver(url) || url; } catch { replacement = url; }
+        }
+        if (typeof replacement !== 'string') return replacement;
+        const before = offset > 0 ? source[offset - 1] : '';
+        const after = source[offset + code.length] || '';
+        // 相鄰表情已由前一個替換的尾端空白分隔，不重複加空白。
+        const adjacentToReplacement = previousMatchEnd === offset;
+        const leading = !adjacentToReplacement && before && !/\s/.test(before) ? ' ' : '';
+        const trailing = after && !/\s/.test(after) ? ' ' : '';
+        previousMatchEnd = offset + code.length;
+        return leading + replacement + trailing;
     });
 }
 
