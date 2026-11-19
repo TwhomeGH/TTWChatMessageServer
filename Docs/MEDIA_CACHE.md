@@ -23,8 +23,9 @@ MediaCache 將圖片持久化到本機，訊息只傳本地 URL：
 
 - `ScriptLib/media/cache.cjs`：快取、下載、SSRF 檢查與供應。
 - `MediaRoutes.cjs`：公開的 `GET /media/<sha256>[.<ext>]` 路由；副檔名只供客戶端分類，實際格式仍看 `Content-Type`。
-- `cache/media/<sha256>.bin`：圖片位元組。
-- `data/media.sqlite`：來源 URL、Content-Type、大小、ETag、存取時間與失敗次數。
+- `cache/media/<content-sha256>.bin`：圖片位元組；相同內容只存一份。
+- `data/media.sqlite`：URL hash、內容 hash、來源 URL、Content-Type、大小、ETag、存取時間與失敗次數。
+- 公開 URL 仍使用來源網址的 hash 當 ID，訊息與歷史連結不會因內容去重而改變；`media.content_hash` 指向實際共用的內容檔。舊資料沒有 `content_hash` 時沿用舊的 URL hash 檔名。
 
 `/media/` 只接受 hash（可帶 png／jpg／gif／webp／avif／bmp 副檔名），**不提供 `?url=` 任意抓取**。資料庫與圖片目錄已排除 Git。對外 URL 會依內容類型或來源副檔名產生 `.png`／`.jpg` 等後綴，讓依副檔名分類的客戶端也能辨識。
 
@@ -54,8 +55,9 @@ MediaCache 將圖片持久化到本機，訊息只傳本地 URL：
 ## 檢視與手動測試
 
 - `/monitor` 的「MediaCache 資源」面板可查看快取統計、搜尋、預覽、複製本地 `/media/<hash>.<ext>` 連結與開啟圖片。
-- `GET /api/media`（需登入）支援 `page`、`pageSize`、`q`、`type`、`status`；只回傳 hash、host、型別、大小、時間與狀態，不暴露完整來源 URL。
-- `GET /api/media/stats`（需登入）回傳總數、bytes、cached／failed／missing。
+- `GET /api/media`（需登入）支援 `page`、`pageSize`、`q`、`type`、`status`；只回傳 URL hash、contentHash、host、型別、大小、時間與狀態，不暴露完整來源 URL。
+- `GET /api/media/stats`（需登入）回傳總數、bytes（唯一內容 bytes）、uniqueContent、cached／failed／missing。相同內容的多個 URL 不會重複計入 bytes。
+- 既有資料若仍是舊的 URL hash 檔名，不會在啟動時回溯搬移；新下載或重新抓取後才套用內容去重。
 - `/monitor` 另有 Raw Socket 測試入口：`POST /api/socket/test` 經子程序直接送 `socketHub`，可選擇是否套用 MediaCache／emoji 正式轉換；不經 `/chat`、filter、dedup、traffic 或 AutoClip。
 
 ## 安全限制

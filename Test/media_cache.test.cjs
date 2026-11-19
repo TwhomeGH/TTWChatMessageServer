@@ -102,6 +102,66 @@ test('MediaCache 把外部 URL 換成本地 hash，下載後可再從快取供�
     assert.equal((await fakeServe(cache, svgHash)).status, 404);
 });
 
+test('相同內容不同 URL 共用一個檔案，不同內容仍分開', async t => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ttw-media-dedup-'));
+    const other = Buffer.from('89504e470d0a1a0a0000000d49484453', 'hex');
+    const server = http.createServer((req, res) => {
+        const body = req.url === '/other.png' ? other : PNG;
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': body.length });
+        res.end(body);
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const cache = new MediaCache({
+        dbFile: path.join(dir, 'media.sqlite'), imageDir: path.join(dir, 'images'),
+        baseUrl: 'http://127.0.0.1:3332', allowPrivateHosts: true
+    });
+    t.after(async () => {
+        cache.close();
+        await new Promise(resolve => server.close(resolve));
+        fs.rmSync(dir, { recursive: true, force: true });
+    });
+
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const first = `${base}/a.png`;
+    const second = `${base}/b.png`;
+    const third = `${base}/other.png`;
+    const hashes = [first, second, third].map(hashUrl);
+    for (const source of [first, second, third]) cache.localUrl(source);
+    for (const hash of hashes) assert.equal((await fakeServe(cache, hash)).status, 200);
+
+    const rows = cache.db.prepare('SELECT hash,content_hash FROM media ORDER BY hash').all();
+    const byHash = new Map(rows.map(row => [row.hash, row.content_hash]));
+    assert.equal(byHash.get(hashes[0]), byHash.get(hashes[1]));
+    assert.notEqual(byHash.get(hashes[0]), byHash.get(hashes[2]));
+
+    const files = fs.readdirSync(path.join(dir, 'images')).filter(name => name.endsWith('.bin'));
+    assert.equal(files.length, 2, '同內容只應留一個 .bin，不同內容分成兩個');
+    const stats = cache.stats();
+    assert.equal(stats.total, 3);
+    assert.equal(stats.uniqueContent, 2);
+    assert.equal(stats.bytes, PNG.length + other.length);
+
+    // 共享內容只要還有一筆 pinned，prune 不可刪掉檔案；解除引用後才整組清除。
+    cache.pin(hashes[0]);
+    cache.maxBytes = 1;
+    cache.prune();
+    assert.deepEqual(cache.db.prepare('SELECT hash FROM media').all().map(row => row.hash).sort(), hashes.slice(0, 2).sort());
+    assert.equal(fs.readdirSync(path.join(dir, 'images')).filter(name => name.endsWith('.bin')).length, 1);
+    cache.unpinExcept(new Set());
+    cache.prune();
+    assert.equal(cache.db.prepare('SELECT hash FROM media').all().length, 0);
+    assert.equal(fs.readdirSync(path.join(dir, 'images')).filter(name => name.endsWith('.bin')).length, 0);
+
+    // inline 與 HTTP 同內容時，釋放 inline 不能刪掉 HTTP 還在用的檔案。
+    cache.localUrl(first);
+    assert.equal((await fakeServe(cache, hashes[0])).status, 200);
+    const inline = cache.storeInlineDataUri('data:image/png;base64,' + PNG.toString('base64'));
+    const inlineHash = inline.split('/').pop().replace(/\.[a-z0-9]+$/i, '');
+    cache.releaseInlineExcept(new Set());
+    assert.equal(fs.existsSync(cache.filePath(inlineHash)), true);
+    assert.equal((await fakeServe(cache, hashes[0])).status, 200);
+});
+
 test('MediaCache 拒絕私有位址、SVG 與非 HTTP URL', async t => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ttw-media-deny-'));
     const cache = new MediaCache({

@@ -23,7 +23,8 @@ const EXTENSION_BY_TYPE = new Map([
 ]);
 const KNOWN_EXTENSION_RE = /\.(?:png|jpe?g|gif|webp|avif|bmp)$/i;
 
-const hashUrl = value => crypto.createHash('sha256').update(value).digest('hex');
+const hashBytes = value => crypto.createHash('sha256').update(value).digest('hex');
+const hashUrl = value => hashBytes(String(value));
 
 /** 給客戶端的 URL 一律帶可辨識的圖片副檔名，讓以副檔名分類的客戶端也能處理。 */
 function imageExtension(contentType, sourceUrl = '') {
@@ -96,8 +97,9 @@ function isPrivateAddress(address) {
 }
 
 /**
- * 通用圖片快取：把外部圖片 URL 換成本機 /media/<sha256>，首次請求時抓取並持久化。
- * 只存圖片位元組與來源 metadata，不存 HTML。
+ * 通用圖片快取：把外部圖片 URL 換成本機 /media/<urlHash>，首次請求時抓取並持久化。
+ * 公開 URL 保留來源 URL hash；實體檔案以 sha256(圖片 bytes) 命名，
+ * 同一張圖即使來自不同 URL 也只存一份。只存圖片位元組與來源 metadata，不存 HTML。
  */
 class MediaCache {
     constructor({ dbFile = DEFAULT_DB, imageDir = DEFAULT_DIR, baseUrl = detectMediaBaseUrl(),
@@ -123,6 +125,7 @@ class MediaCache {
             CREATE TABLE IF NOT EXISTS media (
                 hash TEXT PRIMARY KEY,
                 url TEXT NOT NULL,
+                content_hash TEXT,
                 content_type TEXT,
                 byte_size INTEGER,
                 etag TEXT,
@@ -135,12 +138,24 @@ class MediaCache {
             );
         `);
         const columns = new Set(this.db.prepare('PRAGMA table_info(media)').all().map(row => row.name));
+        if (!columns.has('content_hash')) this.db.exec('ALTER TABLE media ADD COLUMN content_hash TEXT');
         if (!columns.has('source')) this.db.exec("ALTER TABLE media ADD COLUMN source TEXT NOT NULL DEFAULT 'http'");
         if (!columns.has('pinned')) this.db.exec('ALTER TABLE media ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
+        this.db.exec('CREATE INDEX IF NOT EXISTS idx_media_content_hash ON media(content_hash)');
     }
 
-    filePath(hash) {
-        return path.join(this.imageDir, hash + '.bin');
+    /**
+     * 實體檔案依內容 hash 儲存；舊資料沒有 content_hash 時沿用 URL hash 檔名。
+     * 傳入 row 可避免額外查詢；只傳 hash 時查 DB 取得目前的內容 hash。
+     */
+    filePathForRow(row = {}) {
+        const key = row.content_hash || row.hash;
+        return path.join(this.imageDir, String(key) + '.bin');
+    }
+
+    filePath(hash, contentHash = null) {
+        const key = contentHash || this.db.prepare('SELECT content_hash FROM media WHERE hash=?').get(String(hash || ''))?.content_hash || hash;
+        return path.join(this.imageDir, String(key) + '.bin');
     }
 
     /** 同步取得（或建立）本地 URL；預抓失敗不影響原訊息。 */
@@ -180,11 +195,11 @@ class MediaCache {
             fs.writeFileSync(temporary, decoded.body);
             fs.renameSync(temporary, file);
         }
-        this.db.prepare(`INSERT INTO media(hash,url,content_type,byte_size,etag,fetched_at,last_access,source,pinned)
-            VALUES(?,?,?,?,?,?,?,'inline',1)
+        this.db.prepare(`INSERT INTO media(hash,url,content_hash,content_type,byte_size,etag,fetched_at,last_access,source,pinned)
+            VALUES(?,?,?,?,?,?,?,?,'inline',1)
             ON CONFLICT(hash) DO UPDATE SET content_type=excluded.content_type,byte_size=excluded.byte_size,
-                source='inline',pinned=1,last_access=excluded.last_access`).run(
-            decoded.hash, 'inline:' + decoded.hash, decoded.mime, decoded.body.length,
+                content_hash=excluded.content_hash,source='inline',pinned=1,last_access=excluded.last_access`).run(
+            decoded.hash, 'inline:' + decoded.hash, decoded.hash, decoded.mime, decoded.body.length,
             decoded.hash, this.now(), this.now()
         );
         return `${this.baseUrl}/media/${decoded.hash}${imageExtension(decoded.mime)}`;
@@ -204,28 +219,53 @@ class MediaCache {
         }
     }
 
-    /** 釋放不再被 monitor 歷史引用的 inline 檔。 */
+    /** 釋放不再被 monitor 歷史引用的 inline 檔；若 HTTP 仍引用同內容則保留檔案。 */
     releaseInlineExcept(referenced = new Set()) {
-        const rows = this.db.prepare("SELECT hash FROM media WHERE source='inline'").all();
+        const rows = this.db.prepare("SELECT hash,content_hash,source FROM media WHERE source='inline'").all();
         for (const row of rows) {
             if (referenced.has(row.hash)) continue;
-            try { fs.unlinkSync(this.filePath(row.hash)); } catch { /* ignore */ }
+            const key = row.content_hash || row.hash;
+            const otherRefs = this.db.prepare(`SELECT COUNT(*) AS count FROM media
+                WHERE (content_hash=? OR hash=?) AND hash<>?`).get(key, key, row.hash).count;
+            if (!otherRefs) {
+                try { fs.unlinkSync(this.filePathForRow(row)); } catch { /* ignore */ }
+            }
             this.db.prepare('DELETE FROM media WHERE hash=?').run(row.hash);
         }
     }
 
-    /** 清除過期或超出容量的非 pinned HTTP 快取；inline 由引用方管理。 */
+    /**
+     * 清除過期或超出容量的非 pinned 快取。
+     * 同一內容可能被多個 URL 引用，因此以 content_hash 分組，最後一個引用消失才刪檔。
+     */
     prune() {
-        const rows = this.db.prepare(`SELECT hash,byte_size,last_access FROM media
-            WHERE pinned=0 ORDER BY last_access ASC, hash ASC`).all();
-        let total = rows.reduce((sum, row) => sum + (Number(row.byte_size) || 0), 0);
-        const cutoff = this.now() - this.maxAgeMs;
+        const rows = this.db.prepare(`SELECT hash,url,content_hash,byte_size,last_access,pinned FROM media`).all();
+        const groups = new Map();
         for (const row of rows) {
-            const expired = this.maxAgeMs > 0 && Number(row.last_access || 0) < cutoff;
+            const key = row.content_hash || row.hash;
+            const group = groups.get(key) || {
+                key, rows: [], size: 0, lastAccess: 0, pinned: false
+            };
+            group.rows.push(row);
+            group.size = Math.max(group.size, Number(row.byte_size) || 0);
+            group.lastAccess = Math.max(group.lastAccess, Number(row.last_access) || 0);
+            group.pinned = group.pinned || row.pinned === 1;
+            groups.set(key, group);
+        }
+
+        const candidates = [...groups.values()]
+            .filter(group => !group.pinned)
+            .sort((a, b) => a.lastAccess - b.lastAccess || a.key.localeCompare(b.key));
+        let total = candidates.reduce((sum, group) => sum + group.size, 0);
+        const cutoff = this.now() - this.maxAgeMs;
+        for (const group of candidates) {
+            const expired = this.maxAgeMs > 0 && group.lastAccess < cutoff;
             if (!expired && total <= this.maxBytes) continue;
-            try { fs.unlinkSync(this.filePath(row.hash)); } catch { /* ignore */ }
-            this.db.prepare('DELETE FROM media WHERE hash=?').run(row.hash);
-            total -= Number(row.byte_size) || 0;
+            for (const row of group.rows) {
+                this.db.prepare('DELETE FROM media WHERE hash=?').run(row.hash);
+            }
+            try { fs.unlinkSync(this.filePathForRow(group.rows[0])); } catch { /* ignore */ }
+            total -= group.size;
         }
         return { remainingBytes: total };
     }
@@ -273,20 +313,42 @@ class MediaCache {
     }
 
     async ensure(hash, url) {
-        if (fs.existsSync(this.filePath(hash))) {
-            const row = this.db.prepare('SELECT content_type FROM media WHERE hash=?').get(hash);
-            if (row?.content_type) return row.content_type;
+        const current = this.db.prepare('SELECT content_hash, content_type FROM media WHERE hash=?').get(hash);
+        if (fs.existsSync(this.filePathForRow({ hash, ...(current || {}) }))) {
+            if (current?.content_type) return current.content_type;
         }
         if (this.inflight.has(hash)) return this.inflight.get(hash);
         const task = (async () => {
             try {
                 const image = await this.fetchImage(url);
-                const temporary = this.filePath(hash) + '.' + process.pid + '.tmp';
-                await fsp.writeFile(temporary, image.body);
-                await fsp.rename(temporary, this.filePath(hash));
+                const contentHash = hashBytes(image.body);
+                const duplicate = this.db.prepare(`SELECT hash, content_hash FROM media
+                    WHERE content_hash=? AND hash<>? LIMIT 1`).get(contentHash, hash);
+                const duplicatePath = duplicate ? this.filePathForRow(duplicate) : '';
+                const target = this.filePath(hash, contentHash);
+
+                // 同一張圖已由其他 URL 存過：兩筆 URL 共用同一個內容檔，不再寫入重複 bytes。
+                if (duplicate && fs.existsSync(duplicatePath)) {
+                    this.db.prepare(`UPDATE media SET content_type=?,byte_size=?,etag=?,fetched_at=?,
+                        content_hash=?,fail_count=0,last_fail_at=NULL,last_access=? WHERE hash=?`)
+                        .run(image.contentType, image.body.length, image.etag, this.now(), contentHash, this.now(), hash);
+                    return image.contentType;
+                }
+
+                if (!fs.existsSync(target)) {
+                    const temporary = target + '.' + process.pid + '.tmp';
+                    try {
+                        await fsp.writeFile(temporary, image.body);
+                        await fsp.rename(temporary, target);
+                    } catch (error) {
+                        // 兩個不同 URL 同時抓到相同內容時，另一個請求可能已建立目標檔。
+                        try { await fsp.unlink(temporary); } catch { /* ignore */ }
+                        if (!fs.existsSync(target)) throw error;
+                    }
+                }
                 this.db.prepare(`UPDATE media SET content_type=?,byte_size=?,etag=?,fetched_at=?,
-                    fail_count=0,last_fail_at=NULL,last_access=? WHERE hash=?`)
-                    .run(image.contentType, image.body.length, image.etag, this.now(), this.now(), hash);
+                    content_hash=?,fail_count=0,last_fail_at=NULL,last_access=? WHERE hash=?`)
+                    .run(image.contentType, image.body.length, image.etag, this.now(), contentHash, this.now(), hash);
                 return image.contentType;
             } catch (error) {
                 this.db.prepare(`UPDATE media SET fail_count=fail_count+1,last_fail_at=? WHERE hash=?`)
@@ -312,7 +374,7 @@ class MediaCache {
             res.end('Not Found');
             return;
         }
-        const row = this.db.prepare('SELECT * FROM media WHERE hash=?').get(hash);
+        let row = this.db.prepare('SELECT * FROM media WHERE hash=?').get(hash);
         if (!row) {
             res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
             res.end('Not Found');
@@ -320,10 +382,11 @@ class MediaCache {
         }
         try {
             let contentType = row.content_type;
-            if (!contentType || !fs.existsSync(this.filePath(hash))) {
+            if (!contentType || !fs.existsSync(this.filePathForRow(row))) {
                 contentType = await this.ensure(hash, row.url);
+                row = this.db.prepare('SELECT * FROM media WHERE hash=?').get(hash);
             }
-            const body = await fsp.readFile(this.filePath(hash));
+            const body = await fsp.readFile(this.filePathForRow(row));
             this.db.prepare('UPDATE media SET last_access=? WHERE hash=?').run(this.now(), hash);
             const etag = '"' + hash + '"';
             if (req.headers['if-none-match'] === etag) {
@@ -339,15 +402,16 @@ class MediaCache {
                 'X-Content-Type-Options': 'nosniff'
             });
             res.end(req.method === 'HEAD' ? undefined : body);
-        } catch {
+        } catch (error) {
             // 不在公開路由導向原始 URL，避免把私有位址帶給客戶端；失敗就回 404。
+            console.error('[MediaCache] 供應失敗:', error.message);
             res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
             res.end('Image unavailable');
         }
     }
 
     statusOf(row) {
-        if (!row.content_type || !fs.existsSync(this.filePath(row.hash))) return 'missing';
+        if (!row.content_type || !fs.existsSync(this.filePathForRow(row))) return 'missing';
         if (row.fail_count > 0) return 'failed';
         return 'cached';
     }
@@ -357,6 +421,7 @@ class MediaCache {
         try { host = new URL(row.url).hostname; } catch { /* ignore */ }
         return {
             hash: row.hash,
+            contentHash: row.content_hash || '',
             localUrl: `${this.baseUrl}/media/${row.hash}${imageExtension(row.content_type)}`,
             host,
             contentType: row.content_type || '',
@@ -371,13 +436,17 @@ class MediaCache {
     }
 
     stats() {
-        const rows = this.db.prepare('SELECT hash,url,content_type,byte_size,fail_count FROM media').all();
-        const result = { total: rows.length, bytes: 0, cached: 0, failed: 0, missing: 0, byType: {} };
+        const rows = this.db.prepare('SELECT hash,url,content_hash,content_type,byte_size,fail_count FROM media').all();
+        const result = { total: rows.length, bytes: 0, cached: 0, failed: 0, missing: 0, uniqueContent: 0, byType: {} };
+        const contentSizes = new Map();
         for (const row of rows) {
-            result.bytes += Number(row.byte_size) || 0;
+            const key = row.content_hash || row.hash;
+            contentSizes.set(key, Math.max(contentSizes.get(key) || 0, Number(row.byte_size) || 0));
             result[this.statusOf(row)] += 1;
             if (row.content_type) result.byType[row.content_type] = (result.byType[row.content_type] || 0) + 1;
         }
+        result.uniqueContent = contentSizes.size;
+        result.bytes = [...contentSizes.values()].reduce((sum, size) => sum + size, 0);
         return result;
     }
 

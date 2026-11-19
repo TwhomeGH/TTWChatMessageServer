@@ -1,5 +1,29 @@
 # ChangeHistory
 
+## 2026.11.20 MediaCache 依內容去重
+
+**類型**: 功能 · **檔案**: `ScriptLib/media/cache.cjs`、`MediaRoutes.cjs`、`Test/media_cache.test.cjs`、`Docs/MEDIA_CACHE.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 原因
+
+HTTP 圖片原本以 `sha256(來源 URL)` 當 key；相同圖片只要網址不同就會重複存一份 bytes，且同一 URL 的內容沒有內容 hash 可判斷。
+
+### 修改
+
+- 保留來源 URL hash 作為公開 `/media/<urlHash>.<ext>` ID，訊息與歷史連結不變。
+- 下載後計算 `sha256(圖片 bytes)` 存入 `media.content_hash`；相同內容已存在時共用同一個 `cache/media/<contentHash>.bin`，不再寫第二份。
+- inline data URI 仍使用內容 hash。
+- `prune()` 以內容分組處理，最後一個引用消失才刪檔；`stats.bytes` 改計唯一內容 bytes，新增 `uniqueContent`。
+- 舊資料沒有 `content_hash` 時沿用舊檔名；既有重複檔不會啟動時回溯搬移，新的下載／重新抓取才套用去重。
+
+### 驗證
+
+- `node --test Test/media_cache.test.cjs`
+- `npm run test:core`
+- `npm run lint`
+
+---
+
 ## 2026.11.20 Socket 離線改由其他通道提醒
 
 **類型**: 功能 · **檔案**: `ScriptLib/socket/alert.mjs`、`ScriptLib/socket/transport.mjs`、`ScriptLib/socket/endpoint.mjs`、`ScriptLib/socket/hub.mjs`、`TikTok.js`、`.env.example`、`Docs/envExample`、`Docs/RUNTIME.md`、`Test/socket_alert.test.mjs`、`Test/socket_transport.test.mjs`、`Docs/TEST_FILES_REFERENCE.md`
