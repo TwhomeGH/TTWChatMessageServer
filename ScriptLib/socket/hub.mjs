@@ -7,12 +7,14 @@ import { MessageDedup } from './dedup.mjs';
  */
 export class SocketHub {
     constructor({ endpoints = [], dedup = new MessageDedup(), replaceEmojis = (value) => value, onSend,
-        mediaCache = null, logger = console } = {}) {
+        onTransportFailure, onTransportRecover, mediaCache = null, logger = console } = {}) {
         // 保留停用端點，才能執行中重新開啟；send／connect 會自行檢查 enabled。
         this.endpoints = endpoints.filter(endpoint => endpoint);
         this.dedup = dedup;
         this.replaceEmojis = replaceEmojis;
         this.onSend = onSend;
+        this.onTransportFailure = onTransportFailure;
+        this.onTransportRecover = onTransportRecover;
         this.mediaCache = mediaCache;
         this.logger = logger;
     }
@@ -156,11 +158,13 @@ export function splitApis(input) {
  * @param {(value: string) => string} [options.replaceEmojis]
  * @param {import('./dedup.mjs').MessageDedup} [options.dedup]
  * @param {Object|null} [options.mediaCache] 圖片快取（需有 localUrl）。
+ * @param {(info: Object) => void} [options.onTransportFailure] 任一端點連線失敗時的回呼。
+ * @param {(info: Object) => void} [options.onTransportRecover] 任一端點恢復連線時的回呼。
  * @param {Console} [options.logger=console]
  * @returns {SocketHub}
  */
 export function createHub({ socketApi, apis = [], enabled = true, onConnect, onSend, replaceEmojis, dedup,
-    mediaCache = null, logger = console } = {}) {
+    mediaCache = null, onTransportFailure, onTransportRecover, logger = console } = {}) {
     const specs = [];
     if (socketApi) specs.push(socketApi);
     for (const api of splitApis(apis)) specs.push(api);
@@ -186,7 +190,9 @@ export function createHub({ socketApi, apis = [], enabled = true, onConnect, onS
     for (const [url, filters] of byUrl) {
         const filter = filters.has(null) ? undefined : [...filters];
         // 即使 enabled=false 也建立端點，之後才能透過 setEnabled 動態連線。
-        endpoints.push(new SocketEndpoint({ url, enabled, filter, onConnect, logger }));
+        endpoints.push(new SocketEndpoint({ url, enabled, filter, onConnect,
+            onFailure: onTransportFailure, onRecover: onTransportRecover, logger }));
     }
-    return new SocketHub({ endpoints, dedup, replaceEmojis, onSend, mediaCache, logger });
+    return new SocketHub({ endpoints, dedup, replaceEmojis, onSend, mediaCache,
+        onTransportFailure, onTransportRecover, logger });
 }

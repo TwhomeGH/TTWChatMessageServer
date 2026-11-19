@@ -41,6 +41,7 @@
 - Socket 端點由 `SOCKET_API`／`SOCKET_APIS` 設定；即使啟動時沒有勾選 Socket，端點仍會建立但保持停用，之後可動態連線。
 - Bark／ntfy 由 `BARK_API`／`NTFY_API` 設定；啟動時未勾選的通道仍保留，可之後動態開啟。未設定 URL 的通道按鈕會停用。
 - 關閉 Socket 會斷線並清空待送佇列；重新開啟會重新建立連線。關閉通知通道只停止該通道的推播，不影響另一通道。
+- Socket 端點連續失敗達 `SOCKET_ALERT_AFTER_FAILURES`（預設 5 次）且 Bark／ntfy 有啟用時，會透過這些通道提醒「主服務仍在執行、Socket 目標無法連線」；同一次離線每 `SOCKET_ALERT_REPEAT_MIN` 分鐘（預設 360，0=只一次）最多提醒一次，成功重連後重新計算。提醒不經 Socket 輸出，也不寫入聊天歷史。
 - Monitor 的即時鏡像與本場統計不屬於 Socket 輸出，切換 Socket 不會停止 monitor 更新。
 
 Socket 使用既有 SOCKET_API 設定（可再用 SOCKET_APIS 加開多個端點，每端點可用 `?filter=類別` 只收指定分類）；Bark 與 ntfy 使用既有通知設定（BARK_API／NTFY_API）。「開啟設定」只導向設定頁。程序啟動成功不代表各平台已完成登入。

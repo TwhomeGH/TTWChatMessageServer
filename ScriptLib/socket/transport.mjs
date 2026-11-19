@@ -57,14 +57,17 @@ export class SocketTransport {
      * @param {number} [options.ttl=30000] 佇列項目存活時間（ms）。
      * @param {number} [options.stallMs=15000] 連線／write 停滯逾時（ms）。
      * @param {number} [options.retryMs=15000] 重連基礎間隔（ms）。
+     * @param {(info: Object) => void} [options.onFailure] 連線失敗並排入重連時呼叫。
+     * @param {(info: Object) => void} [options.onRecover] 連線成功時呼叫。
      * @param {Console} [options.logger=console]
      */
     constructor({ host, port, enabled = true, onConnect = () => {},
         socketFactory = () => new net.Socket(), maxPending = 200,
         maxBytes = 1024 * 1024, ttl = 30000, stallMs = 15000,
-        retryMs = 15000, logger = console }) {
+        retryMs = 15000, onFailure = () => {}, onRecover = () => {},
+        logger = console }) {
         Object.assign(this, { host, port, enabled, onConnect, socketFactory,
-            maxPending, maxBytes, ttl, stallMs, retryMs, logger });
+            maxPending, maxBytes, ttl, stallMs, retryMs, onFailure, onRecover, logger });
         this.queue = [];
         this.bytes = 0;
         this.connected = false;
@@ -72,6 +75,7 @@ export class SocketTransport {
         this.stopped = false;
         this.retries = 0;
         this.stats = { dropped: 0, reconnects: 0 };
+        this.lastError = null;
         this.lastLog = 0;
     }
     drop(index = 0) {
@@ -177,9 +181,12 @@ export class SocketTransport {
             clearTimeout(this.connectTimer);
             this.connected = true;
             this.retries = 0;
+            this.lastError = null;
             this.logger.log('✅ TCP Socket connected');
             this.flush();
             this.onConnect();
+            try { this.onRecover({ host: this.host, port: this.port }); }
+            catch (error) { this.logger.warn?.(`[Socket] onRecover 失敗: ${error.message}`); }
         });
         socket.on('data', chunk => {
             try { reader.push(chunk); }
@@ -191,6 +198,7 @@ export class SocketTransport {
             this.flush();
         });
         socket.on('error', err => {
+            this.lastError = err;
             this.logger.warn(`[Socket] ${err.message}`);
             socket.destroy();
         });
@@ -204,6 +212,15 @@ export class SocketTransport {
             this.stats.reconnects++;
             this.report();
             const delay = Math.min(this.retryMs + Math.max(0, this.retries - 10) * 5000, 300000);
+            try {
+                this.onFailure({
+                    host: this.host, port: this.port, retries: this.retries,
+                    reconnects: this.stats.reconnects, queued: this.queue.length,
+                    dropped: this.stats.dropped, error: this.lastError?.message || '', retryInMs: delay
+                });
+            } catch (error) {
+                this.logger.warn?.(`[Socket] onFailure 失敗: ${error.message}`);
+            }
             this.retryTimer = setTimeout(() => this.connect(), delay);
         });
         socket.connect(this.port, this.host);

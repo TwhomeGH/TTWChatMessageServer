@@ -13,6 +13,7 @@ import { promises as fs, readFileSync, existsSync, writeFileSync } from 'fs';
 import axios from 'axios';
 
 import { createHub } from './ScriptLib/socket/hub.mjs';
+import { createSocketAlertPolicy } from './ScriptLib/socket/alert.mjs';
 import { createAutoStop } from './ScriptLib/lifecycle/autoStop.mjs';
 import { createMonitorRelay } from './ScriptLib/socket/monitor-relay.mjs';
 import { MessageDedup } from './ScriptLib/socket/dedup.mjs';
@@ -251,6 +252,7 @@ let tiktokLiveBeforeAutoStop = false; // 連線早於管理器建立時，先記
 // Socket 輸出層：端點／去重／扇出皆在 ScriptLib/socket/。
 const dedup = new MessageDedup();
 const monitorRelay = createMonitorRelay();
+let socketAlerts = null;
 const socketHub = createHub({
     socketApi: process.env.SOCKET_API || 'tcp://localhost:9322',
     apis: process.env.SOCKET_APIS || '',
@@ -259,6 +261,8 @@ const socketHub = createHub({
     dedup,
     mediaCache: mediaCacheModule.defaultMediaCache,
     onSend: (payload) => monitorRelay.forward(payload),
+    onTransportFailure: (info) => socketAlerts?.failure(info),
+    onTransportRecover: (info) => socketAlerts?.recovery(info),
     onConnect: () => {
         if (isFirstSocketConnect) {
             sendSocketMessage("系統", "TTW Chat Message Server 已連線", { isMain: false, category: 'system' });
@@ -274,6 +278,18 @@ const Ntfy = process.env.NTFY_API;
 // notify() 一次扇出到所有已啟用通道，事件點不必知道有哪些通道。
 const notifier = createNotifier({ isBark, isNtfy, barkApi: Bark, ntfyApi: Ntfy, getEmojiMap, axios });
 const notify = (title, comment, icon, url) => notifier.notify(title, comment, icon, url);
+
+// Socket 目標離線時，重試到門檻後改用其他已啟用通道提醒；成功重連即清除。
+const socketAlertAfterFailures = Math.max(1, Number(process.env.SOCKET_ALERT_AFTER_FAILURES) || 5);
+const socketAlertRepeatMinutes = Number(process.env.SOCKET_ALERT_REPEAT_MIN);
+socketAlerts = createSocketAlertPolicy({
+    notify,
+    channels: () => notifier.enabled,
+    threshold: socketAlertAfterFailures,
+    repeatMs: Number.isFinite(socketAlertRepeatMinutes) && socketAlertRepeatMinutes >= 0
+        ? socketAlertRepeatMinutes * 60000 : 6 * 60 * 60 * 1000,
+    logger: console
+});
 
 /** 目前收發／通知狀態；configured 表示有設定，active 才是實際啟用。 */
 function transportSnapshot() {
@@ -304,6 +320,7 @@ function applyTransports(next = {}) {
     if (typeof next.socket === 'boolean') {
         isSocket = next.socket;
         socketHub.setEnabled(isSocket);
+        if (!isSocket) socketAlerts?.clear();
     }
     if (typeof next.bark === 'boolean') {
         isBark = next.bark;

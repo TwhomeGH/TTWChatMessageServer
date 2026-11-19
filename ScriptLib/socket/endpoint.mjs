@@ -25,13 +25,15 @@ export class SocketEndpoint {
      * @param {boolean} [options.enabled=true] 是否啟用。
      * @param {(string|string[])} [options.filter] 允許的 category；空＝全部。
      * @param {() => void} [options.onConnect] 連線建立時的回呼。
+     * @param {(info: Object) => void} [options.onFailure] 連線失敗時的回呼。
+     * @param {(info: Object) => void} [options.onRecover] 連線恢復時的回呼。
      * @param {Console} [options.logger=console]
      * @param {Object} [options.transportOptions] 覆寫 SocketTransport 的選項（測試用）。
      */
-    constructor({ url, enabled = true, filter, onConnect, logger = console, transportOptions = {} } = {}) {
+    constructor({ url, enabled = true, filter, onConnect, onFailure, onRecover, logger = console, transportOptions = {} } = {}) {
         this.filter = normalizeFilter(filter);
         const { host, port } = parseSocketUrl(url);
-        this.transport = new SocketTransport({ host, port, enabled, onConnect, logger, ...transportOptions });
+        this.transport = new SocketTransport({ host, port, enabled, onConnect, onFailure, onRecover, logger, ...transportOptions });
     }
 
     /** @returns {boolean} 傳輸層是否啟用。 */

@@ -92,6 +92,26 @@ test('setEnabled 可執行中關閉並清空佇列，再開啟時重新連線', 
     assert.deepEqual(sockets[1].writes, [{ n: 2 }]);
 });
 
+test('連線失敗回報重試資訊，成功重連時回報 recovery', async t => {
+    const failures = [];
+    const recoveries = [];
+    const { transport, sockets, socket } = setup(t, {
+        retryMs: 5,
+        onFailure: info => failures.push(info),
+        onRecover: info => recoveries.push(info)
+    });
+    socket.emit('error', new Error('connect ECONNREFUSED 192.168.0.159:9322'));
+    assert.equal(failures.length, 1);
+    assert.equal(failures[0].retries, 1);
+    assert.match(failures[0].error, /ECONNREFUSED/);
+    assert.equal(failures[0].host, 'localhost');
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.ok(sockets.length >= 2);
+    sockets.at(-1).emit('connect');
+    assert.equal(recoveries.length, 1);
+    assert.equal(transport.retries, 0);
+});
+
 test('disconnect during backpressure retains only unsent frames and reconnects once', async t => {
     const { transport, socket, sockets } = setup(t, { retryMs: 5 });
     socket.emit('connect');

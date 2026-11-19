@@ -1,5 +1,28 @@
 # ChangeHistory
 
+## 2026.11.20 Socket 離線改由其他通道提醒
+
+**類型**: 功能 · **檔案**: `ScriptLib/socket/alert.mjs`、`ScriptLib/socket/transport.mjs`、`ScriptLib/socket/endpoint.mjs`、`ScriptLib/socket/hub.mjs`、`TikTok.js`、`.env.example`、`Docs/envExample`、`Docs/RUNTIME.md`、`Test/socket_alert.test.mjs`、`Test/socket_transport.test.mjs`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 原因
+
+Socket 目標離線時傳輸層會持續重試；使用者若忘了關閉 Socket，只會看到每分鐘的 `ECONNREFUSED` 與重連計數，沒有其他提示。
+
+### 修改
+
+- 傳輸層在重連失敗時回報次數、佇列、丟棄數與最後錯誤；成功連線時回報 recovery。
+- 新增 Socket 通知策略：連續失敗達 `SOCKET_ALERT_AFTER_FAILURES`（預設 5）且 Bark／ntfy 等通道有啟用時，透過這些通道提醒「主服務仍在執行、Socket 目標無法連線」。
+- 同一次離線每 `SOCKET_ALERT_REPEAT_MIN` 分鐘（預設 360，0=只提醒一次）最多提醒一次；成功重連或執行中關閉 Socket 後清除狀態。
+- 提醒不經 Socket 輸出，也不寫入聊天歷史；沒有其他已啟用通道時不發送。
+
+### 驗證
+
+- `node --test Test/socket_alert.test.mjs Test/socket_transport.test.mjs`
+- `npm run test:core`（368 項）
+- `npm run lint`
+
+---
+
 ## 2026.11.20 Python overlay 圖片網址後貼文字驗證
 
 **類型**: 測試 · **檔案**: `OtherTool/live_engine/tests/test_emoji_parser.py`、`Docs/MEDIA_CACHE.md`

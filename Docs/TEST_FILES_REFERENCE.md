@@ -71,6 +71,8 @@ node Test/xxx.mjs
 | `Test/media_cache.test.cjs` | 圖片快取、`.ext` URL、inline pin、LRU／大小上限、SVG／私有位址拒絕、路由與 SocketHub 改寫 |
 | `Test/inline_image.test.cjs` | data URI 圖片格式、大小／數量限制與通知剝離 |
 | `Test/socket_test_routes.test.cjs` | Raw Socket 測試入口的登入、子程序檢查與 payload 轉送 |
+| `Test/socket_alert.test.mjs` | Socket 連續失敗通知門檻、通道可用性、重複間隔與 recovery 清除 |
+| `Test/socket_transport.test.mjs` | Socket 重連失敗回報與 recovery 回呼 |
 | `Test/log_store.test.cjs` | 系統日誌分類、SQLite 寫入、摘要、篩選與 keyset 分頁 |
 | `Test/log_routes.test.cjs` | `/api/logs` 登入、summary 與列表篩選 |
 | `Test/log_explorer_ui.cjs` | `/logs` 摘要卡、分類／等級篩選與欄位展開 |
