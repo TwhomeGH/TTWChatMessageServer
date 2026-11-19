@@ -45,6 +45,20 @@ class TestParseMessage:
         assert segs[1]["type"] == "text"
         assert segs[1]["content"] == " nice"
 
+    def test_text_glued_after_image_extension(self):
+        # 伺服器若沒補空白，...pngsw 仍應只把 .png 當圖片，sw 留在文字。
+        segs = parse_message("https://e.com/a.pngsw")
+        assert [s["type"] for s in segs] == ["image", "text"]
+        assert segs[0]["url"] == "https://e.com/a.png"
+        assert segs[1]["content"] == "sw"
+
+    def test_text_glued_after_media_cache_url(self):
+        url = "http://192.168.0.102:3332/media/" + "a" * 64 + ".png"
+        segs = parse_message(url + "sw")
+        assert [s["type"] for s in segs] == ["image", "text"]
+        assert segs[0]["url"] == url
+        assert segs[1]["content"] == "sw"
+
     def test_multiple_images(self):
         segs = parse_message("https://e.com/a.png https://e.com/b.jpg hello")
         assert len(segs) == 4

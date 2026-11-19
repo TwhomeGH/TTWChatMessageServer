@@ -1,5 +1,19 @@
 # ChangeHistory
 
+## 2026.11.20 Python overlay 圖片網址後貼文字驗證
+
+**類型**: 測試 · **檔案**: `OtherTool/live_engine/tests/test_emoji_parser.py`、`Docs/MEDIA_CACHE.md`
+
+### 內容
+
+確認 Windows overlay 的 `parse_message` 以圖片副檔名結尾切分；`.../1f602.pngsw` 會解析成圖片 `.../1f602.png` 與文字 `sw`，不會把整段當一般文字；MediaCache 的 `/media/<hash>.pngsw` 同樣處理。補上兩個回歸測試，避免日後修改正則時退化。
+
+### 驗證
+
+- `python -m pytest -q`（65 項）
+
+---
+
 ## 2026.11.19 表情網址與相鄰文字補空白
 
 **類型**: 修正 · **檔案**: `EmojiMap.js`、`Test/emoji_store.test.cjs`、`Docs/EMOJI_MAP.md`

@@ -49,6 +49,7 @@ MediaCache 將圖片持久化到本機，訊息只傳本地 URL：
 - 表情映射中沒有圖片副檔名的 HTTP URL 會先轉進 MediaCache，輸出 `/media/<hash>.<ext>`；已有 `.png`／`.jpg` 等副檔名者維持遠端 URL。
 - 舊的無副檔名 `/media/<hash>` 仍可讀取；Python overlay 也接受這種路徑，避免舊資料變回文字。
 - Python overlay 已在 texture worker 本機解碼 png／jpeg／webp／gif data URI；日誌只記錄類型與長度。
+- Python overlay 的訊息解析以圖片副檔名結尾切分；即使網址後緊貼文字（例如 `.../1f602.pngsw`），仍只取 `.../1f602.png` 作為圖片，`sw` 留在文字片段。
 
 ## 檢視與手動測試
 
