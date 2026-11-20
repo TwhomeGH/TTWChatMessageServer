@@ -1,5 +1,29 @@
 # ChangeHistory
 
+## 2026.11.21 IPC 診斷新增訊息過濾器
+
+**類型**: 功能 · **檔案**: `ScriptLib/filters/diagnostics.mjs`、`MessageFilter.js`、`ScriptLib/runtime/diagnostics.cjs`、`TikTok.js`、`runtime.html`、`lang/*.json`、`Test/filter_diagnostics.test.mjs`、`Test/runtime_diagnostics.test.cjs`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 原因
+
+IPC 診斷只有聊天收發與平台狀態，沒有過濾器決策；被過濾的訊息只能從日誌逐筆找，無法快速看出哪條規則命中、是否誤攔，或 throttle 是否累積中。
+
+### 修改
+
+- 新增過濾器診斷：`evaluated`／`passed`／`blocked`／`modified`、`byField`、`byReason`、廣告阻擋數、最後決策與最近 20 筆。
+- 決策只保留使用者、訊息長度、原因、欄位與時間，不保存聊天本文。
+- 快照列出目前規則的 field／action／throttle 設定，以及 throttle 的活動群組數、pending 與最舊時間。
+- `processFilter` 每次決策自動記錄；`simulateSequence` 使用隔離規則，不會污染線上診斷。
+- IPC 診斷新增 `filter` 命令，`snapshot` 也包含；Runtime 頁新增「訊息過濾器」選項。
+
+### 驗證
+
+- `node --test Test/filter_diagnostics.test.mjs Test/runtime_diagnostics.test.cjs`
+- `npm run test:core`
+- `npm run lint`
+
+---
+
 ## 2026.11.21 IPC 診斷新增聊天收發
 
 **類型**: 功能 · **檔案**: `ScriptLib/runtime/chat-stats.mjs`、`ScriptLib/runtime/diagnostics.cjs`、`TikTok.js`、`ScriptLib/tiktok/events.mjs`、`ScriptLib/twitch/chat.mjs`、`ScriptLib/kick/chat.mjs`、`ScriptLib/youtube/chat.mjs`、`ScriptLib/odysee/chat.mjs`、`runtime.html`、`lang/*.json`、`Test/chat_stats.test.mjs`、`Test/runtime_diagnostics.test.cjs`、`Test/twitch_chat.test.mjs`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`

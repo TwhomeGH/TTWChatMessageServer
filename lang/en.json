@@ -582,6 +582,7 @@
   "runtime.diag.autoclip": "AutoClip",
   "runtime.diag.twitch": "Twitch",
   "runtime.diag.chat": "Chat delivery",
+  "runtime.diag.filter": "Message filter",
   "runtime.diag.clips": "Clip history summary",
   "runtime.diag.run": "Run diagnostic",
   "runtime.diag.running": "Running…",

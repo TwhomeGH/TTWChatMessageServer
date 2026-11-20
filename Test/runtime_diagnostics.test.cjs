@@ -13,7 +13,8 @@ const state = {
     autoClip: { config: { mode: 'live' }, count: 2, recent: [] },
     twitch: { userId: '42', apiReady: true },
     clips: [{ id: 'abc', confirmed: false }],
-    chat: { at: 10, platforms: { tiktok: { received: 2, sent: 1 }, twitch: { received: 1, sent: 1 } } }
+    chat: { at: 10, platforms: { tiktok: { received: 2, sent: 1 }, twitch: { received: 1, sent: 1 } } },
+    filter: { evaluated: 3, blocked: 1, byReason: { spam: 1 } }
 };
 
 test('runtime diagnostics 只接受白名單命令並回傳對應區塊', () => {
@@ -36,6 +37,10 @@ test('runtime diagnostics 只接受白名單命令並回傳對應區塊', () => 
     const chat = runDiagnostic('chat', state);
     assert.equal(chat.data.platforms.tiktok.received, 2);
     assert.ok(DIAGNOSTIC_COMMANDS.includes('chat'));
+
+    const filter = runDiagnostic('filter', state);
+    assert.equal(filter.data.blocked, 1);
+    assert.ok(DIAGNOSTIC_COMMANDS.includes('filter'));
 });
 
 test('runtime diagnostics 未知命令不執行任何動作', () => {

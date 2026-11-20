@@ -1,6 +1,7 @@
 import { normalizeSource } from './MessageSource.mjs';
 import { promises as fs, existsSync, copyFileSync } from 'fs';
 import { MessageStats, mergeStatEntries } from './MessageStats.mjs';
+import { createFilterDiagnostics } from './ScriptLib/filters/diagnostics.mjs';
 export { mergeStatEntries };
 const stats = new MessageStats();
 const STATS_FILE = './message_stats.json';
@@ -44,6 +45,7 @@ const filterRules = [];
 
 // 頻率規則的線上狀態：Map(rule → 群組陣列)。模擬測試會用另一份 Map 完全隔離。
 const liveThrottleState = new Map();
+const filterDiagnostics = createFilterDiagnostics();
 
 export function addFilterRule(rule) {
     filterRules.push(rule);
@@ -121,7 +123,17 @@ function processWithRules(rules, { user, message } = {}, now, throttleState) {
 
 /** 用線上規則處理一筆訊息。 */
 export function processFilter(input = {}, now = Date.now(), throttleState = liveThrottleState) {
-    return processWithRules(filterRules, input, now, throttleState);
+    const result = processWithRules(filterRules, input, now, throttleState);
+    filterDiagnostics.record(input, result);
+    return result;
+}
+
+/**
+ * 目前過濾器與頻率規則的唯讀診斷快照；不包含聊天本文。
+ * @returns {Object}
+ */
+export function getFilterDiagnostics() {
+    return filterDiagnostics.snapshot({ rules: filterRules, throttleState: liveThrottleState });
 }
 
 /**
@@ -496,6 +508,7 @@ export default {
     isFiltered,
     clearFilterRules,
     getFilterRules,
+    getFilterDiagnostics,
     takeThrottleSummaries,
     simulateSequence,
 };

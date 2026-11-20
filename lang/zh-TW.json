@@ -582,6 +582,7 @@
   "runtime.diag.autoclip": "AutoClip",
   "runtime.diag.twitch": "Twitch",
   "runtime.diag.chat": "聊天收發",
+  "runtime.diag.filter": "訊息過濾器",
   "runtime.diag.clips": "剪輯歷史摘要",
   "runtime.diag.run": "執行診斷",
   "runtime.diag.running": "診斷中…",

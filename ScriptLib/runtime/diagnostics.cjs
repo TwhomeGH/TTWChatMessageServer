@@ -7,7 +7,7 @@
 
 const DIAGNOSTIC_COMMANDS = Object.freeze([
     'snapshot', 'ping', 'platforms', 'transports', 'viewers',
-    'session', 'socket', 'autoclip', 'twitch', 'clips', 'chat'
+    'session', 'socket', 'autoclip', 'twitch', 'clips', 'chat', 'filter'
 ]);
 
 /** 只保留有限的最近幾筆，避免把整段聊天或歷史帶進診斷回應。 */
@@ -64,7 +64,8 @@ function runDiagnostic(command, state = {}) {
         autoClip: state.autoClip || null,
         twitch: state.twitch || null,
         clips: state.clips || null,
-        chat: state.chat || null
+        chat: state.chat || null,
+        filter: state.filter || null
     };
     if (name === 'ping') {
         return { ok: true, command: name, data: { at: data.at, process: data.process } };

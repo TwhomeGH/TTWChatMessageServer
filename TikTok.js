@@ -46,7 +46,7 @@ const __dirname = path.dirname(__filename);
 import { TikTokLiveConnection } from 'tiktok-live-connector';
 import { setupCustomSignServer, waitForSigner, setStreamerName } from './SignServer/index.js';
 import Translate from "./TranslateTest.js"
-import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFilter, clearStats, takeThrottleSummaries } from "./MessageFilter.js"
+import { recordMessageStat, getTopMessages, getAllMessageStatsSorted, processFilter, getFilterDiagnostics, clearStats, takeThrottleSummaries } from "./MessageFilter.js"
 import { replaceEmojis, setEmojiMediaResolver, loadEmojiMap, getEmojiMap } from "./EmojiMap.js"
 import { startKickChat } from './ScriptLib/kick/chat.mjs';
 import mediaCacheModule from './ScriptLib/media/cache.cjs';
@@ -1492,6 +1492,7 @@ function diagnosticState() {
         combinedViewers: viewerCounts.combined(),
         session: sessionSnapshot(),
         chat: chatStats.snapshot(),
+        filter: getFilterDiagnostics(),
         socket: {
             enabled: socketHub.enabled,
             endpoints: socketHub.endpoints.filter(endpoint => endpoint.enabled).length,
