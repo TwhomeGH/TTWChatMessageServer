@@ -70,7 +70,7 @@ async function checkIsLive(axios, claimId) {
 }
 
 function connect(claimId, channelName, deps) {
-    const { writeLog, notify, sendSystem, sendChat, reportTraffic, reportFiltered, filter, recordHeat, replaceEmojis, translate, onViewerCount } = deps;
+    const { writeLog, notify, sendSystem, sendChat, reportTraffic, reportFiltered, filter, recordHeat, replaceEmojis, translate, chatStats, onViewerCount } = deps;
     const wsUrl = `wss://sockety.odysee.tv/ws/commentron?id=${claimId}&category=${encodeURIComponent(channelName)}&sub_category=viewer`;
     console.log(`🔌 Odysee WebSocket 連線: ${wsUrl}`);
     writeLog("Default", `Odysee WebSocket 連線: ${wsUrl}`, "Odysee");
@@ -98,7 +98,9 @@ function connect(claimId, channelName, deps) {
                 const userName = comment.channel_name || comment.author || '未知';
                 const message = comment.comment || '';
                 const avatar = '';
+                const chatInfo = { id: comment.comment_id || comment.id, user: userName };
 
+                chatStats?.received('odysee', chatInfo);
                 console.info(`[Odysee Chat] ${userName} : ${message}`);
                 writeLog("Default", `${userName} : ${message}`, "Odysee Chat Original");
                 reportTraffic({ platform: 'Odysee', eventType: 'chat', user: userName, message });
@@ -108,6 +110,7 @@ function connect(claimId, channelName, deps) {
                     reportFiltered(fr, { platform: 'Odysee', user: userName, message });
                     console.info('🚫 過濾器阻擋(Odysee):', userName, message, `(規則: ${fr.reason})`);
                     writeLog("Default", `過濾器阻擋(Odysee): ${userName} : ${message} (規則: ${fr.reason})`, "Filter");
+                    chatStats?.dropped('odysee', 'filtered', chatInfo);
                     return;
                 }
 
@@ -115,10 +118,14 @@ function connect(claimId, channelName, deps) {
                 let tMsg = fr.modified && fr.message ? fr.message : message;
                 if (!tUser || !tMsg) {
                     console.info('⚠️ 過濾後(Odysee) nick/msg 為空，跳過:', userName, message);
+                    chatStats?.dropped('odysee', 'invalid', chatInfo);
                     return;
                 }
 
-                if (!recordHeat(tMsg, { platform: 'Odysee', user: userName })) return;
+                if (!recordHeat(tMsg, { platform: 'Odysee', user: userName })) {
+                    chatStats?.dropped('odysee', 'duplicate', chatInfo);
+                    return;
+                }
 
                 notify(tUser, tMsg, avatar);
 
@@ -130,7 +137,8 @@ function connect(claimId, channelName, deps) {
                     if (RES.toLowerCase() != tMsg.toLowerCase()) {
                         notify(tUser, RES, avatar);
                     }
-                    sendChat(tUser, RESCHAT, avatar);
+                    if (sendChat(tUser, RESCHAT, avatar) !== false) chatStats?.sent('odysee', chatInfo);
+                    else chatStats?.dropped('odysee', 'socket-duplicate', chatInfo);
                     writeLog("Default", `${tUser} : ${RESCHAT}`, "Odysee Chat");
                 });
             } else if (msg.type === 'viewers') {

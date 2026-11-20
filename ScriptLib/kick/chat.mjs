@@ -132,7 +132,7 @@ async function getKickUserAvatar(username, userId, ctx) {
  * @returns {Promise<KickWebSocket|undefined>} 建立的 socket（未指定頻道時為 undefined）。
  */
 export async function startKickChat(deps) {
-    const { channelName, writeLog, notify, sendSystem, sendChat, sendNotice, reportTraffic, reportFiltered, filter, recordHeat, replaceEmojis, translate, axios, logger = console } = deps;
+    const { channelName, writeLog, notify, sendSystem, sendChat, sendNotice, reportTraffic, reportFiltered, filter, recordHeat, replaceEmojis, translate, chatStats, axios, logger = console } = deps;
 
     if (!channelName) {
         logger.log('⚠️ 未指定 Kick 頻道名稱，跳過');
@@ -168,6 +168,8 @@ export async function startKickChat(deps) {
     kickWS.on('ChatMessage', async (data) => {
         const userName = data.sender?.username || '未知';
         const message = data.content || '';
+        const chatInfo = { id: data.id, user: userName, at: Date.now() };
+        chatStats?.received('kick', chatInfo);
         let avatar = getSenderAvatar(data.sender);
         if (!avatar) avatar = await getKickUserAvatar(userName, data.sender?.id, avatarCtx);
 
@@ -180,6 +182,7 @@ export async function startKickChat(deps) {
             reportFiltered(fr, { platform: 'Kick', id: data.id, userId: data.sender?.id, user: userName, sentAt: data.created_at, message });
             logger.info('🚫 過濾器阻擋(Kick):', userName, message, `(規則: ${fr.reason})`);
             writeLog("Default", `過濾器阻擋(Kick): ${userName} : ${message} (規則: ${fr.reason})`, "Filter");
+            chatStats?.dropped('kick', 'filtered', chatInfo);
             return;
         }
 
@@ -188,10 +191,14 @@ export async function startKickChat(deps) {
 
         if (!tUser || !tMsg) {
             logger.info('⚠️ 過濾後(Kick) nick/msg 為空，跳過:', userName, message);
+            chatStats?.dropped('kick', 'invalid', chatInfo);
             return;
         }
 
-        if (!recordHeat(tMsg, { platform: 'Kick', id: data.id, userId: data.sender?.id, user: userName, sentAt: data.created_at })) return;
+        if (!recordHeat(tMsg, { platform: 'Kick', id: data.id, userId: data.sender?.id, user: userName, sentAt: data.created_at })) {
+            chatStats?.dropped('kick', 'duplicate', chatInfo);
+            return;
+        }
 
         logger.info(`📢 發送 Bark 通知: ${tUser} - ${tMsg}`);
         notify(tUser, tMsg, avatar);
@@ -205,7 +212,8 @@ export async function startKickChat(deps) {
                 logger.info(`📢 發送 Bark 通知: ${tUser} - ${RES}`);
                 notify(tUser, RES, avatar);
             }
-            sendChat(tUser, RESCHAT, avatar);
+            if (sendChat(tUser, RESCHAT, avatar) !== false) chatStats?.sent('kick', chatInfo);
+            else chatStats?.dropped('kick', 'socket-duplicate', chatInfo);
             writeLog("Default", `${tUser} : ${RESCHAT}`, "Kick Chat");
         });
     });

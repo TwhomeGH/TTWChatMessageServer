@@ -30,6 +30,7 @@ import { createAdScheduler } from './ScriptLib/sponsor/scheduler.mjs';
 import { createSentCache } from './ScriptLib/sponsor/sent-cache.mjs';
 import { TikTokChatGuard, chatMetadata } from './TikTokChatGuard.mjs';
 import { createViewerCounts } from './ScriptLib/viewers/counts.mjs';
+import { createChatStats } from './ScriptLib/runtime/chat-stats.mjs';
 
 
 
@@ -196,6 +197,8 @@ const youtubePollIntervalS = parseInt(process.env.YOUTUBE_POLL_INTERVAL_S) || 30
 
 let isFirstSocketConnect = true;
 let autoClip = null;
+// 各平台聊天收發計數；IPC 診斷用，不保存聊天本文。
+const chatStats = createChatStats();
 function applyRelayAudience(data) {
     const source = normalizeSource(data, 'userscript');
     if (!source.heatEligible || data.audienceKind === 'top-fans' || !Number.isFinite(data.userNum) || data.userNum < 0) return;
@@ -401,6 +404,7 @@ const kickDeps = {
     recordHeat: recordChatHeat,
     replaceEmojis,
     translate: (text) => Translate.TranslateText(text),
+    chatStats,
     axios,
     logger: console,
 };
@@ -631,6 +635,10 @@ process.stdin.on('data', async (chunk) => {
                 const origMsg = json.message;
                 // 測試訊息常重複同一段文字；用頭貼區分，避免換圖仍被當成重複。
                 const dedupVariant = json.isTest === true ? 'test:' + String(json.img || '') : '';
+                const chatPlatform = String(json.platform || 'tiktok').toLowerCase();
+                const chatInfo = { id: json.msgId || json.id, user: origUser, at: Date.now() };
+                const trackChat = json.isTest !== true;
+                if (trackChat) chatStats.received(chatPlatform, chatInfo);
 
                 json.message = replaceEmojis(json.message);
 
@@ -638,6 +646,7 @@ process.stdin.on('data', async (chunk) => {
                 const skippedNotify = { status: 'skipped', channels: [] };
                 if (fr.blocked) {
                     console.log('🚫 過濾器阻擋(來自Server):', json.user, json.message, `(規則: ${fr.reason})`);
+                    if (trackChat) chatStats.dropped(chatPlatform, 'filtered', chatInfo);
                     reportTestResult(json.testId, 'filtered', 0, skippedNotify);
                     return;
                 }
@@ -645,6 +654,7 @@ process.stdin.on('data', async (chunk) => {
                 if (fr.modified && fr.message) json.message = fr.message;
 
                 if (!recordChatHeat(json.message, { ...normalizeSource(json, 'userscript'), id: json.msgId || json.id, sentAt: json.sentAt || json.createTime, userId: json.userId, user: origUser, receivedAt: json.receivedAt || Date.now() })) {
+                    if (trackChat) chatStats.dropped(chatPlatform, 'duplicate', chatInfo);
                     reportTestResult(json.testId, 'ignored', 0, skippedNotify);
                     return;
                 }
@@ -674,7 +684,9 @@ process.stdin.on('data', async (chunk) => {
                     return;
                 }
 
-                sendSocketMessage(json.user, json.message, { img: json.img || '', giftImg: json.giftImg || '', category: 'chat', platform: 'tiktok', dedupUser: origUser, dedupMessage: origMsg, dedupVariant });
+                const delivered = sendSocketMessage(json.user, json.message, { img: json.img || '', giftImg: json.giftImg || '', category: 'chat', platform: 'tiktok', dedupUser: origUser, dedupMessage: origMsg, dedupVariant });
+                if (delivered !== false) chatStats.sent(chatPlatform, chatInfo);
+                else chatStats.dropped(chatPlatform, 'socket-duplicate', chatInfo);
                 dedup.add(origUser, origMsg, dedupVariant);
 
                 let Gift = json.giftImg || '';
@@ -1192,6 +1204,7 @@ registerTikTokEvents(connection, {
     logRawEvent, writeLog, writeFileSync,
     dedup, sentCache, processFilter, reportFiltered, reportTraffic,
     replaceEmojis, recordChatHeat, chatMetadata, translate: (text) => Translate.TranslateText(text),
+    chatStats,
     tikTokChatGuard,
     giftNames, getGiftMapReady: () => giftMapReady,
     getCacheUserNum: () => CacheUserNum,
@@ -1256,6 +1269,7 @@ const twitchChatDeps = {
     recordChatHeat,
     replaceEmojis,
     translate: (text) => Translate.TranslateText(text),
+    chatStats,
     sponsorStore,
     adScheduler,
     manageUrl: SPONSOR_MANAGE_URL,
@@ -1382,6 +1396,7 @@ function startOdyseePlatform() {
         recordHeat: recordChatHeat,
         replaceEmojis,
         translate: (text) => Translate.TranslateText(text),
+        chatStats,
         onViewerCount: (count) => {
             const viewers = Number(count)
             if (!Number.isFinite(viewers) || viewers < 0) return
@@ -1410,6 +1425,7 @@ function startYoutubePlatform() {
         recordHeat: recordChatHeat,
         replaceEmojis,
         translate: (text) => Translate.TranslateText(text),
+        chatStats,
         onChannelIdentity: (channelId) => {
             if (typeof channelId === 'string' && channelId) youtubeBroadcasterId = channelId;
         },
@@ -1475,6 +1491,7 @@ function diagnosticState() {
         viewers: viewerCounts.snapshot(),
         combinedViewers: viewerCounts.combined(),
         session: sessionSnapshot(),
+        chat: chatStats.snapshot(),
         socket: {
             enabled: socketHub.enabled,
             endpoints: socketHub.endpoints.filter(endpoint => endpoint.enabled).length,

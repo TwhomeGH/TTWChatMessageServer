@@ -62,6 +62,20 @@ test('CHAT：觸發 notify 與 sendSocketMessage', async () => {
     assert.ok(calls.some(c => c[0] === 'socket' && c[1] === 'Bob'));
 });
 
+test('CHAT：收到與送出會計入聊天診斷', async () => {
+    const records = [];
+    const chatStats = {
+        received: (...args) => records.push(['received', ...args]),
+        sent: (...args) => records.push(['sent', ...args]),
+        dropped: (...args) => records.push(['dropped', ...args])
+    };
+    const { conn } = makeHarness({ chatStats });
+    conn.handlers.chat({ user: user('Bob'), content: 'hello', msgId: 'm1', common: {}, createTime: 1 });
+    await new Promise(r => setTimeout(r, 0));
+    assert.ok(records.some(row => row[0] === 'received' && row[1] === 'tiktok'));
+    assert.ok(records.some(row => row[0] === 'sent' && row[1] === 'tiktok'));
+});
+
 test('MEMBER：跨路徑重複時直接跳過', () => {
     const { conn, calls } = makeHarness({ dedup: { isDuplicate: () => true, add: () => {} } });
     conn.handlers.member({ user: user('Eve'), common: {} });

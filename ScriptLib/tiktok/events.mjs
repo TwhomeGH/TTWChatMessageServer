@@ -30,7 +30,7 @@ export function registerTikTokEvents(connection, deps) {
         notify, sendSocketMessage,
         logRawEvent, writeLog, writeFileSync,
         dedup, sentCache, processFilter, reportFiltered, reportTraffic,
-        replaceEmojis, recordChatHeat, chatMetadata, translate,
+        replaceEmojis, recordChatHeat, chatMetadata, translate, chatStats,
         tikTokChatGuard,
         giftNames, getGiftMapReady,
         getCacheUserNum, setCacheUserList,
@@ -345,12 +345,22 @@ export function registerTikTokEvents(connection, deps) {
     });
 
     safeEvent(WebcastEvent.CHAT, data => {
-        if (!data?.user?.nickname) return;
+        const chatInfo = {
+            id: data?.msgId || data?.common?.msgId,
+            user: data?.user?.nickname,
+            at: Date.now()
+        };
+        chatStats?.received('tiktok', chatInfo);
+        if (!data?.user?.nickname) {
+            chatStats?.dropped('tiktok', 'invalid', chatInfo);
+            return;
+        }
         reportTraffic({ platform: 'TikTok', eventType: 'chat', id: data.msgId || data.common?.msgId, sentAt: data.createTime || data.common?.createTime, userId: data.user?.userId || data.user?.id, user: data.user?.nickname, message: data.comment });
         if (tiktokEnabled()) {
             const result = tikTokChatGuard.check(data);
             if (!result.accepted) {
                 tikTokReplayDropped++;
+                chatStats?.dropped('tiktok', 'replay', chatInfo);
                 if (Date.now() - lastTikTokReplayLog >= 10000) {
                     lastTikTokReplayLog = Date.now();
                     logger.log(`[TikTok] 忽略重播聊天: ${result.reason}，累計 ${tikTokReplayDropped} 筆`);
@@ -367,12 +377,16 @@ export function registerTikTokEvents(connection, deps) {
             if (data.emotes && data.emotes.length > 0) {
                 data.content = `[表情] ${data.emotes[0]?.emote || ''}`;
             } else {
+                chatStats?.dropped('tiktok', 'invalid', chatInfo);
                 return;
             }
         }
 
         const uniqueKey = `chat_${data.user.nickname}_${data.content}`;
-        if (sentCache.alreadySent(uniqueKey)) return;
+        if (sentCache.alreadySent(uniqueKey)) {
+            chatStats?.dropped('tiktok', 'duplicate', chatInfo);
+            return;
+        }
 
         const fr = processFilter({ user: data.user.nickname, message: data.content });
         if (fr.blocked) {
@@ -380,6 +394,7 @@ export function registerTikTokEvents(connection, deps) {
             logger.log('🚫 過濾器阻擋:', data.user.nickname, data.content, `(規則: ${fr.reason})`);
             writeLog("Default", `過濾器阻擋訊息: ${data.user.nickname} : ${data.content} (規則: ${fr.reason})`, "FilterBlocked");
             dedup.add(data.user.nickname.trim(), data.content.trim());
+            chatStats?.dropped('tiktok', 'filtered', chatInfo);
             return;
         }
 
@@ -395,13 +410,17 @@ export function registerTikTokEvents(connection, deps) {
             logger.log('⚠️ 過濾後 nick/comment 為空，跳過:', data.user.nickname, data.content);
             writeLog("Default", `過濾後 nick/comment 為空，跳過: ${data.user.nickname} : ${data.content}`, "FilterEmpty");
             dedup.add(data.user.nickname.trim(), data.content.trim());
+            chatStats?.dropped('tiktok', 'invalid', chatInfo);
             return;
         }
 
         // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
         comment = replaceEmojis(comment);
 
-        if (!recordChatHeat(comment, { platform: 'TikTok', ...{ id: chatMetadata(data).id, sentAt: chatMetadata(data).time }, userId: data.user?.id, user: data.user?.nickname })) return;
+        if (!recordChatHeat(comment, { platform: 'TikTok', ...{ id: chatMetadata(data).id, sentAt: chatMetadata(data).time }, userId: data.user?.id, user: data.user?.nickname })) {
+            chatStats?.dropped('tiktok', 'duplicate', chatInfo);
+            return;
+        }
 
         notify(nickname, comment, iconn);
 
@@ -418,7 +437,11 @@ export function registerTikTokEvents(connection, deps) {
             }
 
             sessionStats.chats += 1;
-            sendCat('chat', nickname, RESCHAT, iconn, "", true, data.user.nickname, data.content);
+            if (sendCat('chat', nickname, RESCHAT, iconn, "", true, data.user.nickname, data.content) !== false) {
+                chatStats?.sent('tiktok', chatInfo);
+            } else {
+                chatStats?.dropped('tiktok', 'socket-duplicate', chatInfo);
+            }
 
             // 翻譯屬於同一則留言，不重複統計。
 

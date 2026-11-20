@@ -36,6 +36,8 @@
  */
 export async function onChat(event, deps) {
     const receivedAt = Date.now();
+    const chatInfo = { id: event.messageId, user: event.chatterDisplayName, at: receivedAt };
+    deps.chatStats?.received('twitch', chatInfo);
     const icon = await deps.getUserIcon(event.chatterId);
 
     deps.logger.log(`${event.chatterDisplayName} : ${event.messageText}`);
@@ -47,6 +49,7 @@ export async function onChat(event, deps) {
         if (event.chatterId === tuser) {
             deps.logger.log(`${event.chatterDisplayName} 是主播本人，視同訂閱者可以使用 G#Ad 指令`);
             handleGAd(event, deps, icon);
+            deps.chatStats?.dropped('twitch', 'command', chatInfo);
             return;
         } else {
             let subRes;
@@ -68,6 +71,7 @@ export async function onChat(event, deps) {
             } else {
                 deps.logger.log(`${event.chatterDisplayName} 不是訂閱者（API 回傳 isSubscribed=false），無法使用 G#Ad 指令`);
             }
+            deps.chatStats?.dropped('twitch', 'command', chatInfo);
             return;
         }
     }
@@ -93,6 +97,7 @@ export async function onChat(event, deps) {
         }
         if (!authorized) {
             deps.logger.log(`🚫 [G#clip] ${event.chatterDisplayName} 不是主播、訂閱者或追隨者，無法使用 G#clip 指令`);
+            deps.chatStats?.dropped('twitch', 'command', chatInfo);
             return;
         }
 
@@ -102,6 +107,7 @@ export async function onChat(event, deps) {
         const title = res.length > 0 ? res.join(" ") : null
 
         deps.clipService.createClip(title, icon);
+        deps.chatStats?.dropped('twitch', 'command', chatInfo);
 
         return; // 指令已處理，不再當一般訊息轉發
     }
@@ -113,6 +119,7 @@ export async function onChat(event, deps) {
         deps.reportFiltered(fr, { platform: 'Twitch', id: event.messageId, userId: event.chatterId, user: event.chatterDisplayName, message: event.messageText });
         deps.logger.log('🚫 過濾器阻擋(Twitch):', event.chatterDisplayName, event.messageText, `(規則: ${fr.reason})`);
         deps.writeLog("Default", `過濾器阻擋(Twitch): ${event.chatterDisplayName} : ${event.messageText} (規則: ${fr.reason})`, "Filter");
+        deps.chatStats?.dropped('twitch', 'filtered', chatInfo);
 
         return;
     }
@@ -130,10 +137,14 @@ export async function onChat(event, deps) {
 
     if (!tUser || !tMsg) {
         deps.logger.log('⚠️ 過濾後(Twitch) nick/msg 為空，跳過:', event.chatterDisplayName, event.messageText);
+        deps.chatStats?.dropped('twitch', 'invalid', chatInfo);
         return;
     }
 
-    if (!deps.recordChatHeat(tMsg, { platform: 'Twitch', id: event.messageId, userId: event.chatterId, user: event.chatterDisplayName, receivedAt })) return;
+    if (!deps.recordChatHeat(tMsg, { platform: 'Twitch', id: event.messageId, userId: event.chatterId, user: event.chatterDisplayName, receivedAt })) {
+        deps.chatStats?.dropped('twitch', 'duplicate', chatInfo);
+        return;
+    }
 
     deps.notify(tUser, tMsg, icon);
 
@@ -147,7 +158,8 @@ export async function onChat(event, deps) {
             deps.notify(tUser + "[翻譯]", RES, icon);
         }
 
-        deps.sendChat(tUser, RESCHAT, icon);
+        if (deps.sendChat(tUser, RESCHAT, icon) !== false) deps.chatStats?.sent('twitch', chatInfo);
+        else deps.chatStats?.dropped('twitch', 'socket-duplicate', chatInfo);
 
         deps.writeLog("Default", `${tUser} : ${RESCHAT}`, "Twitch Chat")
     })

@@ -159,7 +159,13 @@ async function checkIsLive(axios, apiKey, channelId) {
  */
 function handleYoutubeText(payload, deps, transport = 'native') {
     const { id, user, userId, sentAt, message, img: avatar } = payload;
-    if (!user || !message) return;
+    const chatStats = deps.chatStats;
+    const chatInfo = { id, user, at: Date.now() };
+    chatStats?.received('youtube', chatInfo);
+    if (!user || !message) {
+        chatStats?.dropped('youtube', 'invalid', chatInfo);
+        return;
+    }
     const { writeLog, notify, sendChat, reportTraffic, reportFiltered, filter, recordHeat, replaceEmojis, translate } = deps;
     const event = { platform: 'Youtube', eventType: 'chat', id, userId, user, sentAt, message, transport };
 
@@ -172,6 +178,7 @@ function handleYoutubeText(payload, deps, transport = 'native') {
         reportFiltered(fr, event);
         console.info('🚫 過濾器阻擋(Youtube):', user, message, `(規則: ${fr.reason})`);
         writeLog("Default", `過濾器阻擋(Youtube): ${user} : ${message} (規則: ${fr.reason})`, "Filter");
+        chatStats?.dropped('youtube', 'filtered', chatInfo);
         return;
     }
 
@@ -179,10 +186,14 @@ function handleYoutubeText(payload, deps, transport = 'native') {
     let tMsg = fr.modified && fr.message ? fr.message : message;
     if (!tUser || !tMsg) {
         console.info('⚠️ 過濾後(Youtube) nick/msg 為空，跳過:', user, message);
+        chatStats?.dropped('youtube', 'invalid', chatInfo);
         return;
     }
 
-    if (!recordHeat(tMsg, event)) return;
+    if (!recordHeat(tMsg, event)) {
+        chatStats?.dropped('youtube', 'duplicate', chatInfo);
+        return;
+    }
     notify(tUser, tMsg, avatar);
 
     // 表情取代必須在翻譯之前，避免 shortcode 被當成外文翻譯
@@ -192,7 +203,8 @@ function handleYoutubeText(payload, deps, transport = 'native') {
         if (RES.toLowerCase() !== tMsg.toLowerCase()) {
             notify(tUser, RES, avatar);
         }
-        sendChat(tUser, RESCHAT, avatar);
+        if (sendChat(tUser, RESCHAT, avatar) !== false) chatStats?.sent('youtube', chatInfo);
+        else chatStats?.dropped('youtube', 'socket-duplicate', chatInfo);
         writeLog("Default", `${tUser} : ${RESCHAT}`, "Youtube Chat");
     });
 }

@@ -581,6 +581,7 @@
   "runtime.diag.socket": "Socket state",
   "runtime.diag.autoclip": "AutoClip",
   "runtime.diag.twitch": "Twitch",
+  "runtime.diag.chat": "Chat delivery",
   "runtime.diag.clips": "Clip history summary",
   "runtime.diag.run": "Run diagnostic",
   "runtime.diag.running": "Running…",

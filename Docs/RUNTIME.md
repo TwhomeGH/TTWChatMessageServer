@@ -61,9 +61,12 @@ Runtime 頁的「IPC 診斷」卡片可對目前執行中的子程序送出唯�
 | `socket` | 端點數、連線、佇列與重連次數 |
 | `autoclip` | 設定、樣本數與最近 3 次觸發摘要 |
 | `twitch` | UserID、API client 是否就緒 |
+| `chat` | 各平台聊天 `received`／`sent`／`dropped`、丟棄原因、最後收到／送出時間與最近 12 筆事件 |
 | `clips` | 最近 3 筆剪輯摘要（含待確認狀態） |
 
 主服務以 `POST /api/runtime/diagnostics` 接收命令，透過既有 IPC 送出 `DIAGNOSTIC_REQUEST`，子程序回覆 `DIAGNOSTIC_RESULT`。只接受白名單命令，不提供任意程式碼執行；原始 console／錯誤日誌仍在系統日誌頁。子程序結束或 5 秒內未回應時回傳明確錯誤，不會留下懸掛請求。
+
+`chat` 診斷不保存聊天本文，只記平台、訊息 id、使用者、處理階段與時間。`received` 是平台事件已進來，`sent` 是實際送進 SocketHub；`dropped` 的原因包含 `filtered`、`duplicate`、`invalid`、`replay`、`command`、`socket-duplicate`。若 `received` 長時間不成長，代表平台端沒有送來；若 `received` 成長但 `sent` 不成長，則可從 `dropReasons` 判斷是過濾、去重或輸出被擋。
 
 ## 直播訊息監控面板
 

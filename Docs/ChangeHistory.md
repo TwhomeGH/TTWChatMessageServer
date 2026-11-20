@@ -1,5 +1,29 @@
 # ChangeHistory
 
+## 2026.11.21 IPC 診斷新增聊天收發
+
+**類型**: 功能 · **檔案**: `ScriptLib/runtime/chat-stats.mjs`、`ScriptLib/runtime/diagnostics.cjs`、`TikTok.js`、`ScriptLib/tiktok/events.mjs`、`ScriptLib/twitch/chat.mjs`、`ScriptLib/kick/chat.mjs`、`ScriptLib/youtube/chat.mjs`、`ScriptLib/odysee/chat.mjs`、`runtime.html`、`lang/*.json`、`Test/chat_stats.test.mjs`、`Test/runtime_diagnostics.test.cjs`、`Test/twitch_chat.test.mjs`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 原因
+
+既有 IPC 診斷只有平台、連線與本場統計，沒有聊天層的 received／sent／dropped；日誌只能看到已處理的訊息，無法判斷平台是否根本沒送、被過濾、被去重或 SocketHub 擋下。
+
+### 修改
+
+- 新增 `chatStats`：每平台記錄收到的原始聊天、實際送出、丟棄原因、最後收到／送出時間與最近 12 筆事件；不保存聊天本文。
+- TikTok 原生、TikTok userscript `/chat`、Twitch、Kick、YouTube、Odysee 都接入同一組計數。
+- `dropReasons` 區分 `filtered`、`duplicate`、`invalid`、`replay`、`command`、`socket-duplicate`。
+- IPC 診斷新增 `chat` 命令，`snapshot` 也包含 `chat`；Runtime 頁下拉選單新增「聊天收發」。
+- `lastReceivedAgeMs`／`lastSentAgeMs` 可直接看出訊息是否停止進來。
+
+### 驗證
+
+- `node --test Test/chat_stats.test.mjs Test/runtime_diagnostics.test.cjs Test/twitch_chat.test.mjs Test/tiktok_events.test.mjs`
+- `npm run test:core`
+- `npm run lint`
+
+---
+
 ## 2026.11.20 MediaCache 依內容去重
 
 **類型**: 功能 · **檔案**: `ScriptLib/media/cache.cjs`、`MediaRoutes.cjs`、`Test/media_cache.test.cjs`、`Docs/MEDIA_CACHE.md`、`Docs/TEST_FILES_REFERENCE.md`

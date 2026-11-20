@@ -56,6 +56,20 @@ test('一般聊天：過濾未擋、推播並送出翻譯後訊息', async () =>
     assert.ok(calls.some(c => c[0] === 'sendChat' && c[1] === 'Alice'));
 });
 
+test('一般聊天：收到與送出會計入聊天診斷', async () => {
+    const stats = [];
+    const chatStats = {
+        received: (...a) => stats.push(['received', ...a]),
+        sent: (...a) => stats.push(['sent', ...a]),
+        dropped: (...a) => stats.push(['dropped', ...a])
+    };
+    const { deps } = makeDeps({ chatStats, sendChat: () => true });
+    await onChat(ev(), deps);
+    await tick();
+    assert.ok(stats.some(row => row[0] === 'received' && row[1] === 'twitch'));
+    assert.ok(stats.some(row => row[0] === 'sent' && row[1] === 'twitch'));
+});
+
 test('一般聊天：被過濾器阻擋時回報但不送出', async () => {
     const { deps, calls } = makeDeps({ processFilter: () => ({ blocked: true, reason: 'spam' }) });
     await onChat(ev(), deps);
