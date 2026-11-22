@@ -14,6 +14,7 @@ async function main() {
         '0000000a49444154789c6360000002000154a24f8f0000000049454e44ae426082', 'hex');
     const posts = [];
     const testResultClients = new Set();
+    const messageClients = new Set();
     let lastTestResult = null;
     let chatCount = 0;
     const emitTestResult = result => {
@@ -116,6 +117,8 @@ async function main() {
                 },
                 session: { joins: 2, likes: 7, chats: 3, follows: 1, subscriptions: 2, gifts: 4, peakViewers: 42 }
             }) + '\n\n');
+            messageClients.add(res);
+            req.on('close', () => messageClients.delete(res));
             return;
         }
         if (req.url === '/api/message-categories') {
@@ -377,6 +380,24 @@ async function main() {
         assert.notEqual(liveLayout.bodyOverflowY, 'hidden', '矮視窗仍要保留頁面捲動');
         assert.ok(liveLayout.scrollHeight > liveLayout.clientHeight, '訊息區應在固定高度內捲動');
         assert.equal(liveLayout.atBottom, true, '自動捲動應貼在最底部');
+
+        // 場次結束事件應清空即時訊息並自動切到歷史，不讓舊訊息留在即時。
+        for (const client of messageClients) {
+            client.write('data: ' + JSON.stringify({
+                type: 'monitor-session', state: 'ended', sessionId: 'history-1',
+                startedAt: Date.now() - 3600000, endedAt: Date.now()
+            }) + '\n\n');
+        }
+        await page.waitForFunction(() => document.querySelector('#monModeHistory').classList.contains('is-active')
+            && document.querySelectorAll('#monRows .mon-row').length === 2);
+        const ended = await page.evaluate(() => ({
+            status: document.querySelector('#monStatus').textContent,
+            notice: document.querySelector('#monHistoryBar').hidden,
+            rows: document.querySelectorAll('#monRows .mon-row').length
+        }));
+        assert.equal(ended.notice, false);
+        assert.equal(ended.rows, 2);
+        assert.match(ended.status, /歷史/);
 
         assert.deepEqual(errors, []);
         console.log('Monitor UI passed: audience badges, emoji preview, exact results, and history mode.');

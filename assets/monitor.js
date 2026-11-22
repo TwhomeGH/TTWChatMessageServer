@@ -119,9 +119,14 @@
         session: null,
         guard: null,
         mode: 'live',
-        history: { sessions: [], sessionId: '', session: null, page: 1, pages: 1, total: 0, messages: [], loading: false },
+        history: {
+            sessions: [], sessionId: '', session: null, page: 1, pages: 1, total: 0,
+            messages: [], loading: false, notice: ''
+        },
         media: { page: 1, pages: 1, total: 0, items: [], q: '', type: '', status: '', loading: false, loaded: false },
-        statusKey: 'monitor.reconnecting'
+        statusKey: 'monitor.reconnecting',
+        liveSessionId: '',
+        sessionState: 'unknown'
     };
     let lastUserScrollIntent = 0;
 
@@ -243,7 +248,7 @@
     }
 
     async function loadHistorySessions() {
-        setHistoryStatus(t('monitor.history.status', {}, '歷史模式'));
+        setHistoryStatus(state.history.notice || t('monitor.history.status', {}, '歷史模式'));
         try {
             const response = await fetch('/api/monitor/sessions', { cache: 'no-store' });
             if (response.status === 401) {
@@ -298,10 +303,51 @@
             renderAll();
             updateSession();
             updateJump();
-            setStatus(state.statusKey);
+            setStatus(state.sessionState === 'ended' ? 'monitor.sessionEnded' : state.statusKey);
         } else {
             jumpLatestEl.hidden = true;
             loadHistorySessions();
+        }
+    }
+
+    /** 場次結束或切換時清掉即時訊息；歷史保留在 SQLite，不影響歷史列表。 */
+    function resetLiveView() {
+        state.entries = [];
+        state.shown = 0;
+        state.unseen = 0;
+        state.session = null;
+        state.guard = null;
+        if (state.mode === 'live') {
+            rowsEl.replaceChildren();
+            updateCount();
+            updateSession();
+            renderGuard();
+            updateJump();
+        }
+    }
+
+    /** 處理 Server 推送的場次邊界；結束時自動切到歷史，避免舊訊息留在即時。 */
+    function handleMonitorSession(event) {
+        const sessionId = typeof event.sessionId === 'string' ? event.sessionId : '';
+        if (event.state === 'started') {
+            state.liveSessionId = sessionId;
+            state.sessionState = 'started';
+            state.history.notice = '';
+            resetLiveView();
+            if (state.mode === 'live') setStatus('monitor.connected');
+            return;
+        }
+        if (event.state === 'ended') {
+            state.liveSessionId = sessionId;
+            state.sessionState = 'ended';
+            resetLiveView();
+            state.history.notice = t('monitor.session.ended', {}, '本場已結束，已移至歷史');
+            if (state.mode === 'live') {
+                if (sessionId) state.history.sessionId = sessionId;
+                setMode('history');
+            } else {
+                loadHistorySessions();
+            }
         }
     }
 
@@ -1215,10 +1261,15 @@
         }).observe(rowsEl);
     }
     modeLiveEl.addEventListener('click', () => setMode('live'));
-    modeHistoryEl.addEventListener('click', () => setMode('history'));
+    modeHistoryEl.addEventListener('click', () => {
+        state.history.notice = '';
+        setMode('history');
+    });
     historySessionEl.addEventListener('change', () => {
+        state.history.notice = '';
         state.history.sessionId = historySessionEl.value;
         loadHistoryMessages(1);
+        setHistoryStatus(t('monitor.history.status', {}, '歷史模式'));
     });
     historyPrevEl.addEventListener('click', () => {
         if (state.history.page > 1) loadHistoryMessages(state.history.page - 1);
@@ -1351,11 +1402,18 @@
     };
 
     const source = new EventSource('/status/stream/messages');
-    source.onopen = () => setStatus('monitor.connected');
+    source.onopen = () => {
+        if (state.mode !== 'live') return;
+        setStatus(state.sessionState === 'ended' ? 'monitor.sessionEnded' : 'monitor.connected');
+    };
     source.onerror = () => setStatus('monitor.reconnecting');
     source.onmessage = event => {
         let entry;
         try { entry = JSON.parse(event.data); } catch { return; }
+        if (entry?.type === 'monitor-session') {
+            handleMonitorSession(entry);
+            return;
+        }
         if (!entry || typeof entry.message !== 'string') return;
         append({
             t: Number(entry.t) || Date.now(),

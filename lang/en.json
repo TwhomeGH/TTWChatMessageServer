@@ -334,6 +334,8 @@
   "monitor.autoscroll": "Auto-scroll",
   "monitor.newMessages": "{count} new messages ↓",
   "monitor.session.title": "This stream",
+  "monitor.session.ended": "Session ended; moved to history",
+  "monitor.sessionEnded": "Session ended; waiting for the next one",
   "monitor.guard.active": "Safety cooldown ({seconds}s)",
   "monitor.guard.detail": "Briefly ignores old chat replayed around connect; new messages still arrive.",
   "monitor.session.viewers": "Peak viewers",

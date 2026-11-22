@@ -100,6 +100,7 @@ const mediaPrune = setInterval(() => {
 }, 3600000);
 mediaPrune.unref();
 let monitorSessionId = null;
+let monitorSessionInfo = null;
 
 let tiktokProcess = null;
 let logStore = null;
@@ -171,6 +172,59 @@ const MAX_STREAM_MESSAGES = 500;
 const streamMessages = [];
 const messageClients = new Set();
 const MESSAGE_CATEGORIES = require('./ScriptLib/messages/categories.cjs').MESSAGE_CATEGORIES;
+
+/** 把場次邊界通知送到所有監控頁；/status/stream/messages 也會在初次連線時補送。 */
+function broadcastMonitorSession(info) {
+    if (!info) return;
+    const payload = { type: 'monitor-session', ...info };
+    for (const client of messageClients) {
+        try { client.write(`data: ${JSON.stringify(payload)}\n\n`); }
+        catch { messageClients.delete(client); }
+    }
+}
+
+/**
+ * 開始新的監控場次；舊場次若還開著先收尾。
+ * 不保留上一場的即時緩衝，舊訊息只從歷史 API 讀取。
+ * @returns {string|null} 新場次 id。
+ */
+function startMonitorSession() {
+    if (monitorSessionId) endMonitorSession(monitorSessionId, { notify: false });
+    const startedAt = Date.now();
+    try {
+        const id = monitorHistory.startSession({ startedAt });
+        monitorSessionId = id;
+        monitorSessionInfo = { sessionId: id, state: 'started', startedAt };
+        streamMessages.length = 0;
+        broadcastMonitorSession(monitorSessionInfo);
+        return id;
+    } catch (error) {
+        pushLog('[MonitorHistory] 建立場次失敗:', error.message);
+        monitorSessionId = null;
+        return null;
+    }
+}
+
+/**
+ * 結束目前監控場次；通知監控頁切換到歷史，並清空即時緩衝。
+ * @param {string} id
+ * @param {{notify?: boolean}} [options]
+ */
+function endMonitorSession(id, { notify = true } = {}) {
+    if (!id) return;
+    let ended = false;
+    try {
+        monitorHistory.endSession(id);
+        ended = true;
+    } catch (error) {
+        pushLog('[MonitorHistory] 結束場次失敗:', error.message);
+    }
+    if (monitorSessionId !== id) return;
+    monitorSessionId = null;
+    if (monitorSessionInfo?.sessionId === id) monitorSessionInfo = { ...monitorSessionInfo, state: 'ended', endedAt: Date.now() };
+    streamMessages.length = 0;
+    if (notify && ended) broadcastMonitorSession(monitorSessionInfo);
+}
 
 /**
  * 收到子程序鏡像的 socket 訊息：存入緩衝並推送給監控頁。
@@ -546,17 +600,7 @@ function startRuntime(url) {
 
         // Persist the parent baseline so a new child continues the same counts.
         SaveCacheKeywordDataAll();
-        if (monitorSessionId) {
-            try { monitorHistory.endSession(monitorSessionId); } catch { /* ignore */ }
-        }
-        let launchMonitorSession = null;
-        try {
-            launchMonitorSession = monitorHistory.startSession({ startedAt: Date.now() });
-            monitorSessionId = launchMonitorSession;
-        } catch (error) {
-            pushLog('[MonitorHistory] 建立場次失敗:', error.message);
-            monitorSessionId = null;
-        }
+        const launchMonitorSession = startMonitorSession();
         tiktokProcess = spawn(process.execPath, args, { stdio: ['pipe', 'pipe', 'pipe', 'ipc'] });
 
         if (isTK && tiktokChatSource() === 'browser') {
@@ -606,8 +650,7 @@ function startRuntime(url) {
             pushLog('[SYSTEM] 程序啟動失敗:', error.code || 'PROCESS_ERROR');
             if (tiktokProcess === launchedProcess) tiktokProcess = null;
             if (monitorSessionId && monitorSessionId === launchMonitorSession) {
-                try { monitorHistory.endSession(monitorSessionId); } catch { /* ignore */ }
-                monitorSessionId = null;
+                endMonitorSession(monitorSessionId);
             }
         });
         launchedProcess.stdin.on('error', error => pushLog('[SYSTEM] 程序輸入錯誤:', error.code || 'STDIN_ERROR'));
@@ -696,8 +739,7 @@ function startRuntime(url) {
             }
             if (tiktokProcess === launchedProcess) tiktokProcess = null;
             if (monitorSessionId && monitorSessionId === launchMonitorSession) {
-                try { monitorHistory.endSession(monitorSessionId); } catch { /* ignore */ }
-                monitorSessionId = null;
+                endMonitorSession(monitorSessionId);
             }
 
             // 離線（TikTok.js 結束）時才把自動剪輯即時快照寫入磁碟；跨場次歷史已在 SQLite。
@@ -987,6 +1029,10 @@ const server = http.createServer((req, res) => {
             'Access-Control-Allow-Origin': '*'
         });
 
+        // 先告知目前場次狀態（進行中或已結束），再補目前場次訊息。
+        if (monitorSessionInfo) {
+            res.write(`data: ${JSON.stringify({ type: 'monitor-session', ...monitorSessionInfo })}\n\n`);
+        }
         streamMessages.forEach(entry => res.write(`data: ${JSON.stringify(entry)}\n\n`));
 
         messageClients.add(res);

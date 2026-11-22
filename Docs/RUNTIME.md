@@ -85,6 +85,8 @@ Runtime 頁的「IPC 診斷」卡片可對目前執行中的子程序送出唯�
 
 歷史訊息保存在 `data/monitor.sqlite`（`sessions`／`messages`）。每次 TikTok 子程序啟動是一場；預設保留最近 10 場、14 天、每場最多 20,000 則，可用 `MONITOR_HISTORY_DAYS`／`MONITOR_HISTORY_SESSIONS`／`MONITOR_HISTORY_MAX_MESSAGES` 調整。測試訊息與 `isTest` 不寫入；歷史 API 需要主服務登入，即時 SSE 仍維持原本公開行為。
 
+子程序啟動／結束時，Server 會在 `/status/stream/messages` 推送 `monitor-session` 邊界事件。場次結束後即時緩衝會清空，監控頁自動切到歷史並帶入剛結束的場次；新場次開始時也會清空上一場的即時列，避免舊訊息殘留在即時。重連時先收到目前場次狀態，再補該場訊息。
+
 monitor 工具列的「即時／歷史」切換會在歷史模式列出最近場次、支援搜尋／分類篩選與分頁；切回即時會恢復背景持續累積的 SSE 訊息。歷史查詢 API 為 `GET /api/monitor/sessions` 與 `GET /api/monitor/messages?session=…&page=…&q=…&categories=…`。
 
 「測試訊息（本機預覽）」可輸入使用者、頭貼 URL、平台、分類與訊息；只加入目前頁面，不會送到 `/chat`、平台、filter、AutoClip 或統計。emoji 代碼由公開唯讀的 `/api/emoji/preview` 取得目前映射後在瀏覽器解析，停用或不存在的代碼保留原文。測試列有「測試」badge，重新整理或清除畫面即消失。

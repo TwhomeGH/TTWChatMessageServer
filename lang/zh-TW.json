@@ -334,6 +334,8 @@
   "monitor.autoscroll": "自動捲動",
   "monitor.newMessages": "{count} 則新訊息 ↓",
   "monitor.session.title": "本場",
+  "monitor.session.ended": "本場已結束，已移至歷史",
+  "monitor.sessionEnded": "本場已結束，等待下一場",
   "monitor.guard.active": "安全冷卻中（{seconds} 秒）",
   "monitor.guard.detail": "連線前後短時間內忽略平台補送的舊聊天，避免重播；新訊息仍會正常接收。",
   "monitor.session.viewers": "人數峰值",

@@ -1,5 +1,29 @@
 # ChangeHistory
 
+## 2026.11.22 監控場次結束切換歷史
+
+**類型**: 修正 · **檔案**: `Server.js`、`assets/monitor.js`、`monitor.html` 以外的 i18n、`Test/monitor_audience_ui.cjs`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 原因
+
+子程序結束後，歷史場次已寫入 SQLite，但監控頁仍保留舊的即時訊息；Server 的即時緩衝也沒有在場次邊界清空，重新連線時會把上一場訊息與新場次混在一起。
+
+### 修改
+
+- Server 新增 `monitor-session` SSE 邊界事件（`started`／`ended`），並在 `/status/stream/messages` 初次連線時補送目前場次狀態。
+- 場次開始／結束時清空即時訊息緩衝；歷史仍由 `monitor.sqlite` 提供。
+- 監控頁收到 `ended` 後清空即時列，自動切到歷史並選取剛結束的場次；新場次開始時清空上一場即時內容。
+- 場次結束提示「本場已結束，已移至歷史」；回到即時會顯示等待下一場。
+- 手動切換歷史／場次時清除結束提示，避免誤導。
+
+### 驗證
+
+- `node Test/monitor_audience_ui.cjs`
+- `npm run test:core`
+- `npm run lint`
+
+---
+
 ## 2026.11.21 IPC 診斷新增訊息過濾器
 
 **類型**: 功能 · **檔案**: `ScriptLib/filters/diagnostics.mjs`、`MessageFilter.js`、`ScriptLib/runtime/diagnostics.cjs`、`TikTok.js`、`runtime.html`、`lang/*.json`、`Test/filter_diagnostics.test.mjs`、`Test/runtime_diagnostics.test.cjs`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`

@@ -63,7 +63,7 @@ node Test/xxx.mjs
 | `Test/audience_tracker.test.cjs` | 常客分數、等級、上限、userId 優先、關係篩選、手動合併預覽與別名 |
 | `Test/audience_routes.test.cjs` | 常客列表／明細 API、平台正規化、合併預覽與套用 |
 | `Test/audience_ui.cjs` | 常客關係 badge／avatar、關係篩選、總頁數、明細、合併預覽／套用／還原與手機寬度 |
-| `Test/monitor_audience_ui.cjs` | 監控聊天列、本場／歷史統計、測試訊息、Socket／通知派發、精確結果、即時／歷史切換，以及大量訊息下頁面不溢出、訊息區自動貼底 |
+| `Test/monitor_audience_ui.cjs` | 監控聊天列、本場／歷史統計、測試訊息、Socket／通知派發、精確結果、即時／歷史切換、場次結束自動切歷史，以及大量訊息下頁面不溢出、訊息區自動貼底 |
 | `Test/monitor_history.test.cjs` | 監控歷史 SQLite、場次跨平台統計、data URI materialize 與保留／釋放 |
 | `Test/monitor_routes.test.cjs` | 監控歷史 API 的登入、場次、訊息與缺少場次 |
 | `Test/navigation_guard.test.mjs` | Signer TikTok 導航最小間隔與 WAF 冷卻 |
