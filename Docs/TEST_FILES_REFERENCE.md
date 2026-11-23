@@ -67,6 +67,7 @@ node Test/xxx.mjs
 | `Test/monitor_history.test.cjs` | 監控歷史 SQLite、場次跨平台統計、data URI materialize 與保留／釋放 |
 | `Test/monitor_routes.test.cjs` | 監控歷史 API 的登入、場次、訊息與缺少場次 |
 | `Test/navigation_guard.test.mjs` | Signer TikTok 導航最小間隔與 WAF 冷卻 |
+| `Test/tiktok_raw_log.test.mjs` | MEMBER RAW 診斷欄位（進場來源、action、wave、互動摘要）與長字串截短 |
 | `Test/video_tk_ui.cjs` | videoTK 劇院樣式還原、可拖動按鈕與拖曳不誤觸 |
 | `Test/media_cache.test.cjs` | 圖片快取、`.ext` URL、相同內容跨 URL 去重、inline pin、LRU／大小上限、SVG／私有位址拒絕、路由與 SocketHub 改寫 |
 | `Test/inline_image.test.cjs` | data URI 圖片格式、大小／數量限制與通知剝離 |

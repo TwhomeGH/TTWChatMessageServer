@@ -1,5 +1,32 @@
 # ChangeHistory
 
+## 2026.11.24 MEMBER RAW 進場診斷
+
+**類型**: 診斷 · **檔案**: `ScriptLib/tiktok/rawLog.mjs`、`Test/tiktok_raw_log.test.mjs`、`Docs/LOGS.md`、`Docs/TEST_FILES_REFERENCE.md`
+
+### 原因
+
+`WebcastMemberMessage` 有 `clientEnterSource`／`clientEnterType`／`action`／`enterType` 等欄位，但既有 RAW log 只輸出 `action` 與 `memberCount`，看不到實際進場來源值，無法判斷第三方工具所稱的 `entrySource`／`entryAction`／`entryType` 對應哪個欄位。
+
+### 修改
+
+- MEMBER RAW log 新增 `clientEnterSource`、`clientEnterType`、`clientLiveReason`、`userShareType`、`kickSource`、`hitAbStatus`、`displayStyle`、`actionDescription`、`actionDuration`、`lastSubscriptionAction` 等精選欄位。
+- 加入 `waveAlgorithmData`（`isAlgHit`／`isRewatch`／`predictScore` 等）與 `publicAreaMessageCommon.userInteractionInfo` 摘要。
+- 使用者摘要補上實際 proto 欄位 `isSubscribe`、`isFollower`、`isFollowing`；長字串截短，避免 RAW log 被單一欄位撐爆。
+- 不動 MEMBER 加入訊息流程，也不把這些欄位寫入 monitor 歷史或資料庫。
+
+### 驗證
+
+- `node --test Test/tiktok_raw_log.test.mjs`
+- `npm run lint`
+
+### 限制
+
+- proto 有欄位不代表平台一定填值；需要實際 MEMBER 樣本才能確認語意。
+- 這只是 RAW 觀察，尚未改變「所有 MEMBER 都顯示加入了」的行為。
+
+---
+
 ## 2026.11.22 監控場次結束切換歷史
 
 **類型**: 修正 · **檔案**: `Server.js`、`assets/monitor.js`、`monitor.html` 以外的 i18n、`Test/monitor_audience_ui.cjs`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`

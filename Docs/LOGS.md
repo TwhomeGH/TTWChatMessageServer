@@ -43,6 +43,28 @@ source=child
 
 分類與等級由 `ScriptLib/logs/classify.cjs` 依 tag／文字推斷，無法判斷時為 `other`。
 
+## TikTok MEMBER RAW 診斷
+
+`ScriptLib/tiktok/rawLog.mjs` 的 `[RAW]` 日誌會保留 MEMBER 進場診斷欄位，方便用 `/logs` 搜尋 `[RAW]` 或 `"event":"MEMBER"` 觀察真實值。
+
+```text
+member.enterType
+member.action
+member.actionDescription
+member.clientEnterSource
+member.clientEnterType
+member.clientLiveReason
+member.userShareType
+member.kickSource
+member.hitAbStatus
+member.displayStyle
+member.memberCount
+member.waveAlgorithmData
+member.publicAreaMessageCommon.userInteractionInfo
+```
+
+這些欄位來自 `tiktok-live-proto/v3` 的 `WebcastMemberMessage`；第三方工具所稱的 `entrySource`／`entryAction`／`entryType` 不是我們 proto 的同名欄位，實際語意仍要用觀察到的值確認。字串過長會截短，避免 RAW log 被單一欄位撐爆。
+
 ## 保留策略
 
 ```env

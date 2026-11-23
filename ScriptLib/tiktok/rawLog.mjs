@@ -2,6 +2,24 @@
  * TikTok 原始事件摘要日誌：只輸出精選欄位，避免整包事件資料洗版。
  */
 
+/** 只保留可讀的中繼資料；過長字串截短，避免 RAW log 被單一欄位撐爆。 */
+function compact(value, max = 200) {
+    if (typeof value !== 'string') return value;
+    return value.length > max ? value.slice(0, max) + '…' : value;
+}
+
+/** 取得物件中實際有值的欄位，供 member／wave／interaction 子物件使用。 */
+function pick(source, keys) {
+    const result = {};
+    if (!source || typeof source !== 'object') return result;
+    for (const key of keys) {
+        const value = source[key];
+        if (value === undefined || value === null || value === '') continue;
+        result[key] = compact(value);
+    }
+    return result;
+}
+
 /**
  * 記錄一則 TikTok 原始事件的精選摘要。
  * @param {string} eventName 事件名稱。
@@ -30,6 +48,9 @@ export function logRawEvent(eventName, data, logger = console) {
         if (u.badge !== undefined) info.user.badge = u.badge;
         if (u.isModerator !== undefined) info.user.isModer = u.isModerator;
         if (u.isSubscriber !== undefined) info.user.isSub = u.isSubscriber;
+        if (u.isSubscribe !== undefined) info.user.isSubscribe = u.isSubscribe;
+        if (u.isFollower !== undefined) info.user.isFollower = u.isFollower;
+        if (u.isFollowing !== undefined) info.user.isFollowing = u.isFollowing;
         if (u.isNewGifter !== undefined) info.user.isNewGifter = u.isNewGifter;
         if (Object.keys(info.user).length === 0) delete info.user;
     }
@@ -68,5 +89,36 @@ export function logRawEvent(eventName, data, logger = console) {
     if (data.currency !== undefined) info.currency = data.currency;
     if (data.amount !== undefined) info.amount = data.amount;
     if (data.multibuy !== undefined) info.multibuy = data.multibuy;
+
+    // MEMBER 進場來源診斷：第三方工具稱為 entrySource／entryAction／entryType 的資料，
+    // 在我們的 proto 中對應 clientEnterSource／clientEnterType／action／enterType 等欄位。
+    const member = pick(data, [
+        'enterType', 'action', 'actionDescription', 'clientEnterSource',
+        'clientEnterType', 'clientLiveReason', 'userShareType', 'kickSource',
+        'hitAbStatus', 'displayStyle', 'memberCount', 'userId', 'isSetToAdmin',
+        'isTopUser', 'rankScore', 'topUserNo', 'actionDuration',
+        'lastSubscriptionAction', 'liveSubOnlyTier', 'liveSubOnlyMonth', 'showWave'
+    ]);
+    if (data.operator && typeof data.operator === 'object') {
+        const operator = pick(data.operator, ['id', 'nickname', 'displayId']);
+        if (Object.keys(operator).length) member.operator = operator;
+    }
+    if (data.waveAlgorithmData) {
+        const wave = pick(data.waveAlgorithmData, [
+            'algorithmVersion', 'isAlgHit', 'predictScore', 'isRewatch', 'isFollow'
+        ]);
+        if (Object.keys(wave).length) member.waveAlgorithmData = wave;
+    }
+    if (data.publicAreaMessageCommon) {
+        const publicArea = data.publicAreaMessageCommon;
+        const summary = pick(publicArea, ['adminFoldType', 'isAnchorMarked']);
+        if (publicArea.userInteractionInfo) {
+            const interaction = pick(publicArea.userInteractionInfo, ['likeCnt', 'commentCnt', 'shareCnt']);
+            if (Object.keys(interaction).length) summary.userInteractionInfo = interaction;
+        }
+        if (Object.keys(summary).length) member.publicAreaMessageCommon = summary;
+    }
+    if (Object.keys(member).length) info.member = member;
+
     logger.log(`[RAW] ${JSON.stringify(info)}`);
 }
