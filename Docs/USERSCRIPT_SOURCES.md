@@ -28,14 +28,14 @@ API＋Userscript 是同一個平台的兩個入口，不拆成兩份平台分數
 
 | 檔案 | 新版 |
 | --- | --- |
-| TikTokChat.user.js | 2.13 |
+| TikTokChat.user.js | 2.14 |
 | videoTK.user.js | 2.5 |
-| liveCenter.user.js | 1.20 |
+| liveCenter.user.js | 1.21 |
 | youtube-chat-userscript.user.js | 1.7 |
-| TestCenter.user.js | 1.5 |
+| TestCenter.user.js | 1.7 |
 | ws-relay.user.js | 1.3（已合併 ws-relay.js） |
 
-聊天 DOM 沒有可靠 ID／時間欄位時保留 null。TikTokChat／liveCenter 2.11／1.18 會在頁面載入後先標記既有聊天節點，並在觀察器啟動後短暫跳過補齊期，避免頁面刷新把舊聊天重播到 `/chat`；同時把節點 `id` 當成最後的 msgId fallback。TikTokChat 2.13 只在目標直播頁且分頁可見時掛 observer，離開／隱藏／停用會拆除並停止 15 秒觀眾回報，回到頁面再重新啟動。liveCenter 1.20 另外在分頁回到前景／BFCache 返回時標記既有聊天並重新進入補齊保護期，背景期間補進的舊訊息只會被標記、不會重播到 `/chat`。WS relay 附帶來源欄位，但仍維持原本的原始資料轉接流程，沒有新增解碼功能。未修改功能的其他腳本不更動版本。
+聊天 DOM 沒有可靠 ID／時間欄位時保留 null。TikTokChat／liveCenter 2.11／1.18 會在頁面載入後先標記既有聊天節點，並在觀察器啟動後短暫跳過補齊期，避免頁面刷新把舊聊天重播到 `/chat`；同時把節點 `id` 當成最後的 msgId fallback。TikTokChat 2.13 只在目標直播頁且分頁可見時掛 observer，離開／隱藏／停用會拆除並停止 15 秒觀眾回報，回到頁面再重新啟動。liveCenter 1.20 另外在分頁回到前景／BFCache 返回時標記既有聊天並重新進入補齊保護期，背景期間補進的舊訊息只會被標記、不會重播到 `/chat`。TikTokChat 2.14／liveCenter 1.21 的 payload 補上 `useTTS`：聊天跟隨 `isMain`，加入事件明確為 `useTTS:false`、`isMain:false`。WS relay 附帶來源欄位，但仍維持原本的原始資料轉接流程，沒有新增解碼功能。未修改功能的其他腳本不更動版本。
 
 需要更新瀏覽器中安裝的腳本，並重新啟動伺服器與聊天程序。
 
@@ -52,12 +52,12 @@ WS relay 統一使用 `UserScript/ws-relay.user.js`，保留 URL、二進位與�
 
 | 腳本 | 版本 | 設定位置 |
 | --- | --- | --- |
-| TikTokChat | 2.13 | Tampermonkey 選單「設定 TTW 主服務位址」 |
-| liveCenter | 1.20 | 面板「主服務位址」＋「測試主服務」；也可用選單 |
+| TikTokChat | 2.14 | Tampermonkey 選單「設定 TTW 主服務位址」 |
+| liveCenter | 1.21 | 面板「主服務位址」＋「測試主服務」；也可用選單 |
 | restream-monitor | 1.3.0 | 面板「主服務位址」＋「測試主服務」；也可用選單 |
 | ws-relay | 1.4 | 選單 |
 | youtube-chat-userscript | 1.8 | 選單 |
-| TestCenter | 1.6 | 選單 |
+| TestCenter | 1.7 | 選單 |
 
 - 可輸入 `127.0.0.1:3332`、`http://192.168.0.102:3332` 或含路徑前綴的 `https://example.test/ttw`；會移除結尾 `/`。
 - 拒絕帳密、query、hash 與非 http(s) 位址；格式錯誤會提示並保留原值。

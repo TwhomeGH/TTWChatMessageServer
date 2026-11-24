@@ -86,8 +86,8 @@ export function registerTikTokEvents(connection, deps) {
     };
 
     // 以固定 category／platform 送 socket 訊息的便利包裝。
-    const sendCat = (category, user, message, img, giftImg, isMain = true, dedupUser, dedupMessage) =>
-        sendSocketMessage(user, message, { img, giftImg, isMain, dedupUser, dedupMessage, category, platform: 'tiktok', session: sessionSnapshot() });
+    const sendCat = (category, user, message, img, giftImg, isMain = true, dedupUser, dedupMessage, useTTS = isMain) =>
+        sendSocketMessage(user, message, { img, giftImg, isMain, useTTS, dedupUser, dedupMessage, category, platform: 'tiktok', session: sessionSnapshot() });
 
     // 重播聊天過濾統計（僅本模組使用）。
     let lastTikTokReplayLog = 0;
@@ -322,7 +322,7 @@ export function registerTikTokEvents(connection, deps) {
 
         // socket：維持逐筆發送；本場加入數同步給 monitor。
         sessionStats.joins += 1;
-        sendCat('member', nickname, "來了", iconn, "", false, data.user.nickname, "加入了");
+        sendCat('member', nickname, "來了", iconn, "", false, data.user.nickname, "加入了", false);
 
         // bark：累計後合併發送
         memberBarkAccum.push({ nickname, avatar: iconn });

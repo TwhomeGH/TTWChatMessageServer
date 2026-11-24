@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      2.13
+// @version      2.14
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像；新增目標直播間鎖定，避免亂逛誤送）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
@@ -137,10 +137,10 @@
         });
     }
 
-    function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum,userList=null, metadata={}) {
+    function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum,userList=null, metadata={}, useTTS = isMain) {
         if (!canSend()) { logBlocked(); return; }
         flashSent(sentKind(isMain, giftImg), user, message);
-        const payload = { ...metadata, platform: 'TikTok', transport: 'userscript', broadcasterId: currentHandle(), observedAt: Date.now(), type: 'StreamMessage', user, message, img, giftImg, isMain ,userNum,userList};
+        const payload = { ...metadata, platform: 'TikTok', transport: 'userscript', broadcasterId: currentHandle(), observedAt: Date.now(), type: 'StreamMessage', user, message, img, giftImg, isMain, useTTS ,userNum,userList};
 
         const sendURL = `${ttwEndpoint()}/chat`;
         console.log("sendTo", sendURL, payload);

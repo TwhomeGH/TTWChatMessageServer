@@ -29,6 +29,11 @@ test('TikTok and Live Center bridges preserve real metadata and identify their p
         ctx.sendSocketMessage('user', 'hello', '', '', true, 10, [], { msgId: '123', sentAt: null });
         assert.equal(sent[0].platform, 'TikTok'); assert.equal(sent[0].transport, 'userscript');
         assert.equal(sent[0].msgId, '123'); assert.equal(sent[0].sentAt, null);
+        assert.equal(sent[0].useTTS, true);
+
+        ctx.sendSocketMessage('joined-user', '來了', '', '', false, 10, [], { msgId: '124', sentAt: null });
+        assert.equal(sent[1].isMain, false);
+        assert.equal(sent[1].useTTS, false);
         if (file === 'TikTokChat.user.js') assert.equal(sent[0].broadcasterId, 'target_handle');
         if (file === 'liveCenter.user.js') {
             assert.equal(sent[0].audienceKind, 'top-fans');
@@ -163,7 +168,7 @@ test('TikTok 轉接只在目標直播間發送（安全預設：沒填目標就�
 
 test('TikTokChat 只在目標直播頁且可見時掛 observer，離開就拆除', () => {
     const source = fs.readFileSync(new URL('../UserScript/TikTokChat.user.js', import.meta.url), 'utf8');
-    assert.match(source, /@version\s+2\.13/);
+    assert.match(source, /@version\s+2\.14/);
     assert.match(source, /function startMonitoring\(/);
     assert.match(source, /function stopMonitoring\(/);
     assert.match(source, /function syncMonitoring\(/);
@@ -174,7 +179,7 @@ test('TikTokChat 只在目標直播頁且可見時掛 observer，離開就拆除
 
 test('liveCenter 回到前景時跳過背景補齊的舊訊息', () => {
     const source = fs.readFileSync(new URL('../UserScript/liveCenter.user.js', import.meta.url), 'utf8');
-    assert.match(source, /@version\s+1\.20/);
+    assert.match(source, /@version\s+1\.21/);
     assert.match(source, /function markExistingChatMessages\(/);
     assert.match(source, /function beginHydration\(/);
     assert.match(source, /document\.visibilityState !== 'visible'/);

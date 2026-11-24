@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Live Chat → Socket Bridge
 // @namespace    pip-chat-bridge
-// @version      1.20
+// @version      1.21
 // @description  Listen TikTok live chat and forward to socket server
 // @author       Nuclear0709
 // @match        https://livecenter.tiktok.com/*
@@ -161,7 +161,7 @@ function sendMetrics() {
     });
 }
 
-function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 0, userList = [], metadata = {}) {
+function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 0, userList = [], metadata = {}, useTTS = isMain) {
 
     const payload = {
         ...metadata, platform: 'TikTok', transport: 'userscript', broadcasterId: broadcasterId(), observedAt: Date.now(), audienceKind: 'top-fans',
@@ -171,6 +171,7 @@ function sendSocketMessage(user, message, img, giftImg, isMain = true,userNum = 
         img,
         giftImg,
         isMain,
+        useTTS,
         userNum,
         userList
     };

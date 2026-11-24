@@ -211,8 +211,12 @@ class Engine:
             if raw_text and data.get("type") == "StreamMessage":
                 tts_text = strip_image_urls(raw_text)
                 if tts_text:
+                    use_tts = data.get("useTTS")
                     tts_service.speak_stream_message(
-                        new_node.user, tts_text, data.get("isMain", True)
+                        new_node.user,
+                        tts_text,
+                        data.get("isMain", True),
+                        use_tts if isinstance(use_tts, bool) else None,
                     )
 
         if self.ad_overlay is not None:

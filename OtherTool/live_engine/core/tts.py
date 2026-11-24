@@ -74,9 +74,14 @@ class TTSService:
         self,
         user: str,
         message: str,
-        is_main: bool = True
+        is_main: bool = True,
+        use_tts: Optional[bool] = None
     ):
         if not self.is_enabled:
+            return
+
+        # useTTS=false 是單則訊息的強制否決；true 仍受使用者的 read_main_only 偏好限制。
+        if use_tts is False:
             return
 
         filtered = filter_manager.process_message(message)

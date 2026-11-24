@@ -1,5 +1,36 @@
 # ChangeHistory
 
+## 2026.11.25 加入事件不朗讀：useTTS 與 isMain
+
+**類型**: 修正 · **檔案**: `ScriptLib/socket/hub.mjs`、`TikTok.js`、`ScriptLib/tiktok/events.mjs`、`UserScript/TikTokChat.user.js`、`UserScript/liveCenter.user.js`、`UserScript/TestCenter.user.js`、`OtherTool/live_engine/core/tts.py`、`OtherTool/live_engine/core/engine.py`、`Docs/CHAT_API.md`、`OtherTool/live_engine/README.md`、`Test/socket_hub.test.mjs`、`Test/tiktok_events.test.mjs`、`Test/userscript_source.test.mjs`、`OtherTool/live_engine/tests/test_tts.py`
+
+### 原因
+
+`StreamMessage` 的加入事件原本只送 `isMain:false`，沒有 `useTTS:false`；而 `/chat` 入口又把 userscript 的 `isMain` 固定成 `true`，所以加入事件可能被當成主訊息並觸發朗讀。
+
+### 修改
+
+- `SocketHub.sendMessage` 與 `sendSocketMessage` 新增 `useTTS`，未指定時跟隨 `isMain`。
+- TikTok MEMBER 加入事件明確送 `isMain:false`、`useTTS:false`。
+- `/chat` 保留 userscript 傳入的 `isMain`／`useTTS`；未提供 `useTTS` 時跟隨 `isMain`，不再強制 `isMain:true`。
+- TikTokChat 2.14／liveCenter 1.21 userscript payload 補上 `useTTS`；TestCenter 1.7 測試訊息明確標記 `useTTS:true`。
+- Python overlay 的 StreamMessage TTS 尊重 `useTTS:false`（強制不唸），`true` 仍受使用者的 `read_main_only` 偏好限制。
+- `Docs/CHAT_API.md` 與 overlay README 補上欄位語意與加入事件範例。
+
+### 驗證
+
+- `node --test Test/socket_hub.test.mjs Test/tiktok_events.test.mjs Test/userscript_source.test.mjs Test/tiktok_raw_log.test.mjs`
+- `python -m pytest OtherTool/live_engine/tests -q`
+- `npm run test:core`
+- `npm run lint`
+
+### 限制
+
+- 既有已送到 socket 的訊息不會回溯；需重新啟動主服務與 TikTok 子程序才會套用新 payload。
+- 直接以原始 JSON 呼叫 socket、繞過 `/chat`／`sendSocketMessage` 的第三方發送端仍要自行帶 `useTTS:false`。
+
+---
+
 ## 2026.11.24 MEMBER RAW 進場診斷
 
 **類型**: 診斷 · **檔案**: `ScriptLib/tiktok/rawLog.mjs`、`Test/tiktok_raw_log.test.mjs`、`Docs/LOGS.md`、`Docs/TEST_FILES_REFERENCE.md`

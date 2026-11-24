@@ -72,6 +72,7 @@ export class SocketHub {
      * @param {string} [options.img]
      * @param {string} [options.giftImg]
      * @param {boolean} [options.isMain=true]
+     * @param {boolean} [options.useTTS=isMain] 是否朗讀；加入／非主要事件預設跟隨 isMain。
      * @param {number} [options.userNum]
      * @param {Array} [options.userList]
      * @param {string} [options.category] 訊息分類（供端點過濾）。
@@ -84,7 +85,7 @@ export class SocketHub {
      * @param {boolean} [options.isTest] 測試訊息；歷史不保存。
      * @returns {boolean} 是否實際送出（false = 被去重擋下）。
      */
-    sendMessage(user, message, { img = '', giftImg = '', isMain = true, userNum = 0, userList = [], category, platform,
+    sendMessage(user, message, { img = '', giftImg = '', isMain = true, useTTS = isMain, userNum = 0, userList = [], category, platform,
         dedupUser, dedupMessage, dedupVariant = '', session = null, guard = null, isTest = false } = {}) {
         const checkUser = String(dedupUser ?? user).trim();
         const checkMsg = String(dedupMessage ?? message).trim();
@@ -101,6 +102,7 @@ export class SocketHub {
             img: this.mediaUrl(img),
             giftImg: this.mediaUrl(giftImg),
             isMain: Boolean(isMain),
+            useTTS: Boolean(useTTS),
             userNum: Number(userNum),
             userList,
             ...(session && typeof session === 'object' ? { session } : {}),

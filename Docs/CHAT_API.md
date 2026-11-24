@@ -35,7 +35,8 @@ Userscript → Server.js → TikTok.js → Socket 顯示與自動剪輯統計
 | `userNum` | 有限且非負的數值，可省略 | 真實總觀眾數；只有知道總數才傳，不要用 `0` 代表未知。 |
 | `audienceKind` | `total` 或 `top-fans`，可省略 | 總觀眾數建議明確標記 `total`；`top-fans` 會略過觀眾熱度更新。 |
 | `userList` | 字串陣列，可省略 | 相容欄位，目前不據此更新總觀眾或自動剪輯熱度。 |
-| `isMain` | 布林，相容欄位 | 目前聊天轉接送往 Socket 時固定使用 `true`，不採用輸入值切換。 |
+| `isMain` | 布林，預設 `true` | 是否為主訊息（置底）。聊天 `true`；加入／事件訊息應送 `false`。入口會保留 `false`，不再強制改成 `true`。 |
+| `useTTS` | 布林，省略時跟隨 `isMain` | 是否朗讀此則訊息。聊天預設 `true`；加入事件必須送 `false`，避免被 TTS 唸出「來了」。 |
 | `heatEligible` | 伺服器衍生 | 由 `isTest` 決定，入口會覆寫；不要自行指定。 |
 
 ### data URI 圖片
@@ -65,8 +66,26 @@ data:image/gif;base64,<payload>
   "transport": "userscript",
   "user": "觀眾甲",
   "message": "這段太精彩了！",
+  "isMain": true,
+  "useTTS": true,
   "msgId": null,
   "sentAt": null
+}
+```
+
+### 加入事件
+
+加入事件不是聊天主訊息，也不應觸發 TTS：
+
+```json
+{
+  "type": "StreamMessage",
+  "platform": "TikTok",
+  "transport": "userscript",
+  "user": "觀眾乙",
+  "message": "來了",
+  "isMain": false,
+  "useTTS": false
 }
 ```
 

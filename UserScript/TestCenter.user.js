@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TikTok Socket Test Button
 // @namespace    pip-chat-test
-// @version      1.6
+// @version      1.7
 // @description  Manual test button for local socket bridge (SPA safe)
 // @match        https://livecenter.tiktok.com/*
 // @match        https://*.bing.com/*
@@ -67,6 +67,7 @@
             img: "https://github.com/TwhomeGH/TTWChatMessageServer/blob/main/Emoji/Neuro2.png?raw=true",
             giftImg: 'https://img.icons8.com/?size=100&id=124062&format=png&color=000000',
             isMain: true,
+            useTTS: true,
             userNum: 300, // 模擬頭號觀眾人數
             userList: ['肉鬆', '松鼠', '瓜瓜'] // 模擬頭號觀眾名字列表
         };

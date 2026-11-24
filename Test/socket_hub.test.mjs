@@ -79,7 +79,7 @@ test('SocketHub.sendMessage 去重、套用 replaceEmojis 並帶上 category', (
     assert.equal(hub.sendMessage('user', 'hello :)', { category: 'chat' }), true);
     assert.deepEqual(endpoint.sent[0], {
         type: 'StreamMessage', category: 'chat', user: 'user', message: 'hello 🙂',
-        img: '', giftImg: '', isMain: true, userNum: 0, userList: []
+        img: '', giftImg: '', isMain: true, useTTS: true, userNum: 0, userList: []
     });
 
     // 已記錄的訊息（去重緩衝）會被擋下
@@ -100,6 +100,12 @@ test('SocketHub.sendMessage 去重、套用 replaceEmojis 並帶上 category', (
     dedup.add('測試使用者', '哈拉', 'test:avatar-a');
     assert.equal(hub.sendMessage('測試使用者', '哈拉', { dedupVariant: 'test:avatar-b' }), true);
     assert.equal(hub.sendMessage('測試使用者', '哈拉', { dedupVariant: 'test:avatar-a' }), false);
+
+    // 非主要訊息預設不朗讀；需要時仍可明確覆寫。
+    assert.equal(hub.sendMessage('join-user', '來了', { category: 'member', isMain: false }), true);
+    assert.equal(endpoint.sent[endpoint.sent.length - 1].useTTS, false);
+    assert.equal(hub.sendMessage('notice-user', '公告', { category: 'system', isMain: false, useTTS: true }), true);
+    assert.equal(endpoint.sent[endpoint.sent.length - 1].useTTS, true);
 });
 
 test('createHub：停用時無端點；啟用時建立單一端點', () => {

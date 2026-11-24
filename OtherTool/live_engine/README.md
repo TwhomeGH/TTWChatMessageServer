@@ -168,7 +168,7 @@ python main.py --settings
 Socket port **9322**，每行一個 JSON：
 
 ```json
-{"user":"觀眾名","message":"哈囉","img":"頭像網址","giftImg":"禮物網址","type":"StreamMessage","isMain":true,"userNum":0,"userList":[]}
+{"user":"觀眾名","message":"哈囉","img":"頭像網址","giftImg":"禮物網址","type":"StreamMessage","isMain":true,"useTTS":true,"userNum":0,"userList":[]}
 ```
 
 > **Socket 綁定位址**：預設綁定 `127.0.0.1`（僅本機）。需要讓其他裝置連入時，可透過環境變數
@@ -190,7 +190,8 @@ Socket port **9322**，每行一個 JSON：
 | `img` | 頭像圖片 URL |
 | `giftImg` | 禮物圖片 URL |
 | `type` | `"StreamMessage"` 才會觸發 TTS |
-| `isMain` | 是否為主訊息 |
+| `isMain` | 是否為主訊息；加入事件應為 `false` |
+| `useTTS` | 是否朗讀；`false` 為強制不唸，省略時跟隨 `isMain` |
 | `userNum` | 觀眾人數（顯示於疊層頂部） |
 | `userList` | 觀眾列表（有提供時顯示其長度為人數） |
 
