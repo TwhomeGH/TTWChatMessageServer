@@ -1,5 +1,5 @@
 /** /diagnostics 頁面冒煙測試：LogServer 日誌、logio 卡片與無 page error。 */
-/* global document -- 僅在瀏覽器回呼中使用。 */
+/* global document, getComputedStyle, window -- 僅在瀏覽器回呼中使用。 */
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const fs = require('node:fs');
@@ -132,6 +132,21 @@ async function main() {
         });
         assert.ok(controlSize.checkbox.width <= 24 && controlSize.checkbox.height <= 24, 'checkbox 不應被套成輸入框尺寸');
         assert.ok(controlSize.button.height >= 30, '工具列按鈕應維持可點擊高度');
+
+        await page.setViewport({ width: 640, height: 900 });
+        await page.waitForFunction(() => document.querySelectorAll('#diagLogs .log-row').length === 2);
+        const narrow = await page.evaluate(() => ({
+            rowDisplay: getComputedStyle(document.querySelector('#diagLogs .log-row')).display,
+            categoriesDisplay: getComputedStyle(document.querySelector('#diagCategories')).display,
+            summaryColumns: getComputedStyle(document.querySelector('#diagSummary')).gridTemplateColumns.split(' ').length,
+            messageMaxHeight: getComputedStyle(document.querySelector('#diagLogs .log-message')).maxHeight,
+            bodyOverflow: document.body.scrollWidth - window.innerWidth
+        }));
+        assert.equal(narrow.rowDisplay, 'block', '窄螢幕日誌列應改成卡片式');
+        assert.equal(narrow.categoriesDisplay, 'flex', '窄螢幕分類應改成橫向 chips');
+        assert.equal(narrow.summaryColumns, 2, '窄螢幕摘要應維持兩欄');
+        assert.equal(narrow.messageMaxHeight, '160px', '長內容應限制高度並可捲動');
+        assert.ok(narrow.bodyOverflow <= 1, '窄螢幕不應出現水平溢出');
         await page.waitForFunction(() => document.querySelector('#diagSocketStatus').textContent.length > 0);
         assert.match(await page.$eval('#diagSocketStatus', node => node.textContent), /未啟用/);
         await page.click('#diagSocketEnabled');

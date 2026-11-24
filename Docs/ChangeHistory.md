@@ -1,5 +1,30 @@
 # ChangeHistory
 
+## 2026.11.25 診斷頁窄螢幕適配
+
+**類型**: 修正 · **檔案**: `assets/diagnostics.css`、`Test/diagnostics_ui.cjs`、`Docs/DIAGNOSTICS.md`
+
+### 原因
+
+在 640px 左右的視窗，診斷頁仍使用桌面表格：分類側欄佔固定寬度、摘要卡擠成多欄、時間／分類／嚴重度三個欄位壓縮內容，長 body 被切成很窄的直條，單列高度失控。
+
+### 修改
+
+- 窄螢幕摘要改為兩欄，時間範圍跨整列。
+- 分類側欄改成可橫向滑動的 chips，不再佔用固定側欄高度。
+- 搜尋框獨佔一列，嚴重度／Session 選單兩欄排列。
+- 日誌表格改成卡片式堆疊：時間／分類／嚴重度在上，內容在下一列。
+- 長訊息與展開欄位限制高度並可內部捲動，避免單列無限長。
+- UI 測試加入 640×900 視窗斷言：卡片列、橫向分類、兩欄摘要、無水平溢出。
+
+### 驗證
+
+- `node Test/diagnostics_ui.cjs`
+- `npm run lint`
+- `npm run check:css`
+
+---
+
 ## 2026.11.25 TypeDoc API 參考接入 changelogkit
 
 **類型**: 功能 · **檔案**: `typedoc.json`、`tsconfig.typedoc.json`、`package.json`、`package-lock.json`、`.changelog.toml`、`.github/workflows/pages.yml`、`.gitignore`、`eslint.config.mjs`、`ScriptLib/browser/controller.cjs`、`Docs/API_REFERENCE.md`、`README.md`

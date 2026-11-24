@@ -143,6 +143,85 @@
         margin: 8px;
     }
 
+    /* 窄螢幕：摘要改成兩欄，時間範圍跨整列。 */
+    #diagSummary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    #diagSummary .log-card:nth-child(2) {
+        grid-column: 1 / -1;
+    }
+
+    /* 分類改成可橫向滑動的 chips，不再佔用左側固定欄寬。 */
+    .log-aside {
+        max-height: none;
+        padding: 10px;
+        overflow: visible;
+    }
+    .log-aside-note {
+        display: none;
+    }
+    .log-categories {
+        display: flex;
+        gap: 4px;
+        overflow-x: auto;
+        padding-bottom: 3px;
+    }
+    .log-cat {
+        flex: 0 0 auto;
+        width: auto;
+        white-space: nowrap;
+    }
+
+    /* 工具列：搜尋佔滿，兩個選單並排，開關與按鈕自然換行。 */
+    .log-toolbar input[type="search"] {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+    .log-toolbar select {
+        flex: 1 1 calc(50% - 8px);
+        min-width: 0;
+    }
+
+    /* 表格改成卡片式：時間、分類、嚴重度在上，內容佔滿下一列。 */
+    .log-table thead {
+        display: none;
+    }
+    .log-table,
+    .log-table tbody,
+    .log-table tr,
+    .log-table td {
+        display: block;
+        width: auto;
+    }
+    .log-row {
+        margin-bottom: 8px;
+        padding: 8px;
+        border: 1px solid var(--log-border);
+        border-radius: 8px;
+    }
+    .log-time,
+    .log-category,
+    .log-level {
+        display: inline-block;
+        width: auto;
+        margin-right: 8px;
+    }
+    .log-time {
+        font-size: 11px;
+    }
+    .log-message {
+        max-height: 10rem;
+        margin-top: 5px;
+        overflow: auto;
+    }
+    .log-message .log-fields pre {
+        max-height: 8rem;
+        overflow: auto;
+    }
+    .log-more {
+        width: 100%;
+    }
+
     .diag-top .log-card,
     .diag-socket {
         min-width: 0;
