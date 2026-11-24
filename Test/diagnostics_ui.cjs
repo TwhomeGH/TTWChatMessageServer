@@ -108,6 +108,18 @@ async function main() {
         assert.equal(result.atBottom, true);
         assert.match(result.diagnostic, /logio/);
         assert.equal(result.loginHidden, true);
+
+        const geometry = await page.evaluate(() => {
+            const box = selector => document.querySelector(selector).getBoundingClientRect();
+            return {
+                topCard: box('.diag-top .log-card').left,
+                layout: box('.diag-layout').left,
+                sidebar: box('.log-aside').left,
+                summary: box('#diagSummary .log-card').left
+            };
+        });
+        assert.ok(Math.abs(geometry.topCard - geometry.layout) <= 1, '分類面板應與上方卡片對齊');
+        assert.ok(geometry.summary > geometry.sidebar + 8, '主內容應與分類面板保持間距');
         await page.waitForFunction(() => document.querySelector('#diagSocketStatus').textContent.length > 0);
         assert.match(await page.$eval('#diagSocketStatus', node => node.textContent), /未啟用/);
         await page.click('#diagSocketEnabled');

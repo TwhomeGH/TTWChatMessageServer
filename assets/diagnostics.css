@@ -19,6 +19,14 @@
     padding: 12px 16px 0;
 }
 
+/* 讓側欄與主內容的外緣和上方卡片對齊，不再讓分類面板貼到卡片邊緣。 */
+.log-layout.diag-layout {
+    margin: 12px 16px 16px;
+    border: 1px solid var(--log-border);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
 .diag-top .log-card h2,
 .diag-socket h2 {
     margin: 0 0 8px;
@@ -114,6 +122,10 @@
     .diag-top {
         grid-template-columns: 1fr;
         padding: 8px 8px 0;
+    }
+
+    .log-layout.diag-layout {
+        margin: 8px;
     }
 
     .diag-top .log-card,
