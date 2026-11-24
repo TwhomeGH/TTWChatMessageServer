@@ -5,3 +5,13 @@ history = "Docs/ChangeHistory.md"
 
 # 保留 patched-plugins 的 .d.ts 與 index.js（可讀的 API），只排除真正的產物。
 exclude = ["**/*.min.js", "**/dist/**/chunk-*.js", "**/dist/**/lib-*.js"]
+
+# TypeDoc 產物由 npm run docs:api 產生，export 時複製到 /api-docs/typedoc/。
+[[tool.changelog.api]]
+id = "typedoc"
+title = "API 參考"
+kind = "typedoc"
+html = "build/api"
+mount = "typedoc"
+embed = true
+order = 10

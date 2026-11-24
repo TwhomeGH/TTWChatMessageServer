@@ -1,0 +1,29 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "TTW Chat Message Server API",
+  "entryPoints": [
+    "ScriptLib/**/*.cjs",
+    "ScriptLib/**/*.mjs",
+    "Server.js",
+    "TikTok.js"
+  ],
+  "entryPointStrategy": "expand",
+  "tsconfig": "tsconfig.typedoc.json",
+  "out": "build/api",
+  "readme": "none",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "excludeExternals": true,
+  "excludeNotDocumented": false,
+  "validation": {
+    "notExported": false,
+    "invalidLink": false,
+    "notDocumented": false
+  },
+  "navigation": {
+    "includeCategories": true,
+    "includeGroups": true
+  },
+  "githubPages": true,
+  "cleanOutputDir": true
+}

@@ -1026,7 +1026,7 @@ pip install PyQt6 PyOpenGL numpy pillow requests
 
 有一些訊息為了方便調試 確認參數 所以特別寫進 `Main_Log.log` `TikTokRun.log`
 
-模組拆分與維護責任請參閱 [模組說明](Docs/MODULES.md)。
+模組拆分與維護責任請參閱 [模組說明](Docs/MODULES.md)。程式碼 API 參考由 TypeDoc 產生，並掛載在 changelogkit 靜態站的「API 參考」入口；產生方式見 [API 參考](Docs/API_REFERENCE.md)。
 
 專用瀏覽器與持久化登入：執行 `npm start` 後開啟 `/browser`，詳見 [瀏覽器管理](Docs/BROWSER.md)。
 

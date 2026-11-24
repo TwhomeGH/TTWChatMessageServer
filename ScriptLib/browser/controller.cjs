@@ -32,7 +32,7 @@ function launchArgs(config) {
     ];
 }
 
-/** 把 @handle 或 TikTok 頻道 URL 轉成直播頁；只接受 tiktok.com。 */
+/** 把 `@handle` 或 TikTok 頻道 URL 轉成直播頁；只接受 tiktok.com。 */
 function tiktokLiveUrl(input) {
     const raw = String(input || '').trim();
     if (!raw) throw Object.assign(new Error('缺少 TikTok 帳號'), { code: 'TIKTOK_HANDLE_REQUIRED' });

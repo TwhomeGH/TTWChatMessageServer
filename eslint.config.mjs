@@ -19,7 +19,7 @@ const esmFiles = [
 
 export default defineConfig([
   // SignServer/sdk 是第三方壓縮 SDK、Docs/*.js 是打包參考樣本，皆不屬於本專案原始碼。
-  { ignores: ["**/node_modules/**", "Docs/patched-plugins/**", "Docs/*.js", "SignServer/sdk/**", "output/**", ".playwright-cli/**", "logs/**", "data/**", "cache/**"] },
+  { ignores: ["**/node_modules/**", "Docs/patched-plugins/**", "Docs/*.js", "SignServer/sdk/**", "output/**", ".playwright-cli/**", "logs/**", "data/**", "cache/**", "build/**", "_site/**"] },
   { files: ["**/*.{js,mjs,cjs}"], extends: [js.configs.recommended] },
   // 允許以 _ 開頭明確標示「刻意不使用」，並忽略解構時為了排除某欄位而取出的 rest 兄弟。
   { files: ["**/*.{js,mjs,cjs}"], rules: { "no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_", ignoreRestSiblings: true }] } },

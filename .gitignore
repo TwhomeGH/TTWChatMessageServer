@@ -53,6 +53,9 @@ output/playwright/*
 
 # changelogkit 匯出的唯讀靜態站（CI 部署 GitHub Pages 產物）。
 _site/
+
+# TypeDoc 產物（由 npm run docs:api 重新產生）。
+/build/
 /data/monitor.sqlite*
 /data/logs.sqlite*
 /cache/media/

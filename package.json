@@ -25,6 +25,7 @@
     "build:css": "node scripts/css-build.cjs",
     "check:css": "node scripts/css-build.cjs --check",
     "watch:css": "node scripts/css-build.cjs --watch",
+    "docs:api": "typedoc --options typedoc.json",
     "test:startup": "node --test Test/startup/start.test.cjs Test/startup/css_build.test.cjs",
     "test:core": "node --test --test-concurrency=1 \"Test/*.test.cjs\" \"Test/*.test.mjs\"",
     "test:ci": "npm run test:core && npm run test:startup && npm run check:css"
@@ -34,6 +35,8 @@
     "@tailwindcss/cli": "4.3.3",
     "eslint": "^10.11.0",
     "globals": "^17.12.0",
-    "tailwindcss": "4.3.3"
+    "tailwindcss": "4.3.3",
+    "typedoc": "^0.28.20",
+    "typescript": "^6.0.3"
   }
 }

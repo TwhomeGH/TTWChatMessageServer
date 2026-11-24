@@ -1,5 +1,35 @@
 # ChangeHistory
 
+## 2026.11.25 TypeDoc API 參考接入 changelogkit
+
+**類型**: 功能 · **檔案**: `typedoc.json`、`tsconfig.typedoc.json`、`package.json`、`package-lock.json`、`.changelog.toml`、`.github/workflows/pages.yml`、`.gitignore`、`eslint.config.mjs`、`ScriptLib/browser/controller.cjs`、`Docs/API_REFERENCE.md`、`README.md`
+
+### 原因
+
+程式碼 API 只有 JSDoc 註解，沒有可瀏覽的參考站；changelogkit 已支援 `[[tool.changelog.api]]`，可以把外部 HTML 掛到靜態站導覽。
+
+### 修改
+
+- 加入 TypeDoc 與 TypeScript 開發相依，新增 `typedoc.json`、`tsconfig.typedoc.json` 與 `npm run docs:api`。
+- API 產物輸出到 `build/api`（已 gitignore）。
+- `.changelog.toml` 新增 `API 參考`，以 `embed: true` 掛載到 `api-docs/typedoc/`。
+- Pages workflow 在 `changelogkit export` 前安裝 Node 相依並執行 `npm run docs:api`。
+- 補 `Docs/API_REFERENCE.md` 與 README 入口。
+
+### 驗證
+
+- `npm run docs:api`
+- `py -3.11 -m changelogkit docs --check`（45 份文件，無 ERROR）
+- `py -3.11 -m changelogkit export _site --branch main`
+- 確認 `_site/api-docs/typedoc/index.html` 存在，首頁與開發索引都有「API 參考」連結
+
+### 限制
+
+- TypeDoc 是程式碼 API 參考，不是 HTTP OpenAPI。
+- `build/` 不提交；本機或 CI 必須先產生 API 才能讓 changelogkit 複製。
+
+---
+
 ## 2026.11.25 診斷工具列控制項尺寸
 
 **類型**: 修正 · **檔案**: `assets/diagnostics.css`、`Test/diagnostics_ui.cjs`
