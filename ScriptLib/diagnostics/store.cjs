@@ -87,29 +87,60 @@ class DiagnosticsStore {
         return true;
     }
 
-    snapshot({ limit = 500, q = '', category = '', severity = '', session = '' } = {}) {
+    snapshot({ limit = 500, q = '', category = '', severity = '', session = '', context = 0 } = {}) {
         const query = String(q || '').trim().toLowerCase();
         const selectedCategory = String(category || '').trim();
         const selectedSeverity = String(severity || '').trim();
         const selectedSession = String(session || '').trim();
+        const contextSize = Math.min(Math.max(Number(context) || 0, 0), 20);
         const size = Math.min(Math.max(Number(limit) || 500, 1), this.maxLogs);
-        const filtered = this.logs.filter(entry => {
-            if (selectedCategory && entry.category !== selectedCategory) return false;
-            if (selectedSeverity && entry.severity !== selectedSeverity) return false;
-            if (selectedSession && entry.session !== selectedSession) return false;
-            if (!query) return true;
-            const haystack = [
-                entry.title, entry.body, entry.category, entry.session || '',
-                ...Object.entries(entry.fields || {}).map(([key, value]) => `${key}=${value}`)
-            ].join(' ').toLowerCase();
-            return haystack.includes(query);
+        const matches = [];
+        this.logs.forEach((entry, index) => {
+            if (selectedCategory && entry.category !== selectedCategory) return;
+            if (selectedSeverity && entry.severity !== selectedSeverity) return;
+            if (selectedSession && entry.session !== selectedSession) return;
+            if (query) {
+                const haystack = [
+                    entry.title, entry.body, entry.category, entry.session || '',
+                    ...Object.entries(entry.fields || {}).map(([key, value]) => `${key}=${value}`)
+                ].join(' ').toLowerCase();
+                if (!haystack.includes(query)) return;
+            }
+            matches.push(index);
         });
-        // 畫面維持舊到新；API 給最新在前，讓前端可以選擇反轉或直接顯示。
-        const logs = filtered.slice(-size).reverse();
+
+        const matchedIndexes = new Set(matches);
+        let selected;
+        let hasMore;
+        if (contextSize === 0) {
+            selected = matches.slice(-size).reverse();
+            hasMore = matches.length > selected.length;
+        } else {
+            const indexes = new Set();
+            let processed = 0;
+            for (let m = matches.length - 1; m >= 0; m--) {
+                const index = matches[m];
+                const from = Math.max(0, index - contextSize);
+                const to = Math.min(this.logs.length - 1, index + contextSize);
+                for (let i = from; i <= to; i++) indexes.add(i);
+                processed += 1;
+                if (indexes.size >= size) break;
+            }
+            selected = [...indexes].sort((a, b) => b - a).slice(0, size);
+            hasMore = processed < matches.length || indexes.size > selected.length;
+        }
+
+        // API 給最新在前；UI 再反轉成舊到新顯示。matched=false 代表是匹配項的上下文。
+        const logs = selected.map(index => ({
+            ...this.logs[index],
+            matched: matchedIndexes.has(index)
+        }));
         return {
             logs,
-            total: filtered.length,
-            hasMore: filtered.length > logs.length,
+            total: matches.length,
+            matched: logs.filter(entry => entry.matched).length,
+            context: logs.filter(entry => !entry.matched).length,
+            hasMore,
             summary: summarizeDiagnostics(this.logs),
             diagnostics: [...this.diagnostics.values()].sort((a, b) => b.receivedAt - a.receivedAt),
             recentDiagnostics: this.recentDiagnostics,

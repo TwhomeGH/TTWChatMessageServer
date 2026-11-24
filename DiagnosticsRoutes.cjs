@@ -66,7 +66,8 @@ function createDiagnosticsRoutes(store, { token = '', socketClient = null, resol
                 q: url.searchParams.get('q') || '',
                 category: url.searchParams.get('category') || '',
                 severity: url.searchParams.get('severity') || '',
-                session: url.searchParams.get('session') || ''
+                session: url.searchParams.get('session') || '',
+                context: Number(url.searchParams.get('context')) || 0
             })
         });
         return true;

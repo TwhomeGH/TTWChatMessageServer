@@ -11,7 +11,8 @@
 - 左側分類：依 tag 或 title 統計，可點擊篩選。
 - 摘要卡：總筆數、時間範圍、Session、警告、錯誤。
 - 表格：時間、分類、嚴重度、內容；`key=value` 會收進可展開的欄位。
-- 工具列：搜尋、嚴重度、Session、清除篩選、自動更新、自動滾到最新、載入更多。
+- 工具列：搜尋、嚴重度、Session、匹配前後筆數、清除篩選、自動更新、自動滾到最新、載入更多。
+- 搜尋命中文字會以黃底標記；可選「前後 1／2／3／5／10 筆」，把匹配項前後的日誌一起帶出，這些列會標示「上下文」並淡化顯示。
 - 原始 `body` 仍保留，不做破壞性改寫；未知分類顯示原始 title 或 `Other`。
 - 窄螢幕（≤820px）：分類改成橫向 chips，摘要維持兩欄，搜尋框獨佔一列，日誌表格改成卡片式堆疊，長內容限制高度並可捲動。
 
@@ -94,10 +95,12 @@ TTWChat 只送訂閱訊息，不送 `log`／`logbatch`／`videoHealth`／`audioH
 需要主服務登入：
 
 ```text
-GET /api/diagnostics?limit=300&q=&category=&severity=&session=
+GET /api/diagnostics?limit=300&q=&category=&severity=&session=&context=0
 ```
 
-回傳 `logs`（最新在前）、`total`（符合篩選筆數）、`hasMore`、`summary`（全量摘要）以及既有的 `diagnostics`／`recentDiagnostics`。`summary` 不隨篩選改變，讓分類與總覽保持穩定；表格由前端反轉成舊到新，最新保持在底部。
+`context` 是每個匹配項往前後帶出的日誌筆數（0–20，預設 0）。回傳的 `logs` 每筆都有 `matched`：`true` 表示符合搜尋／篩選，`false` 表示是為了觀察而帶出的上下文；回傳同時包含 `matched`（顯示範圍內符合筆數）與 `context`（上下文筆數）。`total` 仍是符合筆數，`hasMore` 在有更多符合項或上下文被 `limit` 截掉時為 true。
+
+`logs` 最新在前、`summary` 是全量摘要，不隨篩選改變；表格由前端反轉成舊到新，最新保持在底部。`limit` 計算的是實際回傳列數（包含上下文），不是只計算符合項。
 
 ## Log I/O 是什麼
 

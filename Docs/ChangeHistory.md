@@ -1,5 +1,30 @@
 # ChangeHistory
 
+## 2026.11.25 診斷搜尋高亮與匹配前後上下文
+
+**類型**: 功能 · **檔案**: `ScriptLib/diagnostics/store.cjs`、`DiagnosticsRoutes.cjs`、`assets/diagnostics.js`、`assets/diagnostics.css`、`diagnostics.html`、`Test/diagnostics.test.cjs`、`Test/diagnostics_ui.cjs`、`Docs/DIAGNOSTICS.md`
+
+### 原因
+
+搜尋只回傳符合的日誌，看不到目標前後發生什麼；命中字串也沒有視覺標記，長日誌中很難定位。
+
+### 修改
+
+- 搜尋結果以 `<mark>` 標記命中文字，支援大小寫不敏感、多處命中；不把輸入當 HTML／正則。
+- 工具列新增「匹配前後 1／2／3／5／10 筆」，API 新增 `context`。
+- `snapshot()` 保留符合項的 `matched:true`，帶出的相鄰日誌標記 `matched:false`；回傳 `matched`／`context` 數量。
+- 上下文列顯示「上下文」badge 並淡化；狀態列顯示符合數、顯示數與上下文數。
+- `limit` 以實際回傳列數計算，包含上下文；`hasMore` 反映是否還有未載入資料。
+
+### 驗證
+
+- `node --test Test/diagnostics.test.cjs`
+- `node Test/diagnostics_ui.cjs`（含 640px 高亮與上下文斷言）
+- `npm run test:core`（382 項全過）
+- `npm run lint`、`npm run check:css`
+
+---
+
 ## 2026.11.25 診斷頁窄螢幕適配
 
 **類型**: 修正 · **檔案**: `assets/diagnostics.css`、`Test/diagnostics_ui.cjs`、`Docs/DIAGNOSTICS.md`

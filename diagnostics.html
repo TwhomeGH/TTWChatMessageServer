@@ -66,6 +66,14 @@
           <option value="info">一般</option>
         </select>
         <select id="diagSession" title="Session"><option value="">全部 Session</option></select>
+        <select id="diagContext" title="匹配前後相鄰筆數">
+          <option value="0">只有符合</option>
+          <option value="1">前後 1 筆</option>
+          <option value="2">前後 2 筆</option>
+          <option value="3">前後 3 筆</option>
+          <option value="5">前後 5 筆</option>
+          <option value="10">前後 10 筆</option>
+        </select>
         <button id="diagReset" class="log-pill" type="button">清除篩選</button>
         <label class="diag-toggle"><input id="diagAuto" type="checkbox" checked> 自動更新</label>
         <label class="diag-toggle"><input id="diagAutoScroll" type="checkbox" checked> 自動滾到最新</label>

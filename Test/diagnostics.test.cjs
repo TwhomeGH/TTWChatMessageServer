@@ -85,6 +85,28 @@ test('DiagnosticsStore 接收 LogServer logs 與帶外 diagnostic', () => {
         { subsystem: 'logio', source: 'extension', count: 4, lastError: 'disk full' });
 });
 
+test('診斷搜尋可帶入匹配前後上下文並標記 matched', () => {
+    const store = new DiagnosticsStore();
+    store.ingestLogs([
+        { time: '1', title: 'Capture', body: 'before' },
+        { time: '2', title: 'Capture', body: 'target' },
+        { time: '3', title: 'Capture', body: 'after' }
+    ]);
+    const only = store.snapshot({ q: 'target' });
+    assert.deepEqual(only.logs.map(line => line.body), ['target']);
+    assert.equal(only.logs[0].matched, true);
+    assert.equal(only.matched, 1);
+    assert.equal(only.context, 0);
+
+    const around = store.snapshot({ q: 'target', context: 1 });
+    assert.deepEqual(around.logs.map(line => line.body), ['after', 'target', 'before']);
+    assert.deepEqual(around.logs.map(line => line.matched), [false, true, false]);
+    assert.equal(around.total, 1);
+    assert.equal(around.matched, 1);
+    assert.equal(around.context, 2);
+    assert.equal(around.hasMore, false);
+});
+
 test('診斷入口接受 LogServer /post、diagnostic 與可選 token', async () => {
     const store = new DiagnosticsStore();
     const routes = createDiagnosticsRoutes(store, { token: 'secret' });
@@ -110,6 +132,11 @@ test('診斷入口接受 LogServer /post、diagnostic 與可選 token', async ()
 test('診斷 API 需要登入並回傳 snapshot', async () => {
     const store = new DiagnosticsStore();
     store.ingestDiagnostic({ type: 'diagnostic', subsystem: 'logio', source: 'extension', count: 1, lastError: '' });
+    store.ingestLogs([
+        { time: '1', title: 'Capture', body: 'before' },
+        { time: '2', title: 'Capture', body: 'target' },
+        { time: '3', title: 'Capture', body: 'after' }
+    ]);
     const routes = createDiagnosticsRoutes(store);
     const denied = await new Promise(resolve => {
         const req = new EventEmitter();
@@ -122,7 +149,7 @@ test('診斷 API 需要登入並回傳 snapshot', async () => {
     assert.equal(denied.status, 401);
     const allowed = await new Promise(resolve => {
         const req = new EventEmitter();
-        req.url = '/api/diagnostics';
+        req.url = '/api/diagnostics?q=target&context=1';
         req.method = 'GET';
         req.headers = {};
         const res = { writeHead(status) { this.status = status; }, end(body) { resolve({ status: this.status, body: JSON.parse(body) }); } };
@@ -130,6 +157,8 @@ test('診斷 API 需要登入並回傳 snapshot', async () => {
     });
     assert.equal(allowed.status, 200);
     assert.equal(allowed.body.diagnostics.length, 1);
+    assert.deepEqual(allowed.body.logs.map(line => line.body), ['after', 'target', 'before']);
+    assert.deepEqual(allowed.body.logs.map(line => line.matched), [false, true, false]);
 });
 
 test('Socket client 訂閱 externalLogs 並接收 batch／diagnostic', async () => {

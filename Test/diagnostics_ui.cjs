@@ -41,6 +41,44 @@ async function main() {
             return;
         }
         if (url.pathname === '/api/diagnostics') {
+            if (url.searchParams.get('q') === 'target' && url.searchParams.get('context') === '1') {
+                const targetLogs = [
+                    {
+                        time: '2026-11-10 20:00:02', title: 'Capture',
+                        body: '[Capture] after target', category: 'Capture', severity: 'info',
+                        session: 'abc12345', fields: {}, receivedAt: Date.now(), matched: false
+                    },
+                    {
+                        time: '2026-11-10 20:00:01', title: 'Capture',
+                        body: '[Capture] target marker', category: 'Capture', severity: 'info',
+                        session: 'abc12345', fields: {}, receivedAt: Date.now() - 1000, matched: true
+                    },
+                    {
+                        time: '2026-11-10 20:00:00', title: 'Capture',
+                        body: '[Capture] before target', category: 'Capture', severity: 'info',
+                        session: 'abc12345', fields: {}, receivedAt: Date.now() - 2000, matched: false
+                    }
+                ];
+                res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({
+                    ok: true,
+                    logs: targetLogs,
+                    total: 1,
+                    matched: 1,
+                    context: 2,
+                    hasMore: false,
+                    summary: {
+                        total: 3, range: '2026-11-10 20:00:00 ～ 2026-11-10 20:00:02',
+                        categories: [{ name: 'Capture', count: 3 }], sessions: ['abc12345'],
+                        warn: 0, error: 0, info: 3
+                    },
+                    diagnostics: [],
+                    recentDiagnostics: [],
+                    stats: { bufferedLogs: 3, bufferedDiagnostics: 0 },
+                    lastReceived: Date.now()
+                }));
+                return;
+            }
             res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
             res.end(JSON.stringify({
                 ok: true,
@@ -147,6 +185,18 @@ async function main() {
         assert.equal(narrow.summaryColumns, 2, '窄螢幕摘要應維持兩欄');
         assert.equal(narrow.messageMaxHeight, '160px', '長內容應限制高度並可捲動');
         assert.ok(narrow.bodyOverflow <= 1, '窄螢幕不應出現水平溢出');
+
+        await page.select('#diagContext', '1');
+        await page.type('#diagSearch', 'target');
+        await page.waitForFunction(() => document.querySelectorAll('#diagLogs .log-row').length === 3);
+        const matched = await page.evaluate(() => ({
+            highlights: [...document.querySelectorAll('#diagLogs .diag-highlight')].map(node => node.textContent),
+            contextRows: document.querySelectorAll('#diagLogs .log-row.is-context').length,
+            status: document.querySelector('#diagStatus').textContent
+        }));
+        assert.deepEqual(matched.highlights, ['target', 'target', 'target']);
+        assert.equal(matched.contextRows, 2);
+        assert.match(matched.status, /上下文 2 筆/);
         await page.waitForFunction(() => document.querySelector('#diagSocketStatus').textContent.length > 0);
         assert.match(await page.$eval('#diagSocketStatus', node => node.textContent), /未啟用/);
         await page.click('#diagSocketEnabled');

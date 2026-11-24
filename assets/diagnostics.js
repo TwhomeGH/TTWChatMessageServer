@@ -15,6 +15,7 @@
     const search = $('diagSearch');
     const severity = $('diagSeverity');
     const session = $('diagSession');
+    const context = $('diagContext');
     const auto = $('diagAuto');
     const autoScroll = $('diagAutoScroll');
     const refresh = $('diagRefresh');
@@ -33,6 +34,7 @@
         severity: '',
         session: '',
         query: '',
+        context: 0,
         stats: {},
         diagnostics: [],
         recentDiagnostics: [],
@@ -46,6 +48,29 @@
     function text(node, value) {
         node.textContent = value == null ? '' : String(value);
         return node;
+    }
+
+    /** 以目前搜尋字串標記文字；不把使用者輸入當 HTML 或正則表達式。 */
+    function appendHighlighted(node, value, query) {
+        const raw = value == null ? '' : String(value);
+        const needle = String(query || '').trim().toLowerCase();
+        if (!needle) {
+            node.append(document.createTextNode(raw));
+            return;
+        }
+        const haystack = raw.toLowerCase();
+        let start = 0;
+        let index = haystack.indexOf(needle);
+        while (index !== -1) {
+            if (index > start) node.append(document.createTextNode(raw.slice(start, index)));
+            const mark = document.createElement('mark');
+            mark.className = 'diag-highlight';
+            mark.textContent = raw.slice(index, index + needle.length);
+            node.append(mark);
+            start = index + needle.length;
+            index = haystack.indexOf(needle, start);
+        }
+        if (start < raw.length) node.append(document.createTextNode(raw.slice(start)));
     }
 
     function relative(ms) {
@@ -223,7 +248,7 @@
         return badge;
     }
 
-    function fieldsDetails(fields) {
+    function fieldsDetails(fields, query) {
         const keys = Object.keys(fields || {});
         if (!keys.length) return null;
         const details = document.createElement('details');
@@ -231,7 +256,7 @@
         const summary = document.createElement('summary');
         text(summary, `${keys.length} 個欄位`);
         const pre = document.createElement('pre');
-        text(pre, keys.map(key => `${key} = ${fields[key]}`).join('\n'));
+        appendHighlighted(pre, keys.map(key => `${key} = ${fields[key]}`).join('\n'), query);
         details.append(summary, pre);
         return details;
     }
@@ -241,28 +266,35 @@
         logsEl.replaceChildren();
         // API 回傳新到舊；表格改成舊到新，讓最新訊息維持在底部。
         for (const line of [...state.logs].reverse()) {
+            const contextLine = line.matched === false;
             const row = document.createElement('tr');
-            row.className = `log-row is-${line.severity || 'info'}`;
+            row.className = `log-row is-${line.severity || 'info'}${contextLine ? ' is-context' : ''}`;
             const time = document.createElement('td');
             time.className = 'log-time';
             text(time, line.time || (line.receivedAt ? new Date(line.receivedAt).toLocaleString() : '—'));
             const category = document.createElement('td');
             category.className = 'log-category';
-            text(category, line.category || line.title || 'Other');
+            appendHighlighted(category, line.category || line.title || 'Other', state.query);
             const level = document.createElement('td');
             level.className = 'log-level';
             level.append(severityBadge(line.severity));
+            if (contextLine) {
+                const badge = document.createElement('span');
+                badge.className = 'diag-context-badge';
+                badge.textContent = '上下文';
+                level.append(badge);
+            }
             const message = document.createElement('td');
             message.className = 'log-message';
-            message.append(document.createTextNode(line.body || line.title || ''));
-            const fields = fieldsDetails(line.fields);
+            appendHighlighted(message, line.body || line.title || '', state.query);
+            const fields = fieldsDetails(line.fields, state.query);
             if (fields) message.append(fields);
             row.append(time, category, level, message);
             logsEl.append(row);
         }
         emptyEl.hidden = state.logs.length !== 0;
         moreEl.hidden = !state.hasMore;
-        moreEl.textContent = `載入更多（目前 ${state.logs.length} / ${state.total}）`;
+        moreEl.textContent = `載入更多（已顯示 ${state.logs.length} 筆，符合 ${state.total} 筆）`;
         if (autoScroll.checked) {
             requestAnimationFrame(() => { scrollEl.scrollTop = scrollEl.scrollHeight; });
         } else {
@@ -277,7 +309,9 @@
         if (state.session) filterBits.push(`Session ${state.session}`);
         if (state.query) filterBits.push(`搜尋 ${state.query}`);
         const stats = state.stats || {};
+        const contextCount = state.logs.filter(line => line.matched === false).length;
         statusEl.textContent = `${state.total} 筆符合 · 顯示 ${state.logs.length} 筆`
+            + (contextCount ? `（上下文 ${contextCount} 筆）` : '')
             + (filterBits.length ? ` · ${filterBits.join(' · ')}` : '')
             + ` · 緩衝 ${stats.bufferedLogs || 0} 則 · 最後收到：${relative(state.lastReceived)}`;
     }
@@ -302,7 +336,8 @@
                 q: state.query,
                 category: state.category,
                 severity: state.severity,
-                session: state.session
+                session: state.session,
+                context: String(state.context)
             });
             const response = await fetch('/api/diagnostics?' + params, { cache: 'no-store' });
             if (response.status === 401) {
@@ -412,10 +447,12 @@
         state.category = '';
         state.severity = '';
         state.session = '';
+        state.context = 0;
         state.limit = 300;
         search.value = '';
         severity.value = '';
         session.value = '';
+        context.value = '0';
         load();
     }
 
@@ -434,6 +471,11 @@
     });
     session.addEventListener('change', () => {
         state.session = session.value;
+        state.limit = 300;
+        load();
+    });
+    context.addEventListener('change', () => {
+        state.context = Math.max(0, Math.min(20, Number(context.value) || 0));
         state.limit = 300;
         load();
     });
