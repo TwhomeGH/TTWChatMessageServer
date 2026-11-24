@@ -378,6 +378,8 @@
   "monitor.cat.audience": "觀眾數",
   "monitor.cat.summary": "頻率摘要",
   "monitor.cat.heartbeat": "心跳",
+  "monitor.entrySource.homepageHotLiveCell": "首頁熱門直播",
+  "monitor.entrySource.tooltip": "進場來源：{source}",
   "monitor.audience.giftRegular": "送禮常客",
   "monitor.audience.alwaysHere": "每次都來",
   "monitor.audience.frequentChatter": "常打字",

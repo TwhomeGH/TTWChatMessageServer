@@ -638,6 +638,7 @@ process.stdin.on('data', async (chunk) => {
                 // /chat 入口會保留原始旗標：加入事件由 userscript 送 isMain=false，不可在這裡被重設成主訊息。
                 const isMain = json.isMain !== false;
                 const useTTS = typeof json.useTTS === 'boolean' ? json.useTTS : isMain;
+                const entrySource = typeof json.entrySource === 'string' ? json.entrySource : '';
                 const chatPlatform = String(json.platform || 'tiktok').toLowerCase();
                 const chatInfo = { id: json.msgId || json.id, user: origUser, at: Date.now() };
                 const trackChat = json.isTest !== true;
@@ -670,7 +671,7 @@ process.stdin.on('data', async (chunk) => {
                     let remainingMs = 0;
                     if (dispatch.socket) {
                         const sent = sendSocketMessage(json.user, json.message, {
-                            img: json.img || '', giftImg: json.giftImg || '', isMain, useTTS, category: 'chat', platform: 'tiktok',
+                            img: json.img || '', giftImg: json.giftImg || '', isMain, useTTS, entrySource, category: 'chat', platform: 'tiktok',
                             dedupUser: origUser, dedupMessage: origMsg, dedupVariant, isTest: true
                         });
                         if (sent) dedup.add(origUser, origMsg, dedupVariant);
@@ -687,7 +688,7 @@ process.stdin.on('data', async (chunk) => {
                     return;
                 }
 
-                const delivered = sendSocketMessage(json.user, json.message, { img: json.img || '', giftImg: json.giftImg || '', isMain, useTTS, category: 'chat', platform: 'tiktok', dedupUser: origUser, dedupMessage: origMsg, dedupVariant });
+                const delivered = sendSocketMessage(json.user, json.message, { img: json.img || '', giftImg: json.giftImg || '', isMain, useTTS, entrySource, category: 'chat', platform: 'tiktok', dedupUser: origUser, dedupMessage: origMsg, dedupVariant });
                 if (delivered !== false) chatStats.sent(chatPlatform, chatInfo);
                 else chatStats.dropped(chatPlatform, 'socket-duplicate', chatInfo);
                 dedup.add(origUser, origMsg, dedupVariant);
@@ -1033,6 +1034,7 @@ function updateCombinedViewerCount(force = false) {
  * @param {string} [options.giftImg] 禮物圖 URL。
  * @param {boolean} [options.isMain=true] 是否為主訊息（置底）。
  * @param {boolean} [options.useTTS=isMain] 是否朗讀；加入／非主要事件預設跟隨 isMain。
+ * @param {string} [options.entrySource] 平台原始進場來源。
  * @param {string} [options.category] 訊息分類（供端點 ?filter= 過濾）。
  * @param {string} [options.platform] 來源平台（tiktok／twitch／kick／youtube／odysee）。
  * @param {string} [options.dedupUser] 覆寫去重比對的使用者。
@@ -1043,10 +1045,10 @@ function updateCombinedViewerCount(force = false) {
  * @param {boolean} [options.isTest] 測試訊息；歷史不保存。
  * @returns {boolean} 是否實際送出（false = 被去重擋下）。
  */
-function sendSocketMessage(user, message, { img = '', giftImg = '', isMain = true, useTTS = isMain, category, platform, dedupUser, dedupMessage, dedupVariant = '', session = null, guard = null, isTest = false } = {}) {
+function sendSocketMessage(user, message, { img = '', giftImg = '', isMain = true, useTTS = isMain, entrySource = '', category, platform, dedupUser, dedupMessage, dedupVariant = '', session = null, guard = null, isTest = false } = {}) {
     sessionStats.peakViewers = Math.max(sessionStats.peakViewers, Number(CacheUserNum) || 0);
     return socketHub.sendMessage(user, message, {
-        img, giftImg, isMain, useTTS, userNum: CacheUserNum, userList: CacheUserList, category, platform,
+        img, giftImg, isMain, useTTS, entrySource, userNum: CacheUserNum, userList: CacheUserList, category, platform,
         dedupUser, dedupMessage, dedupVariant,
         session: session || sessionSnapshot(), guard, isTest
     });

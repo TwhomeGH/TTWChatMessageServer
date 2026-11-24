@@ -29,6 +29,23 @@ body.app-ui {
 .mon-tag-frequentChatter { color:#93c5fd; border-color:#1d4ed8; background:#172554; }
 .mon-tag-newcomer { color:#f9a8d4; border-color:#9d174d; background:#500724; }
 
+/* 加入事件的進場來源：保留原始值於 title，badge 只顯示已知映射或原始字串。 */
+.mon-source {
+    display: inline-flex;
+    align-items: center;
+    max-width: 14rem;
+    overflow: hidden;
+    padding: 0 6px;
+    border: 1px solid #334155;
+    border-radius: 999px;
+    background: #0f172a;
+    color: #94a3b8;
+    font-size: 10px;
+    line-height: 1.7;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .monitor-panel {
     /* 依工具列實際換行高度分配空間，避免訊息將面板撐出視窗。 */
     position: relative;

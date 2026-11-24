@@ -37,6 +37,7 @@ Userscript → Server.js → TikTok.js → Socket 顯示與自動剪輯統計
 | `userList` | 字串陣列，可省略 | 相容欄位，目前不據此更新總觀眾或自動剪輯熱度。 |
 | `isMain` | 布林，預設 `true` | 是否為主訊息（置底）。聊天 `true`；加入／事件訊息應送 `false`。入口會保留 `false`，不再強制改成 `true`。 |
 | `useTTS` | 布林，省略時跟隨 `isMain` | 是否朗讀此則訊息。聊天預設 `true`；加入事件必須送 `false`，避免被 TTS 唸出「來了」。 |
+| `entrySource` | 字串，可省略 | 平台原始進場來源，例如 `homepage_hot-live_cell`。只用於診斷與顯示，不用它推論 TTS、主要訊息或自動接續播放。 |
 | `heatEligible` | 伺服器衍生 | 由 `isTest` 決定，入口會覆寫；不要自行指定。 |
 
 ### data URI 圖片
@@ -85,7 +86,8 @@ data:image/gif;base64,<payload>
   "user": "觀眾乙",
   "message": "來了",
   "isMain": false,
-  "useTTS": false
+  "useTTS": false,
+  "entrySource": "homepage_hot-live_cell"
 }
 ```
 

@@ -106,6 +106,13 @@ test('SocketHub.sendMessage 去重、套用 replaceEmojis 並帶上 category', (
     assert.equal(endpoint.sent[endpoint.sent.length - 1].useTTS, false);
     assert.equal(hub.sendMessage('notice-user', '公告', { category: 'system', isMain: false, useTTS: true }), true);
     assert.equal(endpoint.sent[endpoint.sent.length - 1].useTTS, true);
+
+    // 進場來源保留原始字串；空值不產生欄位。
+    assert.equal(hub.sendMessage('source-user', '來了', {
+        category: 'member', isMain: false, entrySource: ' homepage_hot-live_cell '
+    }), true);
+    assert.equal(endpoint.sent[endpoint.sent.length - 1].entrySource, 'homepage_hot-live_cell');
+    assert.equal('entrySource' in endpoint.sent[0], false);
 });
 
 test('createHub：停用時無端點；啟用時建立單一端點', () => {

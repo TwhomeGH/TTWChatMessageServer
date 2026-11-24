@@ -378,6 +378,8 @@
   "monitor.cat.audience": "Audience",
   "monitor.cat.summary": "Summary",
   "monitor.cat.heartbeat": "Heartbeat",
+  "monitor.entrySource.homepageHotLiveCell": "Homepage live recommendation",
+  "monitor.entrySource.tooltip": "Entry source: {source}",
   "monitor.audience.giftRegular": "Gift regular",
   "monitor.audience.alwaysHere": "Every stream",
   "monitor.audience.frequentChatter": "Frequent chatter",

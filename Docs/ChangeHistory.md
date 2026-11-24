@@ -1,5 +1,37 @@
 # ChangeHistory
 
+## 2026.11.25 MEMBER 進場來源 Phase 1：monitor 觀測
+
+**類型**: 功能 · **檔案**: `ScriptLib/socket/hub.mjs`、`TikTok.js`、`ScriptLib/tiktok/events.mjs`、`assets/monitor.js`、`assets/monitor.css`、`lang/zh-TW.json`、`lang/en.json`、`Docs/CHAT_API.md`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`、`Test/socket_hub.test.mjs`、`Test/tiktok_events.test.mjs`、`Test/monitor_audience_ui.cjs`
+
+### 原因
+
+實際 MEMBER RAW 已看到 `clientEnterSource:"homepage_hot-live_cell"`，但加入事件原本沒有把原始進場來源帶進 `StreamMessage`，monitor 無法觀測；`clientEnterType`、`clientLiveReason`、`enterType` 在這筆樣本為空，不能拿來推論自動接續播放。
+
+### 修改
+
+- 加入事件可帶可選 `entrySource`；TikTok MEMBER 使用 `data.clientEnterSource`。
+- `SocketHub`／`sendSocketMessage`／`/chat` 保留原始 `entrySource`，空值不產生欄位。
+- monitor 即時加入列在「加入」分類旁顯示來源 badge；`homepage_hot-live_cell` 映射為「首頁熱門直播」，其他值顯示原始字串，tooltip 保留原始值。
+- 搜尋包含來源原始值；`entrySource` 只用於顯示／診斷，不影響 TTS、AutoClip、觀眾數或自動接續判定。
+- 未寫入 monitor 歷史；歷史模式目前不顯示來源。
+
+### 驗證
+
+- `node --test Test/socket_hub.test.mjs Test/tiktok_events.test.mjs`
+- `node Test/monitor_audience_ui.cjs`
+- `npm run test:core`
+- `npm run lint`
+- `npm run check:css`
+
+### 限制
+
+- Phase 1 只支援即時 monitor 觀測，歷史場次與 traffic 尚未保存 `entrySource`。
+- 目前只有 native TikTok MEMBER 提供來源；userscript 路徑若沒有帶 `entrySource`，不會顯示 badge。
+- 尚未建立未知來源的分類；未知值原樣顯示，不推測語意。
+
+---
+
 ## 2026.11.25 加入事件不朗讀：useTTS 與 isMain
 
 **類型**: 修正 · **檔案**: `ScriptLib/socket/hub.mjs`、`TikTok.js`、`ScriptLib/tiktok/events.mjs`、`UserScript/TikTokChat.user.js`、`UserScript/liveCenter.user.js`、`UserScript/TestCenter.user.js`、`OtherTool/live_engine/core/tts.py`、`OtherTool/live_engine/core/engine.py`、`Docs/CHAT_API.md`、`OtherTool/live_engine/README.md`、`Test/socket_hub.test.mjs`、`Test/tiktok_events.test.mjs`、`Test/userscript_source.test.mjs`、`OtherTool/live_engine/tests/test_tts.py`

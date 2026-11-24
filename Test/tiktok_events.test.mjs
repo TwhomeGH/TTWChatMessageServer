@@ -82,13 +82,14 @@ test('MEMBER：跨路徑重複時直接跳過', () => {
     assert.equal(calls.some(c => c[0] === 'socket'), false);
 });
 
-test('MEMBER：加入訊息同時標記 isMain=false、useTTS=false', () => {
+test('MEMBER：加入訊息同時標記 isMain=false、useTTS=false 並保留進場來源', () => {
     const { conn, calls } = makeHarness();
-    conn.handlers.member({ user: user('Eve'), common: {} });
+    conn.handlers.member({ user: user('Eve'), common: {}, clientEnterSource: 'homepage_hot-live_cell' });
     const sent = calls.find(c => c[0] === 'socket');
     assert.ok(sent, '應送出加入訊息');
     assert.equal(sent[3].isMain, false);
     assert.equal(sent[3].useTTS, false);
+    assert.equal(sent[3].entrySource, 'homepage_hot-live_cell');
 });
 
 test('FOLLOW：送出關注訊息', () => {

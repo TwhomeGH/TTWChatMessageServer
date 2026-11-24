@@ -117,6 +117,10 @@ async function main() {
                 },
                 session: { joins: 2, likes: 7, chats: 3, follows: 1, subscriptions: 2, gifts: 4, peakViewers: 42 }
             }) + '\n\n');
+            res.write('data: ' + JSON.stringify({
+                t: Date.now(), category: 'member', platform: 'tiktok', user: 'Bob', message: '來了',
+                entrySource: 'homepage_hot-live_cell'
+            }) + '\n\n');
             messageClients.add(res);
             req.on('close', () => messageClients.delete(res));
             return;
@@ -156,6 +160,11 @@ async function main() {
         const tags = await page.$$eval('.mon-tag', nodes => nodes.map(node => node.textContent));
         assert.deepEqual(tags, ['每次都來', '送禮常客']);
         assert.equal(await page.$eval('.mon-tags', node => node.title.includes('12')), true);
+        const entrySource = await page.$eval('.mon-source', node => ({
+            text: node.textContent, title: node.title
+        }));
+        assert.equal(entrySource.text, '首頁熱門直播');
+        assert.match(entrySource.title, /homepage_hot-live_cell/);
         const session = await page.evaluate(() => ({
             hidden: document.querySelector('#monSession').hidden,
             viewers: document.querySelector('#monSessionViewers').textContent,
@@ -322,6 +331,7 @@ async function main() {
 
         await page.click('#monModeHistory');
         await page.waitForFunction(() => !document.querySelector('#monHistoryBar').hidden
+            && document.querySelectorAll('#monHistorySession option').length === 1
             && document.querySelectorAll('#monRows .mon-row').length === 2);
         const history = await page.evaluate(() => ({
             options: document.querySelectorAll('#monHistorySession option').length,

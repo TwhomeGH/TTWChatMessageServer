@@ -138,6 +138,15 @@
 
     const categoryLabel = name => t(`monitor.cat.${name}`, {}, name);
 
+    /** 已知的 TikTok 進場來源只做顯示映射；原始值仍保留在 entry.entrySource。 */
+    const ENTRY_SOURCE_KEYS = {
+        'homepage_hot-live_cell': 'homepageHotLiveCell'
+    };
+    const entrySourceLabel = source => {
+        const key = ENTRY_SOURCE_KEYS[source];
+        return key ? t(`monitor.entrySource.${key}`, {}, source) : source;
+    };
+
     /** 顯示子程序維護的本場累計；缺少欄位視為 0。 */
     function updateSession() {
         const session = state.mode === 'history' ? state.history.session : state.session;
@@ -1020,7 +1029,7 @@
     function matches(entry) {
         if (state.active.size && !state.active.has(entry.category || 'system')) return false;
         if (!state.query) return true;
-        const haystack = `${entry.user || ''} ${entry.message || ''}`.toLowerCase();
+        const haystack = `${entry.user || ''} ${entry.message || ''} ${entry.entrySource || ''}`.toLowerCase();
         return haystack.includes(state.query);
     }
 
@@ -1041,6 +1050,14 @@
         const chip = document.createElement('span');
         chip.className = `mon-cat shrink-0 text-[11px] leading-5 px-1.5 rounded ${CATEGORY_STYLES[category] || CATEGORY_STYLES.system}`;
         chip.textContent = categoryLabel(category);
+
+        let sourceBadge = null;
+        if (category === 'member' && entry.entrySource) {
+            sourceBadge = document.createElement('span');
+            sourceBadge.className = 'mon-source shrink-0';
+            sourceBadge.textContent = entrySourceLabel(entry.entrySource);
+            sourceBadge.title = t('monitor.entrySource.tooltip', { source: entry.entrySource }, entry.entrySource);
+        }
 
         const testBadge = document.createElement('span');
         testBadge.className = 'mon-test-badge shrink-0';
@@ -1098,7 +1115,7 @@
         if (tags.childElementCount) body.append(tags);
         body.append(message);
 
-        row.append(time, platform, ...(entry.test ? [testBadge] : []), chip, body);
+        row.append(time, platform, ...(entry.test ? [testBadge] : []), chip, ...(sourceBadge ? [sourceBadge] : []), body);
         return row;
     }
 
@@ -1422,6 +1439,7 @@
             user: typeof entry.user === 'string' ? entry.user : '',
             message: entry.message,
             img: typeof entry.img === 'string' ? entry.img : '',
+            entrySource: typeof entry.entrySource === 'string' ? entry.entrySource : '',
             audience: entry.audience && typeof entry.audience === 'object' ? entry.audience : undefined,
             session: entry.session && typeof entry.session === 'object' ? entry.session : undefined,
             guard: entry.guard && typeof entry.guard === 'object' ? entry.guard : undefined
