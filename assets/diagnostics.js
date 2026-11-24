@@ -4,17 +4,40 @@
     const $ = id => document.getElementById(id);
     const cards = $('diagCards');
     const recent = $('diagRecent');
+    const summaryEl = $('diagSummary');
+    const categoriesEl = $('diagCategories');
     const logsEl = $('diagLogs');
+    const scrollEl = $('diagLogScroll');
+    const emptyEl = $('diagEmpty');
+    const moreEl = $('diagMore');
     const statusEl = $('diagStatus');
     const callout = $('diagCallout');
     const search = $('diagSearch');
+    const severity = $('diagSeverity');
+    const session = $('diagSession');
     const auto = $('diagAuto');
     const autoScroll = $('diagAutoScroll');
     const refresh = $('diagRefresh');
+    const reset = $('diagReset');
     const socketEnabled = $('diagSocketEnabled');
     const socketApply = $('diagSocketApply');
     const socketStatus = $('diagSocketStatus');
-    let state = { logs: [], diagnostics: [], recentDiagnostics: [], stats: {}, lastReceived: null };
+
+    const state = {
+        logs: [],
+        summary: null,
+        total: 0,
+        hasMore: false,
+        limit: 300,
+        category: '',
+        severity: '',
+        session: '',
+        query: '',
+        stats: {},
+        diagnostics: [],
+        recentDiagnostics: [],
+        lastReceived: null
+    };
     let timer = null;
     let searchTimer = null;
     let loading = false;
@@ -49,6 +72,86 @@
     function hideCallout() {
         callout.hidden = true;
         callout.replaceChildren();
+    }
+
+    function card(label, value, kind) {
+        const box = document.createElement('div');
+        box.className = 'log-card';
+        const labelNode = document.createElement('div');
+        labelNode.className = 'log-card-label';
+        text(labelNode, label);
+        const valueNode = document.createElement('div');
+        valueNode.className = 'log-card-value' + (kind ? ` is-${kind}` : '');
+        text(valueNode, value);
+        box.append(labelNode, valueNode);
+        return box;
+    }
+
+    function renderSummary() {
+        const summary = state.summary || {};
+        summaryEl.replaceChildren(
+            card('總筆數', summary.total ?? state.logs.length),
+            card('時間範圍', summary.range || '無時間戳'),
+            card('Session', (summary.sessions || []).length),
+            card('警告', summary.warn ?? 0, 'warn'),
+            card('錯誤', summary.error ?? 0, 'error')
+        );
+    }
+
+    function renderCategories() {
+        const categories = state.summary?.categories || [];
+        const total = state.summary?.total ?? state.logs.length;
+        categoriesEl.replaceChildren();
+        const all = document.createElement('button');
+        all.type = 'button';
+        all.className = 'log-cat' + (state.category === '' ? ' active' : '');
+        const allLabel = document.createElement('span');
+        text(allLabel, '全部');
+        const allCount = document.createElement('span');
+        allCount.className = 'count';
+        text(allCount, total);
+        all.append(allLabel, allCount);
+        all.addEventListener('click', () => {
+            state.category = '';
+            state.limit = 300;
+            load();
+        });
+        categoriesEl.append(all);
+        for (const item of categories) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'log-cat' + (state.category === item.name ? ' active' : '');
+            const label = document.createElement('span');
+            text(label, item.name);
+            const count = document.createElement('span');
+            count.className = 'count';
+            text(count, item.count);
+            button.append(label, count);
+            button.addEventListener('click', () => {
+                state.category = item.name;
+                state.limit = 300;
+                load();
+            });
+            categoriesEl.append(button);
+        }
+    }
+
+    function renderSessions() {
+        const selected = state.session;
+        const sessions = state.summary?.sessions || [];
+        session.replaceChildren();
+        const all = document.createElement('option');
+        all.value = '';
+        text(all, '全部 Session');
+        session.append(all);
+        for (const id of sessions) {
+            const option = document.createElement('option');
+            option.value = id;
+            text(option, id);
+            session.append(option);
+        }
+        session.value = sessions.includes(selected) ? selected : '';
+        if (session.value !== selected) state.session = session.value;
     }
 
     function renderCards() {
@@ -112,50 +215,120 @@
         }
     }
 
-    function scrollLogsToLatest() {
-        if (!autoScroll.checked) return;
-        requestAnimationFrame(() => {
-            logsEl.scrollTop = logsEl.scrollHeight;
-        });
+    function severityBadge(level) {
+        const badge = document.createElement('span');
+        const labels = { error: '錯誤', warn: '警告', info: '一般' };
+        badge.className = `log-level-badge log-level-${level || 'info'}`;
+        text(badge, labels[level] || level || '一般');
+        return badge;
     }
 
-    function renderLogs() {
-        const previousTop = logsEl.scrollTop;
+    function fieldsDetails(fields) {
+        const keys = Object.keys(fields || {});
+        if (!keys.length) return null;
+        const details = document.createElement('details');
+        details.className = 'log-fields';
+        const summary = document.createElement('summary');
+        text(summary, `${keys.length} 個欄位`);
+        const pre = document.createElement('pre');
+        text(pre, keys.map(key => `${key} = ${fields[key]}`).join('\n'));
+        details.append(summary, pre);
+        return details;
+    }
+
+    function renderRows() {
+        const previousTop = scrollEl.scrollTop;
         logsEl.replaceChildren();
-        const logs = state.logs || [];
-        if (!logs.length) {
-            const empty = document.createElement('div');
-            empty.className = 'diag-empty';
-            empty.textContent = '沒有符合的日誌。';
-            logsEl.append(empty);
-            return;
-        }
-        // store 回傳新到舊；畫面改成舊到新，最新保持在底部。
-        for (const entry of [...logs].reverse()) {
-            const row = document.createElement('div');
-            row.className = 'diag-log';
-            const time = document.createElement('time');
-            text(time, entry.time || new Date(entry.receivedAt).toLocaleString());
-            const strong = document.createElement('strong');
-            text(strong, entry.title || 'log');
-            const p = document.createElement('p');
-            text(p, (entry.body || '').slice(0, 4000));
-            row.append(time, strong, p);
+        // API 回傳新到舊；表格改成舊到新，讓最新訊息維持在底部。
+        for (const line of [...state.logs].reverse()) {
+            const row = document.createElement('tr');
+            row.className = `log-row is-${line.severity || 'info'}`;
+            const time = document.createElement('td');
+            time.className = 'log-time';
+            text(time, line.time || (line.receivedAt ? new Date(line.receivedAt).toLocaleString() : '—'));
+            const category = document.createElement('td');
+            category.className = 'log-category';
+            text(category, line.category || line.title || 'Other');
+            const level = document.createElement('td');
+            level.className = 'log-level';
+            level.append(severityBadge(line.severity));
+            const message = document.createElement('td');
+            message.className = 'log-message';
+            message.append(document.createTextNode(line.body || line.title || ''));
+            const fields = fieldsDetails(line.fields);
+            if (fields) message.append(fields);
+            row.append(time, category, level, message);
             logsEl.append(row);
         }
+        emptyEl.hidden = state.logs.length !== 0;
+        moreEl.hidden = !state.hasMore;
+        moreEl.textContent = `載入更多（目前 ${state.logs.length} / ${state.total}）`;
         if (autoScroll.checked) {
-            scrollLogsToLatest();
+            requestAnimationFrame(() => { scrollEl.scrollTop = scrollEl.scrollHeight; });
         } else {
-            requestAnimationFrame(() => { logsEl.scrollTop = previousTop; });
+            requestAnimationFrame(() => { scrollEl.scrollTop = previousTop; });
         }
+    }
+
+    function renderStatus() {
+        const filterBits = [];
+        if (state.category) filterBits.push(`分類 ${state.category}`);
+        if (state.severity) filterBits.push(`嚴重度 ${state.severity}`);
+        if (state.session) filterBits.push(`Session ${state.session}`);
+        if (state.query) filterBits.push(`搜尋 ${state.query}`);
+        const stats = state.stats || {};
+        statusEl.textContent = `${state.total} 筆符合 · 顯示 ${state.logs.length} 筆`
+            + (filterBits.length ? ` · ${filterBits.join(' · ')}` : '')
+            + ` · 緩衝 ${stats.bufferedLogs || 0} 則 · 最後收到：${relative(state.lastReceived)}`;
     }
 
     function render() {
+        renderSummary();
+        renderCategories();
+        renderSessions();
         renderCards();
         renderRecent();
-        renderLogs();
-        const stats = state.stats || {};
-        statusEl.textContent = `最後收到：${relative(state.lastReceived)} · 緩衝 ${stats.bufferedLogs || 0} 則 · 診斷 ${stats.bufferedDiagnostics || 0} 筆`;
+        renderRows();
+        renderStatus();
+    }
+
+    async function load(more = false) {
+        if (loading) return;
+        loading = true;
+        try {
+            if (more) state.limit = Math.min(state.limit + 300, 2000);
+            const params = new URLSearchParams({
+                limit: String(state.limit),
+                q: state.query,
+                category: state.category,
+                severity: state.severity,
+                session: state.session
+            });
+            const response = await fetch('/api/diagnostics?' + params, { cache: 'no-store' });
+            if (response.status === 401) {
+                auto.checked = false;
+                schedule();
+                showCallout('診斷資料需要主服務登入。', '/login');
+                return;
+            }
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || '讀取失敗');
+            hideCallout();
+            state.logs = Array.isArray(data.logs) ? data.logs : [];
+            state.summary = data.summary || null;
+            state.total = Number.isFinite(Number(data.total)) ? Number(data.total) : state.logs.length;
+            state.hasMore = data.hasMore === true;
+            state.diagnostics = Array.isArray(data.diagnostics) ? data.diagnostics : [];
+            state.recentDiagnostics = Array.isArray(data.recentDiagnostics) ? data.recentDiagnostics : [];
+            state.stats = data.stats || {};
+            state.lastReceived = data.lastReceived || null;
+            render();
+        } catch (error) {
+            showCallout('讀取診斷失敗：' + error.message, null);
+        } finally {
+            loading = false;
+        }
     }
 
     function socketLabel(data) {
@@ -187,7 +360,6 @@
                 socketStatus.textContent = data.error || ('HTTP ' + response.status);
                 return;
             }
-            // 使用者正在編輯時不要用輪詢結果蓋掉勾選狀態。
             if (!socketDirty) socketEnabled.checked = data.enabled === true;
             socketStatus.textContent = socketLabel(data);
         } catch (error) {
@@ -223,33 +395,6 @@
         }
     }
 
-    async function load() {
-        if (loading) return;
-        loading = true;
-        try {
-            const query = search.value.trim();
-            const response = await fetch('/api/diagnostics?limit=500' + (query ? '&q=' + encodeURIComponent(query) : ''), {
-                cache: 'no-store'
-            });
-            if (response.status === 401) {
-                auto.checked = false;
-                schedule();
-                showCallout('診斷資料需要主服務登入。', '/login');
-                return;
-            }
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            const data = await response.json();
-            if (!data.ok) throw new Error(data.error || '讀取失敗');
-            hideCallout();
-            state = data;
-            render();
-        } catch (error) {
-            showCallout('讀取診斷失敗：' + error.message, null);
-        } finally {
-            loading = false;
-        }
-    }
-
     function schedule() {
         if (timer) clearInterval(timer);
         timer = null;
@@ -262,18 +407,46 @@
         }, 2000);
     }
 
+    function resetFilters() {
+        state.query = '';
+        state.category = '';
+        state.severity = '';
+        state.session = '';
+        state.limit = 300;
+        search.value = '';
+        severity.value = '';
+        session.value = '';
+        load();
+    }
+
     search.addEventListener('input', () => {
         clearTimeout(searchTimer);
-        searchTimer = setTimeout(load, 250);
+        searchTimer = setTimeout(() => {
+            state.query = search.value.trim();
+            state.limit = 300;
+            load();
+        }, 250);
     });
+    severity.addEventListener('change', () => {
+        state.severity = severity.value;
+        state.limit = 300;
+        load();
+    });
+    session.addEventListener('change', () => {
+        state.session = session.value;
+        state.limit = 300;
+        load();
+    });
+    reset.addEventListener('click', resetFilters);
     refresh.addEventListener('click', () => {
         load();
         loadSocketStatus();
     });
     auto.addEventListener('change', schedule);
     autoScroll.addEventListener('change', () => {
-        if (autoScroll.checked) scrollLogsToLatest();
+        if (autoScroll.checked) scrollEl.scrollTop = scrollEl.scrollHeight;
     });
+    moreEl.addEventListener('click', () => load(true));
     socketApply.addEventListener('click', applySocketSubscription);
     socketEnabled.addEventListener('change', () => { socketDirty = true; });
     document.addEventListener('visibilitychange', () => {
@@ -282,6 +455,7 @@
             loadSocketStatus();
         }
     });
+
     schedule();
     load();
     loadSocketStatus();

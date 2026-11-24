@@ -5,72 +5,86 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>應用診斷</title>
   <link rel="stylesheet" href="/assets/app.css">
-  <style>
-    .diag-wrap { max-width: 1100px; margin: 0 auto; }
-    .diag-card { background:#111827; border:1px solid #334155; border-radius:10px; padding:12px; }
-    .diag-card h2 { margin:0 0 8px; font-size:14px; color:#93c5fd; }
-    .diag-metric { display:flex; justify-content:space-between; gap:12px; font-size:12px; padding:4px 0; border-top:1px solid #1f2937; }
-    .diag-metric:first-of-type { border-top:0; }
-    .diag-logs { max-height: 50vh; overflow:auto; border:1px solid #334155; border-radius:8px; background:#0b1220; }
-    .diag-log { padding:7px 10px; border-bottom:1px solid #1f2937; font-size:12px; }
-    .diag-log time { color:#94a3b8; }
-    .diag-log strong { color:#fbbf24; margin-left:6px; }
-    .diag-log p { margin:4px 0 0; white-space:pre-wrap; overflow-wrap:anywhere; color:#e5e7eb; }
-    .diag-empty { padding:14px; color:#94a3b8; font-size:12px; }
-    .diag-status { font-size:12px; color:#94a3b8; }
-  </style>
+  <link rel="stylesheet" href="/assets/log-explorer.css">
+  <link rel="stylesheet" href="/assets/diagnostics.css">
 </head>
-<body class="app-ui bg-gray-900 text-gray-200 font-mono min-h-screen p-4">
-  <div class="diag-wrap">
-    <header class="flex items-center justify-between flex-wrap gap-2 mb-4">
-      <h1 class="text-xl font-bold text-green-400">應用診斷</h1>
-      <nav class="flex gap-2 flex-wrap text-sm">
-        <a href="/monitor" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg">直播訊息</a>
-        <a href="/runtime" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg">運行狀態</a>
-        <a href="/log" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg">系統日誌</a>
-        <a href="/logs" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg" data-i18n="nav.logs">日誌搜尋</a>
-        <a href="/diagnostics" class="bg-blue-700 px-3 py-1.5 rounded-lg">診斷</a>
-      </nav>
-    </header>
-
-    <p id="diagCallout" class="diag-card mb-4" hidden></p>
-
-    <section class="diag-card mb-4">
-      <h2>Socket 外部事件</h2>
-      <div class="flex items-center flex-wrap gap-3 text-xs">
-        <label class="inline-flex items-center gap-1"><input id="diagSocketEnabled" type="checkbox"> 訂閱外部事件</label>
-        <button id="diagSocketApply" class="bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded">套用</button>
-        <span id="diagSocketStatus" class="text-xs text-gray-400"></span>
-      </div>
-      <small class="text-xs text-gray-500">連線目標沿用 SOCKET_API（或 SOCKET_APIS 第一個端點）；切換只送 subscribeExternalLogs，已建立的連線不會重連。Log I/O 是寫檔失敗摘要，Socket 外部事件是另一條日誌串流。</small>
-    </section>
-
-    <div class="grid gap-3 md:grid-cols-2 mb-4">
-      <section class="diag-card">
-        <h2>Log I/O</h2>
-        <div id="diagCards"><div class="diag-empty">尚無 logio 診斷。</div></div>
-      </section>
-      <section class="diag-card">
-        <h2>最近帶外診斷</h2>
-        <div id="diagRecent"><div class="diag-empty">尚無資料。</div></div>
-      </section>
+<body>
+  <header class="log-header">
+    <div>
+      <h1>應用診斷</h1>
+      <p class="log-meta">外部應用的日誌與 log I/O 診斷；只存在記憶體，不寫入正式日誌。</p>
     </div>
+    <nav class="log-nav">
+      <a href="/monitor">直播訊息</a>
+      <a href="/runtime">運行狀態</a>
+      <a href="/log">系統日誌</a>
+      <a href="/logs" data-i18n="nav.logs">日誌搜尋</a>
+      <a href="/diagnostics" class="is-active">診斷</a>
+    </nav>
+  </header>
 
-    <section class="diag-card">
-      <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-        <h2 class="!mb-0">應用日誌</h2>
-        <div class="flex items-center gap-2 text-xs">
-          <input id="diagSearch" type="search" placeholder="搜尋標題或內容…"
-                 class="bg-gray-900 border border-gray-700 rounded-lg px-2 py-1 min-w-48">
-          <label class="inline-flex items-center gap-1"><input id="diagAuto" type="checkbox" checked> 自動更新</label>
-          <label class="inline-flex items-center gap-1"><input id="diagAutoScroll" type="checkbox" checked> 自動滾到最新</label>
-          <button id="diagRefresh" class="bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded">重新整理</button>
-        </div>
+  <p id="diagCallout" class="diag-callout" hidden></p>
+
+  <section class="diag-top">
+    <section class="log-card diag-socket">
+      <h2>Socket 外部事件</h2>
+      <div class="diag-socket-row">
+        <label class="inline-flex items-center gap-1"><input id="diagSocketEnabled" type="checkbox"> 訂閱外部事件</label>
+        <button id="diagSocketApply" class="log-pill" type="button">套用</button>
+        <span id="diagSocketStatus" class="diag-status"></span>
       </div>
-      <div id="diagStatus" class="diag-status mb-2"></div>
-      <div id="diagLogs" class="diag-logs"><div class="diag-empty">載入中…</div></div>
+      <small>連線目標沿用 SOCKET_API（或 SOCKET_APIS 第一個端點）；切換只送 subscribeExternalLogs，已建立的連線不會重連。Log I/O 是寫檔失敗摘要，Socket 外部事件是另一條日誌串流。</small>
     </section>
+
+    <section class="log-card">
+      <h2>Log I/O</h2>
+      <div id="diagCards"><div class="diag-empty">尚無 logio 診斷。</div></div>
+    </section>
+
+    <section class="log-card">
+      <h2>最近帶外診斷</h2>
+      <div id="diagRecent"><div class="diag-empty">尚無資料。</div></div>
+    </section>
+  </section>
+
+  <div class="log-layout">
+    <aside class="log-aside">
+      <h2>分類</h2>
+      <div id="diagCategories" class="log-categories"></div>
+      <p class="log-aside-note">分類與嚴重度由日誌內容推斷；搜尋會比對標題、內容、分類、session 與 key=value 欄位。</p>
+    </aside>
+
+    <main class="log-main">
+      <div id="diagSummary" class="log-cards"></div>
+
+      <div class="log-toolbar">
+        <input id="diagSearch" type="search" placeholder="搜尋標題、內容、session、key=value…" autocomplete="off">
+        <select id="diagSeverity" title="嚴重度">
+          <option value="">全部嚴重度</option>
+          <option value="error">錯誤</option>
+          <option value="warn">警告</option>
+          <option value="info">一般</option>
+        </select>
+        <select id="diagSession" title="Session"><option value="">全部 Session</option></select>
+        <button id="diagReset" class="log-pill" type="button">清除篩選</button>
+        <label class="diag-toggle"><input id="diagAuto" type="checkbox" checked> 自動更新</label>
+        <label class="diag-toggle"><input id="diagAutoScroll" type="checkbox" checked> 自動滾到最新</label>
+        <button id="diagRefresh" class="log-pill" type="button">重新整理</button>
+      </div>
+
+      <div id="diagStatus" class="log-status"></div>
+
+      <div id="diagLogScroll" class="log-table-wrap">
+        <table class="log-table">
+          <thead><tr><th>時間</th><th>分類</th><th>嚴重度</th><th>內容</th></tr></thead>
+          <tbody id="diagLogs"></tbody>
+        </table>
+        <div id="diagEmpty" class="log-empty" hidden>沒有符合條件的日誌。</div>
+        <button id="diagMore" class="log-more" type="button" hidden>載入更多</button>
+      </div>
+    </main>
   </div>
+
   <script src="/assets/i18n.js"></script>
   <script src="/assets/diagnostics.js"></script>
 </body>

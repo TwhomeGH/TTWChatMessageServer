@@ -1,5 +1,36 @@
 # ChangeHistory
 
+## 2026.11.25 診斷頁結構化分析
+
+**類型**: 功能 · **檔案**: `ScriptLib/diagnostics/parse.cjs`、`ScriptLib/diagnostics/store.cjs`、`DiagnosticsRoutes.cjs`、`diagnostics.html`、`assets/diagnostics.js`、`assets/diagnostics.css`、`WebAssets.cjs`、`Test/diagnostics.test.cjs`、`Test/diagnostics_ui.cjs`、`Test/web_assets.test.cjs`、`Docs/DIAGNOSTICS.md`
+
+### 原因
+
+`/diagnostics` 原本只把 `title`／`body` 原樣列出，沒有分類、嚴重度、session、欄位、摘要與篩選，排查時只能人工閱讀；ReplyKit 的 `diagnostic_viewer.py` 已提供可參考的解析方式。
+
+### 修改
+
+- 診斷解析採 structured-first：sender 若在 JSON 帶 `category`／`severity`／`session`／`fields` 就直接使用；舊版只帶 `title`／`body` 時才用文字規則 fallback（tag、session、key=value 與嚴重度關鍵字）。
+- `DiagnosticsStore.snapshot` 支援 `category`／`severity`／`session` 篩選，回傳 `summary`、`total`、`hasMore`；全量摘要不隨篩選改變。
+- `GET /api/diagnostics` 轉送篩選參數。
+- `/diagnostics` 改成參考 diagnostic viewer 的分析介面：左側分類、摘要卡、嚴重度／Session／搜尋工具列、可展開欄位表格、載入更多；保留 Socket 外部事件、Log I/O、最近帶外診斷與自動更新／自動滾動。
+- 新增 `assets/diagnostics.css` 並加入靜態資源白名單。
+
+### 驗證
+
+- `node --test Test/diagnostics.test.cjs Test/web_assets.test.cjs`
+- `node Test/diagnostics_ui.cjs`
+- `npm run test:core`
+- `npm run lint`
+
+### 限制
+
+- 解析只用於顯示與搜尋，不會改變原始 log body，也不寫入正式日誌或 SQLite。JSON 外層結構不會自動讓 body 變成結構化資料。
+- 未知格式依 title 或 `Other` 分類；沒有時間戳時以 `receivedAt` 顯示。
+- 頁面仍只保存記憶體資料，重啟主服務即清空。
+
+---
+
 ## 2026.11.25 日誌分流：MEMBER payload 與 RAW 分類
 
 **類型**: 修正 · **檔案**: `TikTok.js`、`Server.js`、`ScriptLib/logs/classify.cjs`、`Test/log_store.test.cjs`、`Docs/LOGS.md`、`Docs/RUNTIME.md`

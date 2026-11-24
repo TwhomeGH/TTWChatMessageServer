@@ -79,8 +79,8 @@ node Test/xxx.mjs
 | `Test/log_explorer_ui.cjs` | `/logs` 摘要卡、分類／等級篩選與欄位展開 |
 | `Test/chat_stats.test.mjs` | 聊天收發計數、丟棄原因、最近事件上限與 IPC 暴露 |
 | `Test/filter_diagnostics.test.mjs` | 過濾器決策計數、規則／throttle 快照與 processFilter 接線 |
-| `Test/diagnostics.test.cjs` | 診斷 store、`/post`、diagnostic、token、Socket 外部事件訂閱與 API |
-| `Test/diagnostics_ui.cjs` | `/diagnostics` 日誌順序、自動滾到最新、logio 卡片與無 page error |
+| `Test/diagnostics.test.cjs` | 診斷日誌解析（分類／嚴重度／session／fields）、store 篩選、`/post`、diagnostic、token、Socket 外部事件訂閱與 API |
+| `Test/diagnostics_ui.cjs` | `/diagnostics` 分類側欄、摘要卡、嚴重度／欄位、日誌順序、自動滾到最新、logio 卡片與無 page error |
 | `Test/youtube_stop.test.mjs` | 未啟用 YouTube 時收尾不輸出聊天室斷線 |
 | `Test/notify.test.mjs` | 通知格式化與 Bark／ntfy 逐通道結果 |
 | `Test/traffic_planner_ui.cjs` | 人流分類、批次補分類、預覽／套用／復原與手機寬度 |

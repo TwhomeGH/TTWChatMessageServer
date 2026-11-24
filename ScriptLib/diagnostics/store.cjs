@@ -1,3 +1,5 @@
+const { parseDiagnosticLog, summarizeDiagnostics } = require('./parse.cjs');
+
 /**
  * 應用診斷的記憶體暫存：HTTP log bridge（LogServer 相容）與帶外 diagnostic。
  * 不寫 log 檔、不進聊天、不進 SQLite；所有資料都有筆數與字串上限。
@@ -24,12 +26,16 @@ class DiagnosticsStore {
         const title = this.text(entry.title).trim();
         const body = this.text(entry.body ?? entry.message);
         if (!title && !body) return null;
-        return {
+        return parseDiagnosticLog({
             time: this.text(entry.time),
             title: title || 'log',
             body,
-            receivedAt: this.now()
-        };
+            receivedAt: this.now(),
+            category: this.text(entry.category),
+            severity: this.text(entry.severity),
+            session: this.text(entry.session),
+            fields: entry.fields
+        });
     }
 
     /** 接受 LogServer 的 {logs:[...]}、單一 log 物件或陣列。 */
@@ -81,17 +87,30 @@ class DiagnosticsStore {
         return true;
     }
 
-    snapshot({ limit = 500, q = '' } = {}) {
+    snapshot({ limit = 500, q = '', category = '', severity = '', session = '' } = {}) {
         const query = String(q || '').trim().toLowerCase();
+        const selectedCategory = String(category || '').trim();
+        const selectedSeverity = String(severity || '').trim();
+        const selectedSession = String(session || '').trim();
         const size = Math.min(Math.max(Number(limit) || 500, 1), this.maxLogs);
-        const logs = this.logs
-            .filter(entry => !query
-                || entry.title.toLowerCase().includes(query)
-                || entry.body.toLowerCase().includes(query))
-            .slice(-size)
-            .reverse();
+        const filtered = this.logs.filter(entry => {
+            if (selectedCategory && entry.category !== selectedCategory) return false;
+            if (selectedSeverity && entry.severity !== selectedSeverity) return false;
+            if (selectedSession && entry.session !== selectedSession) return false;
+            if (!query) return true;
+            const haystack = [
+                entry.title, entry.body, entry.category, entry.session || '',
+                ...Object.entries(entry.fields || {}).map(([key, value]) => `${key}=${value}`)
+            ].join(' ').toLowerCase();
+            return haystack.includes(query);
+        });
+        // 畫面維持舊到新；API 給最新在前，讓前端可以選擇反轉或直接顯示。
+        const logs = filtered.slice(-size).reverse();
         return {
             logs,
+            total: filtered.length,
+            hasMore: filtered.length > logs.length,
+            summary: summarizeDiagnostics(this.logs),
             diagnostics: [...this.diagnostics.values()].sort((a, b) => b.receivedAt - a.receivedAt),
             recentDiagnostics: this.recentDiagnostics,
             stats: {

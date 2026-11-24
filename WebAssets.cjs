@@ -26,6 +26,7 @@ function createWebAssetHandler(root = __dirname) {
             '/assets/monitor.js': ['assets/monitor.js', 'text/javascript; charset=utf-8'],
             '/assets/monitor.css': ['assets/monitor.css', 'text/css; charset=utf-8'],
             '/assets/diagnostics.js': ['assets/diagnostics.js', 'text/javascript; charset=utf-8'],
+            '/assets/diagnostics.css': ['assets/diagnostics.css', 'text/css; charset=utf-8'],
             '/assets/log-explorer.js': ['assets/log-explorer.js', 'text/javascript; charset=utf-8'],
             '/assets/log-explorer.css': ['assets/log-explorer.css', 'text/css; charset=utf-8']
         };

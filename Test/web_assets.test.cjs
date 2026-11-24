@@ -37,7 +37,7 @@ test('locale dictionaries and helper support GET/HEAD without exposing other fil
     assert.match((await request('/assets/keyword.js')).headers['Content-Type'], /javascript/);
     assert.match((await request('/assets/audience.js')).headers['Content-Type'], /javascript/);
     // 各頁面專用的獨立樣式表（非 Tailwind 產物）也都要能取得。
-    for (const css of ['/assets/keyword.css', '/assets/autoclip.css', '/assets/pushdiag.css', '/assets/sponsor.css', '/assets/traffic.css', '/assets/audience.css']) {
+    for (const css of ['/assets/keyword.css', '/assets/autoclip.css', '/assets/pushdiag.css', '/assets/sponsor.css', '/assets/traffic.css', '/assets/audience.css', '/assets/diagnostics.css']) {
         assert.match((await request(css)).headers['Content-Type'], /^text\/css/);
     }
     assert.equal(await request('/lang/../package.json'), null);

@@ -63,7 +63,10 @@ function createDiagnosticsRoutes(store, { token = '', socketClient = null, resol
             ok: true,
             ...store.snapshot({
                 limit: Number(url.searchParams.get('limit')) || 500,
-                q: url.searchParams.get('q') || ''
+                q: url.searchParams.get('q') || '',
+                category: url.searchParams.get('category') || '',
+                severity: url.searchParams.get('severity') || '',
+                session: url.searchParams.get('session') || ''
             })
         });
         return true;

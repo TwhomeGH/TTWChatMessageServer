@@ -45,9 +45,26 @@ async function main() {
             res.end(JSON.stringify({
                 ok: true,
                 logs: [
-                    { time: '2026-11-10 20:00:01', title: 'ReplyKit', body: 'capture started', receivedAt: Date.now() },
-                    { time: '2026-11-10 20:00:00', title: 'ReplyKit', body: 'older line', receivedAt: Date.now() - 1000 }
+                    {
+                        time: '2026-11-10 20:00:01', title: 'ReplyKit',
+                        body: '[Capture] capture started session=abc12345 fps=60',
+                        category: 'Capture', severity: 'info', session: 'abc12345',
+                        fields: { session: 'abc12345', fps: '60' }, receivedAt: Date.now()
+                    },
+                    {
+                        time: '2026-11-10 20:00:00', title: 'ReplyKit',
+                        body: '[Capture] older line failed=0',
+                        category: 'Capture', severity: 'info', session: null,
+                        fields: { failed: '0' }, receivedAt: Date.now() - 1000
+                    }
                 ],
+                total: 2,
+                hasMore: false,
+                summary: {
+                    total: 2, range: '2026-11-10 20:00:00 ～ 2026-11-10 20:00:01',
+                    categories: [{ name: 'Capture', count: 2 }], sessions: ['abc12345'],
+                    warn: 0, error: 0, info: 2
+                },
                 diagnostics: [{ subsystem: 'logio', source: 'extension', count: 3, lastError: 'disk full', receivedAt: Date.now() }],
                 recentDiagnostics: [{ subsystem: 'logio', source: 'extension', count: 3, lastError: 'disk full', receivedAt: Date.now() }],
                 stats: { bufferedLogs: 1, bufferedDiagnostics: 1 },
@@ -68,18 +85,25 @@ async function main() {
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
         await page.goto(`http://127.0.0.1:${server.address().port}/diagnostics`, { waitUntil: 'networkidle0' });
-        await page.waitForFunction(() => document.querySelectorAll('#diagLogs .diag-log').length === 2);
+        await page.waitForFunction(() => document.querySelectorAll('#diagLogs .log-row').length === 2);
         const result = await page.evaluate(() => ({
             title: document.querySelector('h1').textContent,
-            logs: [...document.querySelectorAll('#diagLogs .diag-log')].map(node => node.textContent),
+            logs: [...document.querySelectorAll('#diagLogs .log-row')].map(node => node.textContent),
             diagnostic: document.querySelector('#diagCards').textContent,
+            summary: document.querySelector('#diagSummary').textContent,
+            categories: [...document.querySelectorAll('#diagCategories .log-cat')].map(node => node.textContent),
             loginHidden: document.querySelector('#diagCallout').hidden,
             autoScroll: document.querySelector('#diagAutoScroll').checked,
-            atBottom: Math.abs(document.querySelector('#diagLogs').scrollHeight - document.querySelector('#diagLogs').clientHeight - document.querySelector('#diagLogs').scrollTop) < 4
+            atBottom: Math.abs(document.querySelector('#diagLogScroll').scrollHeight - document.querySelector('#diagLogScroll').clientHeight - document.querySelector('#diagLogScroll').scrollTop) < 4,
+            fields: document.querySelector('#diagLogs .log-fields summary')?.textContent || ''
         }));
         assert.match(result.title, /應用診斷/);
         assert.match(result.logs[0], /older line/);
         assert.match(result.logs[1], /capture started/);
+        assert.match(result.summary, /2/);
+        assert.match(result.summary, /Session1/);
+        assert.deepEqual(result.categories, ['全部2', 'Capture2']);
+        assert.match(result.fields, /欄位/);
         assert.equal(result.autoScroll, true);
         assert.equal(result.atBottom, true);
         assert.match(result.diagnostic, /logio/);

@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const net = require('node:net');
 const { EventEmitter } = require('node:events');
 const { DiagnosticsStore } = require('../ScriptLib/diagnostics/store.cjs');
+const { parseDiagnosticLog, summarizeDiagnostics } = require('../ScriptLib/diagnostics/parse.cjs');
 const { DiagnosticsSocketClient } = require('../ScriptLib/diagnostics/socket-client.cjs');
 const { createDiagnosticsRoutes } = require('../DiagnosticsRoutes.cjs');
 const { resolveDiagnosticsTarget } = require('../ScriptLib/diagnostics/target.cjs');
@@ -25,6 +26,38 @@ function request(route, { url = '/post', method = 'POST', body = '', headers = {
     });
 }
 
+test('診斷日誌解析分類、嚴重度、session 與 key=value 欄位', () => {
+    const info = parseDiagnosticLog({
+        time: '2026/11/25 10:00:00',
+        title: 'ReplyKit',
+        body: '[Capture] failed=0 lastError=none session=abc12345 dropped=1'
+    });
+    assert.equal(info.category, 'Capture');
+    assert.equal(info.severity, 'info');
+    assert.equal(info.session, 'abc12345');
+    assert.deepEqual(info.fields, { failed: '0', lastError: 'none', session: 'abc12345', dropped: '1' });
+
+    const failed = parseDiagnosticLog({ title: 'ReplyKit', body: '[Capture] failed=1' });
+    assert.equal(failed.severity, 'error');
+    const warned = parseDiagnosticLog({ title: 'ReplyKit', body: '[Capture] warning: queue incomplete' });
+    assert.equal(warned.severity, 'warn');
+
+    const structured = parseDiagnosticLog({
+        title: 'ReplyKit', body: 'plain body', category: 'Custom', severity: 'warn',
+        session: 'session-1', fields: { fps: '60', empty: '' }
+    });
+    assert.equal(structured.category, 'Custom');
+    assert.equal(structured.severity, 'warn');
+    assert.equal(structured.session, 'session-1');
+    assert.deepEqual(structured.fields, { fps: '60' });
+
+    const summary = summarizeDiagnostics([info, failed, warned]);
+    assert.equal(summary.total, 3);
+    assert.equal(summary.error, 1);
+    assert.equal(summary.warn, 1);
+    assert.deepEqual(summary.categories, [{ name: 'Capture', count: 3 }]);
+});
+
 test('DiagnosticsStore 接收 LogServer logs 與帶外 diagnostic', () => {
     const store = new DiagnosticsStore({ maxLogs: 3 });
     store.ingestLogs({ logs: [
@@ -37,6 +70,11 @@ test('DiagnosticsStore 接收 LogServer logs 與帶外 diagnostic', () => {
     assert.equal(snapshot.logs.length, 1);
     assert.equal(snapshot.logs[0].title, 'four');
     assert.equal(snapshot.stats.bufferedLogs, 3);
+
+    const filtered = store.snapshot({ category: 'three', severity: 'info' });
+    assert.equal(filtered.total, 1);
+    assert.equal(filtered.logs[0].title, 'three');
+    assert.equal(store.snapshot().summary.total, 3);
 
     assert.equal(store.ingestDiagnostic({
         type: 'diagnostic', subsystem: 'logio', source: 'extension', count: 4, lastError: 'disk full'
