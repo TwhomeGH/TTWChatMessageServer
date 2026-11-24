@@ -43,6 +43,22 @@ source=child
 
 分類與等級由 `ScriptLib/logs/classify.cjs` 依 tag／文字推斷，無法判斷時為 `other`。
 
+TikTok 原始事件日誌使用獨立 `[RAW]` 標記，不再被包成 `[OUT] [RAW]`：
+
+```text
+category=raw
+source=child
+level=debug
+```
+
+加入事件的實際 socket payload 會另記一筆：
+
+```text
+[OUT] [MEMBER] socket payload endpoints=1 {"type":"StreamMessage",...}
+```
+
+這筆歸類為 `member`，可用分類或關鍵字 `socket payload` 核對 `isMain`、`useTTS`、`entrySource` 等欄位；`endpoints=0` 表示目前沒有啟用且接受 member 的 socket 端點，payload 仍會鏡像到 monitor。
+
 ## TikTok MEMBER RAW 診斷
 
 `ScriptLib/tiktok/rawLog.mjs` 的 `[RAW]` 日誌會保留 MEMBER 進場診斷欄位，方便用 `/logs` 搜尋 `[RAW]` 或 `"event":"MEMBER"` 觀察真實值。

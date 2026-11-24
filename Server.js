@@ -667,9 +667,9 @@ function startRuntime(url) {
                 const line = raw.trim();
                 if (!line) continue;
 
-                // 非 JSON 行：直接顯示
+                // 非 JSON 行：直接顯示；RAW 已有自己的標記，不再包一層 [OUT]。
                 if (!line.startsWith('{') || !line.endsWith('}')) {
-                    pushLog(`[OUT] ${line}`);
+                    pushLog(line.startsWith('[RAW]') ? line : `[OUT] ${line}`);
                     continue;
                 }
 

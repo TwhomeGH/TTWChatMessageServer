@@ -263,7 +263,14 @@ const socketHub = createHub({
     replaceEmojis,
     dedup,
     mediaCache: mediaCacheModule.defaultMediaCache,
-    onSend: (payload) => monitorRelay.forward(payload),
+    onSend: (payload) => {
+        monitorRelay.forward(payload);
+        // 加入事件的實際 socket payload 單獨留一筆，方便核對 isMain／useTTS／entrySource。
+        if (payload?.category === 'member') {
+            const endpoints = socketHub.endpoints.filter(endpoint => endpoint.enabled && endpoint.accepts(payload.category)).length;
+            console.log(`[MEMBER] socket payload endpoints=${endpoints} ${JSON.stringify(payload)}`);
+        }
+    },
     onTransportFailure: (info) => socketAlerts?.failure(info),
     onTransportRecover: (info) => socketAlerts?.recovery(info),
     onConnect: () => {

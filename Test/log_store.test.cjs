@@ -12,6 +12,14 @@ test('日誌分類：主題與等級分開，[OUT] 內含 AutoClip 仍歸 AutoCl
     assert.equal(classifySource('[SYSTEM] Starting TikTok.js'), 'main');
 });
 
+test('RAW 與 MEMBER socket payload 各自分類，不再混進 [OUT]', () => {
+    assert.equal(classifyCategory('[RAW] {"event":"MEMBER"}'), 'raw');
+    assert.equal(classifySource('[RAW] {"event":"MEMBER"}'), 'child');
+    assert.equal(classifyLevel('[RAW] {"event":"MEMBER"}'), 'debug');
+    assert.equal(classifyCategory('[OUT] [MEMBER] socket payload endpoints=1 {}'), 'member');
+    assert.equal(classifySource('[OUT] [MEMBER] socket payload endpoints=1 {}'), 'child');
+});
+
 test('LogStore 寫入、摘要、篩選與 keyset 分頁', () => {
     const store = new LogStore({ file: ':memory:' });
     store.append({ t: 1000, text: '[SYSTEM] 啟動', session: 's1' });

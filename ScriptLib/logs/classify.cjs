@@ -6,6 +6,8 @@
  */
 
 const CATEGORY_RULES = [
+    ['raw', /^\[RAW\]/i],
+    ['member', /\[MEMBER\]/i],
     ['autoclip', /\[AutoClip\]|AutoClip|剪輯/i],
     ['tiktok', /\[TikTok\]|TikTok|Webcast|signer/i],
     ['twitch', /\[Twitch\]|Twitch|G#clip|G#Ad/i],
@@ -51,7 +53,7 @@ function classifyLevel(text = '') {
     const value = String(text);
     if (/^\[ERR\]|❌|\b(?:Error|error|Exception|exception|失敗)\b/.test(value)) return 'error';
     if (/⚠️|警告|warn/i.test(value)) return 'warn';
-    if (/^\[OUT\]|^\[DEBUG\]|debug/i.test(value)) return 'debug';
+    if (/^\[RAW\]|^\[OUT\]|^\[DEBUG\]|debug/i.test(value)) return 'debug';
     return 'info';
 }
 
@@ -61,7 +63,7 @@ function classifyLevel(text = '') {
  */
 function classifySource(text = '') {
     const value = String(text);
-    if (/^\[OUT\]|^\[ERR\]/.test(value)) return 'child';
+    if (/^\[OUT\]|^\[ERR\]|^\[RAW\]/.test(value)) return 'child';
     if (/signer|SignServer|签名|簽名/i.test(value)) return 'signer';
     if (/userscript|Tampermonkey/i.test(value)) return 'userscript';
     return 'main';

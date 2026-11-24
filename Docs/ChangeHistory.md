@@ -1,5 +1,33 @@
 # ChangeHistory
 
+## 2026.11.25 日誌分流：MEMBER payload 與 RAW 分類
+
+**類型**: 修正 · **檔案**: `TikTok.js`、`Server.js`、`ScriptLib/logs/classify.cjs`、`Test/log_store.test.cjs`、`Docs/LOGS.md`、`Docs/RUNTIME.md`
+
+### 原因
+
+MEMBER 事件只看得到「加入了」，沒有記錄實際送出的 socket payload，無法核對 `isMain`、`useTTS`、`entrySource`。另外 child stdout 統一加 `[OUT]`，使 `[RAW]` 變成 `[OUT] [RAW]`，在 `/logs` 被歸到 `out` 而和其他輸出混在一起。
+
+### 修改
+
+- `onSend` 對 category=`member` 的 payload 另記 `[MEMBER] socket payload endpoints=… {...}`，保留實際鏡像／送出的內容。
+- Server 收到 child `[RAW]` 行時保留原標記，不再加 `[OUT]`。
+- 日誌分類新增 `raw` 與 `member`；`[RAW]` 歸 `raw`、`source=child`、`level=debug`，MEMBER payload 歸 `member`。
+- 文件補充 `raw`／`member` 查詢方式與 `endpoints=0` 的意義。
+
+### 驗證
+
+- `node --test Test/log_store.test.cjs`
+- `node --check Server.js && node --check TikTok.js`
+- `npm run lint`
+
+### 限制
+
+- `[MEMBER]` 記錄的是送給端點的 payload；若所有端點停用，仍會因監控鏡像而記錄，`endpoints=0` 可區分。
+- 既有 `[OUT] [RAW]` 歷史資料不會回溯改分類，只影響新日誌。
+
+---
+
 ## 2026.11.25 MEMBER 進場來源 Phase 1：monitor 觀測
 
 **類型**: 功能 · **檔案**: `ScriptLib/socket/hub.mjs`、`TikTok.js`、`ScriptLib/tiktok/events.mjs`、`assets/monitor.js`、`assets/monitor.css`、`lang/zh-TW.json`、`lang/en.json`、`Docs/CHAT_API.md`、`Docs/RUNTIME.md`、`Docs/TEST_FILES_REFERENCE.md`、`Test/socket_hub.test.mjs`、`Test/tiktok_events.test.mjs`、`Test/monitor_audience_ui.cjs`

@@ -91,6 +91,8 @@ monitor 工具列的「即時／歷史」切換會在歷史模式列出最近場
 
 即時加入列若帶有 `entrySource`，會在「加入」分類旁顯示來源 badge；目前只把已知的 `homepage_hot-live_cell` 顯示為「首頁熱門直播」，未知值顯示原始字串，滑鼠移上去可看原始值。這是 Phase 1 的觀測，尚未寫入監控歷史，也不作為自動接續播放的判定。
 
+加入事件的實際 socket payload 會以 `[MEMBER] socket payload endpoints=… {...}` 記錄到系統日誌，可用 `/logs` 的 `member` 分類核對 `isMain`、`useTTS` 與 `entrySource`；`[RAW]` 事件則使用獨立的 `raw` 分類。
+
 「測試訊息（本機預覽）」可輸入使用者、頭貼 URL、平台、分類與訊息；只加入目前頁面，不會送到 `/chat`、平台、filter、AutoClip 或統計。emoji 代碼由公開唯讀的 `/api/emoji/preview` 取得目前映射後在瀏覽器解析，停用或不存在的代碼保留原文。測試列有「測試」badge，重新整理或清除畫面即消失。
 
 頭貼可手動輸入 HTTP(S) URL，或從目前 emoji map 的 active 項目中選取（同一 URL 只列一次）；選取後表單旁會即時顯示頭貼預覽，載入失敗會提示。使用者名稱、頭貼、平台與分類會保存在瀏覽器 `localStorage`（`ttw-monitor-test-prefs`），重新整理後還原；測試訊息本文不保存。「清除測試設定」會移除這組偏好。
