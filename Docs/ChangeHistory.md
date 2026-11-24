@@ -1,5 +1,27 @@
 # ChangeHistory
 
+## 2026.11.25 診斷工具列控制項尺寸
+
+**類型**: 修正 · **檔案**: `assets/diagnostics.css`、`Test/diagnostics_ui.cjs`
+
+### 原因
+
+診斷頁沿用 `log-explorer.css` 的 `.log-toolbar input`，把 `input[type=checkbox]` 也套上文字輸入框的 `min-height`、`padding` 與 `flex: 1 1 320px`，造成自動更新／自動滾動開關被拉大、文字被推遠，和旁邊按鈕比例不一致。
+
+### 修改
+
+- 在 `diagnostics.css` 將工具列 checkbox 重設為 16×16、`flex: 0 0 auto`、無邊框與內距。
+- `.diag-toggle` 高度統一為 34px，和工具列按鈕對齊。
+- UI 測試新增 checkbox 尺寸與按鈕高度斷言，以及分類面板／主內容間距檢查。
+
+### 驗證
+
+- `node Test/diagnostics_ui.cjs`
+- `npm run lint`
+- `npm run check:css`
+
+---
+
 ## 2026.11.25 診斷頁結構化分析
 
 **類型**: 功能 · **檔案**: `ScriptLib/diagnostics/parse.cjs`、`ScriptLib/diagnostics/store.cjs`、`DiagnosticsRoutes.cjs`、`diagnostics.html`、`assets/diagnostics.js`、`assets/diagnostics.css`、`WebAssets.cjs`、`Test/diagnostics.test.cjs`、`Test/diagnostics_ui.cjs`、`Test/web_assets.test.cjs`、`Docs/DIAGNOSTICS.md`

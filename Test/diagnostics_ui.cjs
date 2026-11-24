@@ -120,6 +120,18 @@ async function main() {
         });
         assert.ok(Math.abs(geometry.topCard - geometry.layout) <= 1, '分類面板應與上方卡片對齊');
         assert.ok(geometry.summary > geometry.sidebar + 8, '主內容應與分類面板保持間距');
+        const controlSize = await page.evaluate(() => {
+            const box = selector => {
+                const rect = document.querySelector(selector).getBoundingClientRect();
+                return { width: rect.width, height: rect.height };
+            };
+            return {
+                checkbox: box('#diagAuto'),
+                button: box('#diagRefresh')
+            };
+        });
+        assert.ok(controlSize.checkbox.width <= 24 && controlSize.checkbox.height <= 24, 'checkbox 不應被套成輸入框尺寸');
+        assert.ok(controlSize.button.height >= 30, '工具列按鈕應維持可點擊高度');
         await page.waitForFunction(() => document.querySelector('#diagSocketStatus').textContent.length > 0);
         assert.match(await page.$eval('#diagSocketStatus', node => node.textContent), /未啟用/);
         await page.click('#diagSocketEnabled');

@@ -62,10 +62,25 @@
 .diag-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
+    min-height: 34px;
     color: var(--log-muted);
     font-size: 12px;
     white-space: nowrap;
+}
+
+/* log-explorer.css 的 .log-toolbar input 會套到 checkbox；在診斷頁重設成正常開關尺寸。 */
+.log-toolbar input[type="checkbox"] {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: initial;
+    accent-color: #2563eb;
 }
 
 .diag-empty {
