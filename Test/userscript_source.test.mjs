@@ -166,9 +166,33 @@ test('TikTok 轉接只在目標直播間發送（安全預設：沒填目標就�
     assert.equal(canSend({ enabled: true, handle: '@A0936931' }, '/@a0936931/live'), true);
 });
 
+test('TikTokChat 排除 /coin 頁面，且面板可拖曳', () => {
+    const source = fs.readFileSync(new URL('../UserScript/TikTokChat.user.js', import.meta.url), 'utf8');
+    assert.match(source, /@exclude\s+\*:\/\/www\.tiktok\.com\/coin\*/);
+    assert.match(source, /function isCoinPage\(/);
+    assert.match(source, /function syncPanelVisibility\(/);
+    assert.match(source, /PANEL_POS_KEY/);
+    assert.match(source, /pointerdown/);
+    assert.match(source, /pointermove/);
+    assert.match(source, /pointerup/);
+    assert.match(source, /panel\.hidden = isCoinPage\(\)/);
+
+    const a = source.indexOf('function isCoinPage(');
+    const b = source.indexOf('/** 目前頁面的直播間帳號', a);
+    const ctx = vm.createContext({ location: { pathname: '/coin/' } });
+    vm.runInContext(source.slice(a, b), ctx);
+    assert.equal(ctx.isCoinPage(), true);
+    ctx.location.pathname = '/coin/order';
+    assert.equal(ctx.isCoinPage(), true);
+    ctx.location.pathname = '/@someone/live';
+    assert.equal(ctx.isCoinPage(), false);
+    ctx.location.pathname = '/coin-foo';
+    assert.equal(ctx.isCoinPage(), false);
+});
+
 test('TikTokChat 只在目標直播頁且可見時掛 observer，離開就拆除', () => {
     const source = fs.readFileSync(new URL('../UserScript/TikTokChat.user.js', import.meta.url), 'utf8');
-    assert.match(source, /@version\s+2\.14/);
+    assert.match(source, /@version\s+2\.15/);
     assert.match(source, /function startMonitoring\(/);
     assert.match(source, /function stopMonitoring\(/);
     assert.match(source, /function syncMonitoring\(/);

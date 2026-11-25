@@ -1,5 +1,28 @@
 # ChangeHistory
 
+## 2026.11.25 TikTokChat 排除 /coin 並支援面板拖曳
+
+**類型**: 修正 · **檔案**: `UserScript/TikTokChat.user.js`、`Test/userscript_source.test.mjs`、`Docs/USERSCRIPT_SOURCES.md`
+
+### 原因
+
+TikTokChat 的 `@match` 覆蓋整個 `tiktok.com`，在 `/coin` 代幣頁仍會建立左下角轉接面板；面板固定在左下角，無法避開頁面內容。
+
+### 修改
+
+- 新增 `@exclude *://www.tiktok.com/coin*`，直接從 `/coin` 頁面排除腳本。
+- 新增 `isCoinPage()` 與 `syncPanelVisibility()`：SPA 導航到 `/coin` 時隱藏面板並停止監控，離開後恢復。
+- 面板 pill 支援 pointer 拖曳，移動超過 4px 才視為拖曳，避免點擊展開時誤移動。
+- 位置存在 `localStorage` 的 `ttw-panel-position`；視窗縮放時夾回可見範圍。
+- 版本 2.14 → 2.15。
+
+### 驗證
+
+- `node --test Test/userscript_source.test.mjs`
+- `npm run lint`、`npm run check:css`
+
+---
+
 ## 2026.11.25 診斷搜尋高亮與匹配前後上下文
 
 **類型**: 功能 · **檔案**: `ScriptLib/diagnostics/store.cjs`、`DiagnosticsRoutes.cjs`、`assets/diagnostics.js`、`assets/diagnostics.css`、`diagnostics.html`、`Test/diagnostics.test.cjs`、`Test/diagnostics_ui.cjs`、`Docs/DIAGNOSTICS.md`

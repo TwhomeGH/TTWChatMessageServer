@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         TikTok Live Chat & Viewer Scraper
 // @namespace    http://tampermonkey.net/
-// @version      2.14
+// @version      2.15
 // @description  抓取 TikTok 直播聊天室訊息與觀眾列表 JSON（聊天改為抓頭像；新增目標直播間鎖定，避免亂逛誤送）
 // @author       Nuclear0709
 // @match        *://www.tiktok.com/*
+// @exclude      *://www.tiktok.com/coin*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -78,6 +79,11 @@
 
     function saveTarget() {
         try { localStorage.setItem(TARGET_KEY, JSON.stringify(target)); } catch { /* ignore */ }
+    }
+
+    /** TikTok 代幣／錢包頁不是轉接目標，連面板都不應出現。 */
+    function isCoinPage() {
+        return /^\/coin(?:\/|$)/i.test(location.pathname);
     }
 
     /** 目前頁面的直播間帳號；不是直播間頁面回傳空字串。 */
@@ -177,7 +183,7 @@
 
     /** 只在目標直播頁且分頁可見時掛 observer；離開／隱藏就全部拆除。 */
     function startMonitoring() {
-        if (monitorActive || !canSend() || document.visibilityState === 'hidden') return;
+        if (monitorActive || isCoinPage() || !canSend() || document.visibilityState === 'hidden') return;
         monitorActive = true;
         View = 0;
         ViewUserList = [];
@@ -216,9 +222,17 @@
     }
 
     function syncMonitoring() {
-        const should = canSend() && document.visibilityState !== 'hidden';
+        const should = !isCoinPage() && canSend() && document.visibilityState !== 'hidden';
         if (should && !monitorActive) startMonitoring();
-        else if (!should && monitorActive) stopMonitoring(canSend() ? '分頁隱藏' : '離開目標直播間');
+        else if (!should && monitorActive) {
+            stopMonitoring(isCoinPage() ? '代幣頁面' : canSend() ? '分頁隱藏' : '離開目標直播間');
+        }
+    }
+
+    /** SPA 導航到 /coin 時隱藏面板；離開後再顯示，不需要重新載入腳本。 */
+    function syncPanelVisibility() {
+        const panel = document.getElementById('ttw-panel');
+        if (panel) panel.hidden = isCoinPage();
     }
 
     // 監控 DOM 新增元素的工具函式
@@ -428,7 +442,8 @@ function hasContent(el) {
     // ─────────────────────────────────────────────────────────────
     const PANEL_CSS = `
 #ttw-panel { position: fixed; left: 12px; bottom: 12px; z-index: 2147483000; font: 12px/1.5 system-ui, "Noto Sans TC", sans-serif; color: #e7edf7; }
-#ttw-panel .ttw-pill { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: #1b2940; border: 1px solid #344663; border-radius: 999px; cursor: pointer; color: inherit; font: inherit; }
+#ttw-panel .ttw-pill { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: #1b2940; border: 1px solid #344663; border-radius: 999px; cursor: grab; color: inherit; font: inherit; touch-action: none; user-select: none; }
+#ttw-panel .ttw-pill:active { cursor: grabbing; }
 #ttw-panel .ttw-pill:hover { background: #24344f; }
 #ttw-panel .ttw-body { width: 232px; margin-top: 6px; padding: 10px 12px; background: #131c2b; border: 1px solid #344663; border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
 #ttw-panel .ttw-title { font-weight: 700; margin-bottom: 6px; }
@@ -452,6 +467,100 @@ function hasContent(el) {
 #ttw-panel .ttw-flash { max-width: 232px; max-height: 0; margin-bottom: 0; padding: 0 10px; overflow: hidden; background: #1b2940; border: 1px solid #344663; border-radius: 10px; color: #cbd5e1; opacity: 0; overflow-wrap: anywhere; transition: opacity .18s ease, max-height .18s ease, padding .18s ease, margin-bottom .18s ease; }
 #ttw-panel .ttw-flash.show { max-height: 72px; margin-bottom: 6px; padding: 6px 10px; opacity: 1; }
 `;
+
+    // 面板位置：拖曳 pill 移動，位置存在目前 TikTok 網域。
+    const PANEL_POS_KEY = 'ttw-panel-position';
+    let panelPos = null;
+    let panelDrag = null;
+    let suppressPanelClick = false;
+
+    function loadPanelPosition() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(PANEL_POS_KEY) || 'null');
+            if (Number.isFinite(saved?.x) && Number.isFinite(saved?.y)) {
+                return { x: saved.x, y: saved.y };
+            }
+        } catch { /* ignore */ }
+        return null;
+    }
+
+    function savePanelPosition() {
+        if (!panelPos) return;
+        try { localStorage.setItem(PANEL_POS_KEY, JSON.stringify(panelPos)); } catch { /* ignore */ }
+    }
+
+    /** 套用位置並限制在目前視窗內，避免拖到看不見的地方。 */
+    function applyPanelPosition(x, y) {
+        const box = document.getElementById('ttw-panel');
+        if (!box) return;
+        const rect = box.getBoundingClientRect();
+        panelPos = {
+            x: Math.max(8, Math.min(Math.max(8, innerWidth - rect.width - 8), x)),
+            y: Math.max(8, Math.min(Math.max(8, innerHeight - rect.height - 8), y))
+        };
+        box.style.right = 'auto';
+        box.style.bottom = 'auto';
+        box.style.left = panelPos.x + 'px';
+        box.style.top = panelPos.y + 'px';
+    }
+
+    function clampPanel() {
+        if (panelPos) applyPanelPosition(panelPos.x, panelPos.y);
+    }
+
+    /** 拖曳 pill；移動超過門檻才視為拖曳，避免點擊展開時誤移動。 */
+    function setupPanelDrag(box) {
+        const pill = box.querySelector('#ttw-pill');
+        if (!pill) return;
+        pill.addEventListener('pointerdown', event => {
+            if (event.button !== 0) return;
+            const rect = box.getBoundingClientRect();
+            panelDrag = {
+                id: event.pointerId,
+                offsetX: event.clientX - rect.left,
+                offsetY: event.clientY - rect.top,
+                startX: event.clientX,
+                startY: event.clientY,
+                moved: false
+            };
+            suppressPanelClick = false;
+            try { pill.setPointerCapture(event.pointerId); } catch { /* ignore */ }
+        });
+        pill.addEventListener('pointermove', event => {
+            if (!panelDrag || panelDrag.id !== event.pointerId) return;
+            if (Math.abs(event.clientX - panelDrag.startX) > 4
+                || Math.abs(event.clientY - panelDrag.startY) > 4) {
+                panelDrag.moved = true;
+            }
+            applyPanelPosition(event.clientX - panelDrag.offsetX, event.clientY - panelDrag.offsetY);
+        });
+        const finishDrag = event => {
+            if (!panelDrag || panelDrag.id !== event.pointerId) return;
+            const moved = panelDrag.moved;
+            panelDrag = null;
+            try {
+                if (pill.hasPointerCapture(event.pointerId)) pill.releasePointerCapture(event.pointerId);
+            } catch { /* ignore */ }
+            if (moved) {
+                suppressPanelClick = true;
+                setTimeout(() => { suppressPanelClick = false; }, 300);
+                savePanelPosition();
+            }
+        };
+        pill.addEventListener('pointerup', finishDrag);
+        pill.addEventListener('pointercancel', finishDrag);
+        pill.addEventListener('click', event => {
+            if (suppressPanelClick) {
+                suppressPanelClick = false;
+                event.preventDefault();
+                return;
+            }
+            const body = box.querySelector('#ttw-body');
+            body.hidden = !body.hidden;
+            // 展開後高度變大，重新夾回視窗內。
+            requestAnimationFrame(clampPanel);
+        });
+    }
 
     // 最近轉送提示：讓使用者一眼看到剛剛送了什麼（聊天／加入／送禮）。
     let sentCount = 0;
@@ -521,15 +630,14 @@ function hasContent(el) {
             ])
         ]);
         document.body.append(box);
+        panelPos = loadPanelPosition();
+        if (panelPos) applyPanelPosition(panelPos.x, panelPos.y);
+        setupPanelDrag(box);
 
         const input = box.querySelector('#ttw-handle');
         const enabled = box.querySelector('#ttw-enabled');
         input.value = target.handle;
         enabled.checked = target.enabled;
-        box.querySelector('#ttw-pill').onclick = () => {
-            const body = box.querySelector('#ttw-body');
-            body.hidden = !body.hidden;
-        };
         input.oninput = () => {
             target.handle = input.value.replace(/^@/, '').trim();
             saveTarget();
@@ -565,6 +673,7 @@ function hasContent(el) {
 
     function boot() {
         buildPanel();
+        syncPanelVisibility();
         syncMonitoring();
     }
     if (document.body) boot();
@@ -572,6 +681,7 @@ function hasContent(el) {
 
     // TikTok 是 SPA；換頁、目標設定改變或分頁隱藏時重新評估 observer 生命週期。
     setInterval(() => {
+        syncPanelVisibility();
         syncMonitoring();
         renderPanelState();
     }, 2000);
@@ -579,5 +689,6 @@ function hasContent(el) {
         syncMonitoring();
         renderPanelState();
     });
+    window.addEventListener('resize', clampPanel);
 
 })();
