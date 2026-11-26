@@ -71,7 +71,8 @@ const diagnosticsSocket = new DiagnosticsSocketClient({ store: diagnosticsStore 
 const diagnosticsRoutes = createDiagnosticsRoutes(diagnosticsStore, {
     token: process.env.DIAGNOSTICS_TOKEN || '',
     socketClient: diagnosticsSocket,
-    resolveTarget: () => resolveDiagnosticsTarget(process.env)
+    resolveTarget: () => resolveDiagnosticsTarget(process.env),
+    allowLocal: !/^(0|false|no|off)$/i.test(process.env.DIAGNOSTICS_ALLOW_LOCAL || '1')
 });
 if (/^(1|true|yes|on)$/i.test(process.env.DIAGNOSTICS_SOCKET_ENABLED || '')) {
     const target = resolveDiagnosticsTarget(process.env);

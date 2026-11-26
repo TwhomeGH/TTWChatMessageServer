@@ -1,5 +1,23 @@
 # ChangeHistory
 
+## 2026.11.26 診斷 API 預設允許本機讀取
+
+**類型**: 功能 · **檔案**: `DiagnosticsRoutes.cjs`、`Server.js`、`Test/diagnostics.test.cjs`、`Docs/DIAGNOSTICS.md`、`.env.example`
+
+### 修改
+
+- `GET /api/diagnostics` 預設允許 loopback（`127.0.0.1`、`::1`、`::ffff:127.0.0.1`）與本機網路介面位址免登入讀取。
+- 遠端來源仍需登入或 `DIAGNOSTICS_TOKEN`。
+- 有 `x-forwarded-for`／`x-real-ip`／`forwarded`／`cf-connecting-ip`／`true-client-ip` 時不視為本機，避免反向代理把遠端偽裝成本機。
+- 新增 `DIAGNOSTICS_ALLOW_LOCAL=0` 可完全關閉本機免登入。
+
+### 驗證
+
+- `node --test Test/diagnostics.test.cjs`
+- `npm run lint`
+
+---
+
 ## 2026.11.26 診斷 API 支援 token 遠端讀取
 
 **類型**: 功能 · **檔案**: `DiagnosticsRoutes.cjs`、`Test/diagnostics.test.cjs`、`Docs/DIAGNOSTICS.md`、`.env.example`

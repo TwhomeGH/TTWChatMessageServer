@@ -1,4 +1,5 @@
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const MAX_BODY = 4 * 1024 * 1024;
@@ -12,9 +13,9 @@ function json(res, status, value) {
  * 診斷入口：HTTP LogServer 相容 /post、帶外 diagnostic、以及唯讀診斷頁。
  * 資料只存在記憶體，不寫 log 檔或聊天歷史。
  * @param {import('./ScriptLib/diagnostics/store.cjs').DiagnosticsStore} store
- * @param {{token?: string, socketClient?: Object, resolveTarget?: () => {host: string, port: number, source: string, configured: boolean}}} [options]
+ * @param {{token?: string, socketClient?: Object, resolveTarget?: () => {host: string, port: number, source: string, configured: boolean}, allowLocal?: boolean}} [options]
  */
-function createDiagnosticsRoutes(store, { token = '', socketClient = null, resolveTarget = null } = {}) {
+function createDiagnosticsRoutes(store, { token = '', socketClient = null, resolveTarget = null, allowLocal = true } = {}) {
     function target() {
         if (typeof resolveTarget === 'function') return resolveTarget();
         return { host: '', port: 0, source: '', configured: false };
@@ -39,6 +40,25 @@ function createDiagnosticsRoutes(store, { token = '', socketClient = null, resol
         return Boolean(token) && matchesToken(req);
     }
 
+    const PROXY_HEADERS = ['x-forwarded-for', 'x-real-ip', 'forwarded', 'cf-connecting-ip', 'true-client-ip'];
+    // 用介面位址判斷「從自己的機器連進來」，包含用區網 IP 開本機頁面的情況。
+    const localAddresses = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+    for (const entries of Object.values(os.networkInterfaces())) {
+        for (const entry of entries || []) {
+            if (entry?.address) localAddresses.add(entry.address.toLowerCase());
+        }
+    }
+
+    function authorizedLocal(req) {
+        if (!allowLocal) return false;
+        // 經過反向代理時來源位址會變成代理本身；有 forwarding header 就不算本機。
+        const headers = req.headers || {};
+        if (PROXY_HEADERS.some(name => headers[name])) return false;
+        const address = String(req.socket?.remoteAddress || '').toLowerCase();
+        const normalized = address.startsWith('::ffff:') ? address.slice(7) : address;
+        return localAddresses.has(address) || localAddresses.has(normalized);
+    }
+
     function servePage(req, res) {
         if (req.url.split('?')[0] !== '/diagnostics') return false;
         if (req.method !== 'GET') {
@@ -61,7 +81,7 @@ function createDiagnosticsRoutes(store, { token = '', socketClient = null, resol
     function serveApi(req, res, authorized = false) {
         const url = new URL(req.url, 'http://localhost');
         if (url.pathname !== '/api/diagnostics') return false;
-        if (!authorized && !authorizedRead(req)) {
+        if (!authorized && !authorizedRead(req) && !authorizedLocal(req)) {
             json(res, 401, { ok: false, code: 'AUTH_REQUIRED', error: '請先登入，或提供 DIAGNOSTICS_TOKEN' });
             return true;
         }

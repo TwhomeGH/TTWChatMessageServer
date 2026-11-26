@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const net = require('node:net');
+const os = require('node:os');
 const { EventEmitter } = require('node:events');
 const { DiagnosticsStore } = require('../ScriptLib/diagnostics/store.cjs');
 const { parseDiagnosticLog, summarizeDiagnostics } = require('../ScriptLib/diagnostics/parse.cjs');
@@ -8,12 +9,13 @@ const { DiagnosticsSocketClient } = require('../ScriptLib/diagnostics/socket-cli
 const { createDiagnosticsRoutes } = require('../DiagnosticsRoutes.cjs');
 const { resolveDiagnosticsTarget } = require('../ScriptLib/diagnostics/target.cjs');
 
-function request(route, { url = '/post', method = 'POST', body = '', headers = {} } = {}) {
+function request(route, { url = '/post', method = 'POST', body = '', headers = {}, socket = null } = {}) {
     return new Promise(resolve => {
         const req = new EventEmitter();
         req.url = url;
         req.method = method;
         req.headers = headers;
+        if (socket) req.socket = socket;
         const res = {
             writeHead(status) { this.status = status; },
             end(value) { resolve({ status: this.status, body: value ? JSON.parse(value) : null }); }
@@ -134,6 +136,46 @@ test('診斷 API 可用 DIAGNOSTICS_TOKEN 遠端讀取，未設定或錯誤 toke
         url: '/api/diagnostics', method: 'GET', headers: { authorization: 'Bearer secret' }
     });
     assert.equal(bearer.status, 200);
+});
+
+test('診斷 API 本機來源免登入；遠端、代理或關閉本機允許仍需登入', async () => {
+    const store = new DiagnosticsStore();
+    store.ingestLogs({ time: '1', title: 'Capture', body: 'local target' });
+    const routes = createDiagnosticsRoutes(store);
+
+    for (const remoteAddress of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
+        const local = await request(routes.serveApi, {
+            url: '/api/diagnostics', method: 'GET', socket: { remoteAddress }
+        });
+        assert.equal(local.status, 200, remoteAddress);
+        assert.equal(local.body.logs[0].body, 'local target');
+    }
+
+    assert.equal((await request(routes.serveApi, {
+        url: '/api/diagnostics', method: 'GET', socket: { remoteAddress: '192.168.0.50' }
+    })).status, 401);
+
+    // 反向代理會讓遠端看起來像本機；有 forwarding header 時不可套用本機允許。
+    assert.equal((await request(routes.serveApi, {
+        url: '/api/diagnostics',
+        method: 'GET',
+        headers: { 'x-forwarded-for': '203.0.113.9' },
+        socket: { remoteAddress: '127.0.0.1' }
+    })).status, 401);
+
+    // 用本機區網 IP 開頁面時，來源位址會是本機介面位址，仍應視為本機。
+    const localIp = Object.values(os.networkInterfaces()).flat()
+        .find(entry => entry?.family === 'IPv4' && !entry.internal)?.address;
+    if (localIp) {
+        assert.equal((await request(routes.serveApi, {
+            url: '/api/diagnostics', method: 'GET', socket: { remoteAddress: localIp }
+        })).status, 200);
+    }
+
+    const disabled = createDiagnosticsRoutes(store, { allowLocal: false });
+    assert.equal((await request(disabled.serveApi, {
+        url: '/api/diagnostics', method: 'GET', socket: { remoteAddress: '127.0.0.1' }
+    })).status, 401);
 });
 
 test('診斷入口接受 LogServer /post、diagnostic 與可選 token', async () => {
