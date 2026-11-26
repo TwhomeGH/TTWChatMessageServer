@@ -92,11 +92,20 @@ TTWChat 只送訂閱訊息，不送 `log`／`logbatch`／`videoHealth`／`audioH
 
 ## API
 
-需要主服務登入：
+預設需要主服務登入：
 
 ```text
 GET /api/diagnostics?limit=300&q=&category=&severity=&session=&context=0
 ```
+
+若要在另一台機器用工具讀取，可在 `.env` 設定 `DIAGNOSTICS_TOKEN`，再以標頭帶入，不需要開放匿名讀取：
+
+```text
+GET /api/diagnostics
+x-diagnostics-token: <token>
+```
+
+也接受 `Authorization: Bearer <token>` 或 `?token=<token>`；查詢字串可能出現在日誌，建議優先用標頭。沒有設定 `DIAGNOSTICS_TOKEN` 時，只有登入後的瀏覽器能讀取。
 
 `context` 是每個匹配項往前後帶出的日誌筆數（0–20，預設 0）。回傳的 `logs` 每筆都有 `matched`：`true` 表示符合搜尋／篩選，`false` 表示是為了觀察而帶出的上下文；回傳同時包含 `matched`（顯示範圍內符合筆數）與 `context`（上下文筆數）。`total` 仍是符合筆數，`hasMore` 在有更多符合項或上下文被 `limit` 截掉時為 true。
 
@@ -114,7 +123,7 @@ Socket 外部日誌會出現在下方「應用日誌」，與 HTTP log bridge �
 - 解析是顯示層輔助，不會把 body 改寫成新的 log；未知格式仍保留原文。
 - 不寫 log 檔、SQLite、聊天、traffic、AutoClip 或通知。
 - 未知 socket `type` 忽略，不中斷連線。
-- `/diagnostics` 需要主服務登入；`/post` 只有選填 token，請勿直接暴露到不可信網路。
+- `/diagnostics` 與 `/api/diagnostics` 預設需要主服務登入；設定 `DIAGNOSTICS_TOKEN` 後，API 可用同一個 token 遠端讀取。`/post` 只有選填 token，請勿直接暴露到不可信網路。
 - Socket 角色識別不是身份驗證。
 
 ## 驗證

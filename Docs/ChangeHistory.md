@@ -1,5 +1,30 @@
 # ChangeHistory
 
+## 2026.11.26 診斷 API 支援 token 遠端讀取
+
+**類型**: 功能 · **檔案**: `DiagnosticsRoutes.cjs`、`Test/diagnostics.test.cjs`、`Docs/DIAGNOSTICS.md`、`.env.example`
+
+### 原因
+
+`GET /api/diagnostics` 原本只接受主服務登入，遠端工具無法直接讀取；但診斷內容可能含敏感資料，不適合直接改成匿名開放。
+
+### 修改
+
+- 保留登入為預設授權。
+- 設定 `DIAGNOSTICS_TOKEN` 時，`GET /api/diagnostics` 也接受同一個 token：
+  - `x-diagnostics-token: <token>`
+  - `Authorization: Bearer <token>`
+  - `?token=<token>`（相容用，建議改用標頭）
+- 未設定 token 或 token 錯誤時仍回 401。
+- 送入日誌的 `/post` 行為不變：未設定 token 時開放，設定後必須帶 token。
+
+### 驗證
+
+- `node --test Test/diagnostics.test.cjs`
+- `npm run lint`
+
+---
+
 ## 2026.11.25 TikTokChat 排除 /coin 並支援面板拖曳
 
 **類型**: 修正 · **檔案**: `UserScript/TikTokChat.user.js`、`Test/userscript_source.test.mjs`、`Docs/USERSCRIPT_SOURCES.md`

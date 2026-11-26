@@ -107,6 +107,35 @@ test('診斷搜尋可帶入匹配前後上下文並標記 matched', () => {
     assert.equal(around.hasMore, false);
 });
 
+test('診斷 API 可用 DIAGNOSTICS_TOKEN 遠端讀取，未設定或錯誤 token 仍需登入', async () => {
+    const store = new DiagnosticsStore();
+    store.ingestLogs({ time: '1', title: 'Capture', body: 'remote target' });
+    const routes = createDiagnosticsRoutes(store, { token: 'secret' });
+
+    assert.equal((await request(routes.serveApi, {
+        url: '/api/diagnostics', method: 'GET'
+    })).status, 401);
+    assert.equal((await request(routes.serveApi, {
+        url: '/api/diagnostics', method: 'GET', headers: { 'x-diagnostics-token': 'wrong' }
+    })).status, 401);
+
+    const header = await request(routes.serveApi, {
+        url: '/api/diagnostics', method: 'GET', headers: { 'x-diagnostics-token': 'secret' }
+    });
+    assert.equal(header.status, 200);
+    assert.equal(header.body.logs[0].body, 'remote target');
+
+    const query = await request(routes.serveApi, {
+        url: '/api/diagnostics?token=secret', method: 'GET'
+    });
+    assert.equal(query.status, 200);
+
+    const bearer = await request(routes.serveApi, {
+        url: '/api/diagnostics', method: 'GET', headers: { authorization: 'Bearer secret' }
+    });
+    assert.equal(bearer.status, 200);
+});
+
 test('診斷入口接受 LogServer /post、diagnostic 與可選 token', async () => {
     const store = new DiagnosticsStore();
     const routes = createDiagnosticsRoutes(store, { token: 'secret' });

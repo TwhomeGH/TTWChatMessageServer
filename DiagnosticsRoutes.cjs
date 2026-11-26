@@ -19,14 +19,24 @@ function createDiagnosticsRoutes(store, { token = '', socketClient = null, resol
         if (typeof resolveTarget === 'function') return resolveTarget();
         return { host: '', port: 0, source: '', configured: false };
     }
-    function authorizedIntake(req) {
-        if (!token) return true;
+    function matchesToken(req) {
+        if (!token) return false;
         const header = req.headers['x-diagnostics-token'];
         if (header === token) return true;
         const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
         if (bearer === token) return true;
         const url = new URL(req.url, 'http://localhost');
         return url.searchParams.get('token') === token;
+    }
+
+    function authorizedIntake(req) {
+        // 送入日誌預設開放；有設定 token 時才要求 token。
+        return !token || matchesToken(req);
+    }
+
+    function authorizedRead(req) {
+        // 讀取診斷可能包含敏感內容，預設只允許登入；token 是可選的遠端讀取通道。
+        return Boolean(token) && matchesToken(req);
     }
 
     function servePage(req, res) {
@@ -51,8 +61,8 @@ function createDiagnosticsRoutes(store, { token = '', socketClient = null, resol
     function serveApi(req, res, authorized = false) {
         const url = new URL(req.url, 'http://localhost');
         if (url.pathname !== '/api/diagnostics') return false;
-        if (!authorized) {
-            json(res, 401, { ok: false, code: 'AUTH_REQUIRED', error: '請先登入' });
+        if (!authorized && !authorizedRead(req)) {
+            json(res, 401, { ok: false, code: 'AUTH_REQUIRED', error: '請先登入，或提供 DIAGNOSTICS_TOKEN' });
             return true;
         }
         if (req.method !== 'GET') {
