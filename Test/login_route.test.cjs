@@ -32,20 +32,30 @@ function loginRoute(url) {
     return { status, headers, body };
 }
 
-test('GET /login 會回傳登入頁，不再 404', () => {
+test('GET /login 會回傳登入頁，不再 404，也不再預設 /config', () => {
     const result = loginRoute('/login');
     assert.equal(result.status, 200);
     assert.match(result.body, /系統登入|登入/);
     assert.equal(result.headers['Cache-Control'], 'no-store');
-    assert.match(result.body, /REDIRECT_AFTER_LOGIN = "\/config"/);
+    assert.doesNotMatch(result.body, /REDIRECT_AFTER_LOGIN/);
 });
 
-test('登入後可回到原始頁面；外部導向一律回 /config', () => {
+test('登入後可回到原始頁面；外部導向不注入 redirect', () => {
     const diagnostics = loginRoute('/login?redirect=%2Fdiagnostics');
     assert.match(diagnostics.body, /REDIRECT_AFTER_LOGIN = "\/diagnostics"/);
 
     for (const bad of ['//evil.example', 'https://evil.example', '/\\evil', '/bad\nlocation']) {
         const result = loginRoute('/login?redirect=' + encodeURIComponent(bad));
-        assert.match(result.body, /REDIRECT_AFTER_LOGIN = "\/config"/, bad);
+        assert.doesNotMatch(result.body, /REDIRECT_AFTER_LOGIN/, bad);
     }
+});
+
+test('登入頁沒有明確目標時提供返回上一頁的確認畫面', () => {
+    const html = fs.readFileSync(require.resolve('../login.html'), 'utf8');
+    assert.match(html, /function safeReturnPath\(/);
+    assert.match(html, /function intendedReturn\(/);
+    assert.match(html, /document\.referrer/);
+    assert.match(html, /id="loginSuccess"/);
+    assert.match(html, /history\.back\(\)/);
+    assert.match(html, /前往全域設定/);
 });

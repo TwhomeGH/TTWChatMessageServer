@@ -1497,7 +1497,7 @@ const server = http.createServer((req, res) => {
             && !requested.includes('\\')
             && !/[\r\n]/.test(requested)
             ? requested
-            : '/config';
+            : '';
         const loginPath = path.join(__dirname, 'login.html');
         fs.readFile(loginPath, 'utf8', (err, html) => {
             if (err) {
@@ -1505,10 +1505,13 @@ const server = http.createServer((req, res) => {
                 res.end('Error loading login.html');
                 return;
             }
-            const withRedirect = html.replace(
-                '</head>',
-                `<script>const REDIRECT_AFTER_LOGIN = ${JSON.stringify(redirect)};</script>\n</head>`
-            );
+            // 沒有明確目標時不預設 /config；登入頁會用 referrer 或顯示返回按鈕。
+            const withRedirect = redirect
+                ? html.replace(
+                    '</head>',
+                    `<script>const REDIRECT_AFTER_LOGIN = ${JSON.stringify(redirect)};</script>\n</head>`
+                )
+                : html;
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
             res.end(withRedirect);
         });
@@ -1535,8 +1538,12 @@ const server = http.createServer((req, res) => {
                 res.end('Server Error');
                 return;
             }
+            const withRedirect = html.replace(
+                '</head>',
+                '<script>const REDIRECT_AFTER_LOGIN = "/config";</script>\n</head>'
+            );
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(html);
+            res.end(withRedirect);
             });
             return;
         }

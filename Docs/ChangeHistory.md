@@ -11,7 +11,9 @@
 ### 修改
 
 - 新增 `GET /login` 回傳 `login.html`，並設定 `Cache-Control: no-store`。
-- 支援 `?redirect=<站內路徑>`：登入成功後回到原頁（例如 `/diagnostics`）；外部網址、`//`、反斜線與換行一律退回 `/config`。
+- 支援 `?redirect=<站內路徑>`：登入成功後回到原頁（例如 `/diagnostics`）；外部網址、`//`、反斜線與換行不採用。
+- 沒有明確 `redirect` 時，登入頁優先使用同源 `document.referrer` 回到上一頁；兩者都沒有時顯示「已登入」確認畫面，提供「回到上一頁」（有歷史時）與「前往全域設定」。
+- `/config` 的未登入登入頁明確帶 `/config` 回跳，不再依賴登入頁的預設值。
 - 診斷頁的登入提示改連 `/login?redirect=%2Fdiagnostics`。
 
 ### 驗證

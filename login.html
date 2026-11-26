@@ -10,7 +10,7 @@
     <main class="login-card">
       <p class="config-eyebrow">TTW Chat Message Server</p>
       <h1>系統登入</h1>
-      <p class="login-hint">輸入控制台密碼。登入狀態會保留在 HttpOnly cookie。</p>
+      <p id="loginHint" class="login-hint">輸入控制台密碼。登入狀態會保留在 HttpOnly cookie。</p>
 
       <form id="loginForm" class="space-y-4">
         <div class="login-field">
@@ -29,9 +29,50 @@
       </form>
 
       <p id="error" class="login-error" role="alert"></p>
+
+      <div id="loginSuccess" class="space-y-4" hidden>
+        <h2 class="text-lg font-semibold">已登入</h2>
+        <p class="login-hint">登入成功。為了安全，請確認要前往的位置。</p>
+        <button id="loginBack" class="config-primary-button w-full" type="button" hidden>回到剛才的頁面</button>
+        <a href="/config" class="config-secondary-button w-full">前往全域設定</a>
+      </div>
     </main>
 
     <script>
+      /** 只接受同源路徑，避免登入後被帶到外部網站。 */
+      function safeReturnPath(value) {
+        try {
+          const url = new URL(value, window.location.origin);
+          if (url.origin !== window.location.origin) return '';
+          if (url.pathname === '/login') return '';
+          return url.pathname + url.search + url.hash;
+        } catch {
+          return '';
+        }
+      }
+
+      /** 優先用明確的 redirect，其次才用上一頁；都沒有時顯示確認畫面。 */
+      function intendedReturn() {
+        if (typeof REDIRECT_AFTER_LOGIN !== 'undefined') {
+          const explicit = safeReturnPath(REDIRECT_AFTER_LOGIN);
+          if (explicit) return explicit;
+        }
+        return document.referrer ? safeReturnPath(document.referrer) : '';
+      }
+
+      function showSuccess() {
+        document.getElementById('loginForm').hidden = true;
+        document.getElementById('loginHint').hidden = true;
+        document.getElementById('error').textContent = '';
+        document.getElementById('loginSuccess').hidden = false;
+        const back = document.getElementById('loginBack');
+        if (history.length > 1) {
+          back.hidden = false;
+          back.textContent = '回到上一頁';
+          back.addEventListener('click', () => history.back(), { once: true });
+        }
+      }
+
       async function login() {
         const password = document.getElementById('password').value.trim();
         const errorBox = document.getElementById('error');
@@ -57,7 +98,12 @@
 
           const data = await res.json();
           if (data.success) {
-            window.location.href = typeof REDIRECT_AFTER_LOGIN !== 'undefined' ? REDIRECT_AFTER_LOGIN : '/config';
+            const target = intendedReturn();
+            if (target) {
+              window.location.assign(target);
+              return;
+            }
+            showSuccess();
           } else {
             errorBox.textContent = '登入失敗';
           }

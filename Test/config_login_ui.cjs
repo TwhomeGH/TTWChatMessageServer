@@ -149,15 +149,20 @@ async function main() {
 
         await page.$eval('#password', el => { el.value = ''; });
         await page.type('#password', 'correct');
+        await page.click('#loginForm button[type="submit"]');
+        await page.waitForFunction(() => document.getElementById('loginSuccess').hidden === false);
+        assert.match(await page.$eval('#loginSuccess', el => el.textContent), /已登入/);
+        assert.equal(await page.$eval('#loginSuccess a[href="/config"]', el => el.textContent), '前往全域設定');
+
         await Promise.all([
             page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
-            page.click('#loginForm button[type="submit"]')
+            page.click('#loginSuccess a[href="/config"]')
         ]);
         assert.equal(new URL(page.url()).pathname, '/config');
         assert.equal(await page.$eval('#safetyOverlay', el => getComputedStyle(el).display !== 'none'), true);
 
         assert.deepEqual(errors, []);
-        console.log('Config/Login UI passed: dark theme, safety gate, 24 fields, sidebar/mobile nav, no 390px overflow, dirty state, login error/success; screenshots in output/playwright.');
+        console.log('Config/Login UI passed: dark theme, safety gate, 24 fields, sidebar/mobile nav, no 390px overflow, dirty state, login error/success confirmation; screenshots in output/playwright.');
     } finally {
         await browser?.close();
         await new Promise(resolve => server.close(resolve));
