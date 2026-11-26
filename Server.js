@@ -1488,6 +1488,32 @@ const server = http.createServer((req, res) => {
         });
         }
 
+    // GET /login → 顯示登入頁；可帶 redirect 回到原始頁面。
+    else if (req.method === 'GET' && (req.url === '/login' || req.url.startsWith('/login?'))) {
+        const loginUrl = new URL(req.url, 'http://localhost');
+        const requested = String(loginUrl.searchParams.get('redirect') || '');
+        const redirect = requested.startsWith('/')
+            && !requested.startsWith('//')
+            && !requested.includes('\\')
+            && !/[\r\n]/.test(requested)
+            ? requested
+            : '/config';
+        const loginPath = path.join(__dirname, 'login.html');
+        fs.readFile(loginPath, 'utf8', (err, html) => {
+            if (err) {
+                res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Error loading login.html');
+                return;
+            }
+            const withRedirect = html.replace(
+                '</head>',
+                `<script>const REDIRECT_AFTER_LOGIN = ${JSON.stringify(redirect)};</script>\n</head>`
+            );
+            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+            res.end(withRedirect);
+        });
+    }
+
 
     // 保護的 config API
     

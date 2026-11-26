@@ -1,5 +1,27 @@
 # ChangeHistory
 
+## 2026.11.27 修正 GET /login 404 與登入後回跳
+
+**類型**: 修正 · **檔案**: `Server.js`、`assets/diagnostics.js`、`Test/login_route.test.cjs`、`Docs/DIAGNOSTICS.md`、`Docs/WEB_UI.md`
+
+### 原因
+
+`/login` 先前只實作 `POST` 登入 API，沒有 `GET` 頁面路由；診斷頁的「前往登入」連到 `/login` 因而被最後的 404 接走。
+
+### 修改
+
+- 新增 `GET /login` 回傳 `login.html`，並設定 `Cache-Control: no-store`。
+- 支援 `?redirect=<站內路徑>`：登入成功後回到原頁（例如 `/diagnostics`）；外部網址、`//`、反斜線與換行一律退回 `/config`。
+- 診斷頁的登入提示改連 `/login?redirect=%2Fdiagnostics`。
+
+### 驗證
+
+- `node --test Test/login_route.test.cjs`
+- `node Test/diagnostics_ui.cjs`
+- `npm run lint`
+
+---
+
 ## 2026.11.26 診斷頁平板排版與收到時間排序／範圍
 
 **類型**: 功能 · **檔案**: `diagnostics.html`、`assets/diagnostics.js`、`assets/diagnostics.css`、`ScriptLib/diagnostics/store.cjs`、`DiagnosticsRoutes.cjs`、`Test/diagnostics_ui.cjs`、`Test/diagnostics.test.cjs`、`Docs/DIAGNOSTICS.md`

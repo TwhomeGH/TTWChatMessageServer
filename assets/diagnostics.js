@@ -372,7 +372,7 @@
             if (response.status === 401) {
                 auto.checked = false;
                 schedule();
-                showCallout('診斷資料需要主服務登入。', '/login');
+                showCallout('診斷資料需要主服務登入。', '/login?redirect=' + encodeURIComponent('/diagnostics'));
                 return;
             }
             if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -442,7 +442,7 @@
             });
             const data = await response.json().catch(() => ({}));
             if (response.status === 401) {
-                showCallout('Socket 訂閱需要主服務登入。', '/login');
+                showCallout('Socket 訂閱需要主服務登入。', '/login?redirect=' + encodeURIComponent('/diagnostics'));
                 return;
             }
             if (!response.ok || !data.ok) {

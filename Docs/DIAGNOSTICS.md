@@ -92,7 +92,7 @@ TTWChat 只送訂閱訊息，不送 `log`／`logbatch`／`videoHealth`／`audioH
 
 ## API
 
-同機（`127.0.0.1`／`::1`，或本機網路介面位址）預設可直接讀取，不需要登入；其他來源需要主服務登入：
+同機（`127.0.0.1`／`::1`，或本機網路介面位址）預設可直接讀取，不需要登入；其他來源需要主服務登入。頁面上的「前往登入」會帶 `?redirect=/diagnostics`，登入後回到診斷頁：
 
 ```text
 GET /api/diagnostics?limit=300&q=&category=&severity=&session=&order=desc&from=0&to=0&context=0
