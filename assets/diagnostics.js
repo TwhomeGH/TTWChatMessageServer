@@ -15,6 +15,11 @@
     const search = $('diagSearch');
     const severity = $('diagSeverity');
     const session = $('diagSession');
+    const order = $('diagOrder');
+    const range = $('diagRange');
+    const customRange = $('diagCustomRange');
+    const fromInput = $('diagFrom');
+    const toInput = $('diagTo');
     const context = $('diagContext');
     const auto = $('diagAuto');
     const autoScroll = $('diagAutoScroll');
@@ -34,6 +39,9 @@
         severity: '',
         session: '',
         query: '',
+        order: 'desc',
+        from: 0,
+        to: 0,
         context: 0,
         stats: {},
         diagnostics: [],
@@ -81,6 +89,20 @@
         return Math.floor(seconds / 3600) + ' 小時前';
     }
 
+    function formatDateTime(ms) {
+        return new Date(ms).toLocaleString('zh-TW', {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+        });
+    }
+
+    function rangeLabel() {
+        if (state.from && state.to) return `${formatDateTime(state.from)} ～ ${formatDateTime(state.to)}`;
+        if (state.from) return `${formatDateTime(state.from)} 之後`;
+        if (state.to) return `${formatDateTime(state.to)} 之前`;
+        return '全部收到時間';
+    }
+
     function showCallout(message, link) {
         callout.replaceChildren();
         callout.hidden = false;
@@ -116,7 +138,7 @@
         const summary = state.summary || {};
         summaryEl.replaceChildren(
             card('總筆數', summary.total ?? state.logs.length),
-            card('時間範圍', summary.range || '無時間戳'),
+            card('資料時間範圍', summary.range || '無時間戳'),
             card('Session', (summary.sessions || []).length),
             card('警告', summary.warn ?? 0, 'warn'),
             card('錯誤', summary.error ?? 0, 'error')
@@ -264,8 +286,8 @@
     function renderRows() {
         const previousTop = scrollEl.scrollTop;
         logsEl.replaceChildren();
-        // API 回傳新到舊；表格改成舊到新，讓最新訊息維持在底部。
-        for (const line of [...state.logs].reverse()) {
+        // 排序由 API 的 order 參數決定；新到舊時最新在頂端，舊到新時最新在底部。
+        for (const line of state.logs) {
             const contextLine = line.matched === false;
             const row = document.createElement('tr');
             row.className = `log-row is-${line.severity || 'info'}${contextLine ? ' is-context' : ''}`;
@@ -296,7 +318,9 @@
         moreEl.hidden = !state.hasMore;
         moreEl.textContent = `載入更多（已顯示 ${state.logs.length} 筆，符合 ${state.total} 筆）`;
         if (autoScroll.checked) {
-            requestAnimationFrame(() => { scrollEl.scrollTop = scrollEl.scrollHeight; });
+            requestAnimationFrame(() => {
+                scrollEl.scrollTop = state.order === 'asc' ? scrollEl.scrollHeight : 0;
+            });
         } else {
             requestAnimationFrame(() => { scrollEl.scrollTop = previousTop; });
         }
@@ -310,9 +334,11 @@
         if (state.query) filterBits.push(`搜尋 ${state.query}`);
         const stats = state.stats || {};
         const contextCount = state.logs.filter(line => line.matched === false).length;
+        const orderLabel = state.order === 'asc' ? '收到時間 舊→新' : '收到時間 新→舊';
         statusEl.textContent = `${state.total} 筆符合 · 顯示 ${state.logs.length} 筆`
             + (contextCount ? `（上下文 ${contextCount} 筆）` : '')
             + (filterBits.length ? ` · ${filterBits.join(' · ')}` : '')
+            + ` · 排序 ${orderLabel} · 收到範圍 ${rangeLabel()}`
             + ` · 緩衝 ${stats.bufferedLogs || 0} 則 · 最後收到：${relative(state.lastReceived)}`;
     }
 
@@ -337,6 +363,9 @@
                 category: state.category,
                 severity: state.severity,
                 session: state.session,
+                order: state.order,
+                from: String(state.from),
+                to: String(state.to),
                 context: String(state.context)
             });
             const response = await fetch('/api/diagnostics?' + params, { cache: 'no-store' });
@@ -447,12 +476,29 @@
         state.category = '';
         state.severity = '';
         state.session = '';
+        state.order = 'desc';
+        state.from = 0;
+        state.to = 0;
         state.context = 0;
         state.limit = 300;
         search.value = '';
         severity.value = '';
         session.value = '';
+        order.value = 'desc';
+        range.value = 'all';
+        customRange.hidden = true;
+        fromInput.value = '';
+        toInput.value = '';
         context.value = '0';
+        load();
+    }
+
+    function applyCustomRange() {
+        const from = fromInput.value ? new Date(fromInput.value).getTime() : 0;
+        const to = toInput.value ? new Date(toInput.value).getTime() : 0;
+        state.from = Number.isFinite(from) ? from : 0;
+        state.to = Number.isFinite(to) ? to : 0;
+        state.limit = 300;
         load();
     }
 
@@ -474,6 +520,25 @@
         state.limit = 300;
         load();
     });
+    order.addEventListener('change', () => {
+        state.order = order.value === 'asc' ? 'asc' : 'desc';
+        state.limit = 300;
+        load();
+    });
+    range.addEventListener('change', () => {
+        if (range.value === 'custom') {
+            customRange.hidden = false;
+            applyCustomRange();
+            return;
+        }
+        customRange.hidden = true;
+        state.from = range.value === 'all' ? 0 : Date.now() - Number(range.value) * 60000;
+        state.to = 0;
+        state.limit = 300;
+        load();
+    });
+    fromInput.addEventListener('change', applyCustomRange);
+    toInput.addEventListener('change', applyCustomRange);
     context.addEventListener('change', () => {
         state.context = Math.max(0, Math.min(20, Number(context.value) || 0));
         state.limit = 300;
@@ -486,7 +551,9 @@
     });
     auto.addEventListener('change', schedule);
     autoScroll.addEventListener('change', () => {
-        if (autoScroll.checked) scrollEl.scrollTop = scrollEl.scrollHeight;
+        if (autoScroll.checked) {
+            scrollEl.scrollTop = state.order === 'asc' ? scrollEl.scrollHeight : 0;
+        }
     });
     moreEl.addEventListener('click', () => load(true));
     socketApply.addEventListener('click', applySocketSubscription);

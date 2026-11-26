@@ -87,11 +87,14 @@ class DiagnosticsStore {
         return true;
     }
 
-    snapshot({ limit = 500, q = '', category = '', severity = '', session = '', context = 0 } = {}) {
+    snapshot({ limit = 500, q = '', category = '', severity = '', session = '', order = 'desc', from = 0, to = 0, context = 0 } = {}) {
         const query = String(q || '').trim().toLowerCase();
         const selectedCategory = String(category || '').trim();
         const selectedSeverity = String(severity || '').trim();
         const selectedSession = String(session || '').trim();
+        const ascending = String(order).toLowerCase() === 'asc';
+        const fromMs = Number(from) || 0;
+        const toMs = Number(to) || 0;
         const contextSize = Math.min(Math.max(Number(context) || 0, 0), 20);
         const size = Math.min(Math.max(Number(limit) || 500, 1), this.maxLogs);
         const matches = [];
@@ -99,6 +102,8 @@ class DiagnosticsStore {
             if (selectedCategory && entry.category !== selectedCategory) return;
             if (selectedSeverity && entry.severity !== selectedSeverity) return;
             if (selectedSession && entry.session !== selectedSession) return;
+            if (fromMs && entry.receivedAt < fromMs) return;
+            if (toMs && entry.receivedAt > toMs) return;
             if (query) {
                 const haystack = [
                     entry.title, entry.body, entry.category, entry.session || '',
@@ -113,24 +118,27 @@ class DiagnosticsStore {
         let selected;
         let hasMore;
         if (contextSize === 0) {
-            selected = matches.slice(-size).reverse();
+            selected = ascending ? matches.slice(0, size) : matches.slice(-size).reverse();
             hasMore = matches.length > selected.length;
         } else {
             const indexes = new Set();
             let processed = 0;
-            for (let m = matches.length - 1; m >= 0; m--) {
+            const start = ascending ? 0 : matches.length - 1;
+            const end = ascending ? matches.length : -1;
+            const step = ascending ? 1 : -1;
+            for (let m = start; m !== end; m += step) {
                 const index = matches[m];
-                const from = Math.max(0, index - contextSize);
-                const to = Math.min(this.logs.length - 1, index + contextSize);
-                for (let i = from; i <= to; i++) indexes.add(i);
+                const contextFrom = Math.max(0, index - contextSize);
+                const contextTo = Math.min(this.logs.length - 1, index + contextSize);
+                for (let i = contextFrom; i <= contextTo; i++) indexes.add(i);
                 processed += 1;
                 if (indexes.size >= size) break;
             }
-            selected = [...indexes].sort((a, b) => b - a).slice(0, size);
+            selected = [...indexes].sort((a, b) => ascending ? a - b : b - a).slice(0, size);
             hasMore = processed < matches.length || indexes.size > selected.length;
         }
 
-        // API 給最新在前；UI 再反轉成舊到新顯示。matched=false 代表是匹配項的上下文。
+        // order 決定回傳方向；matched=false 代表是匹配項的上下文。
         const logs = selected.map(index => ({
             ...this.logs[index],
             matched: matchedIndexes.has(index)

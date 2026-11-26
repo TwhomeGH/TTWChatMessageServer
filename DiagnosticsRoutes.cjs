@@ -97,6 +97,9 @@ function createDiagnosticsRoutes(store, { token = '', socketClient = null, resol
                 category: url.searchParams.get('category') || '',
                 severity: url.searchParams.get('severity') || '',
                 session: url.searchParams.get('session') || '',
+                order: url.searchParams.get('order') === 'asc' ? 'asc' : 'desc',
+                from: Number(url.searchParams.get('from')) || 0,
+                to: Number(url.searchParams.get('to')) || 0,
                 context: Number(url.searchParams.get('context')) || 0
             })
         });

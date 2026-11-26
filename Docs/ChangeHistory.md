@@ -1,5 +1,29 @@
 # ChangeHistory
 
+## 2026.11.26 診斷頁平板排版與收到時間排序／範圍
+
+**類型**: 功能 · **檔案**: `diagnostics.html`、`assets/diagnostics.js`、`assets/diagnostics.css`、`ScriptLib/diagnostics/store.cjs`、`DiagnosticsRoutes.cjs`、`Test/diagnostics_ui.cjs`、`Test/diagnostics.test.cjs`、`Docs/DIAGNOSTICS.md`
+
+### 原因
+
+平板與短視窗下，診斷頁把畫面固定在 100dvh，上方卡片、摘要與工具列吃掉高度，日誌表格只剩表頭且難以捲動；同時沒有時間排序與收到時間區間，排查時無法把範圍縮到特定時段。
+
+### 修改
+
+- 診斷頁改成整頁自然捲動，表格保留 `70dvh` 最大高度與最小高度；平板／`1200px` 以下改成卡片式日誌、橫向分類 chips 與 2 欄摘要。
+- 工具列新增「收到時間：新→舊／舊→新」排序，預設新到舊。
+- 新增收到時間範圍：最近 15 分鐘、1／6／24 小時與自訂開始／結束時間；API 新增 `order`、`from`、`to`。
+- 時間篩選與排序以伺服器 `receivedAt` 為準；表格顯示的「時間」仍是外部應用提供的來源時間，避免批次補送或格式不一致造成錯誤排序。
+- 摘要卡時間範圍改名「資料時間範圍」，時間字串縮小避免卡片被撐高。
+
+### 驗證
+
+- `node --test Test/diagnostics.test.cjs`
+- `node Test/diagnostics_ui.cjs`（含 1024×768 平板、排序、時間範圍切換）
+- `npm run lint`、`npm run check:css`
+
+---
+
 ## 2026.11.26 診斷 API 預設允許本機讀取
 
 **類型**: 功能 · **檔案**: `DiagnosticsRoutes.cjs`、`Server.js`、`Test/diagnostics.test.cjs`、`Docs/DIAGNOSTICS.md`、`.env.example`

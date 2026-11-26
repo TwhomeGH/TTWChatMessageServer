@@ -10,6 +10,7 @@ const { browserPath } = require('./browser_path.cjs');
 async function main() {
     const pageHtml = fs.readFileSync(path.join(__dirname, '../diagnostics.html'));
     const socketPosts = [];
+    const diagnosticRequests = [];
     const server = http.createServer((req, res) => {
         const url = new URL(req.url, 'http://127.0.0.1');
         if (url.pathname === '/diagnostics') {
@@ -41,6 +42,7 @@ async function main() {
             return;
         }
         if (url.pathname === '/api/diagnostics') {
+            diagnosticRequests.push(url.toString());
             if (url.searchParams.get('q') === 'target' && url.searchParams.get('context') === '1') {
                 const targetLogs = [
                     {
@@ -79,23 +81,25 @@ async function main() {
                 }));
                 return;
             }
+            const logs = [
+                {
+                    time: '2026-11-10 20:00:01', title: 'ReplyKit',
+                    body: '[Capture] capture started session=abc12345 fps=60',
+                    category: 'Capture', severity: 'info', session: 'abc12345',
+                    fields: { session: 'abc12345', fps: '60' }, receivedAt: Date.now()
+                },
+                {
+                    time: '2026-11-10 20:00:00', title: 'ReplyKit',
+                    body: '[Capture] older line failed=0',
+                    category: 'Capture', severity: 'info', session: null,
+                    fields: { failed: '0' }, receivedAt: Date.now() - 1000
+                }
+            ];
+            if (url.searchParams.get('order') === 'asc') logs.reverse();
             res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
             res.end(JSON.stringify({
                 ok: true,
-                logs: [
-                    {
-                        time: '2026-11-10 20:00:01', title: 'ReplyKit',
-                        body: '[Capture] capture started session=abc12345 fps=60',
-                        category: 'Capture', severity: 'info', session: 'abc12345',
-                        fields: { session: 'abc12345', fps: '60' }, receivedAt: Date.now()
-                    },
-                    {
-                        time: '2026-11-10 20:00:00', title: 'ReplyKit',
-                        body: '[Capture] older line failed=0',
-                        category: 'Capture', severity: 'info', session: null,
-                        fields: { failed: '0' }, receivedAt: Date.now() - 1000
-                    }
-                ],
+                logs,
                 total: 2,
                 hasMore: false,
                 summary: {
@@ -132,18 +136,18 @@ async function main() {
             categories: [...document.querySelectorAll('#diagCategories .log-cat')].map(node => node.textContent),
             loginHidden: document.querySelector('#diagCallout').hidden,
             autoScroll: document.querySelector('#diagAutoScroll').checked,
-            atBottom: Math.abs(document.querySelector('#diagLogScroll').scrollHeight - document.querySelector('#diagLogScroll').clientHeight - document.querySelector('#diagLogScroll').scrollTop) < 4,
+            atTop: document.querySelector('#diagLogScroll').scrollTop < 4,
             fields: document.querySelector('#diagLogs .log-fields summary')?.textContent || ''
         }));
         assert.match(result.title, /應用診斷/);
-        assert.match(result.logs[0], /older line/);
-        assert.match(result.logs[1], /capture started/);
+        assert.match(result.logs[0], /capture started/);
+        assert.match(result.logs[1], /older line/);
         assert.match(result.summary, /2/);
         assert.match(result.summary, /Session1/);
         assert.deepEqual(result.categories, ['全部2', 'Capture2']);
         assert.match(result.fields, /欄位/);
         assert.equal(result.autoScroll, true);
-        assert.equal(result.atBottom, true);
+        assert.equal(result.atTop, true);
         assert.match(result.diagnostic, /logio/);
         assert.equal(result.loginHidden, true);
 
@@ -186,6 +190,47 @@ async function main() {
         assert.equal(narrow.messageMaxHeight, '160px', '長內容應限制高度並可捲動');
         assert.ok(narrow.bodyOverflow <= 1, '窄螢幕不應出現水平溢出');
 
+        await page.setViewport({ width: 1024, height: 768 });
+        await page.waitForFunction(() => document.querySelectorAll('#diagLogs .log-row').length === 2);
+        const tablet = await page.evaluate(() => {
+            const wrap = document.querySelector('#diagLogScroll').getBoundingClientRect();
+            const row = document.querySelector('#diagLogs .log-row').getBoundingClientRect();
+            return {
+                bodyOverflowY: getComputedStyle(document.body).overflowY,
+                rowDisplay: getComputedStyle(document.querySelector('#diagLogs .log-row')).display,
+                categoriesDisplay: getComputedStyle(document.querySelector('#diagCategories')).display,
+                wrapHeight: wrap.height,
+                rowVisible: row.top < wrap.bottom && row.bottom > wrap.top,
+                horizontalOverflow: document.body.scrollWidth - window.innerWidth
+            };
+        });
+        assert.equal(tablet.bodyOverflowY, 'auto', '平板應允許整頁捲動');
+        assert.equal(tablet.rowDisplay, 'block', '平板日誌列應改成卡片式');
+        assert.equal(tablet.categoriesDisplay, 'flex', '平板分類應改成橫向 chips');
+        assert.ok(tablet.wrapHeight > 100, '平板表格應保留可讀高度');
+        assert.equal(tablet.rowVisible, true, '平板應能看到日誌列，而不只是表頭');
+        assert.ok(tablet.horizontalOverflow <= 1, '平板不應出現水平溢出');
+
+        await page.select('#diagOrder', 'asc');
+        await page.waitForFunction(() => document.querySelector('#diagLogs .log-row .log-message')?.textContent.includes('older line'));
+        assert.ok(diagnosticRequests.some(url => new URL(url, 'http://x').searchParams.get('order') === 'asc'));
+        await page.select('#diagOrder', 'desc');
+        await page.waitForFunction(() => document.querySelector('#diagLogs .log-row .log-message')?.textContent.includes('capture started'));
+
+        await page.select('#diagRange', '60');
+        await page.waitForFunction(() => {
+            const text = document.querySelector('#diagStatus').textContent;
+            return text.includes('收到範圍') && !text.includes('全部收到時間');
+        });
+        assert.ok(diagnosticRequests.some(url => {
+            const query = new URL(url, 'http://x').searchParams;
+            return query.get('order') === 'desc' && Number(query.get('from')) > 0;
+        }));
+        await page.select('#diagRange', 'custom');
+        assert.equal(await page.$eval('#diagCustomRange', node => node.hidden), false);
+
+        await page.select('#diagRange', 'all');
+        await page.waitForFunction(() => document.querySelector('#diagStatus').textContent.includes('全部收到時間'));
         await page.select('#diagContext', '1');
         await page.type('#diagSearch', 'target');
         await page.waitForFunction(() => document.querySelectorAll('#diagLogs .log-row').length === 3);

@@ -1,5 +1,47 @@
 /* 應用診斷頁專屬排版；表格與分類沿用 log-explorer.css 的 log-* 樣式。 */
 
+/* 診斷頁比一般日誌頁高，讓整頁自然捲動；表格自己保留可捲動的高度。 */
+body {
+    height: auto;
+    min-height: 100dvh;
+    overflow-y: auto;
+}
+
+.log-layout.diag-layout {
+    flex: none;
+}
+
+.diag-layout .log-main {
+    overflow: visible;
+}
+
+.diag-layout .log-table-wrap {
+    max-height: 70dvh;
+    min-height: 160px;
+}
+
+/* 時間範圍字串很長；縮小字級避免摘要卡被撐成好幾行。 */
+#diagSummary .log-card:nth-child(2) .log-card-value {
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.diag-range {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.diag-range[hidden] {
+    display: none;
+}
+
+.diag-range input {
+    flex: 0 1 168px;
+    min-width: 132px;
+}
+
 .diag-callout {
     flex: 0 0 auto;
     margin: 12px 16px 0;
@@ -157,7 +199,7 @@
     color: #94a3b8;
 }
 
-@media (max-width: 820px) {
+@media (max-width: 1200px) {
     .diag-top {
         grid-template-columns: 1fr;
         padding: 8px 8px 0;
@@ -204,6 +246,13 @@
     .log-toolbar select {
         flex: 1 1 calc(50% - 8px);
         min-width: 0;
+    }
+    .diag-range {
+        flex: 1 1 100%;
+        flex-wrap: wrap;
+    }
+    .diag-range input {
+        flex: 1 1 140px;
     }
 
     /* 表格改成卡片式：時間、分類、嚴重度在上，內容佔滿下一列。 */

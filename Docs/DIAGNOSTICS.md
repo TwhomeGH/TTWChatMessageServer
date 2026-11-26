@@ -95,7 +95,7 @@ TTWChat 只送訂閱訊息，不送 `log`／`logbatch`／`videoHealth`／`audioH
 同機（`127.0.0.1`／`::1`，或本機網路介面位址）預設可直接讀取，不需要登入；其他來源需要主服務登入：
 
 ```text
-GET /api/diagnostics?limit=300&q=&category=&severity=&session=&context=0
+GET /api/diagnostics?limit=300&q=&category=&severity=&session=&order=desc&from=0&to=0&context=0
 ```
 
 本機允許可用 `DIAGNOSTICS_ALLOW_LOCAL=0` 關閉。若服務前面有反向代理，代理必須帶 `x-forwarded-for`／`x-real-ip`／`forwarded` 等標頭，這類請求會被視為遠端，不能沿用本機允許；否則遠端會透過代理看起來像本機，此時請關閉本機允許或改用 token。
@@ -111,7 +111,9 @@ x-diagnostics-token: <token>
 
 `context` 是每個匹配項往前後帶出的日誌筆數（0–20，預設 0）。回傳的 `logs` 每筆都有 `matched`：`true` 表示符合搜尋／篩選，`false` 表示是為了觀察而帶出的上下文；回傳同時包含 `matched`（顯示範圍內符合筆數）與 `context`（上下文筆數）。`total` 仍是符合筆數，`hasMore` 在有更多符合項或上下文被 `limit` 截掉時為 true。
 
-`logs` 最新在前、`summary` 是全量摘要，不隨篩選改變；表格由前端反轉成舊到新，最新保持在底部。`limit` 計算的是實際回傳列數（包含上下文），不是只計算符合項。
+`summary` 是全量摘要，不隨篩選改變。`order=desc` 時 `logs` 與表格最新在前；`order=asc` 時最舊在前、最新在底部。`limit` 計算的是實際回傳列數（包含上下文），不是只計算符合項。
+
+`from`／`to` 是 epoch 毫秒，依伺服器收到的 `receivedAt` 過濾；表格顯示的「時間」是外部應用提供的來源時間，因此篩選與排序標示為「收到時間」，避免來源時間格式不一致或批次補送造成排序錯亂。UI 的時間範圍有最近 15 分鐘、1／6／24 小時與自訂區間；自訂區間可只填開始或結束。
 
 ## Log I/O 是什麼
 
@@ -125,6 +127,7 @@ Socket 外部日誌會出現在下方「應用日誌」，與 HTTP log bridge �
 - 解析是顯示層輔助，不會把 body 改寫成新的 log；未知格式仍保留原文。
 - 不寫 log 檔、SQLite、聊天、traffic、AutoClip 或通知。
 - 未知 socket `type` 忽略，不中斷連線。
+- 平板／窄視窗沿用卡片式日誌與整頁捲動，表格另有最大高度，不會只剩表頭；時間排序與收到時間範圍都在工具列。
 - `/diagnostics` 與 `/api/diagnostics` 預設只允許本機（loopback 或本機介面位址）或已登入的主服務；設定 `DIAGNOSTICS_TOKEN` 後，API 可用同一個 token 遠端讀取。`/post` 只有選填 token，請勿直接暴露到不可信網路。
 - Socket 角色識別不是身份驗證。
 

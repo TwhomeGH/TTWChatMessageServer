@@ -109,6 +109,41 @@ test('診斷搜尋可帶入匹配前後上下文並標記 matched', () => {
     assert.equal(around.hasMore, false);
 });
 
+test('診斷快照支援時間排序與時間範圍', () => {
+    let now = 1000;
+    const store = new DiagnosticsStore({ now: () => now });
+    store.ingestLogs({ title: 'Capture', body: 'first' });
+    now = 2000;
+    store.ingestLogs({ title: 'Capture', body: 'second' });
+    now = 3000;
+    store.ingestLogs({ title: 'Capture', body: 'third' });
+
+    assert.deepEqual(store.snapshot().logs.map(line => line.body), ['third', 'second', 'first']);
+    assert.deepEqual(store.snapshot({ order: 'asc' }).logs.map(line => line.body), ['first', 'second', 'third']);
+    assert.deepEqual(store.snapshot({ limit: 2 }).logs.map(line => line.body), ['third', 'second']);
+    assert.deepEqual(store.snapshot({ limit: 2, order: 'asc' }).logs.map(line => line.body), ['first', 'second']);
+    assert.deepEqual(store.snapshot({ from: 1500, to: 2500 }).logs.map(line => line.body), ['second']);
+});
+
+test('診斷 API 接受時間排序與收到時間範圍參數', async () => {
+    let now = 1000;
+    const store = new DiagnosticsStore({ now: () => now });
+    store.ingestLogs({ title: 'Capture', body: 'first' });
+    now = 2000;
+    store.ingestLogs({ title: 'Capture', body: 'second' });
+    now = 3000;
+    store.ingestLogs({ title: 'Capture', body: 'third' });
+    const routes = createDiagnosticsRoutes(store);
+
+    const response = await request(routes.serveApi, {
+        url: '/api/diagnostics?order=asc&from=1500&to=2500',
+        method: 'GET',
+        socket: { remoteAddress: '127.0.0.1' }
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.logs.map(line => line.body), ['second']);
+});
+
 test('診斷 API 可用 DIAGNOSTICS_TOKEN 遠端讀取，未設定或錯誤 token 仍需登入', async () => {
     const store = new DiagnosticsStore();
     store.ingestLogs({ time: '1', title: 'Capture', body: 'remote target' });

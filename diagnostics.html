@@ -66,6 +66,23 @@
           <option value="info">一般</option>
         </select>
         <select id="diagSession" title="Session"><option value="">全部 Session</option></select>
+        <select id="diagOrder" title="收到時間排序">
+          <option value="desc">收到時間：新→舊</option>
+          <option value="asc">收到時間：舊→新</option>
+        </select>
+        <select id="diagRange" title="收到時間範圍">
+          <option value="all">全部收到時間</option>
+          <option value="15">最近 15 分鐘</option>
+          <option value="60">最近 1 小時</option>
+          <option value="360">最近 6 小時</option>
+          <option value="1440">最近 24 小時</option>
+          <option value="custom">自訂區間…</option>
+        </select>
+        <span id="diagCustomRange" class="diag-range" hidden>
+          <input id="diagFrom" type="datetime-local" aria-label="開始收到時間">
+          <span>～</span>
+          <input id="diagTo" type="datetime-local" aria-label="結束收到時間">
+        </span>
         <select id="diagContext" title="匹配前後相鄰筆數">
           <option value="0">只有符合</option>
           <option value="1">前後 1 筆</option>
