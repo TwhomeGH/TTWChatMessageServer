@@ -4,8 +4,10 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 /** 從 Server.js 取出 GET /login 區塊，避免真的啟動主服務。 */
-function loginRoute(url) {
-    const source = fs.readFileSync(require.resolve('../Server.js'), 'utf8');
+function loginRoute(url, rawSource) {
+    // GitHub Actions 的 Windows checkout 可能是 CRLF；先正規化，避免 `\n\n` 找不到區塊邊界。
+    const source = (rawSource || fs.readFileSync(require.resolve('../Server.js'), 'utf8'))
+        .replace(/\r\n?/g, '\n');
     const start = source.indexOf('    // GET /login');
     const end = source.indexOf('\n\n    // 保護的 config API', start);
     assert.ok(start >= 0 && end > start, '找不到 GET /login 路由');
@@ -38,6 +40,13 @@ test('GET /login 會回傳登入頁，不再 404，也不再預設 /config', () 
     assert.match(result.body, /系統登入|登入/);
     assert.equal(result.headers['Cache-Control'], 'no-store');
     assert.doesNotMatch(result.body, /REDIRECT_AFTER_LOGIN/);
+});
+
+test('login 路由抽取容忍 Windows CRLF checkout', () => {
+    const crlf = fs.readFileSync(require.resolve('../Server.js'), 'utf8').replace(/\r?\n/g, '\r\n');
+    const result = loginRoute('/login', crlf);
+    assert.equal(result.status, 200);
+    assert.match(result.body, /系統登入|登入/);
 });
 
 test('登入後可回到原始頁面；外部導向不注入 redirect', () => {

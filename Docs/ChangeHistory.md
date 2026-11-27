@@ -21,6 +21,7 @@
 - `node --test Test/login_route.test.cjs`
 - `node Test/diagnostics_ui.cjs`
 - `npm run lint`
+- CI 的 Windows checkout 為 CRLF 時，測試先正規化 `Server.js` 行尾；避免用 `\n\n` 找區塊邊界失敗。
 
 ---
 
