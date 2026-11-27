@@ -835,7 +835,7 @@ http://localhost:3332/open?user=你的TikTok名&twitchUser=你的Twitch名&kickU
 
 ### 開發測試腳本
 
-開發過程中的測試與分析腳本統一放在 `Test/` 目錄，完整清單與說明見 [Docs/TEST_FILES_REFERENCE.md](./Docs/TEST_FILES_REFERENCE.md)。
+開發過程中的測試與分析腳本統一放在 `Test/` 目錄，完整清單與說明見 [Docs/TEST_FILES_REFERENCE.md](./Docs/TEST_FILES_REFERENCE.md)。CI workflow、依賴快取與失效方式見 [CI 說明](./Docs/CI.md)。
 
 ```bash
 node Test/xxx.mjs

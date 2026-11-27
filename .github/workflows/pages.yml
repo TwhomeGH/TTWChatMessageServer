@@ -30,17 +30,36 @@ jobs:
         with:
           python-version: "3.x"
 
+      - name: Cache pip downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          # run_id 讓每次執行都能保存最新 wheel，restore-keys 仍可接續前一次。
+          key: pip-${{ runner.os }}-changelogkit-${{ github.run_id }}
+          restore-keys: |
+            pip-${{ runner.os }}-changelogkit-
+
       - name: Install changelogkit
         run: python -m pip install changelogkit
 
       - name: Set up Node
+        id: node
         uses: actions/setup-node@v6
         with:
           node-version: '24.x'
           cache: npm
 
+      # package-lock 沒變時直接重用 node_modules，避免 Pages 每次重新下載。
+      - name: Restore installed Node dependencies
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json', 'package.json') }}
+
       - name: Install locked Node dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci --ignore-scripts --no-audit --no-fund --prefer-offline
 
       - name: Generate API reference
         run: npm run docs:api

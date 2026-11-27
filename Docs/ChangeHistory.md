@@ -1,5 +1,27 @@
 # ChangeHistory
 
+## 2026.11.27 CI 依賴快取：node_modules 與 pip
+
+**類型**: 改善 · **檔案**: `.github/workflows/core-tests.yml`、`.github/workflows/pages.yml`、`Docs/CI.md`、`README.md`
+
+### 原因
+
+`actions/setup-node` 的 `cache: npm` 只保留 npm tarball 快取；`npm ci` 每次仍會刪除並重新展開 `node_modules`，套件清單沒變時也會重複安裝。Pages 的 `changelogkit` 也每次重新下載。
+
+### 修改
+
+- Core Tests 與 Pages 新增 `node_modules` 快取，key 包含 OS、CPU 架構、`setup-node` 解析後的 Node 版本、`package-lock.json` 與 `package.json`。
+- 精確命中時跳過 `npm ci`；未命中時使用 `npm ci --prefer-offline`，成功後保存新快取。
+- Pages 的 pip 下載加入快取；`key` 使用 `github.run_id` 讓每次執行都能保存最新 wheel，`restore-keys` 接續前一次。
+- 新增 `Docs/CI.md`，記錄 workflow 分工、快取失效條件與清理方式。
+
+### 驗證
+
+- 以 Python `yaml.safe_load` 驗證兩個 workflow 語法。
+- 未修改應用程式行為；下一次 CI 執行會先建立快取，之後套件未變更時直接重用。
+
+---
+
 ## 2026.11.27 修正 GET /login 404 與登入後回跳
 
 **類型**: 修正 · **檔案**: `Server.js`、`assets/diagnostics.js`、`Test/login_route.test.cjs`、`Docs/DIAGNOSTICS.md`、`Docs/WEB_UI.md`

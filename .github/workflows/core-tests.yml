@@ -30,14 +30,23 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Node
+        id: node
         uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
           check-latest: true
           cache: npm
+      # package-lock 沒變時直接重用 node_modules，不再讓 npm ci 重新展開所有套件。
+      - name: Restore installed Node dependencies
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json', 'package.json') }}
       # 不需下載瀏覽器或執行直播 SDK 的安裝 hook。
       - name: Install locked dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci --ignore-scripts --no-audit --no-fund --prefer-offline
       - name: Core behavior
         run: npm run test:core
       - name: Startup and CSS build behavior
