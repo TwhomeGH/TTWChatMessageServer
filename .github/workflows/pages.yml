@@ -31,7 +31,7 @@ jobs:
           python-version: "3.x"
 
       - name: Cache pip downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           # run_id 讓每次執行都能保存最新 wheel，restore-keys 仍可接續前一次。
@@ -52,7 +52,7 @@ jobs:
       # package-lock 沒變時直接重用 node_modules，避免 Pages 每次重新下載。
       - name: Restore installed Node dependencies
         id: node-modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: node_modules
           key: node-modules-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json', 'package.json') }}
@@ -83,7 +83,7 @@ jobs:
       - name: Cancel stale Pages deployments
         if: github.event_name == 'push'
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             // deploy-pages 的 Pages 狀態 API 可能 404 或停在非 in-progress 狀態，

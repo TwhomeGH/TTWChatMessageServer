@@ -8,6 +8,22 @@
 | `.github/workflows/pages.yml` | push main、手動 | TypeDoc API、changelogkit 匯出與 GitHub Pages 部署 |
 | `.github/workflows/codeql.yml` | 依 GitHub 設定 | CodeQL 掃描 |
 
+## Action runtime
+
+GitHub Actions 的 JavaScript action 必須使用 Node 24 runtime，避免 Node 20 淘汰警告與強制升級：
+
+| Action | 版本 | Runtime |
+| --- | --- | --- |
+| `actions/cache` | v5 | node24 |
+| `actions/github-script` | v8 | node24 |
+| `actions/checkout` | v5／v7 | node24 |
+| `actions/setup-node` | v6 | node24 |
+| `actions/setup-python` | v6／v7 | node24 |
+| `actions/configure-pages` | v6 | node24 |
+| `actions/deploy-pages` | v5 | node24 |
+
+`actions/cache@v5` 與 `actions/github-script@v8` 需要 Actions Runner `2.327.1` 以上；GitHub-hosted runner 已符合。
+
 ## 依賴快取
 
 CI 不使用每次重新下載的 `npm ci` 當唯一來源；分成兩層：

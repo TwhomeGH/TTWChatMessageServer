@@ -1,5 +1,27 @@
 # ChangeHistory
 
+## 2026.11.27 CI action 升級至 Node 24 runtime
+
+**類型**: 修正 · **檔案**: `.github/workflows/core-tests.yml`、`.github/workflows/pages.yml`、`Docs/CI.md`
+
+### 原因
+
+GitHub Actions 已淘汰 Node.js 20 action runtime；`actions/cache@v4` 與 `actions/github-script@v7` 會被強制在 Node 24 執行並產生警告。
+
+### 修改
+
+- `actions/cache@v4` → `actions/cache@v5`（官方標示 node24 runtime）。
+- `actions/github-script@v7` → `actions/github-script@v8`（官方標示 node24 runtime）。
+- 其餘使用中的 action 已確認是 node24：`checkout@v5`／`v7`、`setup-node@v6`、`setup-python@v6`／`v7`、`configure-pages@v6`、`deploy-pages@v5`。
+- `Docs/CI.md` 補上 action runtime 對照與最低 runner 版本。
+
+### 驗證
+
+- 以 Python `yaml.safe_load` 驗證 workflow 語法。
+- 下一次 CI 不再出現 Node.js 20 action runtime 警告。
+
+---
+
 ## 2026.11.27 CI 依賴快取：node_modules 與 pip
 
 **類型**: 改善 · **檔案**: `.github/workflows/core-tests.yml`、`.github/workflows/pages.yml`、`Docs/CI.md`、`README.md`
